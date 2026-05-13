@@ -693,6 +693,7 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
+// Deprecated: use (*TestEnv).WaitForChannel instead.
 func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {
@@ -702,6 +703,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
+// Deprecated: use (*TestEnv).SendToChannel instead.
 func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {

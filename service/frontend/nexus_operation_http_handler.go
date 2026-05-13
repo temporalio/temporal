@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -31,7 +32,7 @@ import (
 )
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
-type NexusHTTPHandler struct {
+type NexusOperationHTTPHandler struct {
 	base                                 nexusrpc.BaseHTTPHandler
 	logger                               log.Logger
 	nexusHandler                         http.Handler
@@ -45,9 +46,9 @@ type NexusHTTPHandler struct {
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 }
 
-func NewNexusHTTPHandler(
+func NewNexusOperationHTTPHandler(
 	serviceConfig *Config,
-	matchingClient matchingservice.MatchingServiceClient,
+	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.FrontendHTTPClientCache,
@@ -59,12 +60,12 @@ func NewNexusHTTPHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
-	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
+	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-) *NexusHTTPHandler {
-	return &NexusHTTPHandler{
+) *NexusOperationHTTPHandler {
+	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
 			FailureConverter: nexusrpc.DefaultFailureConverter(),
@@ -75,7 +76,7 @@ func NewNexusHTTPHandler(
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
-		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
+		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
@@ -84,7 +85,7 @@ func NewNexusHTTPHandler(
 				metricsHandler:                metricsHandler,
 				clusterMetadata:               clusterMetadata,
 				namespaceRegistry:             namespaceRegistry,
-				matchingClient:                matchingClient,
+				matchingClient:                matchingservice.MatchingServiceClient(matchingClient),
 				auth:                          authInterceptor,
 				telemetryInterceptor:          telemetryInterceptor,
 				requestErrorHandler:           requestErrorHandler,
@@ -104,20 +105,20 @@ func NewNexusHTTPHandler(
 	}
 }
 
-func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
+func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByEndpoint)
 }
 
-func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
+func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
 	h.preprocessErrorCounter.Record(1)
 	h.base.WriteFailure(writer, r, err)
 }
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
-func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
+func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
 	var err error
 	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
@@ -138,7 +139,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		return
 	}
 
-	rWithAuthCtx, err := h.parseTlsAndAuthInfo(r, nc)
+	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
@@ -157,7 +158,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 }
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
-func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
+func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
 	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
@@ -198,7 +199,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	rWithAuthCtx, err := h.parseTlsAndAuthInfo(r, nc)
+	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		h.logger.Error("failed to get claims", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
@@ -216,7 +217,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 	h.serveResolvedURL(w, r, u, nc)
 }
 
-func (h *NexusHTTPHandler) baseNexusContext(apiName string, header http.Header) *nexusContext {
+func (h *NexusOperationHTTPHandler) baseNexusContext(apiName string, header http.Header) *nexusContext {
 	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
@@ -233,7 +234,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string, header http.Header) 
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter, r *http.Request) (*nexusContext, bool) {
+func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter, r *http.Request) (*nexusContext, bool) {
 	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
@@ -273,7 +274,7 @@ func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *htt
 	return route.Deserialize(vars)
 }
 
-func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
+func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
 	var tlsInfo *credentials.TLSInfo
 	if r.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{
@@ -299,7 +300,7 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 	return r, nil
 }
 
-func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
+func (h *NexusOperationHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
 	// Attach Nexus context to response writer and request context.
 	nc.originalRequestHeaders = r.Header.Clone()
 	w = newNexusHTTPResponseWriter(w, nc)

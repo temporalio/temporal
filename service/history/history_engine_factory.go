@@ -52,8 +52,7 @@ type (
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
-		VersionMembershipCache          worker_versioning.VersionMembershipCache
-		ReactivationSignalCache         worker_versioning.ReactivationSignalCache
+		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
 	}
@@ -74,7 +73,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.VersionMembershipCache,
-		f.ReactivationSignalCache,
 		f.WorkerDeploymentClient,
 		f.RoutingInfoCache,
 		f.RawMatchingClient,

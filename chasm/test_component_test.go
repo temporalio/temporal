@@ -40,12 +40,11 @@ type (
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data    *protoMessageType
-		SubComponent11       Field[*TestSubComponent11]
-		SubComponent11_2     Field[*TestSubComponent11]
-		SubData11            Field[*protoMessageType] // Random proto message.
-		SubComponent2Pointer Field[*TestSubComponent2]
-		DataPointer          Field[*protoMessageType]
+		SubComponent1Data *protoMessageType
+		SubComponent11    Field[*TestSubComponent11]
+		SubComponent11_2  Field[*TestSubComponent11]
+		SubData11         Field[*protoMessageType] // Random proto message.
+		RootPointer       Field[*TestComponent]
 
 		ParentPtr ParentPtr[*TestComponent]
 	}
@@ -54,6 +53,8 @@ type (
 		UnimplementedComponent
 
 		SubComponent11Data *protoMessageType
+		GrandparentPointer Field[*TestComponent]
+		ParentComponentPtr Field[*TestSubComponent1]
 
 		ParentPtr ParentPtr[*TestSubComponent1]
 	}
@@ -87,11 +88,21 @@ func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
 	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return LifecycleStateCompleted
 	default:
 		return LifecycleStateFailed
 	}
+}
+
+func (tc *TestComponent) Pause(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+}
+
+func (tc *TestComponent) Unpause(_ MutableContext) {
+	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 func (tc *TestComponent) Terminate(
@@ -133,11 +144,21 @@ func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
 	switch tsc1.SubComponent1Data.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return LifecycleStateCompleted
 	default:
 		return LifecycleStateFailed
 	}
+}
+
+func (tsc1 *TestSubComponent1) Pause(_ MutableContext) {
+	tsc1.SubComponent1Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+}
+
+func (tsc1 *TestSubComponent1) Unpause(_ MutableContext) {
+	tsc1.SubComponent1Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 func (tsc1 *TestSubComponent1) GetData() string {
@@ -148,6 +169,8 @@ func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
 	switch tsc11.SubComponent11Data.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStatePaused
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return LifecycleStateCompleted
 	default:

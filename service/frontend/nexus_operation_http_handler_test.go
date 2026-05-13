@@ -44,12 +44,12 @@ func (f *fakeNamespaceRegistry) GetNamespaceName(id namespace.ID) (namespace.Nam
 	return f.getNamespaceName(id)
 }
 
-func newTestNexusHTTPHandler(
+func newTestNexusOperationHTTPHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	namespaceRegistry namespace.Registry,
-) (*NexusHTTPHandler, *mux.Router) {
+) (*NexusOperationHTTPHandler, *mux.Router) {
 	logger := log.NewTestLogger()
-	h := &NexusHTTPHandler{
+	h := &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
 			FailureConverter: nexusrpc.DefaultFailureConverter(),
@@ -79,7 +79,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 			return nil, serviceerror.NewNotFound("endpoint not found")
 		},
 	}
-	_, router := newTestNexusHTTPHandler(reg, nil)
+	_, router := newTestNexusOperationHTTPHandler(reg, nil)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -97,7 +97,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 			return nil, &retryableNotFoundError{msg: "endpoint temporarily unavailable"}
 		},
 	}
-	_, router := newTestNexusHTTPHandler(reg, nil)
+	_, router := newTestNexusOperationHTTPHandler(reg, nil)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -138,7 +138,7 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 		},
 	}
 
-	_, router := newTestNexusHTTPHandler(reg, nsReg)
+	_, router := newTestNexusOperationHTTPHandler(reg, nsReg)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 

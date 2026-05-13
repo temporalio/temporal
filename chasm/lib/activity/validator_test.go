@@ -688,6 +688,30 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 	})
 }
 
+func TestValidateStartDelay(t *testing.T) {
+	t.Run("NilDuration", func(t *testing.T) {
+		err := validateStartDelay(nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("ZeroDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(0))
+		require.NoError(t, err)
+	})
+
+	t.Run("ValidDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(5 * time.Second))
+		require.NoError(t, err)
+	})
+
+	t.Run("NegativeDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(-1 * time.Second))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "invalid StartDelay")
+	})
+}
+
 func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
 	return retrypolicy.DefaultRetrySettings{
 		InitialInterval:            time.Second,

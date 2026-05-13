@@ -4748,9 +4748,6 @@ type testTaskManager struct {
 	logger   log.Logger
 	fairness bool
 
-	// TODO: run some tests with this and without
-	updateMetadataOnCreateTasks bool
-
 	faultInjection map[string]float32 // "op:error" -> fraction of time
 	delayInjection time.Duration
 }
@@ -4763,9 +4760,8 @@ type dbTaskQueueKey struct {
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
 	return &testTaskManager{
-		queues:                      make(map[dbTaskQueueKey]*testQueueData),
-		logger:                      logger,
-		updateMetadataOnCreateTasks: true,
+		queues: make(map[dbTaskQueueKey]*testQueueData),
+		logger: logger,
 	}
 }
 
@@ -5073,7 +5069,7 @@ func (m *testTaskManager) CreateTasks(
 	tlm.createTaskBatchCount++
 
 	resp := &persistence.CreateTasksResponse{}
-	if m.updateMetadataOnCreateTasks {
+	if request.UpdateMetadata {
 		tlm.info = common.CloneProto(request.TaskQueueInfo.Data)
 		resp.UpdatedMetadata = true
 	}
@@ -5724,6 +5720,8 @@ func defaultTestConfig() *Config {
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 	config.AutoEnableV2Sub = trueTaskQueueSub
+	// Always update metadata on append in tests so backlog count assertions are exact.
+	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
 	return config
 }
 

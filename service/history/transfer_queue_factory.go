@@ -32,7 +32,7 @@ type (
 		HistoryRawClient       resource.HistoryRawClient
 		MatchingRawClient      resource.MatchingRawClient
 		VisibilityManager      manager.VisibilityManager
-		VersionMembershipCache worker_versioning.VersionMembershipCache
+		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	transferQueueFactory struct {

@@ -130,6 +130,7 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 		s.captureHandler,
 		s.logger,
 		resolverFactory,
+		nsregistry.DefaultNamespaceStateChanged,
 	)
 }
 

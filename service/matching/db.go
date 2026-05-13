@@ -3,6 +3,7 @@ package matching
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"sync"
@@ -278,6 +279,16 @@ func (db *taskQueueDB) OldUpdateState(
 	return err
 }
 
+// shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the
+// metadata blob. This is always true when enough time has passed since the last metadata
+// write (controlled by MetadataUpdateOnAppendInterval), so that backlog counts stay
+// reasonably fresh. When the interval is zero, metadata is updated on every append
+// (previous behavior). Caller must hold db.Mutex.
+func (db *taskQueueDB) shouldUpdateMetadataOnAppendLocked() bool {
+	interval := db.config.MetadataUpdateOnAppendInterval()
+	return interval <= 0 || time.Since(db.lastWrite) >= interval
+}
+
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
@@ -289,10 +300,31 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
 	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
-		return nil
+		// If we don't write, though, we wouldn't know if someone else has stolen ownership
+		// momentarily (this could happen due to eventual consistency of membership updates).
+		// So instead, do a (cheaper) read to just check the range id.
+		return db.verifyOwnershipLocked(ctx)
 	}
 
 	return db.updateTaskQueueLocked(ctx, false)
+}
+
+func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
+	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: db.queue.NamespaceId(),
+		TaskQueue:   db.queue.PersistenceName(),
+		TaskType:    db.queue.TaskType(),
+	})
+	if err != nil {
+		return err
+	}
+	if response.RangeID != db.rangeID {
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("task queue ownership lost: stored rangeID %d, in-memory rangeID %d",
+				response.RangeID, db.rangeID),
+		}
+	}
+	return nil
 }
 
 func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, newAckLevel int64, countDelta int64, oldestTime time.Time) {
@@ -499,6 +531,11 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
+	// Decide whether to include metadata in the write. We always need the LWT for the
+	// range ID check, but updating the full metadata blob on every append has extra cost.
+	// We piggyback the metadata update if enough time has passed since the last write.
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -506,8 +543,9 @@ func (db *taskQueueDB) CreateTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
@@ -579,6 +617,8 @@ func (db *taskQueueDB) CreateFairTasks(
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
 
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -586,8 +626,9 @@ func (db *taskQueueDB) CreateFairTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	if err == nil {
