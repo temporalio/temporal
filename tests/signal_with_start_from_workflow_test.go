@@ -16,7 +16,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
-	workflowservicev1 "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -33,13 +32,13 @@ import (
 // via the __temporal_system Nexus endpoint and returns the RunID of the started/signaled
 // target workflow. It is used by TestBothWorkflowsVisibleAfterSWSFromWorkflow to verify
 // end-to-end SDK serialization against the real server.
-func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservicev1.SignalWithStartWorkflowExecutionRequest) (string, error) {
+func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest) (string, error) {
 	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.WorkflowService.ServiceName)
 	// fut := nc.ExecuteOperation(ctx, systemnexus.WorkflowService.SignalWithStartWorkflowExecution, req, workflow.NexusOperationOptions{})
 	fut := nc.ExecuteOperation(ctx, workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution,
 		req,
 		workflow.NexusOperationOptions{})
-	var result workflowservicev1.SignalWorkflowExecutionResponse
+	var result workflowservice.SignalWorkflowExecutionResponse
 	if err := fut.Get(ctx, &result); err != nil {
 		return "", err
 	}
@@ -58,7 +57,7 @@ func sysNexusSWSTargetWorkflow(ctx workflow.Context) (string, error) {
 }
 
 type SignalWithStartFromWorkflowTestSuite struct {
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestBase // nolint:forbidigo // Will migrate to test env at a later date
 }
 
 func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
@@ -694,7 +693,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	// the RunID of the newly-started target workflow.
 	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
-	}, systemNexusSWSWorkflow, workflowservicev1.SignalWithStartWorkflowExecutionRequest{
+	}, systemNexusSWSWorkflow, workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:   targetWorkflowID,
 		SignalName:   "test-signal",
 		WorkflowType: &commonpb.WorkflowType{Name: "sysNexusSWSTargetWorkflow"},

@@ -107,12 +107,12 @@ func (v *RequestValidator) ValidateWorkflowStartDelay(
 
 	return nil
 }
-func (v *RequestValidator) ValidateWorkflowIdReusePolicy(
+func (v *RequestValidator) ValidateWorkflowIDReusePolicy(
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
-		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING { //nolint:staticcheck // SA1019: kept for backwards compatibility
 		return errIncompatibleIDReusePolicyTerminateIfRunning
 	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
@@ -232,7 +232,7 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return err
 	}
 
-	if err := v.ValidateWorkflowIdReusePolicy(
+	if err := v.ValidateWorkflowIDReusePolicy(
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {

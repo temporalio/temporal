@@ -36,8 +36,8 @@ var (
 	errClusterIsNotConfiguredForReadingArchivalVisibility = serviceerror.NewInvalidArgument("Cluster is not configured for reading archived visibility records.")
 	errNamespaceIsNotConfiguredForVisibilityArchival      = serviceerror.NewInvalidArgument("Namespace is not configured for visibility archival.")
 	errSearchAttributesNotSet                             = serviceerror.NewInvalidArgument("SearchAttributes are not set on request.")
-	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")                                 // DEPRECATED
-	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")                        // DEPRECATED
+	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")          // DEPRECATED
+	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.") // DEPRECATED
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
@@ -67,14 +67,14 @@ var (
 	errMultiOpNotStartAndUpdate                           = serviceerror.NewInvalidArgument("Operations have to be exactly [Start, Update].")
 	errMultiOpAborted                                     = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 
-	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
-	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
-	errUpdateNameNotSet       = serviceerror.NewInvalidArgument("Update name is not set on request.")
-	errUpdateIDTooLong        = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
-	errUpdateRefNotSet        = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
-	errSourceClusterNotSet    = serviceerror.NewInvalidArgument("SourceCluster is not set on request.")
-	errTargetClusterNotSet    = serviceerror.NewInvalidArgument("TargetCluster is not set on request.")
-	errInvalidDLQJobToken     = serviceerror.NewInvalidArgument("Invalid DLQ job token.")
+	errUpdateMetaNotSet    = serviceerror.NewInvalidArgument("Update meta is not set on request.")
+	errUpdateInputNotSet   = serviceerror.NewInvalidArgument("Update input is not set on request.")
+	errUpdateNameNotSet    = serviceerror.NewInvalidArgument("Update name is not set on request.")
+	errUpdateIDTooLong     = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
+	errUpdateRefNotSet     = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
+	errSourceClusterNotSet = serviceerror.NewInvalidArgument("SourceCluster is not set on request.")
+	errTargetClusterNotSet = serviceerror.NewInvalidArgument("TargetCluster is not set on request.")
+	errInvalidDLQJobToken  = serviceerror.NewInvalidArgument("Invalid DLQ job token.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
@@ -100,7 +100,7 @@ var (
 
 	errDeploymentVersionsNotAllowed = serviceerror.NewPermissionDenied("Worker Deployment Versions are disabled on this namespace.", "")
 
-	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
+	errBatchAPINotAllowed = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
 
 	errUpdateWorkflowExecutionAPINotAllowed           = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAsyncAcceptedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update accepted is disabled on this namespace.", "")

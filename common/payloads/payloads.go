@@ -48,8 +48,7 @@ func EncodeSingle(value any) (*commonpb.Payload, error) {
 func MustEncodeSingle(value any) *commonpb.Payload {
 	p, err := EncodeSingle(value)
 	if err != nil {
-		// TODO: nolint
-		panic(fmt.Sprintf("unable to encode single payload: %v", err))
+		panic(fmt.Sprintf("unable to encode single payload: %v", err)) //nolint:forbidigo // Must-helper: callers opt into panic on encode failure
 	}
 	return p
 }
@@ -57,8 +56,7 @@ func MustEncodeSingle(value any) *commonpb.Payload {
 func MustEncode(value ...any) *commonpb.Payloads {
 	p, err := defaultDataConverter.ToPayloads(value...)
 	if err != nil {
-		// TODO: nolint
-		panic(fmt.Sprintf("unable to encode payloads: %v", err))
+		panic(fmt.Sprintf("unable to encode payloads: %v", err)) //nolint:forbidigo // Must-helper: callers opt into panic on encode failure
 	}
 	return p
 }

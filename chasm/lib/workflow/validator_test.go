@@ -132,7 +132,7 @@ func TestValidateSignalWithStartRequest(t *testing.T) {
 
 	t.Run("IncompatibleTerminateIfRunningWithConflictPolicy", func(t *testing.T) {
 		req := validSWSRequest()
-		req.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
+		req.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING //nolint:staticcheck // SA1019: testing backwards-compatible validation path
 		req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 		err := v.ValidateSignalWithStartRequest(req)
 		require.ErrorContains(t, err, "WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy")

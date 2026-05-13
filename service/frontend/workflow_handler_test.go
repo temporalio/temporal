@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -238,7 +237,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 		workflow.NewValidator(
-			workflow.NewConfig(dynamicconfig.NewNoopCollection()),
+			workflow.NewConfig(dc.NewNoopCollection()),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),

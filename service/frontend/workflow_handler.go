@@ -647,7 +647,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateWorkflowIdReusePolicy(
+	if err := wh.validator.ValidateWorkflowIDReusePolicy(
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err

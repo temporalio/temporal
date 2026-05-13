@@ -6,7 +6,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
