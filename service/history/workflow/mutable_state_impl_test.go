@@ -4242,6 +4242,136 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 	}
 }
 
+// TestSnapshotTimeSkippingInfo unit-tests the pure helper that builds the
+// (config, initialSkippedDuration) tuple propagated to child workflows / CaN.
+// The notable branch is the MaxSkippedDuration remaining-budget gate: when the
+// source has consumed all but < TimeSkippingPrecision of its MaxSkipped bound,
+// the config is dropped from the snapshot so the child/new run does not boot
+// with a near-zero or already-exceeded budget. InitialSkippedDuration still
+// propagates so virtual time stays consistent.
+func TestSnapshotTimeSkippingInfo(t *testing.T) {
+	maxSkippedCfg := func(d time.Duration) *workflowpb.TimeSkippingConfig {
+		return &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(d)},
+		}
+	}
+	maxElapsedCfg := func(d time.Duration) *workflowpb.TimeSkippingConfig {
+		return &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(d)},
+		}
+	}
+
+	cases := []struct {
+		name              string
+		source            *persistencespb.WorkflowExecutionInfo
+		expectCfg         *workflowpb.TimeSkippingConfig
+		expectInitialSkip *durationpb.Duration
+	}{
+		{
+			name:   "nil TimeSkippingInfo → (nil, nil)",
+			source: &persistencespb.WorkflowExecutionInfo{},
+		},
+		{
+			name: "config nil, accumulated set → (nil, initialSkipped) — accumulated still propagates",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
+				},
+			},
+			expectInitialSkip: durationpb.New(15 * time.Minute),
+		},
+		{
+			name: "config set, accumulated nil → cloned config, no initial skip",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+			},
+			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
+			name: "MaxSkipped with ample remaining budget → cloned config, initial skip propagates",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config:                     maxSkippedCfg(time.Hour),
+					AccumulatedSkippedDuration: durationpb.New(10 * time.Minute),
+				},
+			},
+			expectCfg:         maxSkippedCfg(time.Hour),
+			expectInitialSkip: durationpb.New(10 * time.Minute),
+		},
+		{
+			name: "MaxSkipped with exactly TimeSkippingPrecision remaining → cloned (boundary is strict <)",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config:                     maxSkippedCfg(time.Hour),
+					AccumulatedSkippedDuration: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
+				},
+			},
+			expectCfg:         maxSkippedCfg(time.Hour),
+			expectInitialSkip: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
+		},
+		{
+			name: "MaxSkipped with remaining < TimeSkippingPrecision → config dropped, initial skip kept",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config:                     maxSkippedCfg(time.Hour),
+					AccumulatedSkippedDuration: durationpb.New(time.Hour - 500*time.Millisecond),
+				},
+			},
+			expectInitialSkip: durationpb.New(time.Hour - 500*time.Millisecond),
+		},
+		{
+			name: "MaxSkipped already exceeded → config dropped, initial skip kept",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config:                     maxSkippedCfg(time.Hour),
+					AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+				},
+			},
+			expectInitialSkip: durationpb.New(2 * time.Hour),
+		},
+		{
+			name: "MaxElapsed bound is NOT subject to the remaining-budget gate — config always clones through",
+			source: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config:                     maxElapsedCfg(time.Minute),
+					AccumulatedSkippedDuration: durationpb.New(10 * time.Hour),
+				},
+			},
+			expectCfg:         maxElapsedCfg(time.Minute),
+			expectInitialSkip: durationpb.New(10 * time.Hour),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotCfg, gotInitial := snapshotTimeSkippingInfo(tc.source)
+
+			if tc.expectCfg == nil {
+				require.Nil(t, gotCfg)
+			} else {
+				require.NotNil(t, gotCfg)
+				require.True(t, proto.Equal(tc.expectCfg, gotCfg),
+					"expected config %v, got %v", tc.expectCfg, gotCfg)
+				// Must be a clone — mutating must not leak into source.
+				gotCfg.Enabled = !gotCfg.Enabled
+				require.True(t, tc.source.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+					"mutation of snapshot leaked into source's Config")
+			}
+
+			if tc.expectInitialSkip == nil {
+				require.Nil(t, gotInitial)
+			} else {
+				require.NotNil(t, gotInitial)
+				require.Equal(t, tc.expectInitialSkip.AsDuration(), gotInitial.AsDuration())
+			}
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 

@@ -541,6 +541,13 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
+	// InitialSkippedDuration is intentionally not set here. It is an
+	// internal-only field set by CaN/retry/child-wf/reset paths in the
+	// history service; the public workflowservice proto has no equivalent,
+	// so frontend-originated starts always carry InitialSkippedDuration=0.
+	// This is the precondition that lets the MS chokepoint check at
+	// AddWorkflowExecutionStartedEventWithOptions reduce to the frontend
+	// min-floor for external Start callers.
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,

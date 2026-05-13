@@ -9652,20 +9652,35 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 // or continue-as-new). The source is passed explicitly so callers can snapshot from the
 // originating run's executionInfo — on CaN, the new MS is empty at snapshot time, so we
 // must read from the previous run.
+//
+// When the source's MaxSkippedDuration bound has less than
+// MinRemainingTimeSkippingBoundForPropagation of remaining budget, the config is
+// dropped from the snapshot — propagating it would land the new run with a near-zero
+// or already-exceeded MaxSkipped budget, which would just disable on first skip.
+// InitialSkippedDuration still propagates so the new run's virtual time stays
+// consistent with the parent across the run boundary.
 func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
 	tsInfo := source.GetTimeSkippingInfo()
 	if tsInfo == nil {
 		return nil, nil
 	}
-	var tsc *workflowpb.TimeSkippingConfig
 	var initialSkipped *durationpb.Duration
-	if srcTSC := tsInfo.GetConfig(); srcTSC != nil {
-		if cloned, ok := proto.Clone(srcTSC).(*workflowpb.TimeSkippingConfig); ok {
-			tsc = cloned
-		}
-	}
 	if skipped := tsInfo.GetAccumulatedSkippedDuration(); skipped != nil {
 		initialSkipped = durationpb.New(skipped.AsDuration())
+	}
+	srcTSC := tsInfo.GetConfig()
+	if srcTSC == nil {
+		return nil, initialSkipped
+	}
+	if bound, ok := srcTSC.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration); ok {
+		remaining := bound.MaxSkippedDuration.AsDuration() - tsInfo.GetAccumulatedSkippedDuration().AsDuration()
+		if remaining < namespace.TimeSkippingPrecision {
+			return nil, initialSkipped
+		}
+	}
+	var tsc *workflowpb.TimeSkippingConfig
+	if cloned, ok := proto.Clone(srcTSC).(*workflowpb.TimeSkippingConfig); ok {
+		tsc = cloned
 	}
 	return tsc, initialSkipped
 }
