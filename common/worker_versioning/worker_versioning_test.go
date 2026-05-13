@@ -762,18 +762,18 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 // per range, so calling the function many times on the same input makes a
 // ~50%-per-call probabilistic bug practically deterministic.
 func TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression(t *testing.T) {
-	t2 := timestamp.TimePtr(time.Now().Add(-time.Hour))
-	t3 := timestamp.TimePtr(time.Now())
+	t1 := timestamp.TimePtr(time.Now().Add(-time.Hour))
+	t2 := timestamp.TimePtr(time.Now())
 
 	data := &persistencespb.DeploymentData{
 		DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 			"foo": {
 				RoutingConfig: &deploymentpb.RoutingConfig{
 					CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
-					CurrentVersionChangedTime:           t2,
+					CurrentVersionChangedTime:           t1,
 					RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
 					RampingVersionPercentage:            30,
-					RampingVersionPercentageChangedTime: t2,
+					RampingVersionPercentageChangedTime: t1,
 				},
 				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 					v1.GetBuildId(): {},
@@ -782,10 +782,10 @@ func TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression(t *testing
 			"bar": {
 				RoutingConfig: &deploymentpb.RoutingConfig{
 					CurrentDeploymentVersion:            nil,
-					CurrentVersionChangedTime:           t3,
+					CurrentVersionChangedTime:           t2,
 					RampingDeploymentVersion:            nil,
 					RampingVersionPercentage:            20,
-					RampingVersionPercentageChangedTime: t3,
+					RampingVersionPercentageChangedTime: t2,
 				},
 				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
 			},
