@@ -79,7 +79,6 @@ func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) 
 		Return(nil)
 	// WaitHandover should observe the cancel and return an error; the defer must still run.
 	env.OnActivity(a.WaitHandover, mock.Anything, mock.Anything).Return(temporal.NewCanceledError())
-	env.OnActivity(a.UpdateActiveCluster, mock.Anything, mock.Anything).Return(nil)
 
 	env.ExecuteWorkflow(NamespaceHandoverWorkflow, NamespaceHandoverParams{
 		Namespace:              "test-ns",
