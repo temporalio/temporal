@@ -131,6 +131,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
+	callback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),

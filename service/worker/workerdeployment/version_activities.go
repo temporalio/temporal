@@ -201,7 +201,7 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 
 func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
-	_, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
 		var invalidArgs *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgs) {
@@ -209,7 +209,7 @@ func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, 
 		}
 		return nil, err
 	}
-	return nil, nil
+	return wciSpecToComputeConfigSummary(resp.Spec), nil
 }
 
 func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
