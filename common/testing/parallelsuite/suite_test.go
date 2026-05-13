@@ -72,6 +72,9 @@ func TestRun_AcceptsSuite(t *testing.T) {
 	t.Run("with args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validWithArgsSuite{}, "hello", 42) })
 	})
+	t.Run("legacy", func(t *testing.T) {
+		require.NotPanics(t, func() { RunLegacySequential(t, &validSuite{}) })
+	})
 }
 
 func TestRun_RejectsSuite(t *testing.T) {

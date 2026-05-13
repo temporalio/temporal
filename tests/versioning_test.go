@@ -3977,10 +3977,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		require.True(t, s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.Eventually(func() bool {
+		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
-		}))
+		})
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
@@ -4155,7 +4155,6 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 				break
 			}
 		}
-
 		require.True(t, foundPoller)
 	}, 3*time.Second, 50*time.Millisecond)
 
