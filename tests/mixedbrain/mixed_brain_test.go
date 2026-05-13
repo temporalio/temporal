@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/omes/devserver"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -98,17 +99,27 @@ func TestMixedBrain(t *testing.T) {
 		currentBase, releaseBase = 7230, 7240
 	}
 
+	// Standalone Nexus is a current-only feature (off by default in releases
+	// pre-1.31). Enabling it on the current server lets omes exercise the
+	// StartNexusOperationExecution RPC; requests that the proxy routes to
+	// the release server come back with Unimplemented, which the omes
+	// scenario tolerates as a no-op.
+	currentDC := map[string]any{
+		"nexusoperation.enableStandalone": true,
+	}
+
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
 	currentLogger, currentLog := serverLogger(t, "current", logRoot)
 	defer currentLog.Close()
 	currentSrv, err := devserver.Start(t.Context(), devserver.Options{
-		SourceDir:   sourceRoot(),
-		PortBase:    currentBase,
-		Persistence: persistence,
-		Stdout:      currentLog,
-		Stderr:      currentLog,
-		Logger:      currentLogger,
+		SourceDir:           sourceRoot(),
+		PortBase:            currentBase,
+		Persistence:         persistence,
+		DynamicConfigValues: currentDC,
+		Stdout:              currentLog,
+		Stderr:              currentLog,
+		Logger:              currentLogger,
 	})
 	require.NoError(t, err, "start current server")
 	t.Cleanup(func() { _ = currentSrv.Stop() })
@@ -151,6 +162,13 @@ func TestMixedBrain(t *testing.T) {
 	t.Run("run omes", func(st *testing.T) {
 		createNexusEndpoint(st, conn, nexusEndpoint, "default", "omes-"+runID)
 
+		// TCP proxy round-robins each new connection across the two
+		// backends. gRPC's pick-first multiplexing keeps every RPC on the
+		// first connection it picks, so omes' standalone-Nexus calls all
+		// land on whichever backend the worker's gRPC client landed on
+		// (typically the release server here — which returns Unimplemented
+		// and exercises the graceful-degradation path in omes#339). The
+		// success path is verified separately below against currentSrv.
 		proxy := startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
 		st.Cleanup(proxy.stop)
 
@@ -162,6 +180,36 @@ func TestMixedBrain(t *testing.T) {
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
 	})
+
+	t.Run("verify standalone nexus succeeds on current", func(st *testing.T) {
+		// Direct call to currentSrv (no proxy) to prove the success path
+		// works in the same run that demonstrates Unimplemented tolerance
+		// against the release server. The omes scenario can't easily target
+		// a specific backend (HTTP/2 multiplexing pins streams), so we
+		// verify here.
+		verifyStandaloneNexus(st, currentSrv.FrontendHostPort(), nexusEndpoint, runID)
+	})
+}
+
+// verifyStandaloneNexus issues one StartNexusOperationExecution against the
+// given frontend and asserts it succeeds. The endpoint must already exist.
+func verifyStandaloneNexus(t *testing.T, frontend, endpoint, runID string) {
+	t.Helper()
+	cc, err := grpc.NewClient(frontend, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer cc.Close()
+
+	wf := workflowservice.NewWorkflowServiceClient(cc)
+	opID := fmt.Sprintf("verify-standalone-nexus-%s", runID)
+	_, err = wf.StartNexusOperationExecution(t.Context(), &workflowservice.StartNexusOperationExecutionRequest{
+		Namespace:   "default",
+		OperationId: opID,
+		Endpoint:    endpoint,
+		Service:     "kitchen-sink",
+		Operation:   "echo-sync",
+	})
+	require.NoError(t, err, "standalone Nexus must succeed against current server")
+	t.Logf("Direct standalone-Nexus call against current server succeeded (opID=%s)", opID)
 }
 
 // runOmes runs Omes throughput stress scenario.
@@ -191,6 +239,11 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 			"--max-concurrent", "5",
 			"--option", "internal-iterations=10",
 			"--option", "nexus-endpoint="+nexusEndpoint,
+			// Schedule standalone-Nexus actions through omes. With the TCP
+			// proxy these typically all pin to one backend (HTTP/2
+			// multiplexing); the direct verification subtest below covers
+			// the success path explicitly against the current server.
+			"--option", "include-standalone-nexus=true",
 		)
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
