@@ -24,6 +24,11 @@ const (
 	SyncMatchOutcomeSuccess
 	// A poller was available but rate limiting blocked the match.
 	SyncMatchOutcomeRateLimited
+	// A poller was available and the task was matched, but the dispatch failed internally
+	// (e.g. RecordTaskStarted rejected by history due to busy workflow). This is not a poller
+	// shortage — worker capacity was sufficient, but the task could not be started for reasons
+	// unrelated to scaling.
+	SyncMatchOutcomeStartFailed
 )
 
 type (

@@ -699,7 +699,10 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 
 	matched, err := c.oldMatcher.Offer(childCtx, task)
 	if matched {
-		return syncMatchSuccess, err
+		if err != nil {
+			return syncMatchStartFailed, err
+		}
+		return syncMatchSuccess, nil
 	}
 	return syncMatchNoPoller, err
 }
