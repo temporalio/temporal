@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -4979,24 +4980,45 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	// Try CHASM first; fall back to V1 on routable errors (NotFound,
-	// sentinel, ErrClosed). This mirrors the pattern used by PatchSchedule
-	// and other dual-stack operations.
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
-		_, err := wh.deleteScheduleCHASM(ctx, request)
-		if err == nil {
-			return &workflowservice.DeleteScheduleResponse{}, nil
+	// Always attempt deletion in both stacks. A schedule may exist in either or
+	// both during dual-stack migration (and a V1 sentinel may linger after a
+	// CHASM-only create). Surface an error only when neither stack succeeded.
+	//
+	// Each path gets its own metadata context so that downstream gRPC trailers
+	// (propagated by TrailerToContextMetadataInterceptor) don't clobber each
+	// other. After both paths complete, the winning side's metadata is copied
+	// into the original context for upstream consumers (e.g. metering).
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+
+	chasmCtx := contextutil.WithMetadataContext(ctx)
+	var chasmErr error
+	if chasmEnabled {
+		_, chasmErr = wh.deleteScheduleCHASM(chasmCtx, request)
+	}
+	v1Ctx := contextutil.WithMetadataContext(ctx)
+	_, v1Err := wh.deleteScheduleWorkflow(v1Ctx, request)
+
+	// At least one side actually deleted -> success.
+	if (chasmEnabled && chasmErr == nil) || v1Err == nil {
+		// CHASM owns the schedule unless it returned a routable error
+		// (NotFound/sentinel/closed), in which case V1 is the owner.
+		winnerCtx := v1Ctx
+		if chasmEnabled && chasmErr == nil {
+			winnerCtx = chasmCtx
 		}
-		if !isSchedulerErrorLegacyRoutable(err) {
-			return nil, err
+		for k, v := range contextutil.ContextMetadataGetAll(winnerCtx) {
+			contextutil.ContextMetadataSet(ctx, k, v)
 		}
+		return &workflowservice.DeleteScheduleResponse{}, nil
 	}
 
-	_, err := wh.deleteScheduleWorkflow(ctx, request)
-	if err != nil {
-		return nil, err
+	// Neither side deleted. Surface a real (non-routable) CHASM failure first;
+	// otherwise return the V1 error (which is either a real failure or the
+	// canonical NotFound when neither stack had the schedule).
+	if chasmEnabled && chasmErr != nil && !isSchedulerErrorLegacyRoutable(chasmErr) {
+		return nil, chasmErr
 	}
-	return &workflowservice.DeleteScheduleResponse{}, nil
+	return nil, v1Err
 }
 
 func (wh *WorkflowHandler) deleteScheduleCHASM(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
