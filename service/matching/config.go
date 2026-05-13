@@ -91,6 +91,9 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		PriorityAgingTickInterval                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PriorityAgingThreshold                   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PriorityAgingMaxBoost                    dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -176,6 +179,9 @@ type (
 		TaskDeleteInterval             func() time.Duration
 		PriorityLevels                 priorityKey
 		DefaultPriorityKey             priorityKey
+		PriorityAgingTickInterval      func() time.Duration
+		PriorityAgingThreshold         func() time.Duration
+		PriorityAgingMaxBoost          func() int
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -338,6 +344,9 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
+		PriorityAgingTickInterval:                dynamicconfig.MatchingPriorityAgingTickInterval.Get(dc),
+		PriorityAgingThreshold:                   dynamicconfig.MatchingPriorityAgingThreshold.Get(dc),
+		PriorityAgingMaxBoost:                    dynamicconfig.MatchingPriorityAgingMaxBoost.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
@@ -453,6 +462,15 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PriorityLevels:             priorityLevels,
 		DefaultPriorityKey:         defaultPriorityKey,
+		PriorityAgingTickInterval: func() time.Duration {
+			return config.PriorityAgingTickInterval(ns.String(), taskQueueName, taskType)
+		},
+		PriorityAgingThreshold: func() time.Duration {
+			return config.PriorityAgingThreshold(ns.String(), taskQueueName, taskType)
+		},
+		PriorityAgingMaxBoost: func() int {
+			return config.PriorityAgingMaxBoost(ns.String(), taskQueueName, taskType)
+		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,

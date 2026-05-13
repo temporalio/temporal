@@ -83,10 +83,15 @@ type (
 		// effectivePriority is initialized from an explicit task priority if present, or the
 		// default for the task queue. It can also be the special pollForwarderPriority (higher
 		// than normal priorities) to indicate the poll forwarder. In some other cases (e.g.
-		// migration) it may be adjusted from the explicit task priority.
+		// migration, priority aging) it may be adjusted from the explicit task priority.
 		// The scale of effectivePriority is 10× the normal scale to allow inserting forwards
 		// in between priority levels.
 		effectivePriority priorityKey
+		// basePriority is the effectivePriority at heap-insert time, before any aging
+		// adjustments. Aging recomputes effectivePriority = basePriority - boost(age)
+		// idempotently each tick. Zero means "not yet snapshotted" — applyAging will
+		// snapshot the current effectivePriority on first encounter.
+		basePriority      priorityKey
 		pollForwarderType pollForwarderType
 	}
 

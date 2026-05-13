@@ -1119,3 +1119,83 @@ func gosched(n int) {
 		runtime.Gosched()
 	}
 }
+
+// TestPriorityAging_OlderTaskDispatchedFirst exercises the new aging hook:
+// two tasks at the same operator-set priority, but one has been queued
+// longer. Without aging, they tie on effectivePriority and the older one
+// only wins by fair-level tiebreak (taskId order). After aging, the older
+// one's effectivePriority is boosted down so it wins decisively.
+func (s *MatcherDataSuite) TestPriorityAging_OlderTaskDispatchedFirst() {
+	pri := &commonpb.Priority{PriorityKey: 3}
+
+	// Both tasks at priority 3 → effectivePriority = effectivePriorityFactor * 3 = 30.
+	// Older task: createTime = now - 5min.
+	// Newer task: createTime = now (just enqueued).
+	older := s.newBacklogTaskWithPriority(1, 5*time.Minute, nil, pri)
+	newer := s.newBacklogTaskWithPriority(2, 0, nil, pri)
+
+	s.md.EnqueueTaskNoWait(older)
+	s.md.EnqueueTaskNoWait(newer)
+
+	// Sanity: both have the same effectivePriority before aging.
+	s.md.lock.Lock()
+	s.Require().Equal(priorityKey(30), older.effectivePriority)
+	s.Require().Equal(priorityKey(30), newer.effectivePriority)
+	s.md.lock.Unlock()
+
+	// Apply aging with threshold=1min, maxBoost=5. Older task has been
+	// waiting 5min so it earns the full 5-unit boost; newer task has been
+	// waiting 0s so no boost.
+	changed := s.md.ApplyAging(time.Minute, 5)
+	s.True(changed, "aging should have lowered the older task's effectivePriority")
+
+	s.md.lock.Lock()
+	s.Equal(priorityKey(25), older.effectivePriority, "older task should be boosted by 5 units")
+	s.Equal(priorityKey(30), newer.effectivePriority, "newer task should be untouched")
+	s.Equal(priorityKey(30), older.basePriority, "basePriority preserves the pre-aging value")
+	s.Equal(priorityKey(30), newer.basePriority)
+	s.md.lock.Unlock()
+
+	// Idempotency: a second call with the same `now` shouldn't change anything.
+	changed = s.md.ApplyAging(time.Minute, 5)
+	s.False(changed, "applying aging again with the same time should be a no-op")
+
+	// Lowering maxBoost should de-boost: applyAging recomputes from basePriority.
+	changed = s.md.ApplyAging(time.Minute, 2)
+	s.True(changed)
+	s.md.lock.Lock()
+	s.Equal(priorityKey(28), older.effectivePriority, "older task should be re-derived as base(30) - cap(2)")
+	s.md.lock.Unlock()
+}
+
+// TestPriorityAging_NeverCrossesLevels verifies the per-priority-level
+// guard: even with a configured maxBoost larger than effectivePriorityFactor,
+// an aged task at priority N+1 can never leap-frog a fresh task at priority N.
+func (s *MatcherDataSuite) TestPriorityAging_NeverCrossesLevels() {
+	lowPriTask := s.newBacklogTaskWithPriority(
+		1, 24*time.Hour, nil, &commonpb.Priority{PriorityKey: 4})
+	s.md.EnqueueTaskNoWait(lowPriTask)
+
+	// 24h waiting + threshold=1s + maxBoost=1000 would naively let aging
+	// blow through the 10-unit gap between priority levels. Verify it
+	// gets clamped to effectivePriorityFactor-1 = 9.
+	s.md.ApplyAging(time.Second, 1000)
+	s.md.lock.Lock()
+	s.GreaterOrEqual(int(lowPriTask.effectivePriority), 31,
+		"aged priority-4 task should not enter priority-3's range")
+	s.md.lock.Unlock()
+}
+
+// TestPriorityAging_Disabled_NoOp confirms that aging with threshold=0 or
+// maxBoost=0 does nothing, matching the dynamic-config "disabled" path.
+func (s *MatcherDataSuite) TestPriorityAging_Disabled_NoOp() {
+	pri := &commonpb.Priority{PriorityKey: 3}
+	old := s.newBacklogTaskWithPriority(1, time.Hour, nil, pri)
+	s.md.EnqueueTaskNoWait(old)
+
+	s.False(s.md.ApplyAging(0, 5), "threshold=0 must be a no-op")
+	s.False(s.md.ApplyAging(time.Minute, 0), "maxBoost=0 must be a no-op")
+	s.md.lock.Lock()
+	s.Equal(priorityKey(30), old.effectivePriority, "task untouched when aging is disabled")
+	s.md.lock.Unlock()
+}

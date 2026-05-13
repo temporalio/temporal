@@ -125,6 +125,10 @@ func (tm *priTaskMatcher) Start() {
 	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
+	// Priority aging runs on every priTaskMatcher instance that has a local
+	// backlog — root, sticky, or non-root. Cheap no-op when tick interval is 0.
+	go tm.priorityAgingLoop()
+
 	if tm.fwdr == nil {
 		// Root/sticky doesn't forward. But it does need something to validate tasks.
 		go tm.validateTasksOnRoot(retrier)
@@ -160,6 +164,37 @@ func (tm *priTaskMatcher) Stop() {
 	// backlog tasks that were redirected from another versioned queue (or the default). To
 	// handle those, the caller of Stop should also call ReprocessRedirectedTasksAfterStop
 	// when applicable.
+}
+
+// priorityAgingLoop periodically re-applies age-based priority boosts to
+// queued tasks so a task that has been waiting longer gets dispatched
+// ahead of newer tasks at the same operator-set priority level.
+//
+// Polls the dynamic config on each tick so an operator can change the
+// cadence / threshold / max boost (or disable entirely by setting
+// PriorityAgingTickInterval to 0) without bouncing the matcher.
+func (tm *priTaskMatcher) priorityAgingLoop() {
+	// Initial interval check; treat 0 as "disabled" but keep polling at a
+	// long cadence so a later config flip can turn aging on.
+	const disabledPollInterval = time.Minute
+	for {
+		interval := tm.config.PriorityAgingTickInterval()
+		if interval <= 0 {
+			interval = disabledPollInterval
+		}
+		select {
+		case <-tm.tqCtx.Done():
+			return
+		case <-time.After(interval):
+		}
+		if tm.config.PriorityAgingTickInterval() <= 0 {
+			continue
+		}
+		tm.data.ApplyAging(
+			tm.config.PriorityAgingThreshold(),
+			tm.config.PriorityAgingMaxBoost(),
+		)
+	}
 }
 
 // TODO(pri): access to retrier is not synchronized

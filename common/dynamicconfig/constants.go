@@ -1445,6 +1445,21 @@ second per poller by one physical queue manager`,
 		5,
 		`Number of simple priority levels (requires new matcher)`,
 	)
+	MatchingPriorityAgingTickInterval = NewTaskQueueDurationSetting(
+		"matching.priorityAgingTickInterval",
+		0,
+		`Interval at which the matcher walks queued tasks and re-applies age-based priority boosts. Set to 0 to disable aging entirely. (requires new matcher)`,
+	)
+	MatchingPriorityAgingThreshold = NewTaskQueueDurationSetting(
+		"matching.priorityAgingThreshold",
+		30*time.Second,
+		`Wait time at which a queued task earns one unit of effective-priority boost (lower effectivePriority = preferred for dispatch). Each additional threshold-wait grants one more unit, capped by priorityAgingMaxBoost.`,
+	)
+	MatchingPriorityAgingMaxBoost = NewTaskQueueIntSetting(
+		"matching.priorityAgingMaxBoost",
+		9,
+		`Maximum age-based priority boost a single task may accumulate, in units of effective priority. Hard-capped at effectivePriorityFactor-1 (=9) inside the matcher so an aged task at priority N+1 never leap-frogs a fresh task at priority N.`,
+	)
 	MatchingBacklogTaskForwardTimeout = NewTaskQueueDurationSetting(
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,

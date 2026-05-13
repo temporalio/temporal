@@ -229,6 +229,72 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 	heap.Init(t)
 }
 
+// applyAging walks tasks in the heap and lowers their effectivePriority
+// (= raises dispatch priority) as a function of how long each task has been
+// waiting. Older tasks within the same operator-set priority level dispatch
+// ahead of newer tasks at that level, without ever crossing into a higher
+// operator-set level.
+//
+// Aging is bounded to (effectivePriorityFactor - 1) units of boost so an
+// aged task at priority N+1 can never leap-frog a fresh task at priority N.
+//
+// Idempotent under stable `now`: the boost is recomputed from a per-task
+// `basePriority` snapshot rather than accumulated, so calling applyAging
+// repeatedly with the same `now` produces the same heap state. This also
+// means lowering the threshold at runtime correctly de-boosts tasks that
+// were previously boosted past their new target.
+//
+// Returns true if any task's effectivePriority changed (caller may want to
+// emit a metric).
+func (t *taskPQ) applyAging(
+	now time.Time,
+	threshold time.Duration,
+	maxBoost priorityKey,
+) (changed bool) {
+	if threshold <= 0 || maxBoost <= 0 || len(t.heap) == 0 {
+		return false
+	}
+	// Cap so aging stays strictly within a single operator-set priority level.
+	if maxBoost >= effectivePriorityFactor {
+		maxBoost = effectivePriorityFactor - 1
+	}
+	for _, task := range t.heap {
+		if task.isPollForwarder() {
+			continue
+		}
+		// Snapshot the pre-aging priority on first encounter.
+		if task.basePriority == 0 {
+			task.basePriority = task.effectivePriority
+		}
+		ct := task.getCreateTime()
+		if ct == nil {
+			continue
+		}
+		createdAt := ct.AsTime()
+		if createdAt.IsZero() {
+			continue
+		}
+		age := now.Sub(createdAt)
+		var boost priorityKey
+		if age >= threshold {
+			units := priorityKey(age / threshold)
+			if units > maxBoost {
+				units = maxBoost
+			}
+			boost = units
+		}
+		want := task.basePriority - boost
+		if want != task.effectivePriority {
+			task.effectivePriority = want
+			changed = true
+		}
+	}
+	if changed {
+		heap.Init(t)
+	}
+	return changed
+}
+
 type matcherData struct {
 	config           *taskQueueConfig
 	logger           log.Logger
@@ -502,6 +568,24 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
 	d.reconsiderForwardTimer.set(d.timeSource, d.rematchAfterTimer, delayToForwardingAllowed)
 	return delayToForwardingAllowed <= 0
+}
+
+// ApplyAging acquires the matcher lock, re-applies age-based priority boosts
+// to queued tasks, and wakes any newly-eligible matches if priorities changed.
+//
+// Safe to call at any cadence; returns true if any task's effectivePriority
+// was modified. Caller is responsible for the tick rhythm.
+func (d *matcherData) ApplyAging(threshold time.Duration, maxBoost int) bool {
+	if threshold <= 0 || maxBoost <= 0 {
+		return false
+	}
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	changed := d.tasks.applyAging(d.timeSource.Now(), threshold, priorityKey(maxBoost))
+	if changed {
+		d.findAndWakeMatches()
+	}
+	return changed
 }
 
 // call with lock held
