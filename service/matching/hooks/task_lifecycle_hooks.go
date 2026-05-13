@@ -15,8 +15,11 @@ type SyncMatchOutcome int
 const (
 	// Default zero value; should not be used explicitly.
 	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
-	// The task was not sync-matched. Catch-all for reasons not covered by more specific outcomes.
-	SyncMatchOutcomeNotMatched
+	// Sync match was not attempted because the backlog is too deep. The system skipped sync
+	// match to preserve dispatch ordering — this is normal behavior, not a capacity problem.
+	SyncMatchOutcomeBacklogPresent
+	// Sync match was attempted but no poller was available.
+	SyncMatchOutcomeNoPoller
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
 	// A poller was available but rate limiting blocked the match.

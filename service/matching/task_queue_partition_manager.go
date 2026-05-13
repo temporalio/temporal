@@ -484,15 +484,18 @@ reredirectTask:
 
 func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	switch outcome {
-	case syncMatchSuccess:
-		return hooks.SyncMatchOutcomeSuccess
-	case syncMatchRateLimited:
-		return hooks.SyncMatchOutcomeRateLimited
 	case syncMatchUnspecified:
 		return hooks.SyncMatchOutcomeUnspecified
-	default:
-		return hooks.SyncMatchOutcomeNotMatched
+	case syncMatchSuccess:
+		return hooks.SyncMatchOutcomeSuccess
+	case syncMatchBacklogPresent:
+		return hooks.SyncMatchOutcomeBacklogPresent
+	case syncMatchNoPoller:
+		return hooks.SyncMatchOutcomeNoPoller
+	case syncMatchRateLimited:
+		return hooks.SyncMatchOutcomeRateLimited
 	}
+	return hooks.SyncMatchOutcomeUnspecified
 }
 
 func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
