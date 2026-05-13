@@ -14,7 +14,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
@@ -34,16 +33,14 @@ import (
 // end-to-end SDK serialization against the real server.
 func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest) (string, error) {
 	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.WorkflowService.ServiceName)
-	// fut := nc.ExecuteOperation(ctx, systemnexus.WorkflowService.SignalWithStartWorkflowExecution, req, workflow.NexusOperationOptions{})
 	fut := nc.ExecuteOperation(ctx, workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution,
 		req,
 		workflow.NexusOperationOptions{})
-	var result workflowservice.SignalWorkflowExecutionResponse
+	var result workflowservice.SignalWithStartWorkflowExecutionResponse
 	if err := fut.Get(ctx, &result); err != nil {
 		return "", err
 	}
-	return "some-run-id", nil
-	// return result.RunId, nil
+	return result.RunId, nil
 }
 
 // sysNexusSWSTargetWorkflow is the workflow started by TestBothWorkflowsVisibleAfterSWSFromWorkflow
@@ -131,7 +128,10 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 	for _, event := range pollResp.History.Events {
 		if attrs := event.GetNexusOperationCompletedEventAttributes(); attrs != nil {
 			var resp workflowservice.SignalWithStartWorkflowExecutionResponse
-			s.NoError((temporalproto.CustomJSONUnmarshalOptions{}).Unmarshal(attrs.Result.GetData(), &resp))
+			s.NoError(sdkconverter.PreferProtoDataConverter.FromPayloads(
+				&commonpb.Payloads{Payloads: []*commonpb.Payload{attrs.Result}},
+				&resp,
+			))
 			return &resp, nil
 		}
 		if attrs := event.GetNexusOperationFailedEventAttributes(); attrs != nil {
@@ -273,8 +273,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.NoError(run.Get(ctx, &response))
 	s.True(response.Started)
 
-	// err = s.SdkClient().TerminateWorkflow(ctx, workflowID, response.RunID, "test cleanup")
-	err = s.SdkClient().TerminateWorkflow(ctx, workflowID, "response.RunID", "test cleanup")
+	err = s.SdkClient().TerminateWorkflow(ctx, workflowID, response.GetRunId(), "test cleanup")
 	s.NoError(err)
 
 	// Verify the linkage from the handler workflow in the caller's history.
@@ -672,6 +671,14 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 // path (the system-nexus payload converter) end-to-end against the real embedded server,
 // complementing the injector-based SDK unit test in sdk-go#2293.
 func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSFromWorkflow() {
+	// go.temporal.io/sdk@v1.41.1 (and earlier) panics in workflow.NewNexusClient when the
+	// endpoint name starts with the reserved "__temporal_" prefix. This test exercises the
+	// __temporal_system endpoint via the SDK Nexus client and cannot pass until an SDK
+	// release lifts that check. The proto-binary variant
+	// (TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary) covers the same scenario by
+	// driving the workflow task manually, so coverage is not lost in the meantime.
+	s.T().Skip("requires SDK release that lifts the __temporal_ endpoint prefix check")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	s.T().Cleanup(cancel)
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
@@ -693,7 +700,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	// the RunID of the newly-started target workflow.
 	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
-	}, systemNexusSWSWorkflow, workflowservice.SignalWithStartWorkflowExecutionRequest{
+	}, systemNexusSWSWorkflow, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:   targetWorkflowID,
 		SignalName:   "test-signal",
 		WorkflowType: &commonpb.WorkflowType{Name: "sysNexusSWSTargetWorkflow"},
