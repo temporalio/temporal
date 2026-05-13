@@ -67,7 +67,7 @@ var HistoryModule = fx.Module(
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newCallbackHandler),
-	fx.Provide(newCompletionScheduleToCloseTimeoutTaskHandler),
+	fx.Provide(newScheduleToCloseTimeoutTaskHandler),
 
 	fx.Provide(newLibrary),
 	fx.Invoke(func(registry *chasm.Registry, library *library) error {

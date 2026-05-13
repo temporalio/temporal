@@ -248,10 +248,6 @@ func (h *frontendHandler) ListCallbackExecutions(
 
 	// Lookup the namespace by its name, to confirm it actually exists.
 	namespaceName := namespace.Name(request.GetNamespace())
-	if _, err := h.namespaceRegistry.GetNamespaceID(namespaceName); err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.ListExecutions[*Callback, *callbackpb.CallbackExecutionListInfo](
 		ctx,
 		&chasm.ListExecutionsRequest{
@@ -313,9 +309,6 @@ func (h *frontendHandler) CountCallbackExecutions(
 
 	// Lookup the namespace by its name, to confirm it actually exists.
 	namespaceName := namespace.Name(request.GetNamespace())
-	if _, err := h.namespaceRegistry.GetNamespaceID(namespaceName); err != nil {
-		return nil, err
-	}
 	resp, err := chasm.CountExecutions[*Callback](
 		ctx,
 		&chasm.CountExecutionsRequest{

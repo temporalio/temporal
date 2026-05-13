@@ -319,10 +319,10 @@ func createStandaloneCallback(
 		RegistrationTime: now,
 		Callback:         input.Callback,
 
-		CallbackID:                       input.CallbackID,
-		CompletionScheduleToCloseTimeout: input.CompletionScheduleToCloseTimeout,
-		Completion:                       input.Completion,
-		SearchAttributes:                 input.SearchAttributes,
+		CallbackID:             input.CallbackID,
+		ScheduleToCloseTimeout: input.CompletionScheduleToCloseTimeout,
+		Completion:             input.Completion,
+		SearchAttributes:       input.SearchAttributes,
 	}
 	cb := newStandaloneCallback(ctx, opts)
 
@@ -338,7 +338,7 @@ func createStandaloneCallback(
 			ctx.AddTask(
 				cb,
 				chasm.TaskAttributes{ScheduledTime: timeoutTime},
-				&callbackspb.CompletionScheduleToCloseTimeoutTask{},
+				&callbackspb.ScheduleToCloseTimeoutTask{},
 			)
 		}
 	}

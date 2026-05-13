@@ -33,23 +33,23 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
-	InvocationTaskHandler                       *invocationTaskHandler
-	BackoffTaskHandler                          *backoffTaskHandler
-	CompletionScheduleToCloseTimeoutTaskHandler *completionScheduleToCloseTimeoutTaskHandler
-	callbackSvcHandler                          *callbackHandler
+	InvocationTaskHandler             *invocationTaskHandler
+	BackoffTaskHandler                *backoffTaskHandler
+	ScheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
+	callbackSvcHandler                *callbackHandler
 }
 
 func newLibrary(
 	InvocationTaskHandler *invocationTaskHandler,
 	BackoffTaskHandler *backoffTaskHandler,
-	CompletionScheduleToCloseTimeoutTaskHandler *completionScheduleToCloseTimeoutTaskHandler,
+	ScheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler,
 	callbackSvcHandler *callbackHandler,
 ) *library {
 	return &library{
-		InvocationTaskHandler:                       InvocationTaskHandler,
-		BackoffTaskHandler:                          BackoffTaskHandler,
-		CompletionScheduleToCloseTimeoutTaskHandler: CompletionScheduleToCloseTimeoutTaskHandler,
-		callbackSvcHandler:                          callbackSvcHandler,
+		InvocationTaskHandler:             InvocationTaskHandler,
+		BackoffTaskHandler:                BackoffTaskHandler,
+		ScheduleToCloseTimeoutTaskHandler: ScheduleToCloseTimeoutTaskHandler,
+		callbackSvcHandler:                callbackSvcHandler,
 	}
 }
 
@@ -65,7 +65,7 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		),
 		chasm.NewRegistrablePureTask(
 			"completionScheduleToCloseTimer",
-			l.CompletionScheduleToCloseTimeoutTaskHandler,
+			l.ScheduleToCloseTimeoutTaskHandler,
 		),
 	}
 }

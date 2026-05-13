@@ -14,5 +14,5 @@ message BackoffTask {
   int32 attempt = 1;
 }
 
-// Fired when the callback completion's schedule-to-close timeout expires.
-message CompletionScheduleToCloseTimeoutTask {}
+// Fired when the callback's schedule-to-close timeout expires.
+message ScheduleToCloseTimeoutTask {}

@@ -112,27 +112,27 @@ func (x *BackoffTask) GetAttempt() int32 {
 	return 0
 }
 
-// Fired when the callback completion's schedule-to-close timeout expires.
-type CompletionScheduleToCloseTimeoutTask struct {
+// Fired when the callback's schedule-to-close timeout expires.
+type ScheduleToCloseTimeoutTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CompletionScheduleToCloseTimeoutTask) Reset() {
-	*x = CompletionScheduleToCloseTimeoutTask{}
+func (x *ScheduleToCloseTimeoutTask) Reset() {
+	*x = ScheduleToCloseTimeoutTask{}
 	mi := &file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CompletionScheduleToCloseTimeoutTask) String() string {
+func (x *ScheduleToCloseTimeoutTask) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompletionScheduleToCloseTimeoutTask) ProtoMessage() {}
+func (*ScheduleToCloseTimeoutTask) ProtoMessage() {}
 
-func (x *CompletionScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
+func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -144,8 +144,8 @@ func (x *CompletionScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompletionScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
-func (*CompletionScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
+// Deprecated: Use ScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
+func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
@@ -157,8 +157,8 @@ const file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc = "" 
 	"\x0eInvocationTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"'\n" +
 	"\vBackoffTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"&\n" +
-	"$CompletionScheduleToCloseTimeoutTaskBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x1c\n" +
+	"\x1aScheduleToCloseTimeoutTaskBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -174,9 +174,9 @@ func file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP() 
 
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_goTypes = []any{
-	(*InvocationTask)(nil),                       // 0: temporal.server.chasm.lib.callbacks.proto.v1.InvocationTask
-	(*BackoffTask)(nil),                          // 1: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask
-	(*CompletionScheduleToCloseTimeoutTask)(nil), // 2: temporal.server.chasm.lib.callbacks.proto.v1.CompletionScheduleToCloseTimeoutTask
+	(*InvocationTask)(nil),             // 0: temporal.server.chasm.lib.callbacks.proto.v1.InvocationTask
+	(*BackoffTask)(nil),                // 1: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask
+	(*ScheduleToCloseTimeoutTask)(nil), // 2: temporal.server.chasm.lib.callbacks.proto.v1.ScheduleToCloseTimeoutTask
 }
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

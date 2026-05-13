@@ -46,7 +46,7 @@ message CallbackState {
 
   // (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
   // is called to when the result gets delivered.
-  google.protobuf.Duration completion_schedule_to_close_timeout = 13;
+  google.protobuf.Duration schedule_to_close_timeout = 13;
 }
 
 // Status of a callback.

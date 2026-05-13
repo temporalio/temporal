@@ -92,10 +92,10 @@ type newStandaloneCallbackOpts struct {
 	RegistrationTime *timestamppb.Timestamp
 	Callback         *callbackspb.Callback
 
-	CallbackID                       string
-	CompletionScheduleToCloseTimeout *durationpb.Duration
-	Completion                       *callbackpb.CallbackExecutionCompletion
-	SearchAttributes                 map[string]*commonpb.Payload
+	CallbackID             string
+	ScheduleToCloseTimeout *durationpb.Duration
+	Completion             *callbackpb.CallbackExecutionCompletion
+	SearchAttributes       map[string]*commonpb.Payload
 }
 
 // newStandaloneCallback returns a new Callback component which will deliver the supplied
@@ -108,7 +108,7 @@ func newStandaloneCallback(
 
 	// Add standalone-specific fields.
 	cb.CallbackId = opts.CallbackID
-	cb.CompletionScheduleToCloseTimeout = opts.CompletionScheduleToCloseTimeout
+	cb.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
 	cb.SuppliedCompletion = chasm.NewDataField(ctx, opts.Completion)
 
 	visibility := chasm.NewVisibilityWithData(ctx, opts.SearchAttributes, nil)
@@ -409,7 +409,7 @@ func (c *Callback) describe(ctx chasm.Context) (*callbackpb.CallbackExecutionInf
 		LastAttemptFailure:      c.LastAttemptFailure,
 		NextAttemptScheduleTime: c.NextAttemptScheduleTime,
 		CloseTime:               c.CloseTime,
-		ScheduleToCloseTimeout:  c.CompletionScheduleToCloseTimeout,
+		ScheduleToCloseTimeout:  c.ScheduleToCloseTimeout,
 		StateTransitionCount:    exInfo.StateTransitionCount,
 	}
 	return info, nil
