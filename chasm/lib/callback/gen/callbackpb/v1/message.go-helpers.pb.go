@@ -90,6 +90,7 @@ var (
 		"Failed":      4,
 		"Succeeded":   5,
 		"Terminated":  6,
+		"TimedOut":    7,
 	}
 )
 

@@ -43,8 +43,10 @@ const (
 	CALLBACK_STATUS_FAILED CallbackStatus = 4
 	// Callback has succeeded.
 	CALLBACK_STATUS_SUCCEEDED CallbackStatus = 5
-	// Callback was terminated by request.
+	// Callback was terminated by request. Only relevant for standalone callbacks.
 	CALLBACK_STATUS_TERMINATED CallbackStatus = 6
+	// Callback exceeded the schedule-to-close timeout.
+	CALLBACK_STATUS_TIMED_OUT CallbackStatus = 7 // TODO(chrsmith): Wire this new state in.
 )
 
 // Enum value maps for CallbackStatus.
@@ -57,6 +59,7 @@ var (
 		4: "CALLBACK_STATUS_FAILED",
 		5: "CALLBACK_STATUS_SUCCEEDED",
 		6: "CALLBACK_STATUS_TERMINATED",
+		7: "CALLBACK_STATUS_TIMED_OUT",
 	}
 	CallbackStatus_value = map[string]int32{
 		"CALLBACK_STATUS_UNSPECIFIED": 0,
@@ -66,6 +69,7 @@ var (
 		"CALLBACK_STATUS_FAILED":      4,
 		"CALLBACK_STATUS_SUCCEEDED":   5,
 		"CALLBACK_STATUS_TERMINATED":  6,
+		"CALLBACK_STATUS_TIMED_OUT":   7,
 	}
 )
 
@@ -91,6 +95,8 @@ func (x CallbackStatus) String() string {
 		return "Succeeded"
 	case CALLBACK_STATUS_TERMINATED:
 		return "Terminated"
+	case CALLBACK_STATUS_TIMED_OUT:
+		return "TimedOut"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -422,7 +428,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\vHeaderEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
-	"\avariantJ\x04\b\x01\x10\x02*\xe9\x01\n" +
+	"\avariantJ\x04\b\x01\x10\x02*\x88\x02\n" +
 	"\x0eCallbackStatus\x12\x1f\n" +
 	"\x1bCALLBACK_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CALLBACK_STATUS_STANDBY\x10\x01\x12\x1d\n" +
@@ -430,7 +436,8 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x1bCALLBACK_STATUS_BACKING_OFF\x10\x03\x12\x1a\n" +
 	"\x16CALLBACK_STATUS_FAILED\x10\x04\x12\x1d\n" +
 	"\x19CALLBACK_STATUS_SUCCEEDED\x10\x05\x12\x1e\n" +
-	"\x1aCALLBACK_STATUS_TERMINATED\x10\x06BGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"\x1aCALLBACK_STATUS_TERMINATED\x10\x06\x12\x1d\n" +
+	"\x19CALLBACK_STATUS_TIMED_OUT\x10\aBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescOnce sync.Once

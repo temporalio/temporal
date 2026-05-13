@@ -98,10 +98,9 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
 	case callbackspb.CALLBACK_STATUS_FAILED,
-		callbackspb.CALLBACK_STATUS_TERMINATED:
-		// TODO: Use chasm.LifecycleStateTerminated when it's available (currently commented out
-		// in chasm/component.go:70). For now, LifecycleStateFailed is functionally correct
-		// as IsClosed() returns true for all states >= LifecycleStateCompleted.
+		callbackspb.CALLBACK_STATUS_TERMINATED,
+		callbackspb.CALLBACK_STATUS_TIMED_OUT:
+		// TODO(chrsmith): Confirm the response from #crew-chasm
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning
@@ -118,9 +117,9 @@ func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 
 func (c *Callback) ContextMetadata(ctx chasm.Context) map[string]string {
 	return map[string]string{
-		"RequestID": c.RequestId,
+		"request-id": c.RequestId,
 		// Only set for standalone callbacks.
-		"CallbackID": ctx.ExecutionKey().BusinessID,
+		"callback-id": ctx.ExecutionKey().BusinessID,
 	}
 }
 
