@@ -6,6 +6,7 @@ import (
 	"time"
 
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -1628,7 +1629,7 @@ See DynamicRateLimitingParams comments for more details.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
-		time.Second*20,
+		common.DefaultLongPollTimeout,
 		`HistoryLongPollExpirationInterval is the long poll expiration interval in the history service`,
 	)
 	HistoryCacheSizeBasedLimit = NewGlobalBoolSetting(
