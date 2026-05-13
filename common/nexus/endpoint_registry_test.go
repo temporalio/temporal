@@ -27,6 +27,7 @@ import (
 
 type testMocks struct {
 	config         *EndpointRegistryConfig
+	lookupCache    *EndpointLookupCache
 	matchingClient *matchingservicemock.MockMatchingServiceClient
 	persistence    *persistence.MockNexusEndpointManager
 }
@@ -54,7 +55,7 @@ func TestGet(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.lookupCache, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -65,10 +66,7 @@ func TestGet(t *testing.T) {
 	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.Endpoint.Spec.Name)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
-
-	reg.dataLock.RLock()
-	defer reg.dataLock.RUnlock()
-	assert.Equal(t, int64(1), reg.tableVersion)
+	require.Equal(t, int64(1), mocks.lookupCache.Version())
 }
 
 func TestGetNotFound(t *testing.T) {
@@ -99,7 +97,7 @@ func TestGetNotFound(t *testing.T) {
 	sentinelErr := errors.New("sentinel")
 	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), gomock.Any()).Return(nil, sentinelErr)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.lookupCache, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -123,10 +121,7 @@ func TestGetNotFound(t *testing.T) {
 	endpoint, err = reg.GetByName(context.Background(), "ignored", uuid.NewString())
 	assert.ErrorAs(t, err, &notFound)
 	assert.Nil(t, endpoint)
-
-	reg.dataLock.RLock()
-	defer reg.dataLock.RUnlock()
-	assert.Equal(t, int64(1), reg.tableVersion)
+	require.Equal(t, int64(1), mocks.lookupCache.Version())
 }
 
 func TestInitializationFallback(t *testing.T) {
@@ -142,17 +137,14 @@ func TestInitializationFallback(t *testing.T) {
 		Entries:       []*persistencespb.NexusEndpointEntry{testEndpoint},
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.lookupCache, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
 	endpoint, err := reg.GetByID(context.Background(), testEndpoint.Id)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEndpoint, endpoint)
-
-	reg.dataLock.RLock()
-	defer reg.dataLock.RUnlock()
-	assert.Equal(t, int64(1), reg.tableVersion)
+	require.Equal(t, int64(1), mocks.lookupCache.Version())
 }
 
 func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
@@ -216,7 +208,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.lookupCache, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -227,10 +219,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry1, entry)
-
-	reg.dataLock.RLock()
-	defer reg.dataLock.RUnlock()
-	assert.Equal(t, int64(3), reg.tableVersion)
+	require.Equal(t, int64(3), mocks.lookupCache.Version())
 }
 
 func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
@@ -283,7 +272,7 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 		NextPageToken: nil,
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.lookupCache, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -294,10 +283,7 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry1, entry)
-
-	reg.dataLock.RLock()
-	defer reg.dataLock.RUnlock()
-	assert.Equal(t, int64(3), reg.tableVersion)
+	require.Equal(t, int64(3), mocks.lookupCache.Version())
 }
 
 func newTestMocks(t *testing.T) *testMocks {
@@ -305,6 +291,7 @@ func newTestMocks(t *testing.T) *testMocks {
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
 	return &testMocks{
 		config:         testConfig,
+		lookupCache:    NewEndpointLookupCache(),
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),
 		persistence:    persistence.NewMockNexusEndpointManager(ctrl),
 	}

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -77,6 +78,7 @@ type (
 		frontendMembershipAddress string
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
+		nexusEndpointLookupCache  *commonnexus.EndpointLookupCache
 
 		// These are routing/load balancing clients but do not do retries:
 		adminClient     adminservice.AdminServiceClient
@@ -222,6 +224,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		testHooks:                        testhooks.NewTestHooks(),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
+		nexusEndpointLookupCache:         commonnexus.NewEndpointLookupCache(),
 		hostsByProtocolByService:         params.HostsByProtocolByService,
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
@@ -670,7 +673,12 @@ func (c *TemporalImpl) startWorker() {
 }
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
-	return fx.Options(c.serviceFxOptions[serviceName]...)
+	options := []fx.Option{
+		// Share the Nexus endpoint lookup cache between history and matching for consistent lookups.
+		fx.Supply(c.nexusEndpointLookupCache),
+		fx.Options(c.serviceFxOptions[serviceName]...),
+	}
+	return fx.Options(options...)
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {

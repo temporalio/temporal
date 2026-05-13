@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -135,6 +136,7 @@ var (
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
+			commonnexus.NewEndpointLookupCache,
 			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
@@ -373,6 +375,7 @@ type (
 		InstanceID                      resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		NexusEndpointLookupCache        *commonnexus.EndpointLookupCache
 	}
 )
 
@@ -396,6 +399,8 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			params.ClusterMetadata,
 			params.Cfg,
 			params.SpanExporters,
+			// Share the Nexus endpoint lookup cache between history and matching for consistent lookups when run in-process.
+			params.NexusEndpointLookupCache,
 		),
 		fx.Provide(
 			resource.DefaultSnTaggedLoggerProvider,

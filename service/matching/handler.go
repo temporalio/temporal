@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -67,6 +68,7 @@ type (
 		NamespaceReplicationQueue     persistence.NamespaceReplicationQueue
 		VisibilityManager             manager.VisibilityManager
 		NexusEndpointManager          persistence.NexusEndpointManager
+		EndpointLookupCache           *commonnexus.EndpointLookupCache
 		TestHooks                     testhooks.TestHooks
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
@@ -111,6 +113,7 @@ func NewHandler(
 			params.NamespaceReplicationQueue,
 			params.VisibilityManager,
 			params.NexusEndpointManager,
+			params.EndpointLookupCache,
 			params.TestHooks,
 			params.SearchAttributeProvider,
 			params.SearchAttributeMapperProvider,

@@ -68,6 +68,7 @@ func register(
 func endpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
+	lookupCache *commonnexus.EndpointLookupCache,
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -75,6 +76,7 @@ func endpointRegistryProvider(
 	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
 	return commonnexus.NewEndpointRegistry(
 		registryConfig,
+		lookupCache,
 		matchingClient,
 		endpointManager,
 		logger,
