@@ -793,7 +793,7 @@ func TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression(t *testing
 	}
 
 	const N = 100
-	for i := 0; i < N; i++ {
+	for i := range N {
 		current, _, _, ramping, _, _, _, _ := CalculateTaskQueueVersioningInfo(data)
 		if !current.Equal(v1) {
 			t.Fatalf("iteration %d: got current = %v, want %v (map iteration order regression)", i, current, v1)
