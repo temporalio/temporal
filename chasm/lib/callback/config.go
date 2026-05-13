@@ -45,6 +45,13 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
+var MaxCallbackScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.limit.scheduleToCloseTimeout",
+	0,
+	`Maximum allowed duration of a callback execution. Commands that specify no schedule-to-close timeout
+or a longer timeout than permitted will have their schedule-to-close timeout capped to this value. 0 implies no limit.`,
+)
+
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 	"callback.retryPolicy.initialInterval",
 	time.Second,
@@ -59,11 +66,12 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 
 type Config struct {
 	// callback.* settings.
-	EnableStandaloneExecutions dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	LongPollBuffer             dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	LongPollTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	RequestTimeout             dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy                func() backoff.RetryPolicy
+	EnableStandaloneExecutions        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LongPollBuffer                    dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxCallbackScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout                    dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                       func() backoff.RetryPolicy
 
 	// Settings defined elsewhere.
 	CHASMEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -80,10 +88,11 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		EnableStandaloneExecutions: EnableStandaloneExecutions.Get(dc),
-		LongPollBuffer:             LongPollBuffer.Get(dc),
-		LongPollTimeout:            LongPollTimeout.Get(dc),
-		RequestTimeout:             RequestTimeout.Get(dc),
+		EnableStandaloneExecutions:        EnableStandaloneExecutions.Get(dc),
+		LongPollBuffer:                    LongPollBuffer.Get(dc),
+		LongPollTimeout:                   LongPollTimeout.Get(dc),
+		MaxCallbackScheduleToCloseTimeout: MaxCallbackScheduleToCloseTimeout.Get(dc),
+		RequestTimeout:                    RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

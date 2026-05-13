@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Returns a serviceerror.InvalidArgument error for a missing required field.
@@ -109,8 +110,17 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(r
 	}
 
 	// ScheduleToCloseTimeout
-	if req.GetScheduleToCloseTimeout() != nil && req.GetScheduleToCloseTimeout().AsDuration() <= 0 {
-		return serviceerror.NewInvalidArgument("schedule_to_close_timeout must be positive")
+	if schedToCloseTimeout := req.GetScheduleToCloseTimeout(); schedToCloseTimeout != nil {
+		if schedToCloseTimeout.AsDuration() <= 0 {
+			return serviceerror.NewInvalidArgument("schedule_to_close_timeout must be positive")
+		}
+
+		// Clamp the ScheduleToCloseTimeout to the maximum allowed if set.
+		maxAllowed := rv.config.MaxCallbackScheduleToCloseTimeout(req.Namespace)
+		if maxAllowed > 0 {
+			clamped := min(schedToCloseTimeout.AsDuration(), maxAllowed)
+			req.ScheduleToCloseTimeout = durationpb.New(clamped)
+		}
 	}
 
 	// Validate the input data to deliver to the callback URL, currently only one kind is supported (Completion).
