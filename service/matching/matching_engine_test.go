@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -264,7 +265,7 @@ func newMatchingEngine(
 		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
-		nexusEndpointClient: newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		nexusEndpointClient: newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager, commonnexus.NewEndpointLookupCache()),
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	return e

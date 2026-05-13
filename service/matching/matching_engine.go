@@ -267,6 +267,7 @@ func NewEngine(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	endpointLookupCache *commonnexus.EndpointLookupCache,
 	testHooks testhooks.TestHooks,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
@@ -293,7 +294,7 @@ func NewEngine(
 		clusterMeta:            clusterMeta,
 		timeSource:             clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:      visibilityManager,
-		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager, endpointLookupCache),
 		// nexusEndpointsOwnershipLostCh initialized below
 		saProvider:       saProvider,
 		saMapperProvider: saMapperProvider,

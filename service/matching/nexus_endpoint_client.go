@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
+	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -55,11 +56,9 @@ type (
 	nexusEndpointClient struct {
 		hasLoadedEndpoints atomic.Bool
 
-		sync.RWMutex        // protects tableVersion, endpoints, endpointsByID, endpointsByName, and tableVersionChanged
+		sync.RWMutex        // protects tableVersion, endpointEntries, and tableVersionChanged
 		tableVersion        int64
 		endpointEntries     []*persistencespb.NexusEndpointEntry // sorted by ID to support pagination during ListNexusEndpoints
-		endpointsByID       map[string]*persistencespb.NexusEndpointEntry
-		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
 		refreshLock              sync.Mutex // protects refreshHandle which is updated whenever node gains/loses ownership
@@ -67,16 +66,19 @@ type (
 		endpointsRefreshInterval dynamicconfig.DurationPropertyFn
 
 		persistence p.NexusEndpointManager
+		lookupCache *commonnexus.EndpointLookupCache
 	}
 )
 
 func newEndpointClient(
 	endpointsRefreshInterval dynamicconfig.DurationPropertyFn,
 	persistence p.NexusEndpointManager,
+	lookupCache *commonnexus.EndpointLookupCache,
 ) *nexusEndpointClient {
 	return &nexusEndpointClient{
 		endpointsRefreshInterval: endpointsRefreshInterval,
 		persistence:              persistence,
+		lookupCache:              lookupCache,
 		tableVersionChanged:      make(chan struct{}),
 	}
 }
@@ -96,7 +98,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 	m.Lock()
 	defer m.Unlock()
 
-	if _, exists := m.endpointsByName[request.spec.GetName()]; exists {
+	if _, _, exists := m.lookupCache.GetByName(request.spec.GetName()); exists {
 		return nil, serviceerror.NewAlreadyExistsf("error creating Nexus endpoint. Endpoint with name %v already registered", request.spec.GetName())
 	}
 
@@ -120,8 +122,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 
 	entry.Version = resp.Version
 	m.tableVersion++
-	m.endpointsByID[entry.Id] = entry
-	m.endpointsByName[entry.Endpoint.Spec.Name] = entry
+	m.lookupCache.ApplyChange(m.tableVersion, nil, entry)
 	m.insertEndpointLocked(entry)
 	ch := m.tableVersionChanged
 	m.tableVersionChanged = make(chan struct{})
@@ -147,7 +148,7 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 	m.Lock()
 	defer m.Unlock()
 
-	previous, exists := m.endpointsByID[request.endpointID]
+	previous, _, exists := m.lookupCache.GetByID(request.endpointID)
 	if !exists {
 		return nil, serviceerror.NewNotFoundf("error updating Nexus endpoint. endpoint ID %v not found", request.endpointID)
 	}
@@ -175,8 +176,7 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 
 	entry.Version = resp.Version
 	m.tableVersion++
-	m.endpointsByID[entry.Id] = entry
-	m.endpointsByName[entry.Endpoint.Spec.Name] = entry
+	m.lookupCache.ApplyChange(m.tableVersion, previous, entry)
 	m.insertEndpointLocked(entry)
 	ch := m.tableVersionChanged
 	m.tableVersionChanged = make(chan struct{})
@@ -213,7 +213,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 	m.Lock()
 	defer m.Unlock()
 
-	entry, ok := m.endpointsByID[request.Id]
+	entry, _, ok := m.lookupCache.GetByID(request.Id)
 	if !ok {
 		return nil, serviceerror.NewNotFoundf("error deleting nexus endpoint with ID: %v", request.Id)
 	}
@@ -227,8 +227,7 @@ func (m *nexusEndpointClient) DeleteNexusEndpoint(
 	}
 
 	m.tableVersion++
-	delete(m.endpointsByID, request.Id)
-	delete(m.endpointsByName, entry.Endpoint.Spec.Name)
+	m.lookupCache.ApplyChange(m.tableVersion, entry, nil)
 	m.endpointEntries = slices.DeleteFunc(m.endpointEntries, func(entry *persistencespb.NexusEndpointEntry) bool {
 		return entry.Id == request.Id
 	})
@@ -330,8 +329,6 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 		m.tableVersion = resp.TableVersion
 		for _, entry := range resp.Entries {
 			m.endpointEntries = append(m.endpointEntries, entry)
-			m.endpointsByID[entry.Id] = entry
-			m.endpointsByName[entry.Endpoint.Spec.Name] = entry
 		}
 
 		if len(pageToken) == 0 {
@@ -340,14 +337,16 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 	}
 
 	m.hasLoadedEndpoints.Store(ctx.Err() == nil)
+	if ctx.Err() == nil {
+		m.lookupCache.ReplaceAll(m.tableVersion, m.endpointEntries)
+	}
 	return ctx.Err()
 }
 
 func (m *nexusEndpointClient) resetCacheStateLocked() {
 	m.tableVersion = 0
 	m.endpointEntries = []*persistencespb.NexusEndpointEntry{}
-	m.endpointsByID = make(map[string]*persistencespb.NexusEndpointEntry)
-	m.endpointsByName = make(map[string]*persistencespb.NexusEndpointEntry)
+	m.lookupCache.Clear()
 }
 
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for

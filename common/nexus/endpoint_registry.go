@@ -3,7 +3,6 @@ package nexus
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,11 +50,7 @@ type (
 
 		dataReady atomic.Pointer[dataReady]
 
-		dataLock        sync.RWMutex // Protects tableVersion and endpoints.
-		tableVersion    int64
-		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
-		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
-
+		lookupCache    *EndpointLookupCache
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
 		logger         log.Logger
@@ -85,18 +80,18 @@ func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryCo
 
 func NewEndpointRegistry(
 	config *EndpointRegistryConfig,
+	lookupCache *EndpointLookupCache,
 	matchingClient matchingservice.MatchingServiceClient,
 	persistence p.NexusEndpointManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *EndpointRegistryImpl {
 	return &EndpointRegistryImpl{
-		config:          config,
-		endpointsByID:   make(map[string]*persistencespb.NexusEndpointEntry),
-		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
-		matchingClient:  matchingClient,
-		persistence:     persistence,
-		logger:          logger,
+		config:         config,
+		lookupCache:    lookupCache,
+		matchingClient: matchingClient,
+		persistence:    persistence,
+		logger:         logger,
 		readThroughCacheByID: cache.NewWithMetrics(config.readThroughCacheSize(), &cache.Options{
 			TTL: config.readThroughCacheTTL(),
 		}, metricsHandler.WithTags(metrics.CacheTypeTag(metrics.NexusEndpointRegistryReadThroughCacheTypeTagValue))),
@@ -148,14 +143,11 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
-	r.dataLock.RLock()
-	endpoint, ok := r.endpointsByName[endpointName]
-	r.dataLock.RUnlock()
 
-	if !ok {
-		return nil, serviceerror.NewNotFoundf("could not find Nexus endpoint by name: %v", endpointName)
+	if endpoint, _, ok := r.lookupCache.GetByName(endpointName); ok {
+		return endpoint, nil
 	}
-	return endpoint, nil
+	return nil, serviceerror.NewNotFoundf("could not find Nexus endpoint by name: %v", endpointName)
 }
 
 func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persistencespb.NexusEndpointEntry, error) {
@@ -163,9 +155,7 @@ func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persist
 		return nil, err
 	}
 
-	r.dataLock.RLock()
-	endpoint, ok := r.endpointsByID[id]
-	r.dataLock.RUnlock()
+	endpoint, _, ok := r.lookupCache.GetByID(id)
 
 	if !ok {
 		// Entry not found, attempt read-through to persistence.
@@ -219,18 +209,14 @@ func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context, dataRea
 				close(dataReady.ready)
 			}
 		} else {
-			r.dataLock.Lock()
-			prevTableVersion := r.tableVersion
-			r.dataLock.Unlock()
+			prevTableVersion := r.lookupCache.Version()
 
 			// Endpoints have previously been loaded, so just keep them up to date with long poll requests to
 			// matching, without fallback to persistence. Ignoring long poll errors since we will just retry
 			// on next loop iteration.
 			_ = backoff.ThrottleRetryContext(ctx, r.refreshEndpoints, r.config.refreshRetryPolicy, nil)
 
-			r.dataLock.Lock()
-			enforceMinWait = prevTableVersion == r.tableVersion
-			r.dataLock.Unlock()
+			enforceMinWait = prevTableVersion == r.lookupCache.Version()
 		}
 		elapsed := time.Since(start)
 
@@ -254,27 +240,14 @@ func (r *EndpointRegistryImpl) loadEndpoints(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
-	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
-	for _, endpoint := range endpoints {
-		endpointsByID[endpoint.Id] = endpoint
-		endpointsByName[endpoint.Endpoint.Spec.Name] = endpoint
-	}
 
-	r.dataLock.Lock()
-	defer r.dataLock.Unlock()
-
-	r.tableVersion = tableVersion
-	r.endpointsByID = endpointsByID
-	r.endpointsByName = endpointsByName
+	r.lookupCache.ReplaceAll(tableVersion, endpoints)
 	return nil
 }
 
 // refreshEndpoints sends long-poll requests to matching to check for any updates to endpoint data.
 func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
-	r.dataLock.RLock()
-	currentTableVersion := r.tableVersion
-	r.dataLock.RUnlock()
+	currentTableVersion := r.lookupCache.Version()
 
 	resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		NextPageToken:         nil,
@@ -328,19 +301,7 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 		entries = append(entries, resp.Entries...)
 	}
 
-	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
-	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
-	for _, entry := range entries {
-		endpointsByID[entry.Id] = entry
-		endpointsByName[entry.Endpoint.Spec.Name] = entry
-	}
-
-	r.dataLock.Lock()
-	defer r.dataLock.Unlock()
-
-	r.tableVersion = currentTableVersion
-	r.endpointsByID = endpointsByID
-	r.endpointsByName = endpointsByName
+	r.lookupCache.ReplaceAll(currentTableVersion, entries)
 
 	return nil
 }

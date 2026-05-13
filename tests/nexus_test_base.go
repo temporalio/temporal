@@ -3,9 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -59,7 +57,6 @@ func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, 
 		})
 	})
 
-	env.ensureNexusEndpoint(ctx, t, name)
 	return resp.Endpoint
 }
 
@@ -94,27 +91,7 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 		})
 	})
 
-	env.ensureNexusEndpoint(ctx, t, endpointName)
 	return endpointName
-}
-
-// ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests
-// can use it.
-func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, endpointName string) {
-	require.Eventually(t, func() bool {
-		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Endpoint:  endpointName,
-			Service:   "probe",
-			Operation: "probe",
-			RequestId: "probe",
-		})
-		if notFound, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-			msg := notFound.Error()
-			return msg != "endpoint not registered" && !strings.HasPrefix(msg, "could not find Nexus endpoint by name:")
-		}
-		return true
-	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
