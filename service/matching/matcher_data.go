@@ -43,7 +43,7 @@ const (
 	syncMatchNoPoller
 	// A poller was available but rate limiting blocked the match.
 	syncMatchRateLimited
-	// The task was matched to a poller but RecordTaskStarted failed (e.g. busy workflow).
+	// A poller was available but RecordTaskStarted failed (e.g. busy workflow), so the task was not dispatched.
 	syncMatchStartFailed
 )
 
