@@ -10,9 +10,6 @@ import "temporal/api/failure/v1/message.proto";
 option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
 
 message CallbackState {
-  // Trigger for when the workflow is closed.
-  message WorkflowClosed {}
-
   // Information on how this callback should be invoked (e.g. its URL and type).
   Callback callback = 1;
   // The time when the callback was registered.
