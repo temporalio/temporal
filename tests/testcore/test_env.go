@@ -87,7 +87,9 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster      bool
+	dedicatedReason       string
 	dynamicConfigSettings []dynamicConfigOverride
+	clusterOptions        []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -106,6 +108,17 @@ func WithDedicatedCluster() TestOption {
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
+	}
+}
+
+// WithClusterOptions appends TestClusterOptions (e.g. WithFxOptionsForService)
+// to the cluster configuration. This implies a dedicated cluster because custom
+// fx options cannot be shared across tests.
+func WithClusterOptions(opts ...TestClusterOption) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, opts...)
+		o.dedicatedReason = "custom cluster options used"
 	}
 }
 
@@ -136,6 +149,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		opt(&options)
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
+	if options.dedicatedReason != "" {
+		dedicatedGuard.record(options.dedicatedReason)
+	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
@@ -150,7 +166,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
