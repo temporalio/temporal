@@ -19,6 +19,7 @@ import (
 
 var (
 	ErrWorkflowIDNotSet                            = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errConflictPolicyFailNotSupported              = serviceerror.NewInvalidArgument("Invalid WorkflowIDConflictPolicy: WORKFLOW_ID_CONFLICT_POLICY_FAIL is not supported for this operation.")
 	errIncompatibleIDReusePolicyTerminateIfRunning = serviceerror.NewInvalidArgument("Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy")
 	errIncompatibleIDReusePolicyRejectDuplicate    = serviceerror.NewInvalidArgument("Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING")
 	errInvalidWorkflowExecutionTimeoutSeconds      = serviceerror.NewInvalidArgument("An invalid WorkflowExecutionTimeoutSeconds is set on request.")
@@ -114,6 +115,9 @@ func (v *RequestValidator) ValidateWorkflowIdReusePolicy(
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		return errIncompatibleIDReusePolicyTerminateIfRunning
 	}
+	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		return errConflictPolicyFailNotSupported
+	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE {
 		return errIncompatibleIDReusePolicyRejectDuplicate
@@ -207,7 +211,7 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return serviceerror.NewInvalidArgumentf("workflow type name exceeds maximum allowed length (%d/%d)", len(request.GetWorkflowType().GetName()), v.config.maxIDLengthLimit())
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", v.config.maxIDLengthLimit()); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", v.config.maxIDLengthLimit()); err != nil {
 		return err
 	}
 
