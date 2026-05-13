@@ -134,6 +134,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 			return nil, err
 		}
 
+		// TODO: once V1 schedules are fully migrated to CHASM, remove this block entirely.
 		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID && vi.archetypeID != chasm.SchedulerArchetypeID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}

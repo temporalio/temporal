@@ -362,22 +362,6 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 		return err
 	}
 
-	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
-	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
-	// In the CHASM context (migration period), generate an OR to match both V1 and V2.
-	if saColNameExpr.alias == sadefs.ScheduleID && c.archetypeID == chasm.SchedulerArchetypeID {
-		v1Right := addSchedulePrefixToSQLExpr(expr.Right)
-		v1Expr := &sqlparser.ComparisonExpr{
-			Operator: expr.Operator,
-			Left:     expr.Left,
-			Right:    v1Right,
-		}
-		*exprRef = &sqlparser.ParenExpr{
-			Expr: &sqlparser.OrExpr{Left: v1Expr, Right: expr},
-		}
-		return nil
-	}
-
 	//nolint:revive,exhaustive // missing default case
 	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
@@ -413,6 +397,35 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 		}
 		expr.Escape = defaultLikeEscapeExpr
 		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+	}
+
+	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
+	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
+	// In the CHASM context (migration period), generate an OR/AND to match/exclude both V1 and V2.
+	// This block runs after the STARTS_WITH → LIKE conversion above so the V1 clone inherits the
+	// already-converted operator and escape settings.
+	// TODO: once V1 schedules are fully migrated to CHASM, remove this OR/AND block and only use V2 (unprefixed) values.
+	if saColNameExpr.alias == sadefs.ScheduleID && c.archetypeID == chasm.SchedulerArchetypeID {
+		isNegative := expr.Operator == sqlparser.NotEqualStr ||
+			expr.Operator == sqlparser.NotInStr ||
+			expr.Operator == sqlparser.NotLikeStr
+		v1Expr := &sqlparser.ComparisonExpr{
+			Operator: expr.Operator,
+			Left:     expr.Left,
+			Right:    addSchedulePrefixToSQLExpr(expr.Right),
+			Escape:   expr.Escape,
+		}
+		// Negative operators use AND so both V1 and V2 forms are excluded.
+		// Positive operators use OR so a match on either form is a hit.
+		if isNegative {
+			*exprRef = &sqlparser.ParenExpr{
+				Expr: &sqlparser.AndExpr{Left: v1Expr, Right: expr},
+			}
+		} else {
+			*exprRef = &sqlparser.ParenExpr{
+				Expr: &sqlparser.OrExpr{Left: v1Expr, Right: expr},
+			}
+		}
 	}
 
 	return nil
@@ -505,6 +518,7 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			return err
 		}
 
+		// TODO: once V1 schedules are fully migrated to CHASM, remove this block entirely.
 		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID && c.archetypeID != chasm.SchedulerArchetypeID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}

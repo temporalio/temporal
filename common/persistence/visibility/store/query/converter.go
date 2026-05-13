@@ -404,6 +404,7 @@ func (c *QueryConverter[ExprT]) convertComparisonExpr(
 		}
 		if c.archetypeID == chasm.SchedulerArchetypeID {
 			// CHASM path handles both V1 (prefixed) and V2 (unprefixed) schedules during migration.
+			// TODO: once V1 schedules are fully migrated to CHASM, remove the OR/AND and only use V2 (unprefixed) values.
 			v1Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, prefixScheduleIDValues(values))
 			if err != nil {
 				return out, err
@@ -411,6 +412,11 @@ func (c *QueryConverter[ExprT]) convertComparisonExpr(
 			v2Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, values)
 			if err != nil {
 				return out, err
+			}
+			// Negative operators must use AND so both V1 and V2 forms are excluded.
+			// Positive operators use OR so a match on either V1 or V2 form is a hit.
+			if isNegativeScheduleIDOperator(expr.Operator) {
+				return c.storeQC.BuildAndExpr(v1Expr, v2Expr)
 			}
 			return c.storeQC.BuildOrExpr(v1Expr, v2Expr)
 		}
@@ -813,6 +819,15 @@ func isSupportedComparisonOperator(operator string) bool {
 
 func isSupportedKeywordOperator(operator string) bool {
 	return slices.Contains(supportedKeywordOperators, operator)
+}
+
+// isNegativeScheduleIDOperator returns true for operators that express exclusion.
+// For ScheduleId filters in the CHASM migration path, negative operators require AND
+// (both V1 and V2 forms must be excluded), while positive operators use OR.
+func isNegativeScheduleIDOperator(operator string) bool {
+	return operator == sqlparser.NotEqualStr ||
+		operator == sqlparser.NotInStr ||
+		operator == sqlparser.NotStartsWithStr
 }
 
 func isSupportedKeywordListOperator(operator string) bool {

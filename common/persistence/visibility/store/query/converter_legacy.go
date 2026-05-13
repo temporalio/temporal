@@ -472,6 +472,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
 	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
 	// In the CHASM context (migration period), generate an OR to match both V1 and V2.
+	// TODO: once V1 schedules are fully migrated to CHASM, remove this OR/AND block and only use V2 (unprefixed) values.
 	if alias == sadefs.ScheduleID && colName == sadefs.WorkflowID && c.archetypeID == chasm.SchedulerArchetypeID {
 		v1ColValues := make([]any, len(colValues))
 		for i, v := range colValues {
@@ -484,6 +485,13 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		v2Query, err := buildESComparisonQuery(colName, comparisonExpr.Operator, colValues, tp)
 		if err != nil {
 			return nil, err
+		}
+		// Negative operators use AND so both V1 and V2 forms are excluded.
+		// Positive operators use OR (should) so a match on either form is a hit.
+		if comparisonExpr.Operator == sqlparser.NotEqualStr ||
+			comparisonExpr.Operator == sqlparser.NotInStr ||
+			comparisonExpr.Operator == sqlparser.NotStartsWithStr {
+			return elastic.NewBoolQuery().Must(v1Query, v2Query), nil
 		}
 		return elastic.NewBoolQuery().Should(v1Query, v2Query).MinimumNumberShouldMatch(1), nil
 	}
