@@ -160,6 +160,21 @@ It is *not* a substitute for regular error handling, validation, or control flow
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
 
+### protorequire package
+
+Use `protorequire.ProtoEqual` to compare proto messages with proto semantics.
+
+To ignore specific fields on the top-level message (e.g. non-deterministic timestamps), pass `protorequire.IgnoreFields`:
+
+```go
+protorequire.ProtoEqual(t, expected, actual,
+    protorequire.IgnoreFields(
+        "execution_duration",
+        "schedule_time",
+    ),
+)
+```
+
 ### Test Cluster
 
 Use `testcore.NewEnv(t)` to create a test environment with access to a Temporal cluster for end-to-end testing.
