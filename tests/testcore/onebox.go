@@ -425,6 +425,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -583,6 +584,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -650,6 +652,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
