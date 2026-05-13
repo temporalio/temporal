@@ -362,6 +362,22 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 		return err
 	}
 
+	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
+	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
+	// In the CHASM context (migration period), generate an OR to match both V1 and V2.
+	if saColNameExpr.alias == sadefs.ScheduleID && c.archetypeID == chasm.SchedulerArchetypeID {
+		v1Right := addSchedulePrefixToSQLExpr(expr.Right)
+		v1Expr := &sqlparser.ComparisonExpr{
+			Operator: expr.Operator,
+			Left:     expr.Left,
+			Right:    v1Right,
+		}
+		*exprRef = &sqlparser.ParenExpr{
+			Expr: &sqlparser.OrExpr{Left: v1Expr, Right: expr},
+		}
+		return nil
+	}
+
 	//nolint:revive,exhaustive // missing default case
 	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
@@ -489,7 +505,7 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			return err
 		}
 
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
+		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID && c.archetypeID != chasm.SchedulerArchetypeID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
@@ -688,4 +704,21 @@ func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
 		}
 	}
 	return false
+}
+
+// addSchedulePrefixToSQLExpr returns a copy of the SQL value expression with the V1 schedule
+// WorkflowId prefix prepended. Handles both single values (*unsafeSQLString) and tuples (IN clause).
+func addSchedulePrefixToSQLExpr(expr sqlparser.Expr) sqlparser.Expr {
+	switch e := expr.(type) {
+	case *unsafeSQLString:
+		return newUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + e.Val)
+	case sqlparser.ValTuple:
+		result := make(sqlparser.ValTuple, len(e))
+		for i, item := range e {
+			result[i] = addSchedulePrefixToSQLExpr(item)
+		}
+		return result
+	default:
+		return expr
+	}
 }

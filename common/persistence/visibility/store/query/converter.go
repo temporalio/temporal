@@ -396,6 +396,28 @@ func (c *QueryConverter[ExprT]) convertComparisonExpr(
 		return out, err
 	}
 
+	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
+	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
+	if colName.Alias == sadefs.ScheduleID && colName.FieldName == sadefs.WorkflowID {
+		if !isSupportedKeywordOperator(expr.Operator) {
+			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
+		}
+		if c.archetypeID == chasm.SchedulerArchetypeID {
+			// CHASM path handles both V1 (prefixed) and V2 (unprefixed) schedules during migration.
+			v1Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, prefixScheduleIDValues(values))
+			if err != nil {
+				return out, err
+			}
+			v2Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, values)
+			if err != nil {
+				return out, err
+			}
+			return c.storeQC.BuildOrExpr(v1Expr, v2Expr)
+		}
+		// V1-only path: apply prefix and fall through to keyword handling.
+		values = prefixScheduleIDValues(values)
+	}
+
 	switch colName.ValueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		if !isSupportedKeywordOperator(expr.Operator) {
@@ -577,9 +599,6 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		value, err := c.parseSQLVal(e, saName, saFieldName, saType)
 		if err != nil {
 			return nil, err
-		}
-		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 		return value, nil
 	case sqlparser.BoolVal:
@@ -806,4 +825,19 @@ func isSupportedTextOperator(operator string) bool {
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
 	return slices.Contains(supportedTypesRangeCond, saType)
+}
+
+// prefixScheduleIDValues prepends the V1 schedule workflow ID prefix to all values.
+// Used when translating ScheduleId search attribute comparisons to WorkflowId comparisons.
+func prefixScheduleIDValues(values any) any {
+	switch v := values.(type) {
+	case []any:
+		result := make([]any, len(v))
+		for i, item := range v {
+			result[i] = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", item)
+		}
+		return result
+	default:
+		return primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", v)
+	}
 }

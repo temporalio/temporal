@@ -1419,6 +1419,149 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 	}
 }
 
+func TestQueryConverter_ConvertComparisonExprScheduleID(t *testing.T) {
+	t.Parallel()
+
+	scheduleIDCol := NewSAColumn(sadefs.ScheduleID, sadefs.WorkflowID, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+
+	testCases := []struct {
+		name        string
+		in          string
+		archetypeID chasm.ArchetypeID
+		setupMocks  func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
+		out         sqlparser.Expr
+	}{
+		{
+			name:        "V1 path prefixes value",
+			in:          "ScheduleId = 'my-sched'",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-sched").
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.EqualStr,
+				Left:     scheduleIDCol,
+				Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+			},
+		},
+
+		{
+			name:        "CHASM path generates OR of prefixed and unprefixed",
+			in:          "ScheduleId = 'my-sched'",
+			archetypeID: chasm.SchedulerArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				v1Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+				}
+				v2Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-sched"),
+				}
+				orExpr := &sqlparser.OrExpr{Left: v1Expr, Right: v2Expr}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-sched").
+					Return(v1Expr, nil)
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, scheduleIDCol, "my-sched").
+					Return(v2Expr, nil)
+				storeQCMock.EXPECT().BuildOrExpr(v1Expr, v2Expr).Return(orExpr, nil)
+			},
+			out: &sqlparser.OrExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-sched"),
+				},
+			},
+		},
+
+		{
+			name:        "CHASM path IN generates OR of prefixed and unprefixed",
+			in:          "ScheduleId IN ('foo', 'bar')",
+			archetypeID: chasm.SchedulerArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				v1Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				}
+				v2Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     scheduleIDCol,
+					Right:    sqlparser.ValTuple{NewUnsafeSQLString("foo"), NewUnsafeSQLString("bar")},
+				}
+				orExpr := &sqlparser.OrExpr{Left: v1Expr, Right: v2Expr}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(
+						sqlparser.InStr,
+						scheduleIDCol,
+						[]any{primitives.ScheduleWorkflowIDPrefix + "foo", primitives.ScheduleWorkflowIDPrefix + "bar"},
+					).
+					Return(v1Expr, nil)
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.InStr, scheduleIDCol, []any{"foo", "bar"}).
+					Return(v2Expr, nil)
+				storeQCMock.EXPECT().BuildOrExpr(v1Expr, v2Expr).Return(orExpr, nil)
+			},
+			out: &sqlparser.OrExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     scheduleIDCol,
+					Right:    sqlparser.ValTuple{NewUnsafeSQLString("foo"), NewUnsafeSQLString("bar")},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctrl := gomock.NewController(t)
+			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+			queryConverter := NewQueryConverter(
+				storeQCMock,
+				testNamespaceName,
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{},
+			).WithArchetypeID(tc.archetypeID)
+
+			if tc.setupMocks != nil {
+				tc.setupMocks(storeQCMock)
+			}
+			inExpr := parseWhereString(tc.in).(*sqlparser.ComparisonExpr)
+			out, err := queryConverter.convertComparisonExpr(inExpr)
+			r.NoError(err)
+			r.Equal(tc.out, out)
+		})
+	}
+}
+
 func TestQueryConverter_ConvertRangeCond(t *testing.T) {
 	t.Parallel()
 
@@ -1957,12 +2100,12 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		},
 
 		{
-			name:   "success special ScheduleID",
+			name:   "success special ScheduleID (prefix no longer added at value parse level)",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
 			alias:  sadefs.ScheduleID,
 			field:  sadefs.WorkflowID,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
+			out:    "foo",
 		},
 
 		{

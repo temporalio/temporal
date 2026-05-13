@@ -43,6 +43,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -83,6 +84,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -129,6 +131,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -188,6 +191,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	values, err := vi.Values(sadefs.ScheduleID, sadefs.WorkflowID, "test-schedule-id")
@@ -213,6 +217,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	values, err := vi.Values(sadefs.ScheduleID, sadefs.ScheduleID, "test-workflow-id")

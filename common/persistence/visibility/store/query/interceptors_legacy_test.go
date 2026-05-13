@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -104,7 +105,7 @@ func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldVal
 		nil,
 		nil,
 		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
-		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap, nil),
+		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap, nil, chasm.UnspecifiedArchetypeID),
 		nil)
 	return NewConverterLegacy(fnInterceptor, whereConverter)
 }

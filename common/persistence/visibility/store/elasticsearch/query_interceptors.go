@@ -36,6 +36,7 @@ type (
 		chasmMapper    *chasm.VisibilitySearchAttributesMapper
 		metricsHandler metrics.Handler
 		logger         log.Logger
+		archetypeID    chasm.ArchetypeID
 	}
 )
 
@@ -62,6 +63,7 @@ func NewValuesInterceptor(
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	archetypeID chasm.ArchetypeID,
 ) *valuesInterceptor {
 	saTypeMap := store.CombineTypeMaps(csaTypeMap, chasmMapper)
 	return &valuesInterceptor{
@@ -70,6 +72,7 @@ func NewValuesInterceptor(
 		chasmMapper:    chasmMapper,
 		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
 		logger:         logger,
+		archetypeID:    archetypeID,
 	}
 }
 
@@ -131,7 +134,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 			return nil, err
 		}
 
-		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID {
+		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID && vi.archetypeID != chasm.SchedulerArchetypeID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 

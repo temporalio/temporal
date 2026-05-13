@@ -805,9 +805,10 @@ func (s *VisibilityStore) convertQueryLegacy(
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, chasmMapper, archetypeID)
 	queryConverter := NewQueryConverterLegacy(
 		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger),
+		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger, archetypeID),
 		saTypeMap,
 		chasmMapper,
+		archetypeID,
 	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
