@@ -63,7 +63,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.62.12-0.20260506203937-27ab43932052 // DO NOT SUBMIT -- Branch chrsmith/standalone-callbacks
+	go.temporal.io/api v1.62.12-0.20260513212731-4fa5ab4b3909 // DO NOT SUBMIT -- Branch chrsmith/standalone-callbacks
 	go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0
@@ -99,6 +99,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
 )
 

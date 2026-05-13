@@ -81,7 +81,6 @@ func (h *callbackHandler) StartCallbackExecution(
 			"callback execution already started",
 			alreadyStartedErr.CurrentRequestID,
 			alreadyStartedErr.CurrentRunID,
-			frontendReq.GetCallbackId(),
 		)
 		return nil, svcErr
 	}
