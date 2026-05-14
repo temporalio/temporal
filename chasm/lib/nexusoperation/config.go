@@ -235,6 +235,8 @@ type Config struct {
 	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataSummarySize          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataDetailsSize          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -262,6 +264,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
