@@ -4614,7 +4614,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 
 			s.Equal("args-value-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
 			s.Equal(env.Tv().HandlerName(), updRequest.GetInput().GetName())
-			s.EqualValues(5, updRequestMsg.GetEventId())
+			s.EqualValues(7, updRequestMsg.GetEventId())
 
 			return env.UpdateAcceptCompleteMessages(env.Tv(), updRequestMsg), nil
 		default:
