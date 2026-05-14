@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -829,7 +830,10 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
-		map[primitives.ServiceName][]grpc.DialOption{},
+		map[primitives.ServiceName][]grpc.DialOption{
+			primitives.HistoryService:  {grpc.WithChainUnaryInterceptor(interceptor.TrailerToContextMetadataInterceptor(logger))},
+			primitives.MatchingService: {grpc.WithChainUnaryInterceptor(interceptor.TrailerToContextMetadataInterceptor(logger))},
+		},
 		monitor,
 	), nil
 }
