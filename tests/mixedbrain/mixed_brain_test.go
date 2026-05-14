@@ -62,13 +62,27 @@ func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.F
 	return zap.NewNop().Sugar().With("server", name), f, logPath
 }
 
-// TestMixedBrain starts two servers in parallel — one built from the current
-// branch's source tree and the other from the latest release tag of the
-// previous minor — joined into a single logical cluster, and runs the Omes
+// TestMixedBrainOSS runs the mixed-brain scenario against the latest OSS
+// release tag of the previous minor (e.g. v1.30.x when current is 1.31.x).
+func TestMixedBrainOSS(t *testing.T) {
+	runMixedBrain(t, fetchPreviousMinorTag)
+}
+
+// TestMixedBrainCloud runs the mixed-brain scenario against the latest
+// non-rc cloud release tag (e.g. v1.32.0-155.3). Cloud releases may be a
+// newer codebase than the current branch — this exercises the opposite
+// direction of version skew compared to TestMixedBrainOSS.
+func TestMixedBrainCloud(t *testing.T) {
+	runMixedBrain(t, fetchLastCloudReleaseTag)
+}
+
+// runMixedBrain starts two servers in parallel — one built from the current
+// branch's source tree and the other from the tag returned by resolveTag —
+// joins them into a single logical cluster, and runs the Omes
 // throughput_stress scenario through a round-robin TCP proxy to exercise both.
 // Server lifecycle (clone + build + config + process) is delegated to
 // github.com/temporalio/omes/devserver.
-func TestMixedBrain(t *testing.T) {
+func runMixedBrain(t *testing.T, resolveTag func(*testing.T) string) {
 	tmpDir := t.TempDir()
 	logRoot := logDir(t)
 
@@ -78,7 +92,7 @@ func TestMixedBrain(t *testing.T) {
 	t.Run("setup", func(t *testing.T) {
 		t.Run("resolve release tag", func(t *testing.T) {
 			t.Parallel()
-			releaseTag = fetchPreviousMinorTag(t)
+			releaseTag = resolveTag(t)
 			t.Logf("Release tag: %s (current server version: %s)", releaseTag, headers.ServerVersion)
 		})
 		t.Run("build omes binary", func(t *testing.T) {
