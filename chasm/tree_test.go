@@ -439,6 +439,37 @@ func (s *nodeSuite) TestCollectionAttributes() {
 	}
 }
 
+func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
+	// Verify that a Map field that was never set deserializes to an empty (non-nil)
+	// map so callers can range over it without nil checks.
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	rootNode, err := s.newTestTree(nilSerializedNodes)
+	s.NoError(err)
+
+	rootNode.value = &TestComponent{}
+	rootNode.valueState = valueStateNeedSyncStructure
+
+	mutations, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	// Only root is updated; no collection nodes because maps were nil/empty.
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Empty(mutations.DeletedNodes)
+
+	persistedNodes := common.CloneProtoMap(mutations.UpdatedNodes)
+
+	rootNode2, err := s.newTestTree(persistedNodes)
+	s.NoError(err)
+
+	err = rootNode2.deserialize(reflect.TypeFor[*TestComponent]())
+	s.NoError(err)
+
+	rootComponent := rootNode2.value.(*TestComponent)
+	s.NotNil(rootComponent.SubComponents, "SubComponents must be non-nil after deserialization")
+	s.Empty(rootComponent.SubComponents)
+	s.NotNil(rootComponent.PendingActivities, "PendingActivities must be non-nil after deserialization")
+	s.Empty(rootComponent.PendingActivities)
+}
+
 func (s *nodeSuite) TestPointerAttributes() {
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
