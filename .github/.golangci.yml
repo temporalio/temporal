@@ -19,7 +19,12 @@ linters:
     - godox
     - iotamixing
     - testifylint
+    - experimental-api
   settings:
+    custom:
+      experimental-api:
+        type: module
+        description: Reports experimental API fields and enum values mixed into stable API types.
     staticcheck:
       checks:
         - "all"

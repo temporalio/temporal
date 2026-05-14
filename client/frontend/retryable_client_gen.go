@@ -431,6 +431,21 @@ func (c *retryableClient) DescribeWorkflowRule(
 	return resp, err
 }
 
+func (c *retryableClient) Echo(
+	ctx context.Context,
+	request *workflowservice.EchoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.EchoResponse, error) {
+	var resp *workflowservice.EchoResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.Echo(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ExecuteMultiOperation(
 	ctx context.Context,
 	request *workflowservice.ExecuteMultiOperationRequest,
