@@ -79,7 +79,7 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 		return
 	}
 
-	trailerPairs := buildTrailerPairs(allMetadata)
+	trailerPairs := c.buildTrailerPairs(allMetadata)
 
 	trailer := metadata.Pairs(trailerPairs...)
 	c.throttledLogger.Info("ContextMetadataInterceptor: Setting trailer",
@@ -103,7 +103,7 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 //  2. Legacy format (backward compatibility during rolling deploys): individual
 //     "contextmetadata-<key>" entries plus unprefixed well-known keys. Old readers that
 //     don't understand the proto key will fall back to these.
-func buildTrailerPairs(allMetadata map[string]any) []string {
+func (c *ContextMetadataInterceptor) buildTrailerPairs(allMetadata map[string]any) []string {
 	var trailerPairs []string
 
 	// Proto format: serialize all metadata into a single protobuf message.
@@ -113,7 +113,11 @@ func buildTrailerPairs(allMetadata map[string]any) []string {
 	for key, value := range allMetadata {
 		protoMsg.Entries[key] = fmt.Sprint(value)
 	}
-	if protoBytes, err := proto.Marshal(protoMsg); err == nil {
+	if protoBytes, err := proto.Marshal(protoMsg); err != nil {
+		c.throttledLogger.Warn("ContextMetadataInterceptor: Failed to marshal proto metadata, falling back to legacy-only",
+			tag.Error(err),
+		)
+	} else {
 		trailerPairs = append(trailerPairs, protoTrailerKey, string(protoBytes))
 	}
 

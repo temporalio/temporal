@@ -35,7 +35,7 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 
 		err := invoker(ctx, method, req, reply, cc, opts...)
 
-		trailerMetadata, propagatedMetadata := extractMetadataFromTrailer(ctx, trailer)
+		trailerMetadata, propagatedMetadata := extractMetadataFromTrailer(ctx, trailer, throttledLogger)
 
 		logMetadataPropagationStatus(ctx, method, trailerMetadata, propagatedMetadata, throttledLogger)
 
@@ -52,6 +52,7 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 func extractMetadataFromTrailer(
 	ctx context.Context,
 	trailer metadata.MD,
+	throttledLogger log.ThrottledLogger,
 ) (trailerMetadata map[string]string, propagatedMetadata map[string]string) {
 	trailerMetadata = make(map[string]string)
 	propagatedMetadata = make(map[string]string)
@@ -59,7 +60,13 @@ func extractMetadataFromTrailer(
 	// Try proto format first (authoritative).
 	if values := trailer[protoTrailerKey]; len(values) > 0 {
 		protoMsg := &contextpropagationspb.ContextMetadata{}
-		if err := proto.Unmarshal([]byte(values[0]), protoMsg); err == nil {
+		err := proto.Unmarshal([]byte(values[0]), protoMsg)
+		if err != nil {
+			throttledLogger.Warn("TrailerToContextMetadataInterceptor: Failed to unmarshal proto trailer, falling back to legacy",
+				tag.Error(err),
+			)
+		}
+		if err == nil {
 			for key, value := range protoMsg.GetEntries() {
 				trailerMetadata[key] = value
 				if contextutil.ContextMetadataSet(ctx, key, value) {

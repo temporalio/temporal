@@ -271,7 +271,8 @@ func TestBuildTrailerPairs_ProtoRoundTrip(t *testing.T) {
 		"other-key":                              "other-value",
 	}
 
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	trailer := metadata.Pairs(pairs...)
 
 	// Proto key must be present.
@@ -294,7 +295,8 @@ func TestBuildTrailerPairs_EmitsBothProtoAndLegacyKeys(t *testing.T) {
 		"other-key":                              "other-value",
 	}
 
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	trailer := metadata.Pairs(pairs...)
 
 	// Proto key present.
@@ -315,7 +317,8 @@ func TestBuildTrailerPairs_EmitsBothProtoAndLegacyKeys(t *testing.T) {
 
 func TestBuildTrailerPairs_EmptyMetadata(t *testing.T) {
 	allMetadata := map[string]any{}
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	// Even with empty metadata, proto is serialized (valid empty message).
 	trailer := metadata.Pairs(pairs...)
 	require.Contains(t, trailer, protoTrailerKey)
@@ -327,7 +330,8 @@ func TestBuildTrailerPairs_NonStringValues(t *testing.T) {
 		contextutil.MetadataKeyWorkflowTaskQueue: struct{ name string }{name: "queue"},
 	}
 
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	trailer := metadata.Pairs(pairs...)
 
 	// Proto key present with fmt.Sprint values.
@@ -345,7 +349,8 @@ func TestBuildTrailerPairs_ControlCharsInValues(t *testing.T) {
 		contextutil.MetadataKeyWorkflowType: "workflow\nwith\x00control\rchars",
 	}
 
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	trailer := metadata.Pairs(pairs...)
 
 	// Proto key must be present and correctly round-trip.
@@ -368,7 +373,8 @@ func TestBuildTrailerPairs_MixedSafeAndUnsafeValues(t *testing.T) {
 		contextutil.MetadataKeyWorkflowTaskQueue: "safe-queue-name",
 	}
 
-	pairs := buildTrailerPairs(allMetadata)
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
 	trailer := metadata.Pairs(pairs...)
 
 	// Proto key carries both entries.
