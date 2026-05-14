@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRequiredFields(t *testing.T) {
+func TestRequiredStringFields(t *testing.T) {
 	// Positive tests
 	positiveTests := requiredFields{
 		{"Field1", "exists"},

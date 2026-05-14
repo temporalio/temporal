@@ -37,7 +37,7 @@ import (
 )
 
 // Test suite for the Nexus "Standalone Callbacks". Which are Nexus operations corresponding to
-// aysynchronous actions that take place outside of Temporal. (e.g. waiting for a payment to
+// asynchronous actions that take place outside of Temporal. (e.g. waiting for a payment to
 // be processed, or webhook to be delivered, etc.)
 
 // Minimal information that an external service would need to report the results of a callback.
@@ -377,8 +377,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 
 	s.Run("success", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		wantPayloadStr := "successfully delivered payload via external svc"
 		successCompletion := &callbackpb.CallbackExecutionCompletion{
@@ -398,8 +397,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 
 	s.Run("failure", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		failureCompletion := &callbackpb.CallbackExecutionCompletion{
 			Result: &callbackpb.CallbackExecutionCompletion_Failure{
@@ -445,8 +443,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("returns_empty_for_non_terminal", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		callbackID := "poll-test-" + uuid.NewString()
 
@@ -486,8 +483,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("blocks_until_complete", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		callbackID := "poll-blocks-" + uuid.NewString()
 		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
@@ -532,8 +528,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("returns_run_id", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		callbackID := "poll-runid-" + uuid.NewString()
 		startResp := s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
@@ -562,8 +557,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("poll_after_timeout", func(s *StandaloneCallbackSuite) {
 		env := s.newEnv()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		ctx := env.Context()
 
 		callbackID := "poll-timeout-" + uuid.NewString()
 		// Start with a very short schedule-to-close timeout so it times out quickly.
@@ -593,8 +587,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 // Delete terminates the callback if it's still running, then marks it for cleanup.
 func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := env.Context()
 
 	// Create a callback that points to a non-existent URL so it won't complete on its own.
 	// The callback will be in SCHEDULED/BACKING_OFF state when we delete it.
@@ -738,8 +731,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 
 	for _, tc := range tests {
 		s.Run(tc.name, func(s *StandaloneCallbackSuite) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
+			ctx := env.Context()
 
 			req := &workflowservice.StartCallbackExecutionRequest{
 				Namespace:              env.Namespace().String(),
@@ -763,8 +755,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 // and that the same request_id is idempotent (returns the existing run_id without error).
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
+	ctx := env.Context()
 
 	callbackID := "dup-test-" + uuid.NewString()
 	requestID := uuid.NewString()
@@ -812,8 +803,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 // can be listed and counted via the visibility APIs, and verifies the returned data.
 func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
-	defer cancel()
+	ctx := env.Context()
 
 	// Create two callback executions with known IDs.
 	callbackIDs := make([]string, 2)
@@ -916,8 +906,7 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 // are persisted and can be used to query callback executions via list filtering.
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
+	ctx := env.Context()
 
 	callbackID := "sa-test-" + uuid.NewString()
 	saValue := "sa-test-value-" + uuid.NewString()
@@ -964,8 +953,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() 
 // TestTerminateCallbackExecution tests terminate, run_id validation, and request ID idempotency.
 func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
+	ctx := env.Context()
 
 	callbackID := "terminate-test-" + uuid.NewString()
 	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
@@ -1060,8 +1048,7 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 // (e.g., a 400 response from the target), the poll outcome contains the failure details.
 func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
+	ctx := env.Context()
 
 	// Start an HTTP server that always returns 400 Bad Request (non-retryable).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1107,8 +1094,7 @@ func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
 //     receives the result regardless of the start handler timing.
 func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandlerReturns() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
-	defer cancel()
+	ctx := env.Context()
 
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
@@ -1215,11 +1201,10 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 // when its schedule-to-close timeout expires before the callback succeeds.
 func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 	env := s.newEnv()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
+	ctx := env.Context()
 
 	// Short timeout so it fires quickly during the test.
-	callbackID := "timeout-test-" + uuid.NewString()
+	callbackID := "timeout-test" + uuid.NewString()
 	s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, 2*time.Second)
 
 	// Poll until the callback reaches a terminal state due to timeout.

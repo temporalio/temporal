@@ -38,22 +38,22 @@ func verifyIsUUID(fieldName, fieldValue string) error {
 	return nil
 }
 
-// requiredField is a tuple of a required field name and its value.
+// requiredStringField is a tuple of a required field name and its value.
 // Used instead of a map[string]string to provide deterministic
 // errors if multiple fields aren't set.
-type requiredField struct {
+type requiredStringField struct {
 	FieldName string
 	Value     string
 }
 
-func (rf requiredField) Validate() error {
+func (rf requiredStringField) Validate() error {
 	if rf.Value == "" {
 		return missingRequiredFieldError(rf.FieldName)
 	}
 	return nil
 }
 
-type requiredFields []requiredField
+type requiredFields []requiredStringField
 
 func (fields requiredFields) Validate() error {
 	for _, rf := range fields {

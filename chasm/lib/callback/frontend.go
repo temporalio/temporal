@@ -65,7 +65,7 @@ func NewFrontendHandler(
 type namespacer interface{ GetNamespace() string }
 
 // Looks up the namespace ID from the user-supplied namespace name in the request proto.
-func (h *frontendHandler) getTargetNamespace(requestProto namespacer) (namespace.ID, error) {
+func (h *frontendHandler) targetNamespace(requestProto namespacer) (namespace.ID, error) {
 	targetNamespaceName := namespace.Name(requestProto.GetNamespace())
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(targetNamespaceName)
 	if err != nil {
@@ -77,7 +77,7 @@ func (h *frontendHandler) getTargetNamespace(requestProto namespacer) (namespace
 func (h *frontendHandler) checkFeatureEnabled(requestProto namespacer) error {
 	// Confirm CHASM is enabled.
 	targetNamespaceName := requestProto.GetNamespace()
-	if !h.config.CHASMEnabled(targetNamespaceName) || !h.config.CHASMCallbacksEnabled(targetNamespaceName) {
+	if !h.config.CHASMEnabled(targetNamespaceName) {
 		return ErrStandaloneCallbacksDisabled
 	}
 	if !h.config.EnableStandaloneExecutions(targetNamespaceName) {
@@ -101,7 +101,7 @@ func (h *frontendHandler) StartCallbackExecution(
 	}
 
 	// Execute
-	namespaceID, err := h.getTargetNamespace(request)
+	namespaceID, err := h.targetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (h *frontendHandler) DescribeCallbackExecution(
 	}
 
 	// Get the Namespace ID to confirm the optional long-poll token matches.
-	namespaceID, err := h.getTargetNamespace(request)
+	namespaceID, err := h.targetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (h *frontendHandler) PollCallbackExecution(
 	}
 
 	// Execute
-	namespaceID, err := h.getTargetNamespace(request)
+	namespaceID, err := h.targetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (h *frontendHandler) TerminateCallbackExecution(
 	}
 
 	// Execute
-	namespaceID, err := h.getTargetNamespace(request)
+	namespaceID, err := h.targetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (h *frontendHandler) DeleteCallbackExecution(
 	}
 
 	// Execute
-	namespaceID, err := h.getTargetNamespace(request)
+	namespaceID, err := h.targetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
