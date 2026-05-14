@@ -56,6 +56,15 @@ type Env interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
+// DynamicConfigT is the narrow *testing.T interface required by Namespace(t).
+// It is satisfied by *testing.T directly and by parallelsuite/testify suites
+// (which expose delegating Name/Fatalf methods on top of their *testing.T),
+// so callers may pass either `s` or `s.T()`.
+type DynamicConfigT interface {
+	Name() string
+	Fatalf(format string, args ...any)
+}
+
 type TestEnv struct {
 	*FunctionalTestBase
 
@@ -188,22 +197,87 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	})
 
 	// For shared clusters, apply all dynamic config settings as overrides.
+	// Baseline overrides applied at NewEnv time are intentionally not tracked
+	// by dcGuard — they form the test's baseline; subtests may further override.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		for _, override := range options.dynamicConfigSettings {
-			env.OverrideDynamicConfig(override.setting, override.value)
+			env.applyDynamicConfigOverride(override.setting, override.value)
 		}
 	}
 
 	return env
 }
 
-// Use test env-specific namespace here for test isolation.
+// Namespace returns the namespace name.
+//
+// Deprecated: use env.NS(t).Name() instead. This unscoped accessor bypasses the
+// cross-(sub)test misuse check and is kept only until the tree finishes
+// migrating. It will be removed.
 func (e *TestEnv) Namespace() namespace.Name {
 	return e.nsName
 }
 
+// NamespaceID returns the namespace ID.
+//
+// Deprecated: use env.NS(t).ID() instead. This unscoped accessor bypasses the
+// cross-(sub)test misuse check and is kept only until the tree finishes
+// migrating. It will be removed.
 func (e *TestEnv) NamespaceID() namespace.ID {
 	return e.nsID
+}
+
+// OverrideDynamicConfig overrides a dynamic config setting for the duration of
+// this test.
+//
+// Deprecated: use env.NS(t).OverrideDynamicConfig(...) instead. This unscoped
+// path bypasses both the cross-(sub)test misuse check and the dcGuard that
+// detects overlapping overrides between subtests sharing an env. Kept only
+// until the tree finishes migrating; will be removed.
+func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	return e.applyDynamicConfigOverride(setting, value)
+}
+
+// StartNamespaceMetricCapture starts a metrics capture scoped to this test's
+// namespace.
+//
+// Deprecated: use env.NS(t).StartMetricCapture() instead. This unscoped
+// accessor bypasses the cross-(sub)test misuse check and is kept only until
+// the tree finishes migrating. It will be removed.
+func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
+	return e.StartNamespaceMetricCaptureFor(e.nsName.String())
+}
+
+// NS returns a *NamespaceHandle scoped to t, the (sub)test that intends to
+// perform namespace-scoped operations. t must be the same (sub)test that
+// created this TestEnv: passing a different t (e.g. an inner subtest using an
+// outer test's env) fatals. This is how cross-(sub)test misuse is detected.
+//
+// Temporary name during migration. Once all callers migrate off the deprecated
+// Namespace/NamespaceID/OverrideDynamicConfig/StartNamespaceMetricCapture
+// methods on TestEnv, NS will be renamed to Namespace.
+func (e *TestEnv) NS(t DynamicConfigT) *NamespaceHandle {
+	if t.Name() != e.t.Name() {
+		t.Fatalf("TestEnv.NS: t %q does not match env's bound test %q. A TestEnv must be used only from the (sub)test that created it; create a separate TestEnv per subtest instead of sharing.", t.Name(), e.t.Name())
+		return nil
+	}
+	return &NamespaceHandle{e: e, t: t}
+}
+
+// NamespaceHandle exposes namespace-scoped operations of a TestEnv. Obtain one
+// via TestEnv.Namespace(t).
+type NamespaceHandle struct {
+	e *TestEnv
+	t DynamicConfigT
+}
+
+// Name returns the namespace name as a string.
+func (n *NamespaceHandle) Name() string {
+	return n.e.nsName.String()
+}
+
+// ID returns the namespace ID.
+func (n *NamespaceHandle) ID() namespace.ID {
+	return n.e.nsID
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -368,10 +442,19 @@ func (e *TestEnv) WorkerTaskQueue() string {
 	return e.sdkWorkerTQ
 }
 
-// OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
-// For settings that can be namespace-scoped, a namespace constraint is applied.
-// All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
-func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+// OverrideDynamicConfig overrides a dynamic config setting for the duration of
+// this test. For settings that can be namespace-scoped, a namespace constraint
+// is applied. All others cannot be applied to a shared cluster and require
+// `WithDedicatedCluster`.
+func (n *NamespaceHandle) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	return n.e.applyDynamicConfigOverride(setting, value)
+}
+
+// applyDynamicConfigOverride applies an override without registering it in the
+// dcGuard tracker. Used by NewEnv for baseline WithDynamicConfig settings and
+// by NamespaceHandle.OverrideDynamicConfig itself after the tracker has
+// accepted the override.
+func (e *TestEnv) applyDynamicConfigOverride(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
@@ -421,11 +504,11 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 	return globalCapture
 }
 
-// StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
-// Namespace captures are safe on shared clusters because reads are restricted to
-// per-metric namespace-filtered iteration and reject non-namespaced metrics.
-func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
-	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
+// StartMetricCapture starts a metrics capture scoped to this test's namespace.
+// Namespace captures are safe on shared clusters because reads are restricted
+// to per-metric namespace-filtered iteration and reject non-namespaced metrics.
+func (n *NamespaceHandle) StartMetricCapture() *NamespaceMetricCapture {
+	return n.e.StartNamespaceMetricCaptureFor(n.Name())
 }
 
 // StartNamespaceMetricCaptureFor starts a metrics capture scoped to the provided namespace.

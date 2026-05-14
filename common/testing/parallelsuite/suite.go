@@ -59,6 +59,19 @@ func (s *Suite[T]) T() *testing.T {
 	return s.guardT.T
 }
 
+// Name returns the name of the underlying *testing.T. Provided so that *Suite
+// can be passed directly where a `Name() string` interface is expected (e.g.
+// testcore.DynamicConfigT) without forcing the caller to dereference via T().
+func (s *Suite[T]) Name() string {
+	return s.T().Name()
+}
+
+// Fatalf forwards to the underlying *testing.T.Fatalf. Like Name, this lets
+// *Suite satisfy small testing.T-shaped interfaces directly.
+func (s *Suite[T]) Fatalf(format string, args ...any) {
+	s.T().Fatalf(format, args...)
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
