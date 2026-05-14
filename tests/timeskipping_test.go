@@ -61,7 +61,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 // TimeSkippingConfig persists the config in mutable state when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	inputBound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
@@ -92,7 +92,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 // with TimeSkippingConfig persists the config in mutable state when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	inputBound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
@@ -127,7 +127,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 // when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	maxSkippedDuration := time.Hour
 
@@ -185,7 +185,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 //  5. Assert exactly 3 WorkflowExecutionOptionsUpdated events appear in history.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	// Start a workflow without any time-skipping config.
@@ -273,7 +273,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 // attributes carry the full config.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -451,7 +451,7 @@ func hasEventType(events []*historypb.HistoryEvent, t enumspb.EventType) bool {
 //	WT3 → complete workflow (timer has fired)
 func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	// Run timeout must exceed the 1h timer; otherwise skip shifts the run-timeout
@@ -520,7 +520,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 //  4. The latest task's VisibilityTimestamp is ≈ wallStart, not wallStart + 1h.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	const (
@@ -632,7 +632,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 // fail.
 func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	const (

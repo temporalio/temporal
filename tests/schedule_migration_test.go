@@ -740,8 +740,8 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 	)
 	s.NoError(err)
 
-	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false)
-	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, false)
+	env.OverrideDynamicConfig(s, dynamicconfig.EnableCHASMSchedulerCreation, false)
+	env.OverrideDynamicConfig(s, dynamicconfig.EnableCHASMSchedulerMigration, false)
 
 	s.Eventually(func() bool {
 		describeResp, describeErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -1194,7 +1194,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
 	// Disable CHASM to create V1 schedule.
-	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+	env.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, false)
 
 	// Create a V1 schedule with an immediate trigger.
 	sched := &schedulepb.Schedule{
@@ -1245,7 +1245,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// Enable CHASM now so the migration activity can create the V2 schedule.
-	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, true)
 
 	// Migrate from V1 to V2 while the workflow is still running.
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{

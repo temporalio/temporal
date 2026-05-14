@@ -271,7 +271,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 
 		t.Run("OnConflictOptions", func(t *testing.T) {
-			env.OverrideDynamicConfig(
+			env.OverrideDynamicConfig(s, 
 				callbacks.AllowedAddresses,
 				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 			)
@@ -616,7 +616,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 		t.Run("InputTooLarge", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(
+			cleanup := env.OverrideDynamicConfig(s, 
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -1955,7 +1955,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(
+			cleanup := env.OverrideDynamicConfig(s, 
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -2479,7 +2479,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(
+			cleanup := env.OverrideDynamicConfig(s, 
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -3938,7 +3938,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 	t.Run("ExceededPageSizeIsCapped", func(t *testing.T) {
 		maxPageSize := int32(1)
-		cleanup := env.OverrideDynamicConfig(
+		cleanup := env.OverrideDynamicConfig(s, 
 			dynamicconfig.FrontendVisibilityMaxPageSize,
 			maxPageSize,
 		)
@@ -4199,13 +4199,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 	// result with at least buffer remaining before the caller deadline.
 	t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
 		// CallerTimeout - LongPollBuffer is far in the future
-		cleanup1 := env.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
+		cleanup1 := env.OverrideDynamicConfig(s, activity.LongPollBuffer, 1*time.Second)
 		defer cleanup1()
 		ctx, cancel := context.WithTimeout(ctx, 9999*time.Millisecond)
 		defer cancel()
 
 		// DescribeActivityExecution will return when this long poll timeout expires.
-		cleanup2 := env.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		cleanup2 := env.OverrideDynamicConfig(s, activity.LongPollTimeout, 10*time.Millisecond)
 		defer cleanup2()
 
 		describeResp, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -4228,10 +4228,10 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 		// will have a 30s deadline that was applied by one of the upstream server layers, so we
 		// still must use a buffer < 30s.
 		ctx := context.Background()
-		cleanup1 := env.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
+		cleanup1 := env.OverrideDynamicConfig(s, activity.LongPollBuffer, 29*time.Second)
 		defer cleanup1()
 		// DescribeActivityExecution will return when this long poll timeout expires.
-		cleanup2 := env.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		cleanup2 := env.OverrideDynamicConfig(s, activity.LongPollTimeout, 10*time.Millisecond)
 		defer cleanup2()
 
 		_, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -5839,7 +5839,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 
-	env.OverrideDynamicConfig(
+	env.OverrideDynamicConfig(s, 
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
@@ -5936,7 +5936,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
 		maxCallbacks := 1
-		env.OverrideDynamicConfig(
+		env.OverrideDynamicConfig(s, 
 			callback.MaxPerExecution,
 			maxCallbacks,
 		)

@@ -152,7 +152,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// start with 20kb limit
-	env.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 20*1024)
+	env.OverrideDynamicConfig(s, dynamicconfig.HistorySizeSuggestContinueAsNew, 20*1024)
 
 	// workflow logic
 	stage := 0
@@ -270,7 +270,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 
 	// change the dynamic config so that SuggestContinueAsNew should now be false. the current
 	// workflow task should still see true, but the next one will see false.
-	env.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
+	env.OverrideDynamicConfig(s, dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4: transient task may not be immediately available after stage 3 failure
 	// Increase retries to handle asynchronous task creation timing

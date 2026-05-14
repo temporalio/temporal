@@ -49,7 +49,7 @@ func clearUpdateRegistryAndAbortPendingUpdates(s *testcore.TestEnv, tv *testvars
 }
 
 func loseUpdateRegistryAndAbandonPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
+	cleanup := s.OverrideDynamicConfig(s.T(), dynamicconfig.ShardFinalizerTimeout, 0)
 	defer cleanup()
 	closeShard(s, tv.WorkflowID())
 }

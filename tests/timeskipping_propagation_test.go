@@ -123,7 +123,7 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -246,7 +246,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 //   - Parent completes.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -378,7 +378,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 // Final state: C.accum == 4h (3h inherited + 1h own); P.accum == 4h; G.accum == 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -547,7 +547,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 // wall time, not less.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsShifted() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -972,7 +972,7 @@ func (s *TimeSkippingPropagationTestSuite) firstWorkflowTaskCompletedEventID(
 // behavior so a future change would surface it.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -1113,7 +1113,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 //   - Wall-clock elapsed is nowhere near 3h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -1238,7 +1238,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 //     ContinuedExecutionRunId.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -1365,7 +1365,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 //     run 1's event #1, with initiator=CRON_SCHEDULE.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 

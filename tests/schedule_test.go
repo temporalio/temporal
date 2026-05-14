@@ -1420,7 +1420,7 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 
 func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
+	s.OverrideDynamicConfig(t, dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 
 	sid := "sched-test-double-reset"
 	wid := "sched-test-double-reset-wf"
@@ -1577,8 +1577,8 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 
 func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
-	s.OverrideDynamicConfig(
+	s.OverrideDynamicConfig(t, dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
+	s.OverrideDynamicConfig(t,
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
