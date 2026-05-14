@@ -120,3 +120,15 @@ message SchedulerMigrationState {
   map<string, temporal.api.common.v1.Payload> search_attributes = 6;
   map<string, temporal.api.common.v1.Payload> memo = 7;
 }
+
+// EventLog keeps a bounded record of state changes, including automation
+// decisions, in lieu of a workflow event history. Entries are meant for
+// human consumption, and aren't used for any scheduler computation.
+message EventLog {
+  repeated Event events = 1;
+}
+
+message Event {
+  google.protobuf.Timestamp time = 1;
+  string message = 2;
+}

@@ -48,6 +48,9 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	// Human-readable event history used for debugging.
+	EventLog chasm.Field[*schedulerpb.EventLog]
+
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
@@ -83,6 +86,9 @@ const (
 
 	// Maximum number of backfillers allowed on a single scheduler.
 	maxBackfillers = 100
+
+	// Maximum number of EventLog entries retained.
+	maxEventLogEntries = 100
 )
 
 var (
@@ -118,6 +124,7 @@ func NewScheduler(
 		cacheConflictToken:   scheduler.InitialConflictToken,
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
+		EventLog:             chasm.NewDataField(ctx, &schedulerpb.EventLog{}),
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
@@ -950,4 +957,18 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
+}
+
+func (s *Scheduler) logEvent(ctx chasm.MutableContext, msg string) {
+	log := s.EventLog.Get(ctx)
+
+	event := &schedulerpb.Event{
+		Time:    timestamppb.New(ctx.Now(s)),
+		Message: msg,
+	}
+	log.Events = append(log.Events, event)
+
+	// Keep a bounded limit on events tracked by dropping the earliest entries.
+	keepFrom := max(0, len(log.Events)-maxEventLogEntries)
+	log.Events = log.Events[keepFrom:]
 }
