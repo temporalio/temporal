@@ -54,12 +54,12 @@ func persistenceFromEnv() devserver.PersistenceOptions {
 	}
 }
 
-func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.File) {
+func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.File, string) {
 	t.Helper()
 	logPath := filepath.Join(logRoot, fmt.Sprintf("mixedbrain_process-%s.log", name))
 	f, err := os.Create(logPath)
 	require.NoError(t, err)
-	return zap.NewNop().Sugar().With("server", name), f
+	return zap.NewNop().Sugar().With("server", name), f, logPath
 }
 
 // TestMixedBrain starts two servers in parallel — one built from the current
@@ -122,7 +122,9 @@ func TestMixedBrain(t *testing.T) {
 
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
-	currentLogger, currentLog := serverLogger(t, "current", logRoot)
+	logMonitor := newLogMonitor(t)
+
+	currentLogger, currentLog, currentLogPath := serverLogger(t, "current", logRoot)
 	defer currentLog.Close()
 	currentSrv, err := devserver.Start(t.Context(), devserver.Options{
 		SourceDir:           sourceRoot(),
@@ -144,7 +146,7 @@ func TestMixedBrain(t *testing.T) {
 	// to see it too once it joins — the helper waits for AlreadyExists.
 	registerDefaultNamespace(t, conn)
 
-	releaseLogger, releaseLog := serverLogger(t, "release", logRoot)
+	releaseLogger, releaseLog, releaseLogPath := serverLogger(t, "release", logRoot)
 	defer releaseLog.Close()
 	releaseSrv, err := devserver.Start(t.Context(), devserver.Options{
 		Ref:                 releaseTag,
@@ -160,6 +162,8 @@ func TestMixedBrain(t *testing.T) {
 	})
 	require.NoError(t, err, "start release server")
 	t.Cleanup(func() { _ = releaseSrv.Stop() })
+	logMonitor.watch(t, "current", currentLogPath)
+	logMonitor.watch(t, "release", releaseLogPath)
 
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 	nexusEndpoint := "mixed-brain-nexus"
@@ -187,6 +191,7 @@ func TestMixedBrain(t *testing.T) {
 			st.Logf("Proxy connections to %s: %d", backend, count)
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
+		logMonitor.assertNoFindings(st)
 	})
 }
 
