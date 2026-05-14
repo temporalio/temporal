@@ -62,12 +62,13 @@ var TransitionScheduled = chasm.NewTransition(
 		}
 
 		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+			a.ScheduleToCloseStamp++
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
 					ScheduledTime: startDelayEnd.Add(timeout),
 				},
-				&activitypb.ScheduleToCloseTimeoutTask{})
+				&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 		}
 
 		dispatchAttrs := chasm.TaskAttributes{}
@@ -101,6 +102,17 @@ var TransitionRescheduled = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
+
+		// Apply deferred reset: set Count to 0 so the increment below produces 1.
+		if a.ActivityReset {
+			attempt.Count = 0
+			a.ActivityReset = false
+			if a.ResetHeartbeats {
+				a.ResetHeartbeats = false
+				a.clearHeartbeat(ctx)
+			}
+		}
+
 		attempt.Count++
 		attempt.Stamp++
 
@@ -191,6 +203,10 @@ var TransitionCompleted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
+
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
@@ -225,6 +241,9 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
+			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
@@ -257,6 +276,7 @@ var TransitionTerminated = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, event terminateEvent) error {
@@ -264,6 +284,9 @@ var TransitionTerminated = chasm.NewTransition(
 			a.TerminateState = &activitypb.ActivityTerminateState{
 				RequestId: event.request.RequestID,
 			}
+			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: event.request.Reason,
@@ -287,11 +310,14 @@ var TransitionTerminated = chasm.NewTransition(
 )
 
 // TransitionCancelRequested transitions to CancelRequested status.
+// PAUSED activities (real status, no worker) are cancelled immediately in handleCancellationRequested
+// rather than waiting for a worker response.
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
@@ -335,6 +361,9 @@ var TransitionCanceled = chasm.NewTransition(
 					Failure: failure,
 				},
 			}
+			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
@@ -355,6 +384,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, event timeoutEvent) error {
@@ -379,9 +409,75 @@ var TransitionTimedOut = chasm.NewTransition(
 				return err
 			}
 
+			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
+
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
 			return nil
 		})
+	},
+)
+
+type pauseEvent struct {
+	req            *workflowservice.PauseActivityExecutionRequest
+	metricsHandler metrics.Handler
+}
+
+// TransitionPaused transitions a SCHEDULED activity to PAUSED status. The stamp is bumped to
+// invalidate any pending dispatch task so the activity is not dispatched while paused.
+//
+// Note: STARTED activities are NOT paused via this transition. Pausing a STARTED activity is a
+// flag-only operation (PauseState is set, status stays STARTED) so the worker's token remains
+// valid and the worker is notified via ActivityPaused=true on its next heartbeat. See
+// handlePauseRequested for the full hybrid logic.
+var TransitionPaused = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+	func(a *Activity, ctx chasm.MutableContext, event pauseEvent) error {
+		a.pause(ctx, event)
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.Stamp++
+		return nil
+	},
+)
+
+type unpauseEvent struct {
+	req            *workflowservice.UnpauseActivityExecutionRequest
+	metricsHandler metrics.Handler
+}
+
+var TransitionUnpaused = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, event unpauseEvent) error {
+		a.unpause(ctx, event)
+		return nil
+	},
+)
+
+type resetEvent struct {
+	req          *workflowservice.ResetActivityExecutionRequest
+	scheduleTime time.Time
+	handler      metrics.Handler
+}
+
+// TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
+// invalidate any pending dispatch task, then a new dispatch task is added at the given schedule time.
+// For STARTED/CANCEL_REQUESTED activities the reset is deferred — see Activity.ActivityReset flag.
+var TransitionReset = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, event resetEvent) error {
+		a.reset(ctx, event)
+		return nil
 	},
 )

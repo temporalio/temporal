@@ -316,3 +316,191 @@ func (c *ActivityServiceLayeredClient) DeleteActivityExecution(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *ActivityServiceLayeredClient) callPauseActivityExecutionNoRetry(
+	ctx context.Context,
+	request *PauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*PauseActivityExecutionResponse, error) {
+	var response *PauseActivityExecutionResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.PauseActivityExecution"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	businessID := request.GetFrontendRequest().GetWorkflowId()
+	if businessID == "" {
+		businessID = request.GetFrontendRequest().GetActivityId()
+	}
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), businessID, c.numShards)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.PauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) PauseActivityExecution(
+	ctx context.Context,
+	request *PauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*PauseActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*PauseActivityExecutionResponse, error) {
+		return c.callPauseActivityExecutionNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ActivityServiceLayeredClient) callUnpauseActivityExecutionNoRetry(
+	ctx context.Context,
+	request *UnpauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*UnpauseActivityExecutionResponse, error) {
+	var response *UnpauseActivityExecutionResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.UnpauseActivityExecution"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	businessID := request.GetFrontendRequest().GetWorkflowId()
+	if businessID == "" {
+		businessID = request.GetFrontendRequest().GetActivityId()
+	}
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), businessID, c.numShards)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.UnpauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) UnpauseActivityExecution(
+	ctx context.Context,
+	request *UnpauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*UnpauseActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*UnpauseActivityExecutionResponse, error) {
+		return c.callUnpauseActivityExecutionNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ActivityServiceLayeredClient) callResetActivityExecutionNoRetry(
+	ctx context.Context,
+	request *ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*ResetActivityExecutionResponse, error) {
+	var response *ResetActivityExecutionResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.ResetActivityExecution"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	businessID := request.GetFrontendRequest().GetWorkflowId()
+	if businessID == "" {
+		businessID = request.GetFrontendRequest().GetActivityId()
+	}
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), businessID, c.numShards)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.ResetActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) ResetActivityExecution(
+	ctx context.Context,
+	request *ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*ResetActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*ResetActivityExecutionResponse, error) {
+		return c.callResetActivityExecutionNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ActivityServiceLayeredClient) callUpdateActivityExecutionOptionsNoRetry(
+	ctx context.Context,
+	request *UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*UpdateActivityExecutionOptionsResponse, error) {
+	var response *UpdateActivityExecutionOptionsResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.UpdateActivityExecutionOptions"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	businessID := request.GetFrontendRequest().GetWorkflowId()
+	if businessID == "" {
+		businessID = request.GetFrontendRequest().GetActivityId()
+	}
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), businessID, c.numShards)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.UpdateActivityExecutionOptions(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*UpdateActivityExecutionOptionsResponse, error) {
+	call := func(ctx context.Context) (*UpdateActivityExecutionOptionsResponse, error) {
+		return c.callUpdateActivityExecutionOptionsNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
