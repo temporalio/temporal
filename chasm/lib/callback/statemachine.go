@@ -179,7 +179,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		callbackspb.CALLBACK_STATUS_SCHEDULED,
 		callbackspb.CALLBACK_STATUS_BACKING_OFF,
 	},
-	callbackspb.CALLBACK_STATUS_FAILED,
+	callbackspb.CALLBACK_STATUS_TIMED_OUT,
 	func(cb *Callback, ctx chasm.MutableContext, event EventTimedOut) error {
 		now := ctx.Now(cb)
 		cb.CloseTime = timestamppb.New(now)
