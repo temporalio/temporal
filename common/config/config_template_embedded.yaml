@@ -152,6 +152,7 @@ persistence:
                 connectAddr: "localhost"
                 connectProtocol: "tcp"
                 connectAttributes:
+                    mode: "{{ default "rwc" (env "SQLITE_MODE") }}"
                     cache: "{{ default "private" (env "SQLITE_CACHE") }}"
                     setup: "{{ default "true" (env "SQLITE_SETUP") }}"
                     journal_mode: "{{ default "wal" (env "SQLITE_JOURNAL_MODE") }}"
@@ -166,6 +167,7 @@ persistence:
                 connectAddr: "localhost"
                 connectProtocol: "tcp"
                 connectAttributes:
+                    mode: "{{ default "rwc" (env "SQLITE_MODE") }}"
                     cache: "{{ default "private" (env "SQLITE_CACHE") }}"
                     setup: "{{ default "true" (env "SQLITE_SETUP") }}"
                     journal_mode: "{{ default "wal" (env "SQLITE_JOURNAL_MODE") }}"
