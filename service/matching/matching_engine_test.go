@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -364,6 +365,52 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 	}
 	s.EqualValues(1, s.taskManager.getQueueDataByKey(tlID).RangeID())
+}
+
+func (s *matchingEngineSuite) TestDescribeTaskQueueNilDescRequest() {
+	_, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: uuid.NewString(),
+		DescRequest: nil,
+	})
+	s.Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+// TestDescribeTaskQueueDtqDefaultCacheKeyPre9436Collision documents the cache bug fixed for
+// https://github.com/temporalio/temporal/issues/9436 : when dtq_default cache keys were built
+// from buildIds before user-data resolution (no explicit Version), buildIds was still empty, so
+// the key was always "dtq_default:". Different resolved deployment sets then collided on that key.
+// The fix resolves and sorts build IDs first, then builds the key: "dtq_default:" + strings.Join(...).
+func TestDescribeTaskQueueDtqDefaultCacheKeyPre9436Collision(t *testing.T) {
+	t.Parallel()
+	keyIfComputedBeforeResolution := "dtq_default:" + strings.Join(nil, ",")
+	require.Equal(t, "dtq_default:", keyIfComputedBeforeResolution)
+
+	resolvedBuildIds := []string{"deployment:ns__build-b", "deployment:ns__build-a", ""}
+	sort.Strings(resolvedBuildIds)
+	keyAfterResolution := "dtq_default:" + strings.Join(resolvedBuildIds, ",")
+	require.NotEqual(t, keyIfComputedBeforeResolution, keyAfterResolution,
+		"empty-join key must not equal key after resolving deployment versions + unversioned sentinel")
+	require.Equal(t, "dtq_default:,deployment:ns__build-a,deployment:ns__build-b", keyAfterResolution)
+}
+
+func TestDescribeVersionedTaskQueuesCacheKey(t *testing.T) {
+	t.Parallel()
+	v := "deployment-version-1"
+	kOne := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+	})
+	kTwo := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{Name: "q-b", Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+	})
+	require.NotEqual(t, kOne, kTwo, "different task-queue sets must not share a cache key")
+	kTwoPermuted := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-b", Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+	})
+	require.Equal(t, kTwo, kTwoPermuted, "order of VersionTaskQueues must not affect the key")
 }
 
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
