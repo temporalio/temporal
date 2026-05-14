@@ -108,12 +108,19 @@ func (it *iteratorImpl) prepareNext() {
 // to the map during iteration can cause a dead lock.
 func (c *lru) Iterator() Iterator {
 	c.mut.Lock()
+	var lockTransferred bool
+	defer func() {
+		if !lockTransferred {
+			c.mut.Unlock()
+		}
+	}()
 	iterator := &iteratorImpl{
 		lru:        c,
 		createTime: c.timeSource.Now().UTC(),
 		nextItem:   c.byAccess.Front(),
 	}
 	iterator.prepareNext()
+	lockTransferred = true
 	return iterator
 }
 
