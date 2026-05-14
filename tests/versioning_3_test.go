@@ -254,7 +254,7 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 		Namespace: s.Namespace().String(),
 		Version:   tv.DeploymentVersionString(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	totalActTQ := 0
 	for _, tq := range resp.GetVersionTaskQueues() {
@@ -862,7 +862,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 4 WorkflowTaskCompleted
 5 WorkflowTaskScheduled // Was speculative WT...
 6 WorkflowTaskStarted
-7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
+7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.
 8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
 `, events)
@@ -2378,13 +2378,13 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						if i < eventsBeforeDeploymentChange {
 							// Events before deployment change should NOT have the flag
 							s.False(attr.GetSuggestContinueAsNew())
-							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.Empty(attr.GetSuggestContinueAsNewReasons())
 							s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
 								"Event %d should not have flag (before deployment change)", event.GetEventId())
 						} else {
 							// Events after deployment change SHOULD have the flag (including failed attempts and transient retries)
 							s.False(attr.GetSuggestContinueAsNew())
-							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.Empty(attr.GetSuggestContinueAsNewReasons())
 							s.True(attr.GetTargetWorkerDeploymentVersionChanged(),
 								"Event %d should have flag (after deployment change)", event.GetEventId())
 						}
@@ -2393,7 +2393,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					for _, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.Empty(attr.GetSuggestContinueAsNewReasons())
 						s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 					}
 				}
@@ -2540,7 +2540,7 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.Empty(attr.GetSuggestContinueAsNewReasons())
 						// Setting a ramping version does not change the target for a Pinned workflow:
 						// the target is the pinned version, not current or ramping.
 						s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
@@ -2949,7 +2949,7 @@ func (s *Versioning3Suite) verifyTransientTask(task *workflowservice.PollWorkflo
 			lastScheduledEvent = event
 		}
 	}
-	s.Require().NotNil(lastScheduledEvent)
+	s.NotNil(lastScheduledEvent)
 	s.Equal(int32(2), lastScheduledEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 }
 
@@ -3001,12 +3001,12 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Require().Len(wfTaskStartedEvents, 2) // make sure we are actually verifying non-zero # of events
+				s.Len(wfTaskStartedEvents, 2) // make sure we are actually verifying non-zero # of events
 
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+					s.Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				// For AutoUpgrade, I want to test that once the workflow has transitioned to v2, it doesn't get the CaN suggestion anymore.
@@ -3037,7 +3037,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+					s.Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3507,20 +3507,23 @@ func (s *Versioning3Suite) TestSyncDeploymentUserDataWithRoutingConfig_Update() 
 func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	s.Eventually(func() bool {
+
+	var unexpectedErr error
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		req.BuildId = tv.BuildID()
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
-			return false
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+			require.NoError(t, err)
 		}
-		s.NoError(err)
-		return err == nil
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3551,51 +3554,59 @@ func (s *Versioning3Suite) pollUntilRegistered(ctx context.Context, tv *testvars
 			}
 		}()
 	}
+
 	// Wait until the version is visible and all requested task queue types are registered.
-	s.Eventually(func() bool {
+	var unexpectedErr error
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return false
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			require.NoError(t, err)
 		}
-		s.NoError(err)
-		tqName := tv.TaskQueue().GetName()
-		for _, tqType := range tqTypes {
-			found := false
-			for _, tq := range resp.GetVersionTaskQueues() {
-				if tq.GetName() == tqName && tq.GetType() == tqType {
-					found = true
-					break
+		if err != nil {
+			unexpectedErr = err
+		} else {
+			tqName := tv.TaskQueue().GetName()
+			for _, tqType := range tqTypes {
+				found := false
+				for _, tq := range resp.GetVersionTaskQueues() {
+					if tq.GetName() == tqName && tq.GetType() == tqType {
+						found = true
+						break
+					}
+				}
+				if !found {
+					require.True(t, found)
+					return
 				}
 			}
-			if !found {
-				return false
-			}
 		}
-		return true
 	}, 30*time.Second, 100*time.Millisecond)
+	s.NoError(unexpectedErr)
 	cancel()
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	s.Eventually(func() bool {
+
+	var unexpectedErr error
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return false
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			require.NoError(t, err)
 		}
-		s.NoError(err)
-		return err == nil
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3613,7 +3624,8 @@ func (s *Versioning3Suite) setRampingDeployment(
 		bid = ""
 	}
 
-	s.Eventually(func() bool {
+	var unexpectedErr error
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
@@ -3621,13 +3633,14 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		req.BuildId = bid
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
-			return false
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+			require.NoError(t, err)
 		}
-		s.NoError(err)
-		return err == nil
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3635,13 +3648,13 @@ func (s *Versioning3Suite) setRampingDeployment(
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment(tv *testvars.TestVars) {
 	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      s.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
-			s.NoError(err)
-			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+			require.NoError(t, err)
+			require.Equal(t, enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
@@ -3764,15 +3777,16 @@ func (s *Versioning3Suite) rollbackTaskQueueToVersion(
 	}}, nil, tqTypeWf)
 
 	// Verify that the rollback propagated to all partitions
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   s.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		return current.GetBuildId() == tv.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
+		require.Equal(t, tv.DeploymentVersion().GetBuildId(), current.GetBuildId())
+		require.Equal(t, int64(0), currentRevisionNumber)
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -4868,21 +4882,14 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
 	// Verify that the child started and completed on the v2 worker.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		execInfo := desc.GetWorkflowExecutionInfo()
 
 		// Verify that the child workflow started and completed on the v1 worker
-		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
-			return false
-		}
-		if execInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-			return false
-		}
-		return true
+		require.Equal(t, tv2.BuildID(), execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, execInfo.GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the parent workflow completed successfully. This shall only be possible if the child workflow
@@ -4980,12 +4987,10 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	s.NoError(err)
 
 	// Verify that the parent workflow has started on the v1 worker
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvParent.WorkflowID(), "")
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tvParent.BuildID()
+		require.NoError(t, err)
+		require.Equal(t, tvParent.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Roll back the child TQ routing-config revision to simulate Routing Config lag in matching partitions (set v0 as current with older revision)
@@ -5001,21 +5006,14 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
 	// Verify that the child started and completed on the v1 worker.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		execInfo := desc.GetWorkflowExecutionInfo()
 
 		// Verify that the child workflow started and completed on the v1 worker
-		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tvChild.BuildID() {
-			return false
-		}
-		if execInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-			return false
-		}
-		return true
+		require.Equal(t, tvChild.BuildID(), execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, execInfo.GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the parent workflow completed successfully. This shall only be possible if the child workflow
@@ -5088,21 +5086,13 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
 	// Verify that the child workflow started and completed on it's worker, which shall verify that no AutoUpgradeInheritedInfo was inherited.
-	s.Eventually(func() bool {
-		s.Eventually(func() bool {
-			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
-			if err != nil {
-				return false
-			}
-			execInfo := desc.GetWorkflowExecutionInfo()
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
+		require.NoError(t, err)
+		execInfo := desc.GetWorkflowExecutionInfo()
 
-			// Verify that the new run starts on the v1 worker
-			if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tvChild.BuildID() {
-				return false
-			}
-			return true
-		}, 10*time.Second, 100*time.Millisecond)
-		return true
+		// Verify that the new run starts on the v1 worker
+		require.Equal(t, tvChild.BuildID(), execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the parent workflow completed successfully.
@@ -5149,12 +5139,10 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	s.NoError(err)
 
 	// Ensure the workflow has started on the v1 worker
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tv1.WorkflowID(), "")
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		require.NoError(t, err)
+		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Rollback the TaskQueueUserData to simulate task queue partition lag
@@ -5170,27 +5158,18 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 
 	// Wait for the new run to start
 	var newRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tv1.WorkflowID(), "")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		execInfo := desc.GetWorkflowExecutionInfo()
 
 		// Verify that the workflow truly CAN'ed and started a new run
-		if execInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-			newRunID = execInfo.GetExecution().GetRunId()
-			if newRunID == run.GetRunID() {
-				return false
-			}
-		}
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, execInfo.GetStatus())
+		newRunID = execInfo.GetExecution().GetRunId()
+		require.NotEqual(t, run.GetRunID(), newRunID)
 
 		// Verify that the new run starts on the v1 worker
-		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv1.BuildID() {
-			return false
-		}
-
-		return true
+		require.Equal(t, tv1.BuildID(), execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the workflow completed successfully on v1
@@ -5331,13 +5310,11 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 		s.NoError(err)
 
 		// Wait for child workflow to be created and executing on v1
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, childWorkflowID, "")
-			if err != nil {
-				return false
-			}
+			require.NoError(t, err)
 			runIDBeforeRetry = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-			return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+			require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		wfID = childWorkflowID
@@ -5360,29 +5337,21 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 
 		if testContinueAsNew {
 			// Wait for ContinueAsNew to happen
-			s.Eventually(func() bool {
+			s.EventuallyWithT(func(t *assert.CollectT) {
 				desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
-				s.NoError(err)
-				if err != nil {
-					return false
-				}
+				require.NoError(t, err)
 				// After CAN, the run ID changes and we should see execution on v1
-				if desc.GetWorkflowExecutionInfo().GetExecution().GetRunId() != run0.GetRunID() {
-					runIDBeforeRetry = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-					return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
-				}
-				return false
+				runIDBeforeRetry = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+				require.NotEqual(t, run0.GetRunID(), runIDBeforeRetry)
+				require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 			}, 10*time.Second, 100*time.Millisecond)
 		} else {
 			runIDBeforeRetry = run0.GetRunID()
 			// Ensure initial run is executing on v1.
-			s.Eventually(func() bool {
+			s.EventuallyWithT(func(t *assert.CollectT) {
 				desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, runIDBeforeRetry)
-				s.NoError(err)
-				if err != nil {
-					return false
-				}
-				return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+				require.NoError(t, err)
+				require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 			}, 10*time.Second, 100*time.Millisecond)
 		}
 	}
@@ -5396,44 +5365,37 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 	go s.idlePollWorkflow(idlePollerCtx, tv0, true, 10*time.Second, "v0 poller should not receive a task")
 
 	// Verify that the rollback propagated to all partitions
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   s.NamespaceID().String(),
 			TaskQueue:     tv0.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
+		require.Equal(t, tv0.DeploymentVersion().GetBuildId(), current.GetBuildId())
+		require.Equal(t, int64(0), currentRevisionNumber)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Trigger failure of the run to cause retry.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, runIDBeforeRetry, "proceed", nil))
 
 	// Wait for run to fail.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfID, runIDBeforeRetry)
-		s.NoError(err)
-		if err != nil {
-			return false
-		}
-		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+		require.NoError(t, err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, desc.Status)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that retry run is still on v1 (didn't bounce back to v0)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
-		s.NoError(err)
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		// After retry, there should be a new run
-		if desc.GetWorkflowExecutionInfo().GetExecution().GetRunId() != runIDBeforeRetry {
-			// Verify workflow (parent or child) is still on v1
-			return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
-		}
-		return false
+		require.NotEqual(t, runIDBeforeRetry, desc.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+		// Verify workflow (parent or child) is still on v1
+		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 }
@@ -5455,15 +5417,15 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// No version exists in the task queue's userData as of now
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   s.NamespaceID().String(),
 			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
-		s.NoError(err)
-		return !resp.GetIsMember() // the check should pass if no version is present
+		require.NoError(t, err)
+		require.False(t, resp.GetIsMember()) // the check should pass if no version is present
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start v1 worker which shall register the version in the task queue
@@ -5477,15 +5439,15 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 	defer w1.Stop()
 
 	// The version should eventually show up in the task queue's user data
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   s.NamespaceID().String(),
 			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
-		s.NoError(err)
-		return resp.GetIsMember()
+		require.NoError(t, err)
+		require.True(t, resp.GetIsMember())
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -5667,12 +5629,10 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 	s.NoError(err)
 
 	// Wait for the workflow to start on v1
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		require.NoError(t, err)
+		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for first activity attempt to fail (should be on v1)
@@ -6686,12 +6646,10 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 	wfID := run0.GetID()
 
 	// Wait for workflow to be running on v1.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, run0.GetRunID())
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		require.NoError(t, err)
+		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Set v2 as current, signal workflow to CaN without AU (decline upgrade).
@@ -6702,38 +6660,32 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 
 	// Wait for CaN to happen — new run on v1.
 	var canRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		canRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		return canRunID != run0.GetRunID() &&
-			desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		require.NotEqual(t, run0.GetRunID(), canRunID)
+		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Signal CaN run to fail (triggers server retry). Target remains v2.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, canRunID, "proceed", nil))
 
 	// Wait for CaN run to fail.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfID, canRunID)
-		if err != nil {
-			return false
-		}
-		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+		require.NoError(t, err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, desc.Status)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for retry run to complete.
 	var retryRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		retryRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		return retryRunID != canRunID &&
-			desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.NotEqual(t, canRunID, retryRunID)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify: retry run's WFT started should have targetDeploymentVersionChanged=false

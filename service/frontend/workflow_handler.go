@@ -41,6 +41,7 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -784,6 +785,8 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 	if request.Operations[1].GetUpdateWorkflow() == nil {
 		return nil, errMultiOpNotStartAndUpdate
 	}
+
+	metrics.EventBlobSize.With(wh.metricsScope(ctx)).Record(int64(request.Operations[1].GetUpdateWorkflow().GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
 
 	historyReq, err := wh.convertToHistoryMultiOperationRequest(ctx, namespaceID, request)
 	if err != nil {
@@ -3148,13 +3151,21 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 	}
 
-	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
 			tag.WorkflowTaskQueueName(taskQueueName),
 			tag.Error(err))
 		return
+	}
+
+	// Deduplicate partitions by destination matching host. The partition is only used for
+	// routing; the matching engine cancels all pollers for the workerInstanceKey on that host
+	// regardless of partition. Sending one RPC per host instead of one per partition reduces
+	// RPCs from numPartitions*taskTypes to numHosts*taskTypes.
+	routingClient, ok := wh.matchingClient.(matchingclient.RoutingClient)
+	if !ok {
+		routingClient = nil
 	}
 
 	var waitGroup sync.WaitGroup
@@ -3168,8 +3179,25 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 
 		tq := tqFamily.TaskQueue(taskType)
+		// Skip partitions that route to an already-visited matching host.
+		seenHosts := make(map[string]bool)
 		for partitionID := range numPartitions {
 			partition := tq.NormalPartition(partitionID)
+
+			if routingClient != nil {
+				host, err := routingClient.Route(partition)
+				if err != nil {
+					wh.logger.Warn("Failed to resolve matching host for poll cancellation dedup, sending RPC anyway.",
+						tag.WorkflowNamespaceID(namespaceID),
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.Error(err))
+				} else if seenHosts[host] {
+					continue
+				} else {
+					seenHosts[host] = true
+				}
+			}
+
 			waitGroup.Go(func() {
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
 					NamespaceId: namespaceID,
@@ -5304,6 +5332,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 
 	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateWorkflowExecution"))
 	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetRequest().GetInput().GetHeader().Size()))
+	metrics.EventBlobSize.With(wh.metricsScope(ctx)).Record(int64(request.GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
 
 	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
