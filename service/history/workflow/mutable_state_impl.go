@@ -9678,17 +9678,18 @@ func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string
 	if len(ms.GetPendingActivityInfos()) > 0 {
 		return true, "has pending activity"
 	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
-		return true, "has pending child execution"
-	}
 	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
 		return true, "has pending nexus operations"
 	}
-
-	// TODO@time-skipping: handle pending external transfer tasks
-	// (signals and cancel requests), their completion is not guaranteed to trigger
-	// a mutable state mutation — and without one, time skipping won't be re-triggered.
-	// We need a separate mechanism to catch these missed trigger opportunities.
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		return true, "has pending child execution"
+	}
+	if len(ms.GetPendingSignalExternalInfos()) > 0 {
+		return true, "has pending signal external"
+	}
+	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
+		return true, "has pending request cancel external"
+	}
 	return false, ""
 }
 
@@ -9715,13 +9716,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 			)
 		}
 	}()
-
 	if !ms.IsWorkflowExecutionRunning() {
 		noSkippingReason = "workflow is not running"
 		return false, nil
 	}
-
-	// pending work exists
 	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
 		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
 		return false, nil
