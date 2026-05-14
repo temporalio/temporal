@@ -12,7 +12,6 @@ const (
 	// interpreting zero as infinite.
 	MinRetentionLocal = 1 * time.Hour
 
-	// MinTimeSkippingBound is the minimum duration for time skipping bound.
 	MinTimeSkippingBound  = 1 * time.Minute
 	TimeSkippingPrecision = 1 * time.Second
 )

@@ -9674,7 +9674,7 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 	}
 	if bound, ok := srcTSC.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration); ok {
 		remaining := bound.MaxSkippedDuration.AsDuration() - tsInfo.GetAccumulatedSkippedDuration().AsDuration()
-		if remaining < namespace.TimeSkippingPrecision {
+		if remaining <= namespace.TimeSkippingPrecision {
 			return nil, initialSkipped
 		}
 	}
@@ -9772,15 +9772,16 @@ func (d timeSkippingTransition) isValid() bool {
 
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
-	advance := func(candidate time.Time, dueToBound bool) {
+	updateTransition := func(candidate time.Time) (bool, time.Duration) {
 		if transition.targetTime.IsZero() || candidate.Before(transition.targetTime) {
 			transition.targetTime = candidate
-			transition.disabledAfterBound = dueToBound
+			return true, 0
 		}
+		return false, candidate.Sub(transition.targetTime)
 	}
 
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		advance(timerInfo.ExpiryTime.AsTime(), false)
+		updateTransition(timerInfo.ExpiryTime.AsTime())
 	}
 
 	if !ms.HadOrHasWorkflowTask() {
@@ -9795,7 +9796,7 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
 		startTime := ms.executionInfo.GetStartTime().AsTime()
 		if executionTime.After(startTime) && executionTime.After(ms.Now()) {
-			advance(executionTime, false)
+			updateTransition(executionTime)
 		}
 	}
 
@@ -9805,12 +9806,16 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		return transition, nil
 	}
 
+	// bound impacts should come at last so that we can be sure if bound is reached
 	switch b := bound.(type) {
 	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
 		if info.GetCurrentElapsedDurationBound() == nil {
-			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+			return timeSkippingTransition{}, serviceerror.NewInternal("time-skipping data corruption: bound target time is not set for elapsed-duration bound")
 		}
-		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
+		updated, gap := updateTransition(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime())
+		if updated || gap <= namespace.TimeSkippingPrecision {
+			transition.disabledAfterBound = true
+		}
 	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
 		// MaxSkippedDuration enforces its cap lazily: no wake-up task is emitted, and the
 		// remaining-skip candidate is consulted on every MS mutation. The cap can therefore
@@ -9818,18 +9823,15 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		// maxSkipped never persists past a single transaction.
 		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
 		maxSkipped := b.MaxSkippedDuration.AsDuration()
-		if accumulated > maxSkipped {
-			return timeSkippingTransition{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
+		if accumulated >= maxSkipped {
+			return timeSkippingTransition{}, serviceerror.NewInternal("time-skipping data corruption: accumulated skipped duration exceeds the configured max skipped duration")
 		}
-		if accumulated == maxSkipped {
-			// Cap exactly hit — emit a "disable, no skip" transition. Going through
-			// advance(ms.Now(), true) would set targetTime to now and trigger a no-op
-			// regen pass downstream.
-			return timeSkippingTransition{disabledAfterBound: true}, nil
+		updated, gap := updateTransition(ms.Now().Add(maxSkipped - accumulated))
+		if updated || gap <= namespace.TimeSkippingPrecision {
+			transition.disabledAfterBound = true
 		}
-		advance(ms.Now().Add(maxSkipped-accumulated), true)
 	default:
-		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+		return timeSkippingTransition{}, serviceerror.NewInternal("time-skipping data corruption: unknown time skipping bound type")
 	}
 	return transition, nil
 }

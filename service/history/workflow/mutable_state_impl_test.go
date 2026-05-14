@@ -4242,13 +4242,6 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 	}
 }
 
-// TestSnapshotTimeSkippingInfo unit-tests the pure helper that builds the
-// (config, initialSkippedDuration) tuple propagated to child workflows / CaN.
-// The notable branch is the MaxSkippedDuration remaining-budget gate: when the
-// source has consumed all but < TimeSkippingPrecision of its MaxSkipped bound,
-// the config is dropped from the snapshot so the child/new run does not boot
-// with a near-zero or already-exceeded budget. InitialSkippedDuration still
-// propagates so virtual time stays consistent.
 func TestSnapshotTimeSkippingInfo(t *testing.T) {
 	maxSkippedCfg := func(d time.Duration) *workflowpb.TimeSkippingConfig {
 		return &workflowpb.TimeSkippingConfig{
@@ -4310,7 +4303,6 @@ func TestSnapshotTimeSkippingInfo(t *testing.T) {
 					AccumulatedSkippedDuration: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
 				},
 			},
-			expectCfg:         maxSkippedCfg(time.Hour),
 			expectInitialSkip: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
 		},
 		{
