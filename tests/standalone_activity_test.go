@@ -8392,11 +8392,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.Nil(t, poll2Resp.GetHeartbeatDetails(), "expected nil heartbeat details in poll after reset")
 	})
 
-	// UnpauseWhileCancelRequested: CANCEL_REQUESTED+PauseState is reached by pausing while STARTED
-	// (flag-only, PauseState set) and then cancelling (status → CANCEL_REQUESTED, PauseState stays).
-	// Pausing directly on a CANCEL_REQUESTED activity is now rejected (FailedPrecondition), so this
-	// is the only valid path into this state. Unpause must be a no-op — cancel takes precedence and
-	// the activity must not be re-dispatched.
+	// Issuing Unpause on a CANCEL_REQUESTED activity is a no-op.
 	t.Run("UnpauseWhileCancelRequested", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -8408,7 +8404,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		// Poll → STARTED.
 		pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		// Pause while STARTED → flag-only (PauseState set, status stays STARTED).
+		// Pause while STARTED → PAUSE_REQUESTED.
 		_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -8418,7 +8414,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Cancel → CANCEL_REQUESTED. PauseState remains set from the prior pause.
+		// Cancel → CANCEL_REQUESTED.
 		_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -8429,16 +8425,16 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Confirm both flags are set via heartbeat.
+		// Heartbeat shows cancel-requested; pause is no longer surfaced.
 		hbResp, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp.TaskToken,
 		})
 		require.NoError(t, err)
 		require.True(t, hbResp.GetCancelRequested())
-		require.True(t, hbResp.GetActivityPaused())
+		require.False(t, hbResp.GetActivityPaused())
 
-		// Unpause — must be a no-op: status stays CANCEL_REQUESTED, no new dispatch task.
+		// Unpause is a no-op: status stays CANCEL_REQUESTED.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -8447,7 +8443,6 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// RunState must still be CANCEL_REQUESTED after the unpause.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -8457,14 +8452,13 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
 			"unpause of a CANCEL_REQUESTED activity must be a no-op")
 
-		// Heartbeat must show CancelRequested=true, ActivityPaused=false after the unpause.
 		hbResp2, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp.TaskToken,
 		})
 		require.NoError(t, err)
 		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after unpause")
-		require.False(t, hbResp2.GetActivityPaused(), "pause flag must be cleared after unpause")
+		require.False(t, hbResp2.GetActivityPaused(), "pause flag must remain cleared")
 	})
 
 	// UnpauseRequestValidation: validate that Unpause rejects invalid request fields.
