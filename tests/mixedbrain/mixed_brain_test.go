@@ -176,10 +176,16 @@ func runMixedBrain(t *testing.T, resolveTag func(*testing.T) string) {
 	})
 	require.NoError(t, err, "start release server")
 	t.Cleanup(func() { _ = releaseSrv.Stop() })
-	// Only watch the current branch's log for soft-assert findings — the
-	// release tag is what it is, and any soft-asserts there are outside the
-	// scope of this PR.
-	logMonitor.Watch(t, "current", currentLogPath)
+
+	// Current branch must not emit soft-asserts during the run. Release tag
+	// is what it is, so we don't police its soft-asserts. Cross-version
+	// task-failure probes (e.g. DLQ markers) belong on the *processing*
+	// side: in the OSS direction current is the newer build and never
+	// schedules tasks release would have to drop, so there's no probe to
+	// fire here — the equivalent probe lives in TestMixedBrainCloud where
+	// the direction reverses and current may DLQ tasks from a newer cloud.
+	currentWatcher := logMonitor.Watch(t, "current", currentLogPath).
+		MustNotMatch("failed assertion: ")
 
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 	nexusEndpoint := "mixed-brain-nexus"
@@ -207,7 +213,7 @@ func runMixedBrain(t *testing.T, resolveTag func(*testing.T) string) {
 			st.Logf("Proxy connections to %s: %d", backend, count)
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
-		logMonitor.AssertNoFindings(st)
+		logMonitor.AssertAll(st, currentWatcher)
 	})
 }
 
