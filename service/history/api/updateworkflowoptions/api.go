@@ -154,8 +154,8 @@ func MergeAndApply(
 	// would put the workflow over-budget the moment it lands. MaxElapsedDuration
 	// has no equivalent constraint because it resets each enable window.
 	if mergedBound, ok := mergedOpts.GetTimeSkippingConfig().GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration); ok {
-		currentBound, _ := getOptionsFromMutableState(ms).GetTimeSkippingConfig().GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
-		changingMaxSkipped := currentBound == nil ||
+		currentBound, ok := getOptionsFromMutableState(ms).GetTimeSkippingConfig().GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
+		changingMaxSkipped := !ok ||
 			currentBound.MaxSkippedDuration.AsDuration() != mergedBound.MaxSkippedDuration.AsDuration()
 		if changingMaxSkipped {
 			accumulated := ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
