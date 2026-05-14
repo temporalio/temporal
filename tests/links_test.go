@@ -169,18 +169,9 @@ func (s *LinksSuite) TestGetWorkflowExecutionResult_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
-	history := env.SdkClient().GetWorkflowHistory(env.Context(), run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-	foundEvent := false
-	for history.HasNext() {
-		event, err := history.Next()
-		s.NoError(err)
-		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-			continue
-		}
-		foundEvent = true
-		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
-	}
-	s.True(foundEvent)
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	event := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {

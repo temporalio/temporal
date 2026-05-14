@@ -7414,7 +7414,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionResult(ctx context.Context, reque
 	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
-
+	if request.GetExecution().GetRunId() != "" {
+		return nil, serviceerror.NewInvalidArgument("RunId is not supported")
+	}
 	if err := wh.callbackValidator.Validate(string(namespaceName), request.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}

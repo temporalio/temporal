@@ -50,14 +50,12 @@ func Invoke(
 			// Read-only: if there are no completion callbacks or links that needs to be attached,
 			// report the not-completed status and return.
 			if !shouldAttachEvents {
-				resp = wfNotCompletedResponse(mutableState)
+				resp = wfRunningResponse(mutableState)
 				return &api.UpdateWorkflowAction{Noop: true, CreateWorkflowTask: false}, nil
 			}
 
 			// Write path: there are completion callbacks or links, and this workflow execution is running:
-			// 1. Attach callbacks and links via AddWorkflowExecutionOptionsUpdatedEvent
-			// 2. Set response for caller with backlinks
-			// 3. Return with Noop=false so the attachments get persisted.
+			// First we attach callbacks and links via AddWorkflowExecutionOptionsUpdatedEvent
 			optionsEvent, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 				nil,
 				false,
@@ -71,11 +69,16 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			resp = wfNotCompletedResponse(mutableState)
+
+			// Then set response for caller with backlinks so UI can render these.
+			resp = wfRunningResponse(mutableState)
 			namespaceName := mutableState.GetNamespaceEntry().Name().String()
 			resp.Response.Links = makeEventLink(
 				namespaceName, resp.Response.GetExecution(), optionsEvent,
 			)
+
+			// Then we return from the closure with Noop=false so the attached callbacks and links
+			// get persisted.
 			return &api.UpdateWorkflowAction{Noop: false, CreateWorkflowTask: false}, nil
 		},
 		nil,
@@ -88,7 +91,7 @@ func Invoke(
 	return resp, nil
 }
 
-func wfNotCompletedResponse(mutableState historyi.MutableState) *historyservice.GetWorkflowExecutionResultResponse {
+func wfRunningResponse(mutableState historyi.MutableState) *historyservice.GetWorkflowExecutionResultResponse {
 	executionState := mutableState.GetExecutionState()
 	executionInfo := mutableState.GetExecutionInfo()
 	return &historyservice.GetWorkflowExecutionResultResponse{
@@ -157,7 +160,9 @@ func wfCompletedResponse(
 				Failure: &failurepb.Failure{
 					Message: "workflow execution was terminated",
 					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+							Identity: completionEvent.GetWorkflowExecutionTerminatedEventAttributes().GetIdentity(),
+						},
 					},
 				},
 			},
@@ -168,14 +173,15 @@ func wfCompletedResponse(
 				Failure: &failurepb.Failure{
 					Message: "workflow execution timed out",
 					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-							TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-						},
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
 					},
 				},
 			},
 		}
 	default:
+		// EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW is not listed because this function is
+		// only reached via the current execution pointer, which is atomically updated to the new
+		// run during CAN, so we should never enter that state here.
 		return nil, serviceerror.NewInternal(
 			fmt.Sprintf("unexpected completion event type %v", completionEvent.GetEventType()),
 		)

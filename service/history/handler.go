@@ -929,9 +929,6 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 func (h *Handler) GetWorkflowExecutionResult(ctx context.Context, request *historyservice.GetWorkflowExecutionResultRequest) (*historyservice.GetWorkflowExecutionResultResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if namespaceID == "" {
-		return nil, h.convertError(errNamespaceNotSet)
-	}
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
 		return nil, h.convertError(err)
 	}
