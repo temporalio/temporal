@@ -148,11 +148,23 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 	cluster.DisableInitialHostLookup = cfg.DisableInitialHostLookup
 
-	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
+	reconnectionPolicy := &gocql.ExponentialReconnectionPolicy{
 		MaxRetries:      30,
 		InitialInterval: time.Second,
 		MaxInterval:     10 * time.Second,
 	}
+	if rp := cfg.ReconnectionPolicy; rp != nil {
+		if rp.MaxRetries > 0 {
+			reconnectionPolicy.MaxRetries = rp.MaxRetries
+		}
+		if rp.InitialInterval > 0 {
+			reconnectionPolicy.InitialInterval = rp.InitialInterval
+		}
+		if rp.MaxInterval > 0 {
+			reconnectionPolicy.MaxInterval = rp.MaxInterval
+		}
+	}
+	cluster.ReconnectionPolicy = reconnectionPolicy
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 

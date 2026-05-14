@@ -150,6 +150,44 @@ func TestNewCassandraCluster(t *testing.T) {
 				assert.Equal(t, time.Duration(789), cluster.WriteTimeout)
 			},
 		},
+		"reconnection_policy_default": {
+			cfg: config.Cassandra{},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				rp, ok := cluster.ReconnectionPolicy.(*gocql.ExponentialReconnectionPolicy)
+				assert.True(t, ok, "reconnection policy must be ExponentialReconnectionPolicy")
+				assert.Equal(t, 30, rp.MaxRetries)
+				assert.Equal(t, time.Second, rp.InitialInterval)
+				assert.Equal(t, 10*time.Second, rp.MaxInterval)
+			},
+		},
+		"reconnection_policy_max_retries": {
+			cfg: config.Cassandra{
+				ReconnectionPolicy: &config.CassandraReconnectionPolicy{
+					MaxRetries: 3,
+				},
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				rp := cluster.ReconnectionPolicy.(*gocql.ExponentialReconnectionPolicy)
+				assert.Equal(t, 3, rp.MaxRetries)
+				assert.Equal(t, time.Second, rp.InitialInterval)
+				assert.Equal(t, 10*time.Second, rp.MaxInterval)
+			},
+		},
+		"reconnection_policy_all_fields": {
+			cfg: config.Cassandra{
+				ReconnectionPolicy: &config.CassandraReconnectionPolicy{
+					MaxRetries:      5,
+					InitialInterval: 250 * time.Millisecond,
+					MaxInterval:     2 * time.Second,
+				},
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				rp := cluster.ReconnectionPolicy.(*gocql.ExponentialReconnectionPolicy)
+				assert.Equal(t, 5, rp.MaxRetries)
+				assert.Equal(t, 250*time.Millisecond, rp.InitialInterval)
+				assert.Equal(t, 2*time.Second, rp.MaxInterval)
+			},
+		},
 		"set_allowed_authenticators": {
 			cfg: config.Cassandra{
 				User:                  "TestUser",
