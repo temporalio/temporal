@@ -122,7 +122,7 @@ func TestMixedBrain(t *testing.T) {
 
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
-	logMonitor := newLogMonitor(t)
+	logMonitor := devserver.NewLogMonitor(t)
 
 	currentLogger, currentLog, currentLogPath := serverLogger(t, "current", logRoot)
 	defer currentLog.Close()
@@ -162,8 +162,8 @@ func TestMixedBrain(t *testing.T) {
 	})
 	require.NoError(t, err, "start release server")
 	t.Cleanup(func() { _ = releaseSrv.Stop() })
-	logMonitor.watch(t, "current", currentLogPath)
-	logMonitor.watch(t, "release", releaseLogPath)
+	logMonitor.Watch(t, "current", currentLogPath)
+	logMonitor.Watch(t, "release", releaseLogPath)
 
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 	nexusEndpoint := "mixed-brain-nexus"
@@ -191,7 +191,7 @@ func TestMixedBrain(t *testing.T) {
 			st.Logf("Proxy connections to %s: %d", backend, count)
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
-		logMonitor.assertNoFindings(st)
+		logMonitor.AssertNoFindings(st)
 	})
 }
 
