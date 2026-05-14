@@ -38,6 +38,7 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
+	HandleScheduleWorkflowTask        func() error
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -227,6 +228,14 @@ func (m *MockNodeBackend) GetNamespaceEntry() *namespace.Namespace {
 func (m *MockNodeBackend) EndpointRegistry() EndpointRegistry {
 	if m.HandleEndpointRegistry != nil {
 		return m.HandleEndpointRegistry()
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) ScheduleWorkflowTask() error {
+	// No-op for tests; override HandleScheduleWorkflowTask if needed.
+	if m.HandleScheduleWorkflowTask != nil {
+		return m.HandleScheduleWorkflowTask()
 	}
 	return nil
 }

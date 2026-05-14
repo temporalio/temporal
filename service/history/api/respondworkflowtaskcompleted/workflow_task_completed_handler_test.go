@@ -551,6 +551,10 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 	t.Run("collects commands for activities with clock, skips those without", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().ChasmEnabled().Return(false).AnyTimes()
+
+		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger())
+		cfg := configs.NewConfig(col, 1)
 
 		// Activity 1: started with clock (post-deploy) — should produce a cancel command.
 		ai1 := &persistencespb.ActivityInfo{
@@ -602,6 +606,7 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 			identity:                "test-identity",
 			workflowTaskCompletedID: 123,
 			mutableState:            ms,
+			config:                  cfg,
 			tokenSerializer:         tasktoken.NewSerializer(),
 			logger:                  log.NewNoopLogger(),
 		}
@@ -622,6 +627,10 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 	t.Run("started activity without control queue does not collect worker command", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().ChasmEnabled().Return(false).AnyTimes()
+
+		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger())
+		cfg := configs.NewConfig(col, 1)
 
 		ai := &persistencespb.ActivityInfo{
 			ScheduledEventId:       scheduledEventID,
@@ -633,11 +642,13 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 
 		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), scheduledEventID, "test-identity").
 			Return(cancelReqEvent, ai, nil)
+		ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
 
 		handler := &workflowTaskCompletedHandler{
 			identity:                "test-identity",
 			workflowTaskCompletedID: 123,
 			mutableState:            ms,
+			config:                  cfg,
 			logger:                  log.NewNoopLogger(),
 		}
 

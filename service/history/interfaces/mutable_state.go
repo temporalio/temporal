@@ -180,6 +180,7 @@ type (
 		GetNextEventID() int64
 		GetLastCompletedWorkflowTaskStartedEventId() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
+		GetNumCHASMPendingActivities() int
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingChildIds() map[int64]struct{}

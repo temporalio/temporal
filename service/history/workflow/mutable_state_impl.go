@@ -117,7 +117,6 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
-
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
 
@@ -164,8 +163,9 @@ type (
 		currentVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
-		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		approximateSize  int
+		chasmNodeSizes   map[string]int // chasm node path -> key + node size in bytes
+		chasmPendingSize int            // size of CHASM data added since last CloseTransaction, included in GetApproximatePersistedSize
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -2268,6 +2268,18 @@ func (ms *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.
 	return ms.pendingActivityInfoIDs
 }
 
+
+func (ms *MutableStateImpl) GetNumCHASMPendingActivities() int {
+	if !ms.ChasmEnabled() {
+		return 0
+	}
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return 0
+	}
+	return len(wf.Activities)
+}
+
 func (ms *MutableStateImpl) GetPendingTimerInfos() map[string]*persistencespb.TimerInfo {
 	return ms.pendingTimerInfoIDs
 }
@@ -2447,9 +2459,9 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
 	// include buffered events in the size if they will not be flushed
 	if ms.BufferSizeAcceptable() && ms.HasStartedWorkflowTask() {
-		return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
+		return ms.approximateSize + ms.chasmPendingSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
 	}
-	return ms.approximateSize
+	return ms.approximateSize + ms.chasmPendingSize
 }
 
 func (ms *MutableStateImpl) AddSignalRequested(
@@ -3320,6 +3332,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 		return nil, err
 	}
 	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, workflowTaskType)
+}
+
+// ScheduleWorkflowTask implements chasm.NodeBackend. It schedules a new normal workflow task if
+// one is not already pending, and the workflow is running and not paused. This is called by
+// embedded CHASM activity sub-components when they reach a terminal state.
+func (ms *MutableStateImpl) ScheduleWorkflowTask() error {
+	return ScheduleWorkflowTask(ms)
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
@@ -4531,6 +4550,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 
 	return actCancelReqEvent, ai, nil
 }
+
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
 	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)
@@ -7316,6 +7336,8 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
+	// CHASM node sizes are now in approximateSize; clear the pre-estimated pending size.
+	ms.chasmPendingSize = 0
 
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
@@ -7396,7 +7418,9 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
 		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
 		if !ok {
-			return serviceerror.NewInternalf("no event definition registered for %v", t)
+			// Event type not registered with the HSM registry (e.g. activity task events written via
+			// NodeBackend.AddHistoryEvent). Their WFT scheduling is handled independently; skip.
+			continue
 		}
 		if def.IsWorkflowTaskTrigger() {
 			if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {

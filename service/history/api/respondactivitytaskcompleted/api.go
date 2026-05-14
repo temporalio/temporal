@@ -65,6 +65,27 @@ func Invoke(
 			isCompletedByID := false
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
 				isCompletedByID = true
+
+				if mutableState.ChasmEnabled() {
+					wf, chasmCtx, chasmErr := mutableState.ChasmWorkflowComponent(ctx)
+					if chasmErr != nil {
+						return nil, chasmErr
+					}
+					metricsHandler := shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
+					found, chasmErr := wf.CompleteEmbeddedActivityByID(chasmCtx, token.GetActivityId(), req, metricsHandler)
+					if chasmErr != nil {
+						return nil, chasmErr
+					}
+					if found {
+						taskQueue = "unknown" // not available on CHASM path
+						versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
+						return &api.UpdateWorkflowAction{
+							Noop:               false,
+							CreateWorkflowTask: true,
+						}, nil
+					}
+				}
+
 				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0

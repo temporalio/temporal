@@ -14,6 +14,8 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -56,8 +58,25 @@ var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
-	// RecordCompleted applies the provided function to record activity completion
-	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	// OnActivityCompleted is called when an activity reaches the Completed terminal state.
+	// For workflow-embedded activities, the implementation writes history events and cleanup is
+	// handled by the terminal event's Apply method. For standalone activities, it schedules
+	// standby callbacks.
+	OnActivityCompleted(ctx chasm.MutableContext, act *Activity) error
+	// OnActivityFailed is called when an activity reaches the Failed terminal state.
+	// retryState explains why the activity was not retried (e.g. max attempts, STC deadline).
+	OnActivityFailed(ctx chasm.MutableContext, act *Activity, retryState enumspb.RetryState) error
+	// OnActivityTimedOut is called when an activity reaches the TimedOut terminal state.
+	// timeoutFailure is the failure to record in the history event.
+	// needsStartedEvent indicates whether an ActivityTaskStarted event must also be written
+	// (true for START_TO_CLOSE and HEARTBEAT timeouts; false for SCHEDULE_TO_START/CLOSE).
+	OnActivityTimedOut(ctx chasm.MutableContext, act *Activity, timeoutFailure *failurepb.Failure, needsStartedEvent bool) error
+	// OnActivityCanceled is called when an activity reaches the Canceled terminal state.
+	// needsStartedEvent indicates whether an ActivityTaskStarted event must also be written
+	// (true when the activity was started before being canceled; false for not-yet-started activities).
+	OnActivityCanceled(ctx chasm.MutableContext, act *Activity, needsStartedEvent bool) error
+	// OnActivityTerminated is called when an activity reaches the Terminated terminal state.
+	OnActivityTerminated(ctx chasm.MutableContext, act *Activity) error
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -175,13 +194,6 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
-func NewEmbeddedActivity(
-	ctx chasm.MutableContext,
-	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
-}
-
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
 	// Get latest component ref and unmarshal into proto ref
 	componentRef, err := ctx.Ref(a)
@@ -191,14 +203,27 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
-	return &matchingservice.AddActivityTaskRequest{
+	req := &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            namespaceID,
 		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
 		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
-	}, nil
+	}
+
+	// For workflow-embedded activities, set Execution and ScheduledEventId so matching can
+	// build the activity poll response for workers and route RecordActivityTaskStarted correctly.
+	if _, ok := a.Store.TryGet(ctx); ok {
+		execKey := ctx.ExecutionKey()
+		req.Execution = &commonpb.WorkflowExecution{
+			WorkflowId: execKey.BusinessID,
+			RunId:      execKey.RunID,
+		}
+		req.ScheduledEventId = a.GetScheduledEventId()
+	}
+
+	return req, nil
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -232,6 +257,13 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 
+	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
+	// For standalone activities, fall back to the execution key's BusinessID.
+	activityID := a.GetActivityId()
+	if activityID == "" {
+		activityID = key.BusinessID
+	}
+
 	return &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 attempt.GetStartedTime(),
 		Attempt:                     attempt.GetCount(),
@@ -246,7 +278,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 			EventTime: a.GetScheduleTime(),
 			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-					ActivityId:             key.BusinessID,
+					ActivityId:             activityID,
 					ActivityType:           a.GetActivityType(),
 					Input:                  requestData.GetInput(),
 					Header:                 requestData.GetHeader(),
@@ -282,12 +314,29 @@ func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *time
 	return nil
 }
 
-// RecordCompleted applies the provided function to record activity completion.
-// For standalone activities, it also triggers any registered completion callbacks.
-func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
-	if err := applyFn(ctx); err != nil {
-		return err
-	}
+// OnActivityCompleted implements ActivityStore for standalone activities.
+// Schedules standby callbacks to notify registered completion listeners.
+func (a *Activity) OnActivityCompleted(ctx chasm.MutableContext, _ *Activity) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// OnActivityFailed implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityFailed(ctx chasm.MutableContext, _ *Activity, _ enumspb.RetryState) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// OnActivityTimedOut implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityTimedOut(ctx chasm.MutableContext, _ *Activity, _ *failurepb.Failure, _ bool) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// OnActivityCanceled implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityCanceled(ctx chasm.MutableContext, _ *Activity, _ bool) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// OnActivityTerminated implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityTerminated(ctx chasm.MutableContext, _ *Activity) error {
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
@@ -441,7 +490,8 @@ func (a *Activity) HandleFailed(
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
 	if isRetryable {
-		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
+		retryInterval := appFailure.GetNextRetryDelay().AsDuration()
+		rescheduled, err := a.tryReschedule(ctx, retryInterval, failure)
 		if err != nil {
 			return nil, err
 		}
@@ -455,6 +505,7 @@ func (a *Activity) HandleFailed(
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:            event.Request,
 		metricsHandler: metricsHandler,
+		retryState:     a.retryStateForFailedActivity(ctx, 0),
 	}); err != nil {
 		return nil, err
 	}
@@ -641,6 +692,34 @@ func (a *Activity) tryReschedule(
 	})
 }
 
+// retryStateForFailedActivity returns the RetryState to record in the ActivityTaskFailed history
+// event when the activity will not be retried. It mirrors the logic in the legacy
+// mutable_state_impl.go RetryActivity / getBackoffInterval path:
+//   - No retry policy → RETRY_STATE_RETRY_POLICY_NOT_SET
+//   - STC deadline would be exceeded → RETRY_STATE_TIMEOUT
+//   - Max attempts reached → RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+func (a *Activity) retryStateForFailedActivity(ctx chasm.Context, overridingRetryInterval time.Duration) enumspb.RetryState {
+	if a.GetRetryPolicy() == nil {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
+	}
+	attempt := a.LastAttempt.Get(ctx)
+	retryPolicy := a.GetRetryPolicy()
+
+	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
+	enoughTime, _ := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
+
+	// STC deadline takes priority: even if we're also out of attempts, the scheduler
+	// would have hit the deadline before getting another chance.
+	if !enoughTime {
+		return enumspb.RETRY_STATE_TIMEOUT
+	}
+	if !enoughAttempts {
+		return enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+	}
+	// Fallback (shouldn't normally reach here — tryReschedule would have succeeded).
+	return enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+}
+
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
 	if !TransitionRescheduled.Possible(a) {
 		return false, 0
@@ -709,6 +788,33 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 	}
 }
 
+// createNotEnoughTimeForRetryFailure creates a SCHEDULE_TO_CLOSE timeout failure used when an
+// activity attempt times out (start-to-close or heartbeat) but there is not enough time
+// remaining in the schedule-to-close window to schedule the next retry. This mirrors the
+// legacy behaviour in timer_queue_active_task_executor.go.
+func createNotEnoughTimeForRetryFailure() *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			},
+		},
+	}
+}
+
+// wouldExceedScheduleToClose returns true when the activity has a schedule-to-close timeout
+// configured and there is not enough time remaining to schedule another retry attempt. It is
+// used by timeout task handlers to decide whether to convert a start-to-close or heartbeat
+// timeout into a schedule-to-close timeout (matching legacy behaviour).
+func (a *Activity) wouldExceedScheduleToClose(ctx chasm.Context) bool {
+	if a.GetScheduleToCloseTimeout().AsDuration() == 0 {
+		return false
+	}
+	ok, _ := a.hasEnoughTimeForRetry(ctx, 0)
+	return !ok
+}
+
 // RecordHeartbeat records a heartbeat for the activity.
 func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
@@ -724,6 +830,10 @@ func (a *Activity) RecordHeartbeat(
 		Details:             input.Request.GetHeartbeatRequest().GetDetails(),
 		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
 	})
+	// Update last worker identity on the current attempt so it is reflected in pending activity info.
+	if identity := input.Request.GetHeartbeatRequest().GetIdentity(); identity != "" {
+		a.LastAttempt.Get(ctx).LastWorkerIdentity = identity
+	}
 	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
 		ctx.AddTask(
 			a,
@@ -765,7 +875,7 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	}
 }
 
-func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
+func InternalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
@@ -788,7 +898,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
 	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
-	runState := internalStatusToRunState(a.GetStatus())
+	runState := InternalStatusToRunState(a.GetStatus())
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
@@ -848,6 +958,50 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	}
 
 	return info
+}
+
+// BuildPendingActivityInfo converts this Activity to a PendingActivityInfo proto for
+// DescribeWorkflowExecution. Returns nil if the activity is in a terminal state.
+func (a *Activity) BuildPendingActivityInfo(ctx chasm.Context) *workflowpb.PendingActivityInfo {
+	runState := InternalStatusToRunState(a.GetStatus())
+	if runState == enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED {
+		return nil // terminal state, not pending
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+
+	var expirationTime *timestamppb.Timestamp
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		expirationTime = timestamppb.New(deadline)
+	}
+
+	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
+	// For standalone activities, this will be empty (standalone activities don't use BuildPendingActivityInfo).
+	activityID := a.GetActivityId()
+
+	return &workflowpb.PendingActivityInfo{
+		ActivityId:         activityID,
+		ActivityType:       a.GetActivityType(),
+		State:              runState,
+		HeartbeatDetails:   heartbeat.GetDetails(),
+		LastHeartbeatTime:  heartbeat.GetRecordedTime(),
+		LastStartedTime:    attempt.GetStartedTime(),
+		Attempt:            attempt.GetCount() + 1, // attempt is 0-indexed internally, API is 1-indexed
+		MaximumAttempts:    a.GetRetryPolicy().GetMaximumAttempts(),
+		ScheduledTime:      a.GetScheduleTime(),
+		ExpirationTime:     expirationTime,
+		LastFailure:        attempt.GetLastFailureDetails().GetFailure(),
+		LastWorkerIdentity: attempt.GetLastWorkerIdentity(),
+		ActivityOptions: &apiactivitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: a.GetTaskQueue().GetName()},
+			ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+			RetryPolicy:            a.GetRetryPolicy(),
+		},
+	}
 }
 
 func (a *Activity) buildDescribeActivityExecutionResponse(
@@ -992,6 +1146,41 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 		return store
 	}
 	return a
+}
+
+// RequestCancelFromWorkflowTask handles a RequestCancelActivity WFT command for this embedded activity.
+// It applies TransitionCancelRequested (and TransitionCanceled if not yet started) so the CHASM
+// tree reflects the cancellation without touching legacy ActivityInfo.
+// Returns wasNotStarted=true when the activity was immediately canceled (no worker to notify).
+//
+// TODO(david.porter): Will not merge — prototype only. Does not emit metrics for the cancel event.
+// >> question, how are metrics handled
+func (a *Activity) RequestCancelFromWorkflowTask(ctx chasm.MutableContext, identity string) (wasNotStarted bool, err error) {
+	if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return false, nil // idempotent: already in cancel-requested state
+	}
+
+	wasNotStarted = a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+
+	if err := TransitionCancelRequested.Apply(a, ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Identity: identity,
+	}); err != nil {
+		return false, err
+	}
+
+	if wasNotStarted {
+		if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
+			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			// TODO(david.porter): Will not merge — prototype only.
+			// Use a no-op handler here since this path doesn't have access to a real
+			// metrics.Handler. Metrics are not emitted for this cancel path.
+			handler: metrics.NoopMetricsHandler,
+		}); err != nil {
+			return wasNotStarted, err
+		}
+	}
+
+	return wasNotStarted, nil
 }
 
 // validateActivityTaskToken validates a task token against the current activity state.

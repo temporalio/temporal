@@ -102,6 +102,11 @@ var ErrCommandNotSupported = errors.New("command not supported")
 
 type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
+	// Identity is the worker identity from the RespondWorkflowTaskCompleted request.
+	Identity string
+	// CancelRequestedEventID is an output field set by the cancel-activity command handler
+	// to the event ID of the ActivityTaskCancelRequested event it writes.
+	CancelRequestedEventID *int64
 }
 
 // CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted

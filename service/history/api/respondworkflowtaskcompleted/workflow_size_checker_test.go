@@ -118,6 +118,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			}
 			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(executionInfos)
 			mutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+			mutableState.EXPECT().GetNumCHASMPendingActivities().Return(0)
 			mutableState.EXPECT().GetPendingRequestCancelExternalInfos().Return(requestCancelInfos)
 			mutableState.EXPECT().GetPendingSignalExternalInfos().Return(signalInfos)
 

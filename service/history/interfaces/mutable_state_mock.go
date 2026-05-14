@@ -2121,6 +2121,7 @@ func (mr *MockMutableStateMockRecorder) GetBaseWorkflowInfo() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseWorkflowInfo", reflect.TypeOf((*MockMutableState)(nil).GetBaseWorkflowInfo))
 }
 
+
 // GetChildExecutionInfo mocks base method.
 func (m *MockMutableState) GetChildExecutionInfo(arg0 int64) (*persistence.ChildExecutionInfo, bool) {
 	m.ctrl.T.Helper()
@@ -2478,6 +2479,20 @@ func (m *MockMutableState) GetNextEventID() int64 {
 func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
+}
+
+// GetNumCHASMPendingActivities mocks base method.
+func (m *MockMutableState) GetNumCHASMPendingActivities() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNumCHASMPendingActivities")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetNumCHASMPendingActivities indicates an expected call of GetNumCHASMPendingActivities.
+func (mr *MockMutableStateMockRecorder) GetNumCHASMPendingActivities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumCHASMPendingActivities", reflect.TypeOf((*MockMutableState)(nil).GetNumCHASMPendingActivities))
 }
 
 // GetPendingActivityInfos mocks base method.
@@ -3441,6 +3456,7 @@ func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RemoveSpeculativeWorkflowTaskTimeoutTask))
 }
+
 
 // RetryActivity mocks base method.
 func (m *MockMutableState) RetryActivity(ai *persistence.ActivityInfo, arg1 *failure.Failure) (enums.RetryState, error) {
