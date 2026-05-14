@@ -147,8 +147,8 @@ persistence:
         {{- else if eq $db "sqlite" }}
         default:
             sql:
-                pluginName: "sqlite"
-                databaseName: "{{ default "temporal.db" (env "DBNAME") }}"
+                pluginName: "{{ $db }}"
+                databaseName: "{{ default "temporal" (env "DBNAME") }}"
                 connectAddr: "localhost"
                 connectProtocol: "tcp"
                 connectAttributes:
@@ -161,8 +161,8 @@ persistence:
                 maxIdleConns: {{ default "1" (env "SQL_MAX_IDLE_CONNS") }}
         visibility:
             sql:
-                pluginName: "sqlite"
-                databaseName: "{{ default "temporal_visibility.db" (env "VISIBILITY_DBNAME") }}"
+                pluginName: "{{ $db }}"
+                databaseName: "{{ default "temporal_visibility" (env "VISIBILITY_DBNAME") }}"
                 connectAddr: "localhost"
                 connectProtocol: "tcp"
                 connectAttributes:
