@@ -33,6 +33,8 @@ func TestErrLookup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
 	serviceResolver.EXPECT().Lookup(gomock.Any()).Return(nil, membership.ErrInsufficientHosts).AnyTimes()
+	serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
@@ -104,6 +106,8 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 			serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfoFromAddress("localhost"), nil)
 			serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfoFromAddress("127.0.0.1"), nil)
 			serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfoFromAddress("localhost"), nil)
+			serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 
 			// Create an in-memory gRPC server.
 			listener := nettest.NewListener(nettest.NewPipe())

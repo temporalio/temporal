@@ -40,7 +40,7 @@ func NewTestServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient, logger)
 	var redirector history.Redirector[TestServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
@@ -50,7 +50,7 @@ func NewTestServiceLayeredClient(
 			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
 		)
 	} else {
-		redirector = history.NewBasicRedirector(connections, resolver)
+		redirector = history.NewBasicRedirector(connections, resolver, logger)
 	}
 	return &TestServiceLayeredClient{
 		metricsHandler: metricsHandler,

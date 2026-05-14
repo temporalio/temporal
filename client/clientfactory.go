@@ -3,8 +3,12 @@
 package client
 
 import (
+	"context"
+	"fmt"
+	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -16,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -129,14 +134,44 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (any, error) {
+	clientProvider := func(clientKey string) (any, func() error, error) {
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
-		return matchingservice.NewMatchingServiceClient(connection), nil
+		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
+	cache := common.NewClientCache(keyResolver, clientProvider, cf.logger)
+	// The goroutine cancels when the factory is GC'd. The closure must not
+	// capture cf, so we extract the references it needs first.
+	logger := cf.logger
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
+		ch := make(chan *membership.ChangedEvent, 1)
+		if err := resolver.AddListener(listenerName, ch); err != nil {
+			logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
+			return
+		}
+		defer func() {
+			if err := resolver.RemoveListener(listenerName); err != nil {
+				logger.Warn("Error removing membership listener", tag.Error(err))
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-ch:
+				for _, h := range event.HostsRemoved {
+					cache.Evict(h.GetAddress())
+				}
+			}
+		}
+	}()
+	runtime.AddCleanup(cf, func(cancel context.CancelFunc) { cancel() }, cancel)
+
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
-		common.NewClientCache(keyResolver, clientProvider),
+		cache,
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),

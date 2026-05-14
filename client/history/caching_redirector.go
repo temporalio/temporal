@@ -133,12 +133,12 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 	}
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	// Recheck under write lock.
 	entry, ok = r.mu.cache[shardID]
 	if ok {
 		if entry.staleAt.IsZero() || time.Now().Before(entry.staleAt) {
+			r.mu.Unlock()
 			return entry, nil
 		}
 		// Delete and fallthrough below to re-check ownership.
@@ -147,10 +147,17 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 
 	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
+		r.mu.Unlock()
 		return cacheEntry[C]{}, err
 	}
 
-	return r.cacheAddLocked(shardID, address), nil
+	newEntry := r.cacheAddLocked(shardID, address)
+	r.mu.Unlock()
+	// Skip closing the connection if the new owner has same address.
+	if ok && entry.address != address {
+		r.connections.closeConn(entry.address)
+	}
+	return newEntry, nil
 }
 
 func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) cacheEntry[C] {
@@ -182,13 +189,13 @@ func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) ca
 
 func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	for shardID, entry := range r.mu.cache {
 		if entry.address == address {
 			delete(r.mu.cache, shardID)
 		}
 	}
+	r.mu.Unlock()
+	r.connections.closeConn(address)
 }
 
 func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *serviceerrors.ShardOwnershipLost) (cacheEntry[C], bool) {
@@ -245,13 +252,13 @@ func (r *CachingRedirector[C]) staleCheck() {
 	staleTTL := r.staleTTL()
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	now := time.Now()
+	var toClose []rpcAddress
 	for shardID, entry := range r.mu.cache {
 		if !entry.staleAt.IsZero() {
 			if now.After(entry.staleAt) {
 				delete(r.mu.cache, shardID)
+				toClose = append(toClose, entry.address)
 			}
 			continue
 		}
@@ -262,5 +269,9 @@ func (r *CachingRedirector[C]) staleCheck() {
 				r.mu.cache[shardID] = entry
 			}
 		}
+	}
+	r.mu.Unlock()
+	for _, addr := range toClose {
+		r.connections.closeConn(addr)
 	}
 }

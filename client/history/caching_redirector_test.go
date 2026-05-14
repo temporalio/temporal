@@ -149,6 +149,8 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp ClientOperation[histo
 	)
 	verify(err)
 	s.Equal(1, s.connections.resetCalls)
+	// hostDown error triggers cacheDeleteByAddress which closes the conn.
+	s.Equal([]rpcAddress{testAddr}, s.connections.closed())
 }
 
 func (s *cachingRedirectorSuite) TestDeadlineExceededError() {
