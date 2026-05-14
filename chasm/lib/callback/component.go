@@ -178,18 +178,6 @@ func (c *Callback) loadInvocationArgs(
 		)
 	}
 
-	// Setup the completion's headers.
-	completion.Header = callback.Header
-	// TODO(chrsmith):
-	// > Is this a behavior change for workflow callbacks?
-	// Yes? And I'm not sure if that's a good thing or not...
-	if callback.GetToken() != "" {
-		if completion.Header == nil {
-			completion.Header = nexus.Header{}
-		}
-		completion.Header.Set(commonnexus.CallbackTokenHeader, callback.GetToken())
-	}
-
 	if callback.Url == chasm.NexusCompletionHandlerURL {
 		return invocableInternal{
 			callback:   callback,
