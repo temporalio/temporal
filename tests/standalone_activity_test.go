@@ -271,7 +271,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 
 		t.Run("OnConflictOptions", func(t *testing.T) {
-			env.OverrideDynamicConfig(s, 
+			env.OverrideDynamicConfig(s,
 				callbacks.AllowedAddresses,
 				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 			)
@@ -616,7 +616,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 		t.Run("InputTooLarge", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(s, 
+			cleanup := env.OverrideDynamicConfig(s,
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -1955,7 +1955,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(s, 
+			cleanup := env.OverrideDynamicConfig(s,
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -2479,7 +2479,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			cleanup := env.OverrideDynamicConfig(s, 
+			cleanup := env.OverrideDynamicConfig(s,
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
@@ -3938,7 +3938,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 	t.Run("ExceededPageSizeIsCapped", func(t *testing.T) {
 		maxPageSize := int32(1)
-		cleanup := env.OverrideDynamicConfig(s, 
+		cleanup := env.OverrideDynamicConfig(s,
 			dynamicconfig.FrontendVisibilityMaxPageSize,
 			maxPageSize,
 		)
@@ -5839,7 +5839,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 
-	env.OverrideDynamicConfig(s, 
+	env.OverrideDynamicConfig(s,
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
@@ -5936,7 +5936,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
 		maxCallbacks := 1
-		env.OverrideDynamicConfig(s, 
+		env.OverrideDynamicConfig(s,
 			callback.MaxPerExecution,
 			maxCallbacks,
 		)
