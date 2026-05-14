@@ -9670,7 +9670,6 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 	return tsc, initialSkipped
 }
 
-// hasInflightWorkToPreventTimeSkipping checks if there is no-inflight work and time can skip.
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
