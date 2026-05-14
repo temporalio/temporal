@@ -3,7 +3,6 @@ package mixedbrain
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,13 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	watchedServerMessages = []string{
-		"Critical attempts processing workflow task",
-		"Task enqueued to DLQ",
-		"Enqueued replication task to DLQ",
-	}
-)
+const failedAssertionLogPrefix = "failed assertion: "
 
 type logMonitor struct {
 	ctx    context.Context
@@ -98,8 +91,7 @@ func (m *logMonitor) checkLine(name, line string) {
 		return
 	}
 
-	entry := parseServerLogLine(line)
-	if containsAny(entry.message, watchedServerMessages) {
+	if strings.Contains(line, failedAssertionLogPrefix) {
 		m.addFinding(name, line)
 	}
 }
@@ -108,35 +100,4 @@ func (m *logMonitor) addFinding(name, msg string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.findings = append(m.findings, fmt.Sprintf("[%s] %s", name, msg))
-}
-
-type serverLogEntry struct {
-	message string
-}
-
-func parseServerLogLine(line string) serverLogEntry {
-	entry := serverLogEntry{
-		message: line,
-	}
-
-	var fields struct {
-		Msg string `json:"msg"`
-	}
-	if err := json.Unmarshal([]byte(line), &fields); err == nil {
-		if fields.Msg != "" {
-			entry.message = fields.Msg
-		}
-		return entry
-	}
-
-	return entry
-}
-
-func containsAny(text string, substrings []string) bool {
-	for _, s := range substrings {
-		if strings.Contains(text, s) {
-			return true
-		}
-	}
-	return false
 }
