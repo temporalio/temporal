@@ -502,15 +502,7 @@ Loop:
 	return executions
 }
 
-type mockHeartBeatRecorder struct {
-	lastHeartBeat replicationTasksHeartbeatDetails
-}
-
-func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetails) {
-	m.lastHeartBeat = details
-}
-
-func (s *activitiesSuite) Test_verifyReplicationTasks() {
+func (s *activitiesSuite) Test_verifyBatch() {
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -521,41 +513,36 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 
 	var tests = []struct {
 		remoteExecutionStates []executionState
-		nextIndex             int
-		expectedVerified      bool
+		startIndex            int
+		expectedDone          bool
 		expectedErr           error
 		expectedNextIndex     int
 	}{
 		{
-			expectedVerified: true,
-			expectedErr:      nil,
+			expectedDone: true,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:             0,
-			expectedVerified:      true,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          true,
 			expectedNextIndex:     4,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:             2,
-			expectedVerified:      true,
-			expectedErr:           nil,
+			startIndex:            2,
+			expectedDone:          true,
 			expectedNextIndex:     4,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
-			nextIndex:             0,
-			expectedVerified:      false,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          false,
 			expectedNextIndex:     2,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound, executionFound, executionNotfound},
-			nextIndex:             0,
-			expectedVerified:      false,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          false,
 			expectedNextIndex:     2,
 		},
 	}
@@ -570,38 +557,39 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		SkipForceReload: true,
 	})).Return(completeState, nil).AnyTimes()
 
-	checkPointTime := time.Now()
 	for _, tc := range tests {
-		var recorder mockHeartBeatRecorder
-		// mockRemoteClient := workflowservicemock.NewMockWorkflowServiceClient(s.controller)
-		request.Executions = createExecutions(s.mockRemoteAdminClient, tc.remoteExecutionStates, tc.nextIndex)
-		details := replicationTasksHeartbeatDetails{
-			NextIndex:  tc.nextIndex,
-			CheckPoint: checkPointTime,
-		}
+		request.Executions = createExecutions(s.mockRemoteAdminClient, tc.remoteExecutionStates, tc.startIndex)
 
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+		var progressCallCount int
+		var lastProgressIndex int
+		nextIndex, done, lastUnverified, err := s.a.verifyBatch(
+			ctx, &request, tc.startIndex, s.mockRemoteAdminClient, &testNamespace,
+			func(ni int) {
+				lastProgressIndex = ni
+				progressCallCount++
+			},
+		)
+
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
-		s.Equal(tc.expectedVerified, verified)
-		s.Equal(tc.expectedNextIndex, details.NextIndex)
-		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
-		s.Equal(recorder.lastHeartBeat, details)
-		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
-			s.Equal(execution1, details.LastNotVerifiedWorkflowExecution)
+		s.Equal(tc.expectedDone, done)
+		s.Equal(tc.expectedNextIndex, nextIndex)
+		s.GreaterOrEqual(len(tc.remoteExecutionStates), nextIndex)
+
+		if nextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[nextIndex] == executionNotfound {
+			s.Equal(execution1, lastUnverified)
 		}
 
 		if len(request.Executions) > 0 {
-			// Except for empty Executions, all should set new CheckPoint to indicate making progress.
-			s.True(checkPointTime.Before(details.CheckPoint))
+			// Except for empty Executions, onProgress should have been called to signal progress.
+			s.Greater(progressCallCount, 0)
+			s.Equal(nextIndex, lastProgressIndex)
 		}
 	}
 }
 
-func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
-	var recorder mockHeartBeatRecorder
-
+func (s *activitiesSuite) Test_verifyBatchNoProgress() {
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -619,23 +607,19 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 		SkipForceReload: true,
 	})).Return(completeState, nil).AnyTimes()
 
-	checkPointTime := time.Now()
-	details := replicationTasksHeartbeatDetails{
-		NextIndex:  0,
-		CheckPoint: checkPointTime,
-	}
-
 	ctx := context.TODO()
-	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+
+	var firstProgressCount int
+	nextIndex, done, _, err := s.a.verifyBatch(
+		ctx, &request, 0, s.mockRemoteAdminClient, &testNamespace,
+		func(ni int) { firstProgressCount++ },
+	)
 	s.NoError(err)
-	s.False(verified)
-	// Verify has made progress.
-	s.True(checkPointTime.Before(details.CheckPoint))
-	s.Equal(2, details.NextIndex)
+	s.False(done)
+	s.Equal(2, nextIndex)
+	s.Equal(2, firstProgressCount) // items 0 and 1 verified
 
-	prevDetails := details
-
-	// Mock for one more NotFound call
+	// Mock for one more NotFound call when retrying from nextIndex.
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -647,14 +631,19 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
-	// All results should be either NotFound or cached and no progress should be made.
-	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+	// Retrying from the same index makes no progress.
+	var secondProgressCount int
+	nextIndex2, done2, _, err := s.a.verifyBatch(
+		ctx, &request, nextIndex, s.mockRemoteAdminClient, &testNamespace,
+		func(ni int) { secondProgressCount++ },
+	)
 	s.NoError(err)
-	s.False(verified)
-	s.Equal(prevDetails, details)
+	s.False(done2)
+	s.Equal(nextIndex, nextIndex2)
+	s.Equal(0, secondProgressCount)
 }
 
-func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
+func (s *activitiesSuite) Test_verifyBatchSkipRetention() {
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -663,21 +652,20 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	}
 
 	var tests = []struct {
-		deleteDiff time.Duration // diff between deleteTime and now
-		verified   bool
+		deleteDiff  time.Duration // diff between deleteTime and now
+		expectedDone bool
 	}{
 		{
-			-30 * time.Second,
-			true,
+			deleteDiff:   -30 * time.Second,
+			expectedDone: true,
 		},
 		{
-			30 * time.Second,
-			false,
+			deleteDiff:   30 * time.Second,
+			expectedDone: false,
 		},
 	}
 
 	for _, tc := range tests {
-		var recorder mockHeartBeatRecorder
 		deleteTime := time.Now().Add(tc.deleteDiff)
 		retention := time.Hour
 		closeTime := deleteTime.Add(-retention)
@@ -723,12 +711,13 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		ns, nsErr := namespace.FromPersistentState(detail, factory(detail))
 		s.Require().NoError(nsErr)
 
-		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, ns, recorder.hearbeat)
+		_, done, lastUnverified, err := s.a.verifyBatch(ctx, &request, 0, s.mockRemoteAdminClient, ns, func(int) {})
 		s.NoError(err)
-		s.Equal(tc.verified, verified)
-		s.Equal(recorder.lastHeartBeat, details)
+		s.Equal(tc.expectedDone, done)
+		if !done {
+			s.Equal(execution1, lastUnverified)
+		}
 	}
 }
 

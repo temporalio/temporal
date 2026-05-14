@@ -915,45 +915,37 @@ func (a *activities) verifySingleReplicationTask(
 	}
 }
 
-func (a *activities) verifyReplicationTasks(
+// verifyBatch scans executions starting at startIndex, verifying each on the remote cluster.
+// onProgress is called after each successful verification with the next index to scan from.
+// Returns the next index to scan from, whether all executions were verified, and the first
+// unverified execution if any.
+func (a *activities) verifyBatch(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	details *replicationTasksHeartbeatDetails,
-	remotAdminClient adminservice.AdminServiceClient,
+	startIndex int,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	heartbeat func(details replicationTasksHeartbeatDetails),
-) (bool, error) {
+	onProgress func(nextIndex int),
+) (nextIndex int, done bool, lastUnverified *ExecutionInfo, err error) {
 	start := time.Now()
-	progress := false
 	defer func() {
-		if progress {
-			// Update CheckPoint when there is a progress
-			details.CheckPoint = time.Now()
-		}
-
-		heartbeat(*details)
 		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
 
-	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
-		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remotAdminClient, ns, we)
+	for i := startIndex; i < len(request.Executions); i++ {
+		we := request.Executions[i]
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteAdminClient, ns, we)
 		if err != nil {
-			return false, err
+			return i, false, nil, err
 		}
-
 		if !r.isVerified() {
-			details.LastNotVerifiedWorkflowExecution = we
-			return false, nil
+			return i, false, we, nil
 		}
-
-		heartbeat(*details)
-		progress = true
+		onProgress(i + 1)
 	}
-
-	return true, nil
+	return len(request.Executions), true, nil, nil
 }
 
 const (
@@ -968,12 +960,11 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 			return response, err
 		}
 	} else {
-		details.NextIndex = 0
 		details.CheckPoint = time.Now()
 		activity.RecordHeartbeat(ctx, details)
 	}
 
-	remotAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
 	if err != nil {
 		return response, err
 	}
@@ -983,41 +974,53 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		return response, err
 	}
 
-	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
+	// Verify if replication tasks exist on target cluster. There are several cases where an
+	// execution is not found on the target cluster:
 	//  1. replication lag
 	//  2. Zombie workflow execution
 	//  3. workflow execution was deleted (due to retention) after replication task was created
 	//  4. workflow execution was not applied successfully on target cluster (i.e, bug)
 	//
-	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
-	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
-	// being verified. If no progress is made for long enough, then
-	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
-	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
-	//    non-retryable error and force-replication will fail.
+	// The verification step is retried every VerifyInterval to handle #1. Progress is recorded
+	// in the activity heartbeat: checkpoint is updated whenever an execution is successfully
+	// verified. If no progress is made for defaultNoProgressNotRetryableTimeout, the activity
+	// returns a non-retryable error indicating a likely bug (#4).
 	for {
-		// Since replication has a lag, sleep first.
-		time.Sleep(request.VerifyInterval)
+		// Since replication has a lag, wait before each scan.
+		select {
+		case <-time.After(request.VerifyInterval):
+		case <-ctx.Done():
+			return response, ctx.Err()
+		}
 
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remotAdminClient, nsEntry,
-			func(d replicationTasksHeartbeatDetails) {
-				activity.RecordHeartbeat(ctx, d)
-			})
+		nextIndex, done, lastUnverified, err := a.verifyBatch(
+			ctx, request, details.NextIndex, remoteAdminClient, nsEntry,
+			func(nextIdx int) {
+				details.NextIndex = nextIdx
+				details.CheckPoint = time.Now()
+				activity.RecordHeartbeat(ctx, details)
+			},
+		)
 		if err != nil {
 			return response, err
 		}
 
-		if verified {
+		details.NextIndex = nextIndex
+		if lastUnverified != nil {
+			details.LastNotVerifiedWorkflowExecution = lastUnverified
+		}
+		activity.RecordHeartbeat(ctx, details)
+
+		if done {
 			response.VerifiedWorkflowCount = int64(len(request.Executions))
 			return response, nil
 		}
 
-		diff := time.Since(details.CheckPoint)
-		if diff > defaultNoProgressNotRetryableTimeout {
-			// Potentially encountered a missing execution, return non-retryable error
+		staleDuration := time.Since(details.CheckPoint)
+		if staleDuration > defaultNoProgressNotRetryableTimeout {
 			return response, temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable): could not find WorkflowExecution: '%v' in TargetCluster: '%s': Checkpoint: '%v', ",
-					diff.Minutes(),
+					staleDuration.Minutes(),
 					details.LastNotVerifiedWorkflowExecution, request.TargetClusterName, details.CheckPoint),
 				"",
 				nil)
