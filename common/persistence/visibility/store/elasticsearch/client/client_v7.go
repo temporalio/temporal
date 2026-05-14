@@ -29,13 +29,16 @@ var _ Client = (*clientImpl)(nil)
 // newClient create a ES client
 func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
 	var urls []string
+	var scheme string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
+		scheme = cfg.URLs[0].Scheme
 		for i, u := range cfg.URLs {
 			urls[i] = u.String()
 		}
 	} else {
 		urls = []string{cfg.URL.String()}
+		scheme = cfg.URL.Scheme
 	}
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(urls...),
@@ -47,6 +50,10 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
 		elastic.SetGzip(!cfg.DisableGzip),
+	}
+
+	if cfg.EnableSniff && len(scheme) > 0 {
+		options = append(options, elastic.SetScheme(scheme))
 	}
 
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
