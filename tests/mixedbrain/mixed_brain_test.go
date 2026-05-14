@@ -54,21 +54,35 @@ func persistenceFromEnv() devserver.PersistenceOptions {
 	}
 }
 
-func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.File) {
+func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.File, string) {
 	t.Helper()
 	logPath := filepath.Join(logRoot, fmt.Sprintf("mixedbrain_process-%s.log", name))
 	f, err := os.Create(logPath)
 	require.NoError(t, err)
-	return zap.NewNop().Sugar().With("server", name), f
+	return zap.NewNop().Sugar().With("server", name), f, logPath
 }
 
-// TestMixedBrain starts two servers in parallel — one built from the current
-// branch's source tree and the other from the latest release tag of the
-// previous minor — joined into a single logical cluster, and runs the Omes
+// TestMixedBrainOSS runs the mixed-brain scenario against the latest OSS
+// release tag of the previous minor (e.g. v1.30.x when current is 1.31.x).
+func TestMixedBrainOSS(t *testing.T) {
+	runMixedBrain(t, fetchPreviousMinorTag)
+}
+
+// TestMixedBrainCloud runs the mixed-brain scenario against the latest
+// non-rc cloud release tag (e.g. v1.32.0-155.3). Cloud releases may be a
+// newer codebase than the current branch — this exercises the opposite
+// direction of version skew compared to TestMixedBrainOSS.
+func TestMixedBrainCloud(t *testing.T) {
+	runMixedBrain(t, fetchLastCloudReleaseTag)
+}
+
+// runMixedBrain starts two servers in parallel — one built from the current
+// branch's source tree and the other from the tag returned by resolveTag —
+// joins them into a single logical cluster, and runs the Omes
 // throughput_stress scenario through a round-robin TCP proxy to exercise both.
 // Server lifecycle (clone + build + config + process) is delegated to
 // github.com/temporalio/omes/devserver.
-func TestMixedBrain(t *testing.T) {
+func runMixedBrain(t *testing.T, resolveTag func(*testing.T) string) {
 	tmpDir := t.TempDir()
 	logRoot := logDir(t)
 
@@ -78,7 +92,7 @@ func TestMixedBrain(t *testing.T) {
 	t.Run("setup", func(t *testing.T) {
 		t.Run("resolve release tag", func(t *testing.T) {
 			t.Parallel()
-			releaseTag = fetchPreviousMinorTag(t)
+			releaseTag = resolveTag(t)
 			t.Logf("Release tag: %s (current server version: %s)", releaseTag, headers.ServerVersion)
 		})
 		t.Run("build omes binary", func(t *testing.T) {
@@ -98,17 +112,42 @@ func TestMixedBrain(t *testing.T) {
 		currentBase, releaseBase = 7230, 7240
 	}
 
+	// Keep repeated-task failure reporting inside the mixed-brain smoke-test
+	// window. Defaults are tuned for production (e.g. 70 history-task DLQ
+	// attempts is roughly an hour), which can let a bad task hide until after
+	// this test has already ended.
+	commonDC := map[string]any{
+		"history.TaskDLQUnexpectedErrorAttempts":                            5,
+		"history.workflowTaskCriticalAttempt":                               2,
+		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute": 2,
+	}
+
+	// Standalone Nexus is a current-only feature (off by default in releases
+	// pre-1.31). Enabling it on the current server lets omes exercise the
+	// StartNexusOperationExecution RPC; requests that the proxy routes to
+	// the release server come back with Unimplemented, which the omes
+	// scenario tolerates as a no-op.
+	currentDC := map[string]any{
+		"nexusoperation.enableStandalone": true,
+	}
+	for k, v := range commonDC {
+		currentDC[k] = v
+	}
+
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
-	currentLogger, currentLog := serverLogger(t, "current", logRoot)
+	logMonitor := devserver.NewLogMonitor(t)
+
+	currentLogger, currentLog, currentLogPath := serverLogger(t, "current", logRoot)
 	defer currentLog.Close()
 	currentSrv, err := devserver.Start(t.Context(), devserver.Options{
-		SourceDir:   sourceRoot(),
-		PortBase:    currentBase,
-		Persistence: persistence,
-		Stdout:      currentLog,
-		Stderr:      currentLog,
-		Logger:      currentLogger,
+		SourceDir:           sourceRoot(),
+		PortBase:            currentBase,
+		Persistence:         persistence,
+		DynamicConfigValues: currentDC,
+		Stdout:              currentLog,
+		Stderr:              currentLog,
+		Logger:              currentLogger,
 	})
 	require.NoError(t, err, "start current server")
 	t.Cleanup(func() { _ = currentSrv.Stop() })
@@ -121,12 +160,13 @@ func TestMixedBrain(t *testing.T) {
 	// to see it too once it joins — the helper waits for AlreadyExists.
 	registerDefaultNamespace(t, conn)
 
-	releaseLogger, releaseLog := serverLogger(t, "release", logRoot)
+	releaseLogger, releaseLog, _ := serverLogger(t, "release", logRoot)
 	defer releaseLog.Close()
 	releaseSrv, err := devserver.Start(t.Context(), devserver.Options{
-		Ref:         releaseTag,
-		PortBase:    releaseBase,
-		Persistence: persistence,
+		Ref:                 releaseTag,
+		PortBase:            releaseBase,
+		Persistence:         persistence,
+		DynamicConfigValues: commonDC,
 		ClusterEndpoint: devserver.ClusterEndpoint{
 			RPCAddress: currentSrv.FrontendHostPort(),
 		},
@@ -136,6 +176,16 @@ func TestMixedBrain(t *testing.T) {
 	})
 	require.NoError(t, err, "start release server")
 	t.Cleanup(func() { _ = releaseSrv.Stop() })
+
+	// Current branch must not emit soft-asserts during the run. Release tag
+	// is what it is, so we don't police its soft-asserts. Cross-version
+	// task-failure probes (e.g. DLQ markers) belong on the *processing*
+	// side: in the OSS direction current is the newer build and never
+	// schedules tasks release would have to drop, so there's no probe to
+	// fire here — the equivalent probe lives in TestMixedBrainCloud where
+	// the direction reverses and current may DLQ tasks from a newer cloud.
+	currentWatcher := logMonitor.Watch(t, "current", currentLogPath).
+		MustNotMatch("failed assertion: ")
 
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 	nexusEndpoint := "mixed-brain-nexus"
@@ -151,6 +201,8 @@ func TestMixedBrain(t *testing.T) {
 	t.Run("run omes", func(st *testing.T) {
 		createNexusEndpoint(st, conn, nexusEndpoint, "default", "omes-"+runID)
 
+		// TCP proxy round-robins each new connection across the two
+		// backends so omes' frontend traffic touches both servers.
 		proxy := startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
 		st.Cleanup(proxy.stop)
 
@@ -161,6 +213,7 @@ func TestMixedBrain(t *testing.T) {
 			st.Logf("Proxy connections to %s: %d", backend, count)
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
+		logMonitor.AssertAll(st, currentWatcher)
 	})
 }
 
@@ -191,6 +244,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 			"--max-concurrent", "5",
 			"--option", "internal-iterations=10",
 			"--option", "nexus-endpoint="+nexusEndpoint,
+			"--option", "include-standalone-nexus=true",
 		)
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
