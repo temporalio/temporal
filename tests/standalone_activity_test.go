@@ -7825,6 +7825,190 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.EqualValues(t, 1, descResp.GetInfo().GetAttempt(), "non-retryable fail must not increment attempt")
 	})
 
+	// StartToCloseTimeoutWhilePauseRequested: a STARTED activity with a pending pause must still
+	// observe its StartToClose timeout. The worker stops responding, the timer fires, the retry
+	// path consumes the pause-request and lands the activity in PAUSED with the attempt count
+	// incremented.
+	t.Run("StartToCloseTimeoutWhilePauseRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker polls → activity is STARTED.
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Pause while STARTED → PAUSE_REQUESTED.
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Worker stops responding. StartToCloseTimeout must fire and the pause-request must be
+		// consumed by a retry, landing the activity in PAUSED at attempt 2.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// HeartbeatTimeoutWhilePauseRequested: as above but for the heartbeat timer. Without the
+	// validator accepting PAUSE_REQUESTED, the HeartbeatTimeoutTask is silently dropped and the
+	// activity never times out (only the longer ScheduleToCloseTimeout would catch it).
+	t.Run("HeartbeatTimeoutWhilePauseRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			HeartbeatTimeout:       durationpb.New(1 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// No heartbeat → HeartbeatTimeoutTask fires → retry consumes pause-request → PAUSED at attempt 2.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// UpdateOptionsPreservesTimeoutsWhilePauseRequested: UpdateActivityExecutionOptions bumps the
+	// attempt stamp, which invalidates all attempt-scoped timeout tasks. The handler must re-emit
+	// fresh StartToClose and Heartbeat timeout tasks for PAUSE_REQUESTED activities, otherwise the
+	// running worker is left with no server-side timeout enforcement (only the long
+	// ScheduleToCloseTimeout would eventually catch a hung worker).
+	t.Run("UpdateOptionsPreservesTimeoutsWhilePauseRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Pause while STARTED → PAUSE_REQUESTED.
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Update StartToCloseTimeout to 1s. The handler bumps the attempt stamp (invalidating the
+		// old 1-minute timeout task) and must re-emit a fresh 1-second timeout task that fires
+		// while the activity is PAUSE_REQUESTED.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(1 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// New StartToCloseTimeout fires → retry consumes pause-request → PAUSED at attempt 2.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
 	// PauseRequestValidation: validate that Pause rejects invalid request fields.
 	t.Run("PauseRequestValidation", func(t *testing.T) {
 		ctx := testcore.NewContext()
