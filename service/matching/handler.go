@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,7 +41,6 @@ type (
 		config            *Config
 		metricsHandler    metrics.Handler
 		logger            log.Logger
-		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 		workersRegistry   workers.Registry
@@ -122,16 +120,12 @@ func NewHandler(
 		workersRegistry:   params.WorkersRegistry,
 	}
 
-	// prevent from serving requests before matching engine is started and ready
-	handler.startWG.Add(1)
-
 	return handler
 }
 
 // Start starts the handler
 func (h *Handler) Start() {
 	h.engine.Start()
-	h.startWG.Done()
 }
 
 // Stop stops the handler
