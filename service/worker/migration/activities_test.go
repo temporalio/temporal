@@ -506,7 +506,7 @@ Loop:
 	return executions
 }
 
-func (s *activitiesSuite) Test_verifyBatch() {
+func (s *activitiesSuite) TestVerifyBatch() {
 	s.a.HistoryShardCount = 1 // deterministic shard mapping for all test executions
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
@@ -602,13 +602,13 @@ func (s *activitiesSuite) Test_verifyBatch() {
 // are deferred and the scan continues past them. With HistoryShardCount=1 all executions share a
 // single shard, so the first failure causes all remaining items to be bulk-deferred without
 // further RPC calls — exercising the shard-aware consecutive-defer optimisation.
-func (s *activitiesSuite) Test_verifyBatchSkipAhead() {
+func (s *activitiesSuite) TestVerifyBatchSkipAhead() {
 	s.a.HistoryShardCount = 1
 	ctx := context.TODO()
 	pastThreshold := time.Time{} // zero time is always past any positive threshold
 
-	// Mocks: only items 0 (found) and 2 (not-found) are tried; items 3-4 share the same
-	// shard as 2 and are bulk-deferred without RPC calls.
+	// Mocks: only items 0 (found) and 1 (not-found) are tried; items 2-4 share the same
+	// shard as 1 and are bulk-deferred without RPC calls.
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
@@ -652,7 +652,7 @@ func (s *activitiesSuite) Test_verifyBatchSkipAhead() {
 
 // Test_verifyBatchDeferredRetry verifies that items in deferredIndices are retried at the start
 // of each call and removed from the deferred set when they succeed.
-func (s *activitiesSuite) Test_verifyBatchDeferredRetry() {
+func (s *activitiesSuite) TestVerifyBatchDeferredRetry() {
 	s.a.HistoryShardCount = 1
 	ctx := context.TODO()
 
@@ -685,7 +685,7 @@ func (s *activitiesSuite) Test_verifyBatchDeferredRetry() {
 	s.Equal(2, progressCallCount)
 }
 
-func (s *activitiesSuite) Test_verifyBatchNoProgress() {
+func (s *activitiesSuite) TestVerifyBatchNoProgress() {
 	s.a.HistoryShardCount = 1
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
@@ -744,7 +744,7 @@ func (s *activitiesSuite) Test_verifyBatchNoProgress() {
 	s.Equal(0, secondProgressCount)
 }
 
-func (s *activitiesSuite) Test_verifyBatchSkipRetention() {
+func (s *activitiesSuite) TestVerifyBatchSkipRetention() {
 	s.a.HistoryShardCount = 1
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,

@@ -959,7 +959,9 @@ func (a *activities) verifyBatch(
 			return startIndex, remaining, false, nil, verifyErr
 		}
 		if r.isVerified() {
-			onProgress(startIndex, remaining)
+			// Include not-yet-tried deferred items so the heartbeat is complete if the
+			// activity crashes between iterations.
+			onProgress(startIndex, append(remaining, deferredIndices[retryIdx+1:]...))
 		} else {
 			remaining = append(remaining, idx)
 		}
