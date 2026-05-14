@@ -7,6 +7,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/sdk/temporal"
@@ -141,24 +142,33 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 		logger:         log.NewNoopLogger(),
 	}
 
-	mockClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).Return(
-		&matchingservice.DispatchNexusTaskResponse{
-			Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
-				Response: &nexuspb.Response{
-					Variant: &nexuspb.Response_StartOperation{
-						StartOperation: &nexuspb.StartOperationResponse{
-							Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-								SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
+	var capturedReq *matchingservice.DispatchNexusTaskRequest
+	mockClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.DispatchNexusTaskRequest, _ ...any) (*matchingservice.DispatchNexusTaskResponse, error) {
+			capturedReq = req
+			return &matchingservice.DispatchNexusTaskResponse{
+				Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+					Response: &nexuspb.Response{
+						Variant: &nexuspb.Response_StartOperation{
+							StartOperation: &nexuspb.StartOperationResponse{
+								Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+									SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
+								},
 							},
 						},
 					},
 				},
-			},
-		}, nil)
+			}, nil
+		})
 
 	task := testWorkerCommandsTask()
 	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.NoError(t, err)
+
+	require.NotNil(t, capturedReq)
+	require.Equal(t, enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS, capturedReq.TaskQueue.Kind,
+		"dispatch request must use TASK_QUEUE_KIND_WORKER_COMMANDS, not TASK_QUEUE_KIND_NORMAL")
+	require.Equal(t, task.Destination, capturedReq.TaskQueue.Name)
 
 	requireMetricValue(t, capture.Snapshot(), "success")
 }
