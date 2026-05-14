@@ -114,7 +114,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	endpoint, err := h.lookupEndpoint(ctx, ns.ID(), args.endpointID, args.endpointName)
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-			h.logger.Error("endpoint not found while processing invocation task", tag.Error(err))
+			h.logger.Error("endpoint not found while processing cancellation invocation", tag.Error(err))
 			handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 			return h.saveCancellationResult(ctx, cancelRef, handlerErr)
 		}

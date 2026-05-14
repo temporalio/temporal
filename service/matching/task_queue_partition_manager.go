@@ -442,15 +442,15 @@ reredirectTask:
 	behavior := directive.GetBehavior()
 	forwarded := params.forwardInfo != nil
 
+	var outcome syncMatchOutcome
 	if isActive {
-		var outcome syncMatchOutcome
 		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		syncMatched = outcome == syncMatchSuccess
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if !forwarded {
-				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+				pm.processTaskAddHooks(ctx, targetVersion, outcome)
 			}
 
 			syncMatchResult := metrics.TaskAddResultSyncMatch
@@ -487,7 +487,7 @@ reredirectTask:
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
 		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
-		pm.processTaskAddHooks(ctx, targetVersion, false)
+		pm.processTaskAddHooks(ctx, targetVersion, outcome)
 	} else {
 		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
@@ -495,11 +495,26 @@ reredirectTask:
 	return assignedBuildId, false, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool) {
+func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
+	switch outcome {
+	case syncMatchSuccess:
+		return hooks.SyncMatchOutcomeSuccess
+	case syncMatchRateLimited:
+		return hooks.SyncMatchOutcomeRateLimited
+	case syncMatchUnspecified:
+		return hooks.SyncMatchOutcomeUnspecified
+	default:
+		return hooks.SyncMatchOutcomeNotMatched
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
 	for _, l := range pm.taskHooks {
+		hookOutcome := syncMatchOutcomeToHook(outcome)
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
-			IsSyncMatch:       syncMatched,
+			IsSyncMatch:       hookOutcome == hooks.SyncMatchOutcomeSuccess,
+			SyncMatchOutcome:  hookOutcome,
 		})
 	}
 }
