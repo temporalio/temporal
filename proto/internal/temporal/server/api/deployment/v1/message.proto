@@ -186,6 +186,10 @@ message WorkerDeploymentLocalState {
   map<string, PropagatingRevisions> propagating_revisions = 8;
   // Request ID used to create this worker deployment.
   string create_request_id = 9;
+  // Tracks the number of in-flight task queue registration propagations for versions
+  // that are current or ramping. Used with propagating_revisions to derive
+  // RoutingConfigUpdateState.
+  int32 pending_tq_registration_propagations = 10;
 }
 
 // Tracks revision numbers that are currently propagating for a specific build ID
