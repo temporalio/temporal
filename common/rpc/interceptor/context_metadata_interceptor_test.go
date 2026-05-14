@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -134,6 +133,7 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 		name             string
 		setupContext     func() context.Context
 		expectTrailerErr bool
+		expectUnsafeWarn bool
 	}{
 		{
 			name: "AllPropagatedKeys",
@@ -181,6 +181,16 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 			},
 			expectTrailerErr: true,
 		},
+		{
+			name:             "UnsafeValueEmitsBinKeyOnly",
+			expectUnsafeWarn: true,
+			setupContext: func() context.Context {
+				ctx := contextutil.WithMetadataContext(t.Context())
+				contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, "Foo\nBar")
+				return metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{}))
+			},
+			expectTrailerErr: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -188,6 +198,9 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 			tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			if tc.expectTrailerErr {
 				tl.Expect(testlogger.Error, "ContextMetadataInterceptor: Failed to set trailer")
+			}
+			if tc.expectUnsafeWarn {
+				tl.Expect(testlogger.Warn, "ContextMetadataInterceptor: Skipping plain-text trailer key for HTTP/2-unsafe value (only -bin key emitted)")
 			}
 			interceptor := NewContextMetadataInterceptor(true, tl)
 
@@ -201,32 +214,112 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 }
 
 func TestContextMetadataInterceptor_backwardCompatTrailerKeys(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	interceptor := NewContextMetadataInterceptor(true, tl)
+
 	ctx := contextutil.WithMetadataContext(t.Context())
 	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, "test-workflow")
 	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, "test-queue")
 	contextutil.ContextMetadataSet(ctx, "other-key", "other-value")
 
-	allMetadata := contextutil.ContextMetadataGetAll(ctx)
-	var trailerPairs []string
-	for key, value := range allMetadata {
-		valStr := fmt.Sprint(value)
-		trailerPairs = append(trailerPairs, trailerKeyPrefix+key, valStr)
-		if key == contextutil.MetadataKeyWorkflowType || key == contextutil.MetadataKeyWorkflowTaskQueue {
-			trailerPairs = append(trailerPairs, key, valStr)
-		}
-	}
-
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/TestMethod"}
+	trailerPairs := interceptor.buildTrailerPairs(ctx, info)
 	trailer := metadata.Pairs(trailerPairs...)
 
-	// Well-known keys appear both with and without prefix
+	// Level 1 (newest): all keys get -bin suffixed entries
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue+trailerBinSuffix)
+	require.Contains(t, trailer, trailerKeyPrefix+"other-key"+trailerBinSuffix)
+
+	// Level 2: all keys get plain prefixed entries (for safe values)
 	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue)
+	require.Contains(t, trailer, trailerKeyPrefix+"other-key")
+
+	// Level 3 (oldest): well-known keys also get unprefixed entries
 	require.Contains(t, trailer, contextutil.MetadataKeyWorkflowType)
+	require.Contains(t, trailer, contextutil.MetadataKeyWorkflowTaskQueue)
+	require.NotContains(t, trailer, "other-key")
+}
+
+func TestContextMetadataInterceptor_binTrailerKeys_SafeValues(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	interceptor := NewContextMetadataInterceptor(true, tl)
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, "test-workflow")
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, "test-queue")
+	contextutil.ContextMetadataSet(ctx, "other-key", "other-value")
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/TestMethod"}
+	trailerPairs := interceptor.buildTrailerPairs(ctx, info)
+	trailer := metadata.Pairs(trailerPairs...)
+
+	// Binary-safe keys always present
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue+trailerBinSuffix)
+	require.Contains(t, trailer, trailerKeyPrefix+"other-key"+trailerBinSuffix)
+
+	// Plain-text keys also present for safe values (backward compat during rolling deploy)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue)
+	require.Contains(t, trailer, trailerKeyPrefix+"other-key")
+}
+
+func TestContextMetadataInterceptor_binTrailerKeys_UnsafeValues(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	tl.Expect(testlogger.Warn, "ContextMetadataInterceptor: Skipping plain-text trailer key for HTTP/2-unsafe value (only -bin key emitted)")
+	interceptor := NewContextMetadataInterceptor(true, tl)
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, "Foo\nBar")
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, "safe-queue")
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/TestMethod"}
+	trailerPairs := interceptor.buildTrailerPairs(ctx, info)
+	trailer := metadata.Pairs(trailerPairs...)
+
+	// Binary-safe keys present for all values
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue+trailerBinSuffix)
+
+	// Plain-text key suppressed for the unsafe value (newline)
+	require.NotContains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType)
+	require.NotContains(t, trailer, contextutil.MetadataKeyWorkflowType)
+
+	// Safe value still gets plain-text keys
 	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue)
 	require.Contains(t, trailer, contextutil.MetadataKeyWorkflowTaskQueue)
+}
 
-	// Other keys only appear with prefix
-	require.Contains(t, trailer, trailerKeyPrefix+"other-key")
-	require.NotContains(t, trailer, "other-key")
+func TestIsHTTP2HeaderSafe(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want bool
+	}{
+		{"empty", "", true},
+		{"plain ASCII", "hello-world", true},
+		{"with HTAB", "hello\tworld", true},
+		{"with space", "hello world", true},
+		{"UTF-8 CJK", "Workflow-日本語", true},
+		{"emoji", "🚀-workflow", true},
+		{"accented chars", "café-résumé", true},
+		{"mixed Unicode", "workflow-über-naïve-🎉", true},
+		{"newline", "Foo\nBar", false},
+		{"carriage return", "Foo\rBar", false},
+		{"NUL byte", "Foo\x00Bar", false},
+		{"DEL", "Foo\x7fBar", false},
+		{"bell", "Foo\x07Bar", false},
+		{"escape", "Foo\x1bBar", false},
+		{"unit separator 0x1F boundary", "\x1f", false},
+		{"space 0x20 boundary", "\x20", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, isHTTP2HeaderSafe(tt.s))
+		})
+	}
 }
 
 func TestNewContextMetadataInterceptor(t *testing.T) {

@@ -316,6 +316,277 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 	}
 }
 
+func TestTrailerToContextMetadataInterceptor_BinSuffixedKeys(t *testing.T) {
+	testCases := []struct {
+		name             string
+		setupInvoker     func() grpc.UnaryInvoker
+		validateMetadata func(*testing.T, context.Context)
+	}{
+		{
+			name: "BinSuffixedWorkflowType",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "test-workflow-type")
+						}
+					}
+					return nil
+				}
+			},
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				value, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "test-workflow-type", value)
+			},
+		},
+		{
+			name: "BinSuffixedAllMetadata",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.Pairs(
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "test-workflow-type",
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue+trailerBinSuffix, "test-task-queue",
+							)
+						}
+					}
+					return nil
+				}
+			},
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				workflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "test-workflow-type", workflowType)
+
+				taskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+				require.True(t, ok)
+				require.Equal(t, "test-task-queue", taskQueue)
+			},
+		},
+		{
+			name: "EmojiValue",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "🚀-workflow")
+						}
+					}
+					return nil
+				}
+			},
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				value, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "🚀-workflow", value)
+			},
+		},
+		{
+			name: "AccentedCharsValue",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "café-résumé")
+						}
+					}
+					return nil
+				}
+			},
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				value, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "café-résumé", value)
+			},
+		},
+		{
+			name: "BinSuffixedMultipleValues",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.MD{
+								trailerKeyPrefix + contextutil.MetadataKeyWorkflowType + trailerBinSuffix: []string{"first-value", "second-value", "third-value"},
+							}
+						}
+					}
+					return nil
+				}
+			},
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				value, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "first-value", value)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			interceptor := TrailerToContextMetadataInterceptor(tl)
+
+			invoker := tc.setupInvoker()
+			ctx := contextutil.WithMetadataContext(t.Context())
+
+			err := interceptor(ctx, "/test.Service/Method", "request", "reply", nil, invoker)
+
+			require.NoError(t, err)
+			if tc.validateMetadata != nil {
+				tc.validateMetadata(t, ctx)
+			}
+		})
+	}
+}
+
+func TestExtractContextMetadataKey(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantKey   string
+		wantFound bool
+	}{
+		{"plain prefixed workflow type", trailerKeyPrefix + "workflow-type", "workflow-type", true},
+		{"plain prefixed task queue", trailerKeyPrefix + "workflow-task-queue", "workflow-task-queue", true},
+		{"plain prefixed key ending in -bin", trailerKeyPrefix + "foo-bin", "foo-bin", true},
+		{"unprefixed workflow type", contextutil.MetadataKeyWorkflowType, contextutil.MetadataKeyWorkflowType, true},
+		{"unprefixed task queue", contextutil.MetadataKeyWorkflowTaskQueue, contextutil.MetadataKeyWorkflowTaskQueue, true},
+		{"unknown key", "some-random-key", "", false},
+		{"empty string", "", "", false},
+		{"prefix only", trailerKeyPrefix, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, found := extractContextMetadataKey(tt.input)
+			require.Equal(t, tt.wantFound, found)
+			if found {
+				require.Equal(t, tt.wantKey, key)
+			}
+		})
+	}
+}
+
+func TestTrailerToContextMetadataInterceptor_AllThreeKeyFormats(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	interceptor := TrailerToContextMetadataInterceptor(tl)
+
+	invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		for _, opt := range opts {
+			if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+				md := trailer.TrailerAddr
+				// All three formats in one trailer, each carrying a different key:
+				//   Level 1 (newest, -bin):  workflow-type via contextmetadata-workflow-type-bin
+				//   Level 2 (prefixed):      workflow-task-queue via contextmetadata-workflow-task-queue
+				//   Level 3 (oldest, bare):  workflow-type via bare workflow-type
+				*md = metadata.Pairs(
+					trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "bin-wf-type",
+					trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue, "prefixed-tq",
+					contextutil.MetadataKeyWorkflowType, "unprefixed-wf-type",
+				)
+			}
+		}
+		return nil
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	err := interceptor(ctx, "/test.Service/Method", "request", "reply", nil, invoker)
+	require.NoError(t, err)
+
+	// -bin key takes priority over unprefixed key (both map to workflow-type)
+	wfType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	require.True(t, ok)
+	require.Equal(t, "bin-wf-type", wfType,
+		"-bin key should take priority over unprefixed key")
+
+	// Prefixed key recognized
+	tq, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	require.True(t, ok)
+	require.Equal(t, "prefixed-tq", tq)
+}
+
+func TestTrailerToContextMetadataInterceptor_BinKeyPriorityOverPrefixedKey(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	interceptor := TrailerToContextMetadataInterceptor(tl)
+
+	invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		for _, opt := range opts {
+			if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+				md := trailer.TrailerAddr
+				*md = metadata.Pairs(
+					trailerKeyPrefix+contextutil.MetadataKeyWorkflowType+trailerBinSuffix, "bin-value",
+					trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "plain-prefixed-value",
+				)
+			}
+		}
+		return nil
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	err := interceptor(ctx, "/test.Service/Method", "request", "reply", nil, invoker)
+	require.NoError(t, err)
+
+	wfType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	require.True(t, ok)
+	require.Equal(t, "bin-value", wfType,
+		"-bin key should take priority over plain prefixed key")
+}
+
+func TestTrailerToContextMetadataInterceptor_EmptyBinKey(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	interceptor := TrailerToContextMetadataInterceptor(tl)
+
+	invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		for _, opt := range opts {
+			if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+				md := trailer.TrailerAddr
+				*md = metadata.MD{
+					trailerKeyPrefix + trailerBinSuffix: []string{"some-value"},
+				}
+			}
+		}
+		return nil
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	err := interceptor(ctx, "/test.Service/Method", "request", "reply", nil, invoker)
+	require.NoError(t, err)
+
+	allMetadata := contextutil.ContextMetadataGetAll(ctx)
+	require.Empty(t, allMetadata)
+}
+
+func TestTrailerToContextMetadataInterceptor_BinKeyEmptyValues(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	tl.Expect(testlogger.Warn, "TrailerToContextMetadataInterceptor: -bin trailer key has empty values")
+	interceptor := TrailerToContextMetadataInterceptor(tl)
+
+	invoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		for _, opt := range opts {
+			if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+				md := trailer.TrailerAddr
+				*md = metadata.MD{
+					trailerKeyPrefix + contextutil.MetadataKeyWorkflowType + trailerBinSuffix: []string{},
+				}
+			}
+		}
+		return nil
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	err := interceptor(ctx, "/test.Service/Method", "request", "reply", nil, invoker)
+	require.NoError(t, err)
+
+	allMetadata := contextutil.ContextMetadataGetAll(ctx)
+	require.Empty(t, allMetadata)
+}
+
 func TestTrailerToContextMetadataInterceptor_PassesThroughCallOptions(t *testing.T) {
 	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	interceptor := TrailerToContextMetadataInterceptor(tl)

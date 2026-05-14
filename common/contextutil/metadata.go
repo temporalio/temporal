@@ -21,6 +21,11 @@ type (
 var metadataCtxKey = metadataContextKey{}
 
 const (
+	// Metadata keys must NOT end in "-bin". The gRPC trailer interceptor uses a "-bin" suffix
+	// to create binary-safe trailer keys, and a metadata key ending in "-bin" would be
+	// ambiguous on the wire (e.g., "contextmetadata-foo-bin" could be a plain-text key for
+	// metadata key "foo-bin" or a binary key for metadata key "foo").
+
 	// MetadataKeyWorkflowType is the context metadata key for workflow type
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue

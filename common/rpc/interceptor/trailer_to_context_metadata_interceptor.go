@@ -36,29 +36,75 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 		trailerMetadata := make(map[string]string)
 		propagatedMetadata := make(map[string]string)
 
-		for prefixedKey, values := range trailer {
-			key, ok := strings.CutPrefix(prefixedKey, trailerKeyPrefix)
-			if !ok {
-				// Backward compatibility: accept unprefixed keys from older writers.
-				if prefixedKey != contextutil.MetadataKeyWorkflowType && prefixedKey != contextutil.MetadataKeyWorkflowTaskQueue {
-					continue
-				}
-				key = prefixedKey
+		setMetadata := func(key, value string) {
+			trailerMetadata[key] = value
+			if contextutil.ContextMetadataSet(ctx, key, value) {
+				propagatedMetadata[key] = value
 			}
-			if len(values) == 0 {
+		}
+
+		// Pass 1: -bin keys from new writers (highest priority).
+		// These are authoritative and take precedence over plain-text keys.
+		binKeys := make(map[string]struct{})
+		for trailerKey, values := range trailer {
+			if !strings.HasPrefix(trailerKey, trailerKeyPrefix) || !strings.HasSuffix(trailerKey, trailerBinSuffix) {
 				continue
 			}
-
-			trailerMetadata[key] = values[0]
-			if contextutil.ContextMetadataSet(ctx, key, values[0]) {
-				propagatedMetadata[key] = values[0]
+			key := trailerKey[len(trailerKeyPrefix) : len(trailerKey)-len(trailerBinSuffix)]
+			if key == "" {
+				continue
 			}
+			if len(values) == 0 {
+				throttledLogger.Warn("TrailerToContextMetadataInterceptor: -bin trailer key has empty values",
+					tag.NewStringTag("trailerKey", trailerKey),
+					tag.NewStringTag("method", method),
+				)
+				continue
+			}
+			binKeys[key] = struct{}{}
+			setMetadata(key, values[0])
+		}
+
+		// Pass 2: plain prefixed and unprefixed keys from old writers.
+		// Skip keys already set by a -bin entry.
+		for trailerKey, values := range trailer {
+			if strings.HasPrefix(trailerKey, trailerKeyPrefix) && strings.HasSuffix(trailerKey, trailerBinSuffix) {
+				continue
+			}
+			key, ok := extractContextMetadataKey(trailerKey)
+			if !ok || key == "" || len(values) == 0 {
+				continue
+			}
+			if _, hasBin := binKeys[key]; hasBin {
+				continue
+			}
+			setMetadata(key, values[0])
 		}
 
 		logMetadataPropagationStatus(ctx, method, trailerMetadata, propagatedMetadata, throttledLogger)
 
 		return err
 	}
+}
+
+// extractContextMetadataKey extracts the context metadata key from a plain-text
+// gRPC trailer key (formats 2 and 3 only — binary "-bin" keys are handled
+// separately by the caller's first pass).
+//
+// Recognized formats (format 1, binary "-bin" keys, is handled by the caller's first pass):
+//  2. Plain-text prefixed: "contextmetadata-<key>" (old writers)
+//  3. Unprefixed well-known: "workflow-type" / "workflow-task-queue" (very old writers)
+func extractContextMetadataKey(trailerKey string) (string, bool) {
+	if after, ok := strings.CutPrefix(trailerKey, trailerKeyPrefix); ok {
+		if after == "" {
+			return "", false
+		}
+		return after, true
+	}
+	if trailerKey == contextutil.MetadataKeyWorkflowType || trailerKey == contextutil.MetadataKeyWorkflowTaskQueue {
+		return trailerKey, true
+	}
+	return "", false
 }
 
 func logMetadataPropagationStatus(
