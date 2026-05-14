@@ -63,7 +63,7 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	event, err := history.Next()
 	s.NoError(err)
-	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+	protorequire.ProtoSliceEqual(s, links, event.Links)
 }
 
 func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {

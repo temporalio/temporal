@@ -5,10 +5,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type validSuite struct{ Suite[*validSuite] }
+
+var _ assert.TestingT = (*validSuite)(nil)
 
 func (s *validSuite) TestA() {
 	s.NotNil(s.T())
@@ -33,8 +36,8 @@ func (s *badNameTests) TestA() {} //nolint:unused
 
 type exportedNonTestSuite struct{ Suite[*exportedNonTestSuite] }
 
-func (s *exportedNonTestSuite) TestA()  {}
-func (s *exportedNonTestSuite) Helper() {} //nolint:unused
+func (s *exportedNonTestSuite) TestA() {}
+func (s *exportedNonTestSuite) Extra() {} //nolint:unused
 
 type hasExtraFieldsSuite struct {
 	Suite[*hasExtraFieldsSuite]

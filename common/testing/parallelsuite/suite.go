@@ -59,6 +59,16 @@ func (s *Suite[T]) T() *testing.T {
 	return s.guardT.T
 }
 
+// Helper marks the calling function as a test helper, while preserving suite guard checks.
+func (s *Suite[T]) Helper() {
+	s.guardT.Helper()
+}
+
+// Errorf reports a formatted test failure, while preserving suite guard checks.
+func (s *Suite[T]) Errorf(format string, args ...any) {
+	s.guardT.Errorf(format, args...)
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
