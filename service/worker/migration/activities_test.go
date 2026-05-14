@@ -592,7 +592,7 @@ func (s *activitiesSuite) TestVerifyBatch() {
 
 		if len(request.Executions) > 0 {
 			// Except for empty Executions, onProgress should have been called for progress.
-			s.Greater(progressCallCount, 0)
+			s.Positive(progressCallCount)
 			s.Equal(nextIndex, lastProgressIndex)
 		}
 	}

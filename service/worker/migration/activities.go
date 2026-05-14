@@ -985,12 +985,11 @@ func (a *activities) verifyBatch(
 			remaining = append(remaining, i)
 			for i+1 < len(request.Executions) {
 				next := request.Executions[i+1]
-				if common.WorkflowIDToHistoryShard(request.NamespaceID, next.BusinessID, a.HistoryShardCount) == hotShard {
-					i++
-					remaining = append(remaining, i)
-				} else {
+				if common.WorkflowIDToHistoryShard(request.NamespaceID, next.BusinessID, a.HistoryShardCount) != hotShard {
 					break
 				}
+				i++
+				remaining = append(remaining, i)
 			}
 			a.Logger.Info("verifyBatch deferring stuck executions",
 				tag.WorkflowNamespace(request.Namespace),
@@ -1071,12 +1070,9 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 
 		details.NextIndex = nextIndex
 		details.DeferredIndices = remainingDeferred
-		switch {
-		case lastUnverified != nil:
-			// Sequential scan stopped at this unverified item.
+		if lastUnverified != nil {
 			details.LastNotVerifiedWorkflowExecution = lastUnverified
-		case len(remainingDeferred) > 0:
-			// All sequential items were processed but some are deferred; record one for diagnostics.
+		} else if len(remainingDeferred) > 0 {
 			details.LastNotVerifiedWorkflowExecution = request.Executions[remainingDeferred[0]]
 		}
 		activity.RecordHeartbeat(ctx, details)
