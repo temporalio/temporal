@@ -371,6 +371,7 @@ func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackExecutionOutco
 		}
 
 	case callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_TIMED_OUT,
 		callbackspb.CALLBACK_STATUS_TERMINATED:
 		val := &callbackpb.CallbackExecutionOutcome_Failure{
 			Failure: c.TerminalFailure.Get(ctx),
@@ -394,6 +395,8 @@ func (c *Callback) statusAsAPIExecutionStatus() enumspb.CallbackExecutionStatus 
 		return enumspb.CALLBACK_EXECUTION_STATUS_FAILED
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED
+	case callbackspb.CALLBACK_STATUS_TIMED_OUT:
+		return enumspb.CALLBACK_EXECUTION_STATUS_FAILED
 	case callbackspb.CALLBACK_STATUS_TERMINATED:
 		return enumspb.CALLBACK_EXECUTION_STATUS_TERMINATED
 	default:
@@ -413,6 +416,8 @@ func (c *Callback) statusAsAPIState() enumspb.CallbackState {
 		return enumspb.CALLBACK_STATE_FAILED
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return enumspb.CALLBACK_STATE_SUCCEEDED
+	case callbackspb.CALLBACK_STATUS_TIMED_OUT:
+		return enumspb.CALLBACK_STATE_TIMED_OUT
 	case callbackspb.CALLBACK_STATUS_TERMINATED:
 		return enumspb.CALLBACK_STATE_TERMINATED
 	default:

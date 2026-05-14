@@ -1227,7 +1227,7 @@ func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
-	s.Equal(enumspb.CALLBACK_STATE_FAILED, descResp.GetInfo().GetState())
+	s.Equal(enumspb.CALLBACK_STATE_TIMED_OUT, descResp.GetInfo().GetState())
 	s.NotNil(descResp.GetInfo().GetCloseTime())
 	s.NotNil(descResp.GetOutcome().GetFailure())
 	s.NotNil(descResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())

@@ -1,6 +1,7 @@
 package callback
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -76,7 +77,8 @@ type frontendRequestValidator struct {
 	saValidator      *searchattribute.Validator
 }
 
-func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(req *workflowservice.StartCallbackExecutionRequest) error {
+func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(
+	ctx context.Context, req *workflowservice.StartCallbackExecutionRequest) error {
 	// Set RequestID if missing.
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
@@ -105,7 +107,7 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(r
 	}
 
 	// Validate the callback to be invoked and its parameters.
-	if err := rv.cbValidator.Validate(req.GetNamespace(), []*commonpb.Callback{req.Callback}); err != nil {
+	if err := rv.cbValidator.Validate(ctx, req.GetNamespace(), []*commonpb.Callback{req.Callback}); err != nil {
 		return err
 	}
 

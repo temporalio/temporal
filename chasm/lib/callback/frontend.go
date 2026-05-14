@@ -96,7 +96,7 @@ func (h *frontendHandler) StartCallbackExecution(
 	if err := h.checkFeatureEnabled(request); err != nil {
 		return nil, err
 	}
-	if err := h.reqValidator.ValidateAndNormalizeStartCallbackExecution(request); err != nil {
+	if err := h.reqValidator.ValidateAndNormalizeStartCallbackExecution(ctx, request); err != nil {
 		return nil, err
 	}
 

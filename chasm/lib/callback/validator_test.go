@@ -37,6 +37,7 @@ func TestValidateCallbacks(t *testing.T) {
 	})
 
 	t.Run("NoURL", func(t *testing.T) {
+		ctx := context.Background()
 		cbs := []*commonpb.Callback{
 			{Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
@@ -44,7 +45,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(ctx, "ns", cbs)
 		require.ErrorContains(t, err, "invalid callback url: not set")
 	})
 
