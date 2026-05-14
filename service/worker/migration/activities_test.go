@@ -610,16 +610,16 @@ func (s *activitiesSuite) TestVerifyBatchSkipAhead() {
 	// Mocks: only items 0 (found) and 1 (not-found) are tried; items 2-4 share the same
 	// shard as 1 and are bulk-deferred without RPC calls.
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
-		Namespace: mockedNamespace,
-		Execution: &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
+		Namespace:       mockedNamespace,
+		Execution:       &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
 		Archetype:       chasm.WorkflowArchetype,
 		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1) // item 0 found
 
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
-		Namespace: mockedNamespace,
-		Execution: &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
+		Namespace:       mockedNamespace,
+		Execution:       &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
 		Archetype:       chasm.WorkflowArchetype,
 		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
@@ -644,7 +644,7 @@ func (s *activitiesSuite) TestVerifyBatchSkipAhead() {
 
 	s.NoError(err)
 	s.False(done)
-	s.Equal(5, nextIndex)                        // scan reached the end
+	s.Equal(5, nextIndex)                         // scan reached the end
 	s.Equal([]int{1, 2, 3, 4}, remainingDeferred) // item 1 and all same-shard items deferred
 	s.Nil(lastUnverified)                         // no sequential stop point; items were deferred
 	s.Equal(1, progressCallCount)                 // only item 0 was verified
@@ -680,8 +680,8 @@ func (s *activitiesSuite) TestVerifyBatchDeferredRetry() {
 
 	s.NoError(err)
 	s.True(done)
-	s.Equal(3, nextIndex)        // sequential frontier unchanged
-	s.Empty(remainingDeferred)   // both deferred items verified
+	s.Equal(3, nextIndex)      // sequential frontier unchanged
+	s.Empty(remainingDeferred) // both deferred items verified
 	s.Equal(2, progressCallCount)
 }
 
