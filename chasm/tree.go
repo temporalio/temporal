@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -750,36 +749,9 @@ func (n *Node) setSerializedNode(
 
 // hasNewTransactionSideEffects returns true when the transaction has observable
 // effects that must be persisted regardless of whether data bytes changed:
-// new tasks, lifecycle termination, or deleted descendant nodes.
-// Collection nodes do not update their own LastUpdateVersionedTransition on
-// removal, so the parent component must carry that structural change.
-func (n *Node) hasNewTransactionSideEffects(encodedPath string) bool {
-	if len(n.newTasks[n.value]) > 0 {
-		return true
-	}
-	if n.terminated {
-		return true
-	}
-	return n.hasDeletedDescendants(encodedPath)
-}
-
-// hasDeletedDescendants returns true if any node in this node's subtree was
-// deleted in the current transaction.
-func (n *Node) hasDeletedDescendants(encodedPath string) bool {
-	if len(n.mutation.DeletedNodes) == 0 {
-		return false
-	}
-	// Root node (empty encoded path): any deletion is a descendant.
-	if encodedPath == "" {
-		return true
-	}
-	prefix := encodedPath + "/"
-	for deletedPath := range n.mutation.DeletedNodes {
-		if strings.HasPrefix(deletedPath, prefix) {
-			return true
-		}
-	}
-	return false
+// new tasks scheduled on this node, or lifecycle termination.
+func (n *Node) hasNewTransactionSideEffects() bool {
+	return len(n.newTasks[n.value]) > 0 || n.terminated
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -1733,17 +1705,17 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		}
 
 		// A nil LastUpdateVersionedTransition means the node is brand new and must always be written.
-		// Content comparison only applies to component and data nodes; collection and pointer
-		// nodes have no Data field and must not be skipped.
+		// Content comparison only applies to component nodes; data, collection, and pointer
+		// nodes are always written when dirty.
 		// prevData holds a pointer to the existing blob without copying it; serialize()
 		// replaces node.serializedNode.Data with a new blob, so prevData retains the
 		// original for comparison.
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := (node.isComponent() || node.isData()) &&
+		skipIfClean := node.isComponent() &&
 			prevVersionedTransition != nil &&
-			!node.hasNewTransactionSideEffects(encodedPath)
+			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
 		if skipIfClean {
 			prevData = node.serializedNode.Data
