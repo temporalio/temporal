@@ -90,7 +90,7 @@ func (m *logMonitor) assertNoFindings(t *testing.T) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	require.Empty(t, m.findings, "unexpected Temporal server logs:\n%s", strings.Join(m.findings, "\n"))
+	require.Empty(t, m.findings, "Temporal server soft assertions:\n%s", strings.Join(m.findings, "\n"))
 }
 
 func (m *logMonitor) checkLine(name, line string) {
@@ -111,30 +111,24 @@ func (m *logMonitor) addFinding(name, msg string) {
 }
 
 type serverLogEntry struct {
-	level   string
 	message string
-	raw     string
 }
 
 func parseServerLogLine(line string) serverLogEntry {
 	entry := serverLogEntry{
-		raw:     line,
 		message: line,
 	}
 
 	var fields struct {
-		Level string `json:"level"`
-		Msg   string `json:"msg"`
+		Msg string `json:"msg"`
 	}
 	if err := json.Unmarshal([]byte(line), &fields); err == nil {
-		entry.level = strings.ToLower(fields.Level)
 		if fields.Msg != "" {
 			entry.message = fields.Msg
 		}
 		return entry
 	}
 
-	entry.level = parseConsoleLevel(line)
 	return entry
 }
 
