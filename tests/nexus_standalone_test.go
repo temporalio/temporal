@@ -342,8 +342,8 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		s.NotEmpty(firstResp.GetLongPollToken())
 
 		s.Run("CallerDeadlineNotExceeded", func(s *NexusStandaloneTestSuite) {
-			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
-			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+			env.OverrideDynamicConfig(s, nexusoperation.LongPollBuffer, time.Second)
+			env.OverrideDynamicConfig(s, nexusoperation.LongPollTimeout, 10*time.Millisecond)
 
 			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 				Namespace:     env.Namespace().String(),
@@ -357,8 +357,8 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 
 		s.Run("NoCallerDeadline", func(s *NexusStandaloneTestSuite) {
 			// Frontend still imposes its own deadline upstream, so the buffer must fit within that.
-			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, 29*time.Second)
-			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+			env.OverrideDynamicConfig(s, nexusoperation.LongPollBuffer, 29*time.Second)
+			env.OverrideDynamicConfig(s, nexusoperation.LongPollTimeout, 10*time.Millisecond)
 
 			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(context.Background(), &workflowservice.DescribeNexusOperationExecutionRequest{
 				Namespace:     env.Namespace().String(),
@@ -1415,7 +1415,7 @@ func (s *NexusStandaloneTestSuite) TestListStandaloneNexusOperation() {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 		// Override max page size to 1.
-		env.OverrideDynamicConfig(dynamicconfig.FrontendVisibilityMaxPageSize, 1)
+		env.OverrideDynamicConfig(s, dynamicconfig.FrontendVisibilityMaxPageSize, 1)
 
 		// PageSize 0 should default to max (1), returning only 1 result.
 		resp, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{

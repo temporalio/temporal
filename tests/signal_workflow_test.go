@@ -374,7 +374,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
+	env.OverrideDynamicConfig(s, dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-external-workflow-test"
 	wt := "functional-signal-external-workflow-test-type"
 	tl := "functional-signal-external-workflow-test-taskqueue"
@@ -753,7 +753,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
+	env.OverrideDynamicConfig(s, dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-external-workflow-test-without-run-id"
 	wt := "functional-signal-external-workflow-test-without-run-id-type"
 	tl := "functional-signal-external-workflow-test-without-run-id-taskqueue"
@@ -967,7 +967,7 @@ CheckHistoryLoopForSignalSent:
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
+	env.OverrideDynamicConfig(s, dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-unknown-workflow-command-test"
 	wt := "functional-signal-unknown-workflow-command-test-type"
 	tl := "functional-signal-unknown-workflow-command-test-taskqueue"
@@ -1492,7 +1492,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	env := testcore.NewEnv(s.T())
 
 	// setting this to 0 to be sure we are terminating the current workflow
-	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	env.OverrideDynamicConfig(s, dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	id := "functional-signal-with-start-workflow-id-reuse-test"
 	wt := "functional-signal-with-start-workflow-id-reuse-test-type"

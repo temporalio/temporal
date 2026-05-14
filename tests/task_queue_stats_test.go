@@ -151,15 +151,15 @@ type TaskQueueStatsVersionSuite struct {
 
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 	env.publishConsumeWorkflowTasksValidateStats(4, false)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -257,8 +257,8 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -417,8 +417,8 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -483,8 +483,8 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -553,8 +553,8 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	env.OverrideDynamicConfig(s, dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	tqName := "tq-" + common.GenerateRandomString(5)
 	deploymentName := testcore.RandomizeStr("deployment")
@@ -722,7 +722,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 
 // taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
 type taskQueueStatsContext struct {
-	testcore.Env
+	*testcore.TestEnv
 	usePriMatcher   bool
 	minPriority     int
 	maxPriority     int
@@ -747,7 +747,7 @@ func newTaskQueueStatsContext(
 	env := testcore.NewEnv(t, opts...)
 	behavior.InjectHooks(env)
 	return &taskQueueStatsContext{
-		Env:             env,
+		TestEnv:         env,
 		usePriMatcher:   usePriMatcher,
 		minPriority:     1,
 		maxPriority:     5,

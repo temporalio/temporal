@@ -51,9 +51,22 @@ type Env interface {
 	AdminClient() adminservice.AdminServiceClient
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
-	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
+}
+
+// (OverrideDynamicConfig is intentionally not on Env: its new t-arg signature
+// would force every Env-implementing helper type — like resetTest, which
+// embeds a suite that embeds FunctionalTestBase with the old signature — to
+// adapt. Concrete *TestEnv exposes the new signature directly.)
+
+// DynamicConfigT is the narrow *testing.T interface required by
+// OverrideDynamicConfig. It is satisfied by *testing.T directly and by
+// parallelsuite/testify suites (which expose delegating Name/Fatalf methods on
+// top of their *testing.T), so callers may pass either `s` or `s.T()`.
+type DynamicConfigT interface {
+	Name() string
+	Fatalf(format string, args ...any)
 }
 
 type TestEnv struct {
@@ -81,6 +94,8 @@ type TestEnv struct {
 	sdkWorkerOnce sync.Once
 	sdkWorker     sdkworker.Worker
 	sdkWorkerTQ   string
+
+	dcGuard *dynamicConfigGuard
 }
 
 type TestOption func(*testOptions)
@@ -180,6 +195,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
+		dcGuard:            newDynamicConfigGuard(),
 	}
 	t.Cleanup(func() {
 		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
@@ -188,9 +204,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	})
 
 	// For shared clusters, apply all dynamic config settings as overrides.
+	// Baseline overrides applied at NewEnv time are intentionally not tracked
+	// by dcGuard — they form the test's baseline; subtests may further override.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		for _, override := range options.dynamicConfigSettings {
-			env.OverrideDynamicConfig(override.setting, override.value)
+			env.applyDynamicConfigOverride(override.setting, override.value)
 		}
 	}
 
@@ -368,10 +386,44 @@ func (e *TestEnv) WorkerTaskQueue() string {
 	return e.sdkWorkerTQ
 }
 
-// OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
-// For settings that can be namespace-scoped, a namespace constraint is applied.
-// All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
-func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+// OverrideDynamicConfig overrides a dynamic config setting for the duration of
+// this test. For settings that can be namespace-scoped, a namespace constraint
+// is applied. All others cannot be applied to a shared cluster and require
+// `WithDedicatedCluster`.
+//
+// The caller must pass the current (sub)test's *testing.T (or a suite that
+// satisfies DynamicConfigT). Overlapping overrides of the same setting on the
+// same TestEnv are rejected: if two subtests share an env and both override
+// the same key, the second call Fatals. To re-override, invoke the cleanup
+// returned by the first call before calling again.
+func (e *TestEnv) OverrideDynamicConfig(t DynamicConfigT, setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	key := setting.Key()
+
+	if prev, ok := e.dcGuard.acquire(key, t.Name()); !ok {
+		t.Fatalf("OverrideDynamicConfig for setting %s already active on this TestEnv (previously overridden by %s); call the returned cleanup before overriding again. Most often this means two subtests sharing an env both override the same setting.", key, prev)
+		return func() {}
+	}
+
+	innerCleanup := e.applyDynamicConfigOverride(setting, value)
+
+	var once sync.Once
+	cleanup = func() {
+		once.Do(func() {
+			e.dcGuard.release(key)
+			innerCleanup()
+		})
+	}
+	// Cleanup is registered on the env's t (not the passed-in t) so that an
+	// override from one subtest is still considered active in a sibling subtest
+	// — that's the very overlap we want to detect.
+	e.t.Cleanup(cleanup)
+	return cleanup
+}
+
+// applyDynamicConfigOverride applies an override without registering it in the
+// dcGuard tracker. Used by NewEnv for baseline WithDynamicConfig settings and
+// by OverrideDynamicConfig itself after the tracker has accepted the override.
+func (e *TestEnv) applyDynamicConfigOverride(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
@@ -490,6 +542,38 @@ func checkTestShard(t *testing.T) {
 		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
 	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
+}
+
+// dynamicConfigGuard tracks active per-TestEnv dynamic config overrides keyed
+// by setting, so that overlapping overrides of the same key (typically two
+// subtests sharing an env) can be detected and rejected.
+type dynamicConfigGuard struct {
+	mu     sync.Mutex
+	active map[dynamicconfig.Key]string // setting key -> caller (sub)test name
+}
+
+func newDynamicConfigGuard() *dynamicConfigGuard {
+	return &dynamicConfigGuard{active: make(map[dynamicconfig.Key]string)}
+}
+
+// acquire records that key is being overridden by caller. Returns ("", true)
+// on success, or (prevCaller, false) if key is already overridden.
+func (g *dynamicConfigGuard) acquire(key dynamicconfig.Key, caller string) (prev string, ok bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if existing, exists := g.active[key]; exists {
+		return existing, false
+	}
+	g.active[key] = caller
+	return "", true
+}
+
+// release clears the active override for key. Safe to call when key is not
+// currently held.
+func (g *dynamicConfigGuard) release(key dynamicconfig.Key) {
+	g.mu.Lock()
+	delete(g.active, key)
+	g.mu.Unlock()
 }
 
 type dedicatedClusterGuard struct {

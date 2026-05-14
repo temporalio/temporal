@@ -91,7 +91,7 @@ func boundStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_LongUserTimer() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -179,7 +179,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_LongUserTimer() {
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -279,7 +279,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers(
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -331,7 +331,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_NoUserTimer() {
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartBackoffCron() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -409,7 +409,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartBackoffCron() 
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartWithDelay() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -482,7 +482,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	// B3 not fixed: bound disable fires regardless of in-flight activity. Update this
 	// test when B3 lands so it asserts the disable is deferred to the next idle moment.
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
@@ -583,7 +583,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(s, dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 

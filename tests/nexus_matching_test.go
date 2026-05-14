@@ -39,10 +39,10 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwar
 	// non-root partitions work correctly even when no forwarding is involved.
 	env := testcore.NewEnv(s.T())
 
-	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0) // disable forwarding
-	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0) // disable forwarding
+	env.OverrideDynamicConfig(s, dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
