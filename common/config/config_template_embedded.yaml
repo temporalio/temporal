@@ -303,6 +303,7 @@ global:
 {{- $temporalGrpcPort := default "7233" (env "FRONTEND_GRPC_PORT") }}
 {{- $temporalHTTPPort := default "7243" (env "FRONTEND_HTTP_PORT") }}
 {{- $temporalInternalHTTPPort := default "7246" (env "INTERNAL_FRONTEND_HTTP_PORT") }}
+{{- $temporalClusterAddress := default (default "127.0.0.1" (env "BIND_ON_IP")) (env "TEMPORAL_BROADCAST_ADDRESS") }}
 services:
     frontend:
         rpc:
@@ -348,8 +349,8 @@ clusterMetadata:
             enabled: true
             initialFailoverVersion: 1
             rpcName: "frontend"
-            rpcAddress: {{ default (print "127.0.0.1:" $temporalGrpcPort) (env "CLUSTER_RPC_ADDRESS") }}
-            httpAddress: {{ default (print "127.0.0.1:" $temporalHTTPPort) (env "CLUSTER_HTTP_ADDRESS") }}
+            rpcAddress: {{ default (print $temporalClusterAddress ":" $temporalGrpcPort) (env "CLUSTER_RPC_ADDRESS") }}
+            httpAddress: {{ default (print $temporalClusterAddress ":" $temporalHTTPPort) (env "CLUSTER_HTTP_ADDRESS") }}
 
 dcRedirectionPolicy:
     policy: "noop"
