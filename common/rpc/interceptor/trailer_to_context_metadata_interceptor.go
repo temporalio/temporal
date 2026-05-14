@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	contextpropagationpb "go.temporal.io/server/api/contextpropagation/v1"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -58,7 +58,7 @@ func extractMetadataFromTrailer(
 
 	// Try proto format first (authoritative).
 	if values := trailer[protoTrailerKey]; len(values) > 0 {
-		protoMsg := &contextpropagationpb.ContextMetadata{}
+		protoMsg := &contextpropagationspb.ContextMetadata{}
 		if err := proto.Unmarshal([]byte(values[0]), protoMsg); err == nil {
 			for key, value := range protoMsg.GetEntries() {
 				trailerMetadata[key] = value

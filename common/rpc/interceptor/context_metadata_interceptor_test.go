@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	contextpropagationpb "go.temporal.io/server/api/contextpropagation/v1"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/grpc"
@@ -279,7 +279,7 @@ func TestBuildTrailerPairs_ProtoRoundTrip(t *testing.T) {
 	require.Len(t, protoValues, 1, "expected exactly one proto trailer value")
 
 	// Deserialize and verify round-trip.
-	protoMsg := &contextpropagationpb.ContextMetadata{}
+	protoMsg := &contextpropagationspb.ContextMetadata{}
 	err := proto.Unmarshal([]byte(protoValues[0]), protoMsg)
 	require.NoError(t, err)
 	require.Equal(t, "test-workflow", protoMsg.Entries[contextutil.MetadataKeyWorkflowType])
@@ -334,7 +334,7 @@ func TestBuildTrailerPairs_NonStringValues(t *testing.T) {
 	protoValues := trailer[protoTrailerKey]
 	require.Len(t, protoValues, 1)
 
-	protoMsg := &contextpropagationpb.ContextMetadata{}
+	protoMsg := &contextpropagationspb.ContextMetadata{}
 	err := proto.Unmarshal([]byte(protoValues[0]), protoMsg)
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprint(12345), protoMsg.Entries[contextutil.MetadataKeyWorkflowType])
@@ -352,7 +352,7 @@ func TestBuildTrailerPairs_ControlCharsInValues(t *testing.T) {
 	protoValues := trailer[protoTrailerKey]
 	require.Len(t, protoValues, 1)
 
-	protoMsg := &contextpropagationpb.ContextMetadata{}
+	protoMsg := &contextpropagationspb.ContextMetadata{}
 	err := proto.Unmarshal([]byte(protoValues[0]), protoMsg)
 	require.NoError(t, err)
 	require.Equal(t, "workflow\nwith\x00control\rchars", protoMsg.Entries[contextutil.MetadataKeyWorkflowType])
@@ -374,7 +374,7 @@ func TestBuildTrailerPairs_MixedSafeAndUnsafeValues(t *testing.T) {
 	// Proto key carries both entries.
 	protoValues := trailer[protoTrailerKey]
 	require.Len(t, protoValues, 1)
-	protoMsg := &contextpropagationpb.ContextMetadata{}
+	protoMsg := &contextpropagationspb.ContextMetadata{}
 	err := proto.Unmarshal([]byte(protoValues[0]), protoMsg)
 	require.NoError(t, err)
 	require.Equal(t, "workflow\nwith\nnewlines", protoMsg.Entries[contextutil.MetadataKeyWorkflowType])

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	contextpropagationpb "go.temporal.io/server/api/contextpropagation/v1"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -422,7 +422,7 @@ func TestLogMetadataPropagationStatus(t *testing.T) {
 func TestExtractMetadataFromTrailer_PrefersProtoKey(t *testing.T) {
 	// Proto key contains "proto-workflow" while legacy keys contain "legacy-workflow".
 	// Reader should prefer the proto key.
-	protoMsg := &contextpropagationpb.ContextMetadata{
+	protoMsg := &contextpropagationspb.ContextMetadata{
 		Entries: map[string]string{
 			contextutil.MetadataKeyWorkflowType:      "proto-workflow",
 			contextutil.MetadataKeyWorkflowTaskQueue: "proto-queue",
@@ -488,7 +488,7 @@ func TestExtractMetadataFromTrailer_ProtoRoundTrip(t *testing.T) {
 }
 
 func TestExtractMetadataFromTrailer_EmptyProtoMetadata(t *testing.T) {
-	protoMsg := &contextpropagationpb.ContextMetadata{
+	protoMsg := &contextpropagationspb.ContextMetadata{
 		Entries: map[string]string{},
 	}
 	protoBytes, err := proto.Marshal(protoMsg)
@@ -523,7 +523,7 @@ func TestExtractMetadataFromTrailer_InvalidProtoFallsBackToLegacy(t *testing.T) 
 }
 
 func TestExtractMetadataFromTrailer_ControlCharsInProto(t *testing.T) {
-	protoMsg := &contextpropagationpb.ContextMetadata{
+	protoMsg := &contextpropagationspb.ContextMetadata{
 		Entries: map[string]string{
 			contextutil.MetadataKeyWorkflowType: "workflow\nwith\x00control\rchars",
 		},

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	contextpropagationpb "go.temporal.io/server/api/contextpropagation/v1"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -107,7 +107,7 @@ func buildTrailerPairs(allMetadata map[string]any) []string {
 	var trailerPairs []string
 
 	// Proto format: serialize all metadata into a single protobuf message.
-	protoMsg := &contextpropagationpb.ContextMetadata{
+	protoMsg := &contextpropagationspb.ContextMetadata{
 		Entries: make(map[string]string, len(allMetadata)),
 	}
 	for key, value := range allMetadata {
