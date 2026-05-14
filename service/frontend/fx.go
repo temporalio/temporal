@@ -904,6 +904,7 @@ func HandlerProvider(
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
+		metricsHandler,
 		logger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),

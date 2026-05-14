@@ -219,6 +219,8 @@ func NewAdminHandler(
 				args.Config.VisibilityAllowList,
 			),
 			args.Config.SuppressErrorSetSystemSearchAttribute,
+			args.MetricsHandler,
+			args.Logger,
 		),
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
