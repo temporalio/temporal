@@ -85,12 +85,9 @@ func (n invocableOutbound) Invoke(
 	n.completion.Header = n.callback.Header
 
 	// If the outbound call is to a standalone callback, then supply the Nexus
-	// operation's token in the request.
+	// operation's token in the request. (Will make its way to the outbound HTTP headers.)
 	if n.callback.GetToken() != "" {
-		if n.completion.Header == nil {
-			n.completion.Header = nexus.Header{}
-		}
-		n.completion.Header.Set(commonnexus.CallbackTokenHeader, n.callback.GetToken())
+		n.completion.OperationToken = n.callback.GetToken()
 	}
 
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
