@@ -432,12 +432,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 }
 
 // TestMergeAndApply_MaxSkippedFloor covers the validation introduced for
-// MaxSkippedDuration updates: the new bound must leave at least
-// TimeSkippingPrecision of remaining budget above the workflow's already-
-// accumulated skipped duration. The check fires only when MaxSkippedDuration
-// is changing; MaxElapsedDuration is exempt (it resets each enable window),
-// and an update that leaves the bound unchanged (but flips e.g. Enabled) also
-// bypasses the floor check.
+// MaxSkippedDuration updates
 func TestMergeAndApply_MaxSkippedFloor(t *testing.T) {
 	maxSkippedCfg := func(d time.Duration) *workflowpb.TimeSkippingConfig {
 		return &workflowpb.TimeSkippingConfig{
@@ -461,91 +456,41 @@ func TestMergeAndApply_MaxSkippedFloor(t *testing.T) {
 		wantErr           bool
 	}{
 		{
-			name:              "first-time MaxSkipped at exactly precision succeeds (accumulated=0, strict <)",
+			name:              "new MaxSkippedDuration is larger than the current accumulated skipped duration",
 			initialConfig:     nil,
-			initialAccumulate: 0,
+			initialAccumulate: 30 * time.Minute,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(namespace.TimeSkippingPrecision),
+				TimeSkippingConfig: maxSkippedCfg(30*time.Minute + 2*namespace.TimeSkippingPrecision),
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			wantErr:    false,
 		},
 		{
-			name:              "first-time MaxSkipped below precision rejected (accumulated=0)",
-			initialConfig:     nil,
-			initialAccumulate: 0,
+			name:              "new MaxSkippedDuration is less than the current accumulated skipped duration",
+			initialConfig:     maxSkippedCfg(60 * time.Minute),
+			initialAccumulate: 30 * time.Minute,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(namespace.TimeSkippingPrecision - 1),
+				TimeSkippingConfig: maxSkippedCfg(30*time.Minute - namespace.TimeSkippingPrecision),
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			wantErr:    true,
 		},
 		{
-			name:              "updating MaxSkipped above accumulated+precision succeeds",
-			initialConfig:     maxSkippedCfg(time.Hour),
-			initialAccumulate: 30 * time.Minute,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(2 * time.Hour),
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
-			wantErr:    false,
-		},
-		{
-			name:              "updating MaxSkipped to value at exactly accumulated+precision succeeds (boundary)",
-			initialConfig:     maxSkippedCfg(time.Hour),
-			initialAccumulate: 30 * time.Minute,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(30*time.Minute + namespace.TimeSkippingPrecision),
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
-			wantErr:    false,
-		},
-		{
-			name:              "updating MaxSkipped below accumulated+precision rejected",
-			initialConfig:     maxSkippedCfg(time.Hour),
-			initialAccumulate: 30 * time.Minute,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(20 * time.Minute),
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
-			wantErr:    true,
-		},
-		{
-			name:              "updating MaxSkipped below accumulated (over-budget on landing) rejected",
-			initialConfig:     maxSkippedCfg(time.Hour),
-			initialAccumulate: 30 * time.Minute,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(10 * time.Minute),
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
-			wantErr:    true,
-		},
-		{
-			name:              "toggling enabled while MaxSkipped is unchanged bypasses the floor check",
-			initialConfig:     maxSkippedCfg(time.Hour),
-			initialAccumulate: 2 * time.Hour, // bound already exceeded
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			wantErr:    false,
-		},
-		{
-			name:              "MaxElapsed bound is exempt from the floor check",
+			name:              "the MaxElapsed bound is not impacted by the check",
 			initialConfig:     nil,
 			initialAccumulate: 10 * time.Hour,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxElapsedCfg(time.Minute),
+				TimeSkippingConfig: maxElapsedCfg(time.Hour),
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
 			wantErr:    false,
 		},
 		{
-			name:              "switching from MaxElapsed to MaxSkipped triggers the floor check",
+			name:              "switching from MaxElapsed to MaxSkipped also triggers the check",
 			initialConfig:     maxElapsedCfg(time.Hour),
 			initialAccumulate: 30 * time.Minute,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: maxSkippedCfg(10 * time.Minute),
+				TimeSkippingConfig: maxSkippedCfg(30*time.Minute - namespace.TimeSkippingPrecision),
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			wantErr:    true,

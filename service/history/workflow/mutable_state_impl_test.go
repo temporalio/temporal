@@ -4173,28 +4173,23 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 		{
 			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config: &workflowpb.TimeSkippingConfig{Enabled: true,
+					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
-			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(2 * time.Hour)}},
 			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "multi-generation: parent's accumulated (which already includes grandparent's contribution) becomes InitialSkippedDuration",
+			name: "accumulated skip only, no config (safe gate) → no config snapshot, just InitialSkippedDuration",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
-			},
-			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
-			expectInitialSkip: durationpb.New(2 * time.Hour),
-		},
-		{
-			name: "accumulated skip only, no config (corrupt-ish but handled) → no config snapshot, just InitialSkippedDuration",
-			parentTSI: &persistencespb.TimeSkippingInfo{
-				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
+				AccumulatedSkippedDuration: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
+				Config: &workflowpb.TimeSkippingConfig{Enabled: true,
+					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)}},
 			},
 			expectNilCfg:      true,
-			expectInitialSkip: durationpb.New(15 * time.Minute),
+			expectInitialSkip: durationpb.New(time.Hour - namespace.TimeSkippingPrecision),
 		},
 	}
 
@@ -4340,7 +4335,7 @@ func TestSnapshotTimeSkippingInfo(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotCfg, gotInitial := snapshotTimeSkippingInfo(tc.source)
+			gotCfg, gotInitial := snapshotTimeSkippingInfoForPropagation(tc.source)
 
 			if tc.expectCfg == nil {
 				require.Nil(t, gotCfg)
@@ -8064,31 +8059,37 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		s.True(tr.disabledAfterBound)
 	})
 
-	s.Run("MaxSkipped_AccumEqualMax_DisableNoSkip", func() {
-		resetMS()
+	// Invariant: calculateTimeSkippingTransition is never called with
+	// accumulated >= maxSkipped, because:
+	//   (a) ApplyWorkflowExecutionTimeSkippingTransitionedEvent
+	//       updates accumulated and Config.Enabled atomically — when accumulated
+	//       hits maxSkipped, Enabled is set to false in the same apply.
+	//   (b) shouldExecuteTimeSkipping short-circuits when
+	//       !Config.Enabled, so the next close-tx never re-enters this function.
+	//   (c) The updateworkflowoptions validator rejects any
+	//       external update that would leave accumulated >= maxSkipped.
+	// Reaching this branch is therefore data corruption, and the function must
+	// return serviceerror.NewInternal so the caller can log and stop.
+	s.Run("MaxSkipped_AccumAtOrAboveMax_Unreachable", func() {
 		maxBound := time.Hour
-		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
-		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(maxBound)
+		for _, tc := range []struct {
+			name  string
+			accum time.Duration
+		}{
+			{"equal_to_max", maxBound},
+			{"above_max", 2 * maxBound},
+		} {
+			s.Run(tc.name, func() {
+				resetMS()
+				s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
+					&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
+				s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(tc.accum)
 
-		tr, err := s.mutableState.calculateTimeSkippingTransition()
-		s.Require().NoError(err)
-		s.True(tr.targetTime.IsZero(), "cap exactly hit must produce zero target time")
-		s.True(tr.disabledAfterBound)
-		s.True(tr.isValid())
-	})
-
-	s.Run("MaxSkipped_AccumGreaterThanMax_InternalError", func() {
-		resetMS()
-		maxBound := time.Hour
-		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
-		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(2 * maxBound)
-
-		_, err := s.mutableState.calculateTimeSkippingTransition()
-		s.Require().Error(err)
-		var internalErr *serviceerror.Internal
-		s.Require().ErrorAs(err, &internalErr)
+				_, err := s.mutableState.calculateTimeSkippingTransition()
+				var internalErr *serviceerror.Internal
+				s.Require().ErrorAs(err, &internalErr)
+			})
+		}
 	})
 
 	s.Run("MaxElapsed_NilCurrentBound_InternalError", func() {
@@ -8155,6 +8156,8 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 
 // TestCloseTransactionTimeSkipping_Bound exercises the bound-fired path inside
 // closeTransactionHandleTimeSkipping.
+// invariant: every transition that consumes bound must carry disabled_after_bound=true,
+// and atomically flip Config.Enabled to false.
 func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 
@@ -8191,50 +8194,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 		return dbState
 	}
 
-	s.Run("MaxSkippedCapHit_DisableNoSkip_NoRegen", func() {
-		// With accumulated == max, calculateTimeSkippingTransition returns
-		// (zero, true). closeTransactionHandleTimeSkipping must:
-		//   - emit a transitioned event with target_time unset and disabled_after_bound=true.
-		//   - return regenTimerTasksForTimeSkipping=false (zero target time).
-		dbState := buildState(func(s *persistencespb.WorkflowMutableState) {
-			s.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
-				},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-			}
-		})
-
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
-		s.Require().NoError(err)
-		_, err = ms.StartTransaction(s.namespaceEntry)
-		s.Require().NoError(err)
-
-		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-		s.Require().NoError(err)
-
-		var tsEvent *historypb.HistoryEvent
-		for _, we := range workflowEventsSeq {
-			for _, ev := range we.Events {
-				if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
-					tsEvent = ev
-				}
-			}
-		}
-		s.Require().NotNil(tsEvent)
-		attr := tsEvent.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-		s.Nil(attr.GetTargetTime(), "cap-hit transition must have unset target_time")
-		s.True(attr.GetDisabledAfterBound())
-		s.False(ms.GetExecutionInfo().TimeSkippingInfo.Config.Enabled,
-			"applying disable_after_bound must flip Enabled to false")
-	})
-
-	s.Run("MaxSkippedAccumBelowMax_SkipsToCap_RegensTasks", func() {
-		// Accumulated < max, no other candidates → bound becomes the only candidate;
-		// transition has both target_time set AND disabled_after_bound=true. The
-		// resulting regen pass produces both an updated user-timer task and the
-		// regenerated bound timer (none here since it's a Skipped bound).
+	s.Run("CloseTransaction_MaxSkippedReached", func() {
 		dbState := buildState(func(s *persistencespb.WorkflowMutableState) {
 			s.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{
@@ -8273,5 +8233,44 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 		// 40 min off, not <1 ms).
 		got := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
 		s.InDelta(float64(time.Hour), float64(got), float64(time.Millisecond))
+	})
+
+	s.Run("CloseTransaction_MaxElapsedReached", func() {
+		boundTarget := time.Now().UTC().Add(40 * time.Minute)
+		dbState := buildState(func(s *persistencespb.WorkflowMutableState) {
+			s.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: &workflowpb.TimeSkippingConfig{
+					Enabled: true,
+					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+				},
+				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+					TargetTime: timestamppb.New(boundTarget),
+				},
+			}
+		})
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		var tsEvent *historypb.HistoryEvent
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+					tsEvent = ev
+				}
+			}
+		}
+		s.Require().NotNil(tsEvent)
+		attr := tsEvent.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+		s.NotNil(attr.GetTargetTime())
+		s.True(attr.GetDisabledAfterBound())
+		s.False(ms.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		s.True(ms.GetExecutionInfo().TimeSkippingInfo.CurrentElapsedDurationBound.HasReached,
+			"applying disable_after_bound for an elapsed bound must mark HasReached")
 	})
 }

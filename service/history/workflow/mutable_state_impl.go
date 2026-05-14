@@ -2620,7 +2620,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
+	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfoForPropagation(previousExecutionInfo)
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
@@ -5983,7 +5983,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	childTSConfig, childInitialSkipped := snapshotTimeSkippingInfo(ms.executionInfo)
+	childTSConfig, childInitialSkipped := snapshotTimeSkippingInfoForPropagation(ms.executionInfo)
 	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
@@ -9647,19 +9647,12 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	ms.hBuilder.SetTimeSource(ms.timeSource)
 }
 
-// snapshotTimeSkippingInfo returns a clone of the source execution's TimeSkippingConfig
+// snapshotTimeSkippingInfoForPropagation returns a clone of the source execution's TimeSkippingConfig
 // and a copy of its AccumulatedSkippedDuration, for propagation to a new run (child workflow
 // or continue-as-new). The source is passed explicitly so callers can snapshot from the
 // originating run's executionInfo — on CaN, the new MS is empty at snapshot time, so we
 // must read from the previous run.
-//
-// When the source's MaxSkippedDuration bound has less than
-// MinRemainingTimeSkippingBoundForPropagation of remaining budget, the config is
-// dropped from the snapshot — propagating it would land the new run with a near-zero
-// or already-exceeded MaxSkipped budget, which would just disable on first skip.
-// InitialSkippedDuration still propagates so the new run's virtual time stays
-// consistent with the parent across the run boundary.
-func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
+func snapshotTimeSkippingInfoForPropagation(source *persistencespb.WorkflowExecutionInfo) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
 	tsInfo := source.GetTimeSkippingInfo()
 	if tsInfo == nil {
 		return nil, nil
@@ -9672,12 +9665,15 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 	if srcTSC == nil {
 		return nil, initialSkipped
 	}
+	// This case should be rare—typically, time skipping is disabled before the remaining budget falls below the precision threshold.
+	// This additional check provides a final safeguard.
 	if bound, ok := srcTSC.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration); ok {
 		remaining := bound.MaxSkippedDuration.AsDuration() - tsInfo.GetAccumulatedSkippedDuration().AsDuration()
 		if remaining <= namespace.TimeSkippingPrecision {
 			return nil, initialSkipped
 		}
 	}
+
 	var tsc *workflowpb.TimeSkippingConfig
 	if cloned, ok := proto.Clone(srcTSC).(*workflowpb.TimeSkippingConfig); ok {
 		tsc = cloned

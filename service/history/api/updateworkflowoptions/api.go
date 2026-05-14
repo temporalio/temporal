@@ -148,11 +148,7 @@ func MergeAndApply(
 		return mergedOpts, false, nil
 	}
 
-	// A new MaxSkippedDuration bound must leave at least MinTimeSkippingDuration of
-	// remaining budget above what the workflow has already accumulated. Skipped
-	// duration grows monotonically, so a bound below the current accumulated value
-	// would put the workflow over-budget the moment it lands. MaxElapsedDuration
-	// has no equivalent constraint because it resets each enable window.
+	// the new max skipped duration must be larger than the current accumulated skipped duration
 	if mergedBound, ok := mergedOpts.GetTimeSkippingConfig().GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration); ok {
 		currentBound, ok := getOptionsFromMutableState(ms).GetTimeSkippingConfig().GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
 		changingMaxSkipped := !ok ||
