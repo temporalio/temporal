@@ -23,7 +23,9 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/worker/dummy"
@@ -31,6 +33,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1314,22 +1317,25 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 // correct context metadata (workflow-type, workflow-task-queue) for every
 // combination of CHASM and V1 state. This metadata is read by saas-temporal's
 // metering interceptor for action attribution.
+//
+// We assert by reading gRPC response trailers: the frontend's
+// ContextMetadataInterceptor is decorated to setTrailer=true for this test,
+// so any context metadata set during the handler is emitted as trailers that
+// the client can read directly.
 func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
-	var metadataRecorder testcore.ContextMetadataRecorder
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
-		testcore.WithClusterOptions(testcore.WithFxOptionsForService(
-			primitives.FrontendService,
-			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
-				return append(base, metadataRecorder.Intercept)
+		testcore.WithFxOptions(primitives.FrontendService,
+			fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+				return interceptor.NewContextMetadataInterceptor(true, logger)
 			}),
-		)),
+		),
 	)
 
-	newSched := func(t *testing.T) (sid, wt, tq string, sched *schedulepb.Schedule) {
+	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {
 		sid = testcore.RandomizeStr("sid")
 		wt = testcore.RandomizeStr("wt")
 		tq = testcore.RandomizeStr("tq")
@@ -1436,9 +1442,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 	}
 
 	deleteAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
-		// Drain any prior records.
-		metadataRecorder.Records()
-
+		var trailer metadata.MD
 		_, err := env.FrontendClient().DeleteSchedule(
 			testcore.NewContext(),
 			&workflowservice.DeleteScheduleRequest{
@@ -1446,20 +1450,18 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 				ScheduleId: sid,
 				Identity:   "test",
 			},
+			grpc.Trailer(&trailer),
 		)
 		require.NoError(t, err)
-
-		rec, ok := metadataRecorder.LastRecord("DeleteSchedule")
-		require.True(t, ok, "expected a metadata record for DeleteSchedule")
-		require.Equal(t, expectedWfType, rec.Metadata["workflow-type"],
+		require.Equal(t, []string{expectedWfType}, trailer.Get("workflow-type"),
 			"workflow-type should match the owning stack's metadata")
-		require.Equal(t, expectedTQ, rec.Metadata["workflow-task-queue"],
+		require.Equal(t, []string{expectedTQ}, trailer.Get("workflow-task-queue"),
 			"workflow-task-queue should match the owning stack's metadata")
 	}
 
 	// Subtest: Both stacks have real entries. CHASM metadata wins.
 	s.T().Run("BothStacks", func(t *testing.T) {
-		sid, wt, tq, sched := newSched(t)
+		sid, wt, tq, sched := newSched()
 		createCHASMSchedule(t, sid, sched)
 		createV1Scheduler(t, sid, sched)
 		deleteAndAssertMetadata(t, sid, wt, tq)
@@ -1467,7 +1469,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	// Subtest: CHASM has real schedule, V1 has dummy sentinel. CHASM metadata wins.
 	s.T().Run("CHASMOnly_V1Sentinel", func(t *testing.T) {
-		sid, wt, tq, sched := newSched(t)
+		sid, wt, tq, sched := newSched()
 		createCHASMSchedule(t, sid, sched)
 		createV1DummySentinel(t, sid)
 		deleteAndAssertMetadata(t, sid, wt, tq)
@@ -1475,7 +1477,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	// Subtest: CHASM has sentinel, V1 has real scheduler. V1 metadata wins.
 	s.T().Run("CHASMSentinel_V1Real", func(t *testing.T) {
-		sid, _, _, sched := newSched(t)
+		sid, _, _, sched := newSched()
 		createCHASMSentinel(t, sid)
 		createV1Scheduler(t, sid, sched)
 		deleteAndAssertMetadata(t, sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
@@ -1483,7 +1485,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	// Subtest: No CHASM entry, V1 has real scheduler. V1 metadata wins.
 	s.T().Run("V1Only_NoCHASM", func(t *testing.T) {
-		sid, _, _, sched := newSched(t)
+		sid, _, _, sched := newSched()
 		createV1Scheduler(t, sid, sched)
 		deleteAndAssertMetadata(t, sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
 	})
@@ -1522,21 +1524,19 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 // TestPatchScheduleContextMetadata verifies that PatchSchedule propagates the
 // correct context metadata for CHASM and V1 schedules.
 func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
-	var metadataRecorder testcore.ContextMetadataRecorder
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
-		testcore.WithClusterOptions(testcore.WithFxOptionsForService(
-			primitives.FrontendService,
-			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
-				return append(base, metadataRecorder.Intercept)
+		testcore.WithFxOptions(primitives.FrontendService,
+			fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+				return interceptor.NewContextMetadataInterceptor(true, logger)
 			}),
-		)),
+		),
 	)
 
-	newSched := func(t *testing.T) (sid, wt, tq string, sched *schedulepb.Schedule) {
+	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {
 		sid = testcore.RandomizeStr("sid")
 		wt = testcore.RandomizeStr("wt")
 		tq = testcore.RandomizeStr("tq")
@@ -1610,8 +1610,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	}
 
 	patchAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
-		metadataRecorder.Records() // drain
-
+		var trailer metadata.MD
 		_, err := env.FrontendClient().PatchSchedule(
 			testcore.NewContext(),
 			&workflowservice.PatchScheduleRequest{
@@ -1621,27 +1620,25 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 				Identity:   "test",
 				RequestId:  testcore.RandomizeStr("req"),
 			},
+			grpc.Trailer(&trailer),
 		)
 		require.NoError(t, err)
-
-		rec, ok := metadataRecorder.LastRecord("PatchSchedule")
-		require.True(t, ok, "expected a metadata record for PatchSchedule")
-		require.Equal(t, expectedWfType, rec.Metadata["workflow-type"],
+		require.Equal(t, []string{expectedWfType}, trailer.Get("workflow-type"),
 			"workflow-type should match the owning stack's metadata")
-		require.Equal(t, expectedTQ, rec.Metadata["workflow-task-queue"],
+		require.Equal(t, []string{expectedTQ}, trailer.Get("workflow-task-queue"),
 			"workflow-task-queue should match the owning stack's metadata")
 	}
 
 	// CHASM schedule: metadata should reflect the schedule's action target.
 	s.T().Run("CHASMSchedule", func(t *testing.T) {
-		sid, wt, tq, sched := newSched(t)
+		sid, wt, tq, sched := newSched()
 		createCHASMSchedule(t, sid, sched)
 		patchAndAssertMetadata(t, sid, wt, tq)
 	})
 
 	// V1 schedule: metadata should reflect the V1 scheduler workflow.
 	s.T().Run("V1Schedule", func(t *testing.T) {
-		sid, _, _, sched := newSched(t)
+		sid, _, _, sched := newSched()
 		createV1Scheduler(t, sid, sched)
 		patchAndAssertMetadata(t, sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
 	})
@@ -1659,7 +1656,6 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 		)
 		require.NoError(t, err)
 
-		metadataRecorder.Records() // drain
 		_, err = env.FrontendClient().PatchSchedule(
 			testcore.NewContext(),
 			&workflowservice.PatchScheduleRequest{
