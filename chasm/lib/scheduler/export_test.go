@@ -42,4 +42,7 @@ func (s *Scheduler) LogEvent(ctx chasm.MutableContext, msg string) {
 	s.logEvent(ctx, msg)
 }
 
-const MaxEventLogEntries = maxEventLogEntries
+const (
+	MaxEventLogEntries    = maxEventLogEntries
+	MaxEventLogMessageLen = maxEventLogMessageLen
+)

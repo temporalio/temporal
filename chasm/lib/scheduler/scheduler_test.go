@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -331,6 +332,20 @@ func TestLogEvent_Accumulates(t *testing.T) {
 		require.Equal(t, m, events[i].Message)
 		require.NotNil(t, events[i].Time)
 	}
+}
+
+func TestLogEvent_TruncatesLongMessages(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	sched.EventLog.Get(ctx).Events = nil
+
+	long := strings.Repeat("x", scheduler.MaxEventLogMessageLen+50)
+	sched.LogEvent(ctx, long)
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, 1)
+	require.Len(t, events[0].Message, scheduler.MaxEventLogMessageLen)
+	require.Equal(t, long[:scheduler.MaxEventLogMessageLen], events[0].Message)
 }
 
 func TestLogEvent_DropsEarliestWhenFull(t *testing.T) {

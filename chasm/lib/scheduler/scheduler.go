@@ -89,6 +89,9 @@ const (
 
 	// Maximum number of EventLog entries retained.
 	maxEventLogEntries = 100
+
+	// Maximum length of an EventLog message; longer messages are truncated.
+	maxEventLogMessageLen = 1000
 )
 
 var (
@@ -962,6 +965,9 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 func (s *Scheduler) logEvent(ctx chasm.MutableContext, msg string) {
 	log := s.EventLog.Get(ctx)
 
+	if len(msg) > maxEventLogMessageLen {
+		msg = msg[:maxEventLogMessageLen]
+	}
 	event := &schedulerpb.Event{
 		Time:    timestamppb.New(ctx.Now(s)),
 		Message: msg,
