@@ -599,7 +599,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	attempt.Stamp++
 
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
 		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
 		// The old task was invalidated by the stamp increment above.
 		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
