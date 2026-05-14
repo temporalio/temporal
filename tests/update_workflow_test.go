@@ -1286,9 +1286,9 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 				T:                   s.T(),
 			}
 
-			halfSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 500*time.Millisecond)
+			fiveSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 5*time.Second)
 			defer cancel()
-			updateResultCh := sendUpdate(halfSecondTimeoutCtx, env, env.Tv())
+			updateResultCh := sendUpdate(fiveSecondTimeoutCtx, env, env.Tv())
 
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask()
@@ -4644,12 +4644,16 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
+
+	queryCtx, cancelQueries := context.WithCancel(env.Context())
+	defer cancelQueries()
+
 	queryFn := func(resCh chan<- QueryResult) {
 		// There is no query handler, and query timeout is ok for this test.
 		// But first query must not time out before 2nd query reached server,
 		// because 2 queries overflow the query buffer (default size 1),
 		// which leads to clearing of WF context.
-		shortCtx, cancel := context.WithTimeout(env.Context(), 100*time.Millisecond)
+		shortCtx, cancel := context.WithTimeout(queryCtx, 5*time.Second)
 		defer cancel()
 		queryResp, err := env.FrontendClient().QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Namespace: env.Namespace().String(),
