@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -99,6 +100,62 @@ type (
 func TestAdminHandlerSuite(t *testing.T) {
 	s := new(adminHandlerSuite)
 	suite.Run(t, s)
+}
+
+func (s *adminHandlerSuite) Test_ListClusterMembers_NoHostID() {
+	hostID := uuid.New()
+	hostIDBytes, err := hostID.MarshalBinary()
+	s.NoError(err)
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMembers(gomock.Any(), &persistence.GetClusterMembersRequest{
+		HostIDEquals: nil,
+	}).Return(&persistence.GetClusterMembersResponse{
+		ActiveMembers: []*persistence.ClusterMember{
+			{
+				Role:       persistence.Frontend,
+				HostID:     hostIDBytes,
+				RPCAddress: net.ParseIP("1.2.3.4"),
+				RPCPort:    7233,
+			},
+		},
+	}, nil)
+
+	resp, err := s.handler.ListClusterMembers(context.Background(), &adminservice.ListClusterMembersRequest{})
+	s.NoError(err)
+	s.Len(resp.ActiveMembers, 1)
+	s.Equal(hostID.String(), resp.ActiveMembers[0].HostId)
+}
+
+func (s *adminHandlerSuite) Test_ListClusterMembers_WithHostID() {
+	hostID := uuid.New()
+	hostIDBytes, err := hostID.MarshalBinary()
+	s.NoError(err)
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetClusterMembersResponse{
+			ActiveMembers: []*persistence.ClusterMember{
+				{
+					Role:       persistence.Frontend,
+					HostID:     hostIDBytes,
+					RPCAddress: net.ParseIP("1.2.3.4"),
+					RPCPort:    7233,
+				},
+			},
+		}, nil)
+
+	resp, err := s.handler.ListClusterMembers(context.Background(), &adminservice.ListClusterMembersRequest{
+		HostId: hostID.String(),
+	})
+	s.NoError(err)
+	s.Len(resp.ActiveMembers, 1)
+	s.Equal(hostID.String(), resp.ActiveMembers[0].HostId)
+}
+
+func (s *adminHandlerSuite) Test_ListClusterMembers_InvalidHostID() {
+	_, err := s.handler.ListClusterMembers(context.Background(), &adminservice.ListClusterMembersRequest{
+		HostId: "not-a-valid-uuid",
+	})
+	s.Error(err)
 }
 
 func (s *adminHandlerSuite) SetupTest() {

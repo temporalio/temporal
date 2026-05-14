@@ -1148,13 +1148,16 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
-	hostIDEqual, err := uuid.Parse(request.GetHostId())
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
-	}
-	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
-	if err != nil {
-		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	var hostIDEqualBytes []byte
+	if hostID := request.GetHostId(); hostID != "" {
+		hostIDEqual, err := uuid.Parse(hostID)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", hostID, err)
+		}
+		hostIDEqualBytes, err = hostIDEqual.MarshalBinary()
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", hostID, err)
+		}
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
