@@ -21,7 +21,11 @@ type (
 var metadataCtxKey = metadataContextKey{}
 
 const (
-	// MetadataKeyWorkflowType is the context metadata key for workflow type
+	// MetadataKeyWorkflowType is the context metadata key for workflow type.
+	// These keys are serialized into a protobuf message (ContextMetadata) and sent
+	// in the "contextmetadata-bin" gRPC trailer. The "-bin" suffix causes gRPC to
+	// base64-encode the value on the wire, so metadata values may contain arbitrary
+	// bytes including HTTP/2-unsafe control characters.
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
 	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
