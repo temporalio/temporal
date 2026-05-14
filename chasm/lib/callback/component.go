@@ -95,7 +95,6 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	case callbackspb.CALLBACK_STATUS_FAILED,
 		callbackspb.CALLBACK_STATUS_TERMINATED,
 		callbackspb.CALLBACK_STATUS_TIMED_OUT:
-		// TODO(chrsmith): Confirm the response from #crew-chasm
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning

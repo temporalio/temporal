@@ -58,9 +58,6 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	// TODO(chrsmith): Both here and in invocable_outbound.go.
-	// > we should validate that temporal:// URLs have a token either via the old header format or the new structured Token field.
-
 	// Get the token from the dedicated Token field, falling back to the header for backwards compat.
 	encodedRef := c.callback.GetToken()
 	if encodedRef == "" {
