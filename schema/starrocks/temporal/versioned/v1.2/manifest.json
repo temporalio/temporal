@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "1.2",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for RPC replication and blob size adjustments",
+  "SchemaUpdateCqlFiles": [
+    "queue.sql",
+    "blob_size.sql"
+  ]
+}

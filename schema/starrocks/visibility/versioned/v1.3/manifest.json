@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "1.3",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add history size bytes and build IDs visibility columns and indices",
+  "SchemaUpdateCqlFiles": [
+    "add_history_size_bytes.sql",
+    "add_build_ids_search_attribute.sql"
+  ]
+}

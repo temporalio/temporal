@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.9",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add _version column",
+  "SchemaUpdateCqlFiles": [
+    "add_version_column.sql"
+  ]
+}
