@@ -405,7 +405,7 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 	// This block runs after the STARTS_WITH → LIKE conversion above so the V1 clone inherits the
 	// already-converted operator and escape settings.
 	// TODO: once V1 schedules are fully migrated to CHASM, remove this OR/AND block and only use V2 (unprefixed) values.
-	if saColNameExpr.alias == sadefs.ScheduleID && c.archetypeID == chasm.SchedulerArchetypeID {
+	if saColNameExpr.alias == sadefs.ScheduleID && saColNameExpr.fieldName == sadefs.WorkflowID && c.archetypeID == chasm.SchedulerArchetypeID {
 		isNegative := expr.Operator == sqlparser.NotEqualStr ||
 			expr.Operator == sqlparser.NotInStr ||
 			expr.Operator == sqlparser.NotLikeStr

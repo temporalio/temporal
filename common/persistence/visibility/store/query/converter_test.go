@@ -1575,6 +1575,255 @@ func TestQueryConverter_ConvertComparisonExprScheduleID(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name:        "CHASM path NOT IN generates AND of prefixed and unprefixed",
+			in:          "ScheduleId NOT IN ('foo', 'bar')",
+			archetypeID: chasm.SchedulerArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				v1Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotInStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				}
+				v2Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotInStr,
+					Left:     scheduleIDCol,
+					Right:    sqlparser.ValTuple{NewUnsafeSQLString("foo"), NewUnsafeSQLString("bar")},
+				}
+				andExpr := &sqlparser.AndExpr{Left: v1Expr, Right: v2Expr}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(
+						sqlparser.NotInStr,
+						scheduleIDCol,
+						[]any{primitives.ScheduleWorkflowIDPrefix + "foo", primitives.ScheduleWorkflowIDPrefix + "bar"},
+					).
+					Return(v1Expr, nil)
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.NotInStr, scheduleIDCol, []any{"foo", "bar"}).
+					Return(v2Expr, nil)
+				storeQCMock.EXPECT().BuildAndExpr(v1Expr, v2Expr).Return(andExpr, nil)
+			},
+			out: &sqlparser.AndExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotInStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotInStr,
+					Left:     scheduleIDCol,
+					Right:    sqlparser.ValTuple{NewUnsafeSQLString("foo"), NewUnsafeSQLString("bar")},
+				},
+			},
+		},
+
+		{
+			name:        "CHASM path STARTS_WITH generates OR of prefixed and unprefixed",
+			in:          "ScheduleId STARTS_WITH 'my-'",
+			archetypeID: chasm.SchedulerArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				v1Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.StartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				}
+				v2Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.StartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-"),
+				}
+				orExpr := &sqlparser.OrExpr{Left: v1Expr, Right: v2Expr}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.StartsWithStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-").
+					Return(v1Expr, nil)
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.StartsWithStr, scheduleIDCol, "my-").
+					Return(v2Expr, nil)
+				storeQCMock.EXPECT().BuildOrExpr(v1Expr, v2Expr).Return(orExpr, nil)
+			},
+			out: &sqlparser.OrExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.StartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.StartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-"),
+				},
+			},
+		},
+
+		{
+			name:        "CHASM path NOT STARTS_WITH generates AND of prefixed and unprefixed",
+			in:          "ScheduleId NOT STARTS_WITH 'my-'",
+			archetypeID: chasm.SchedulerArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				v1Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotStartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				}
+				v2Expr := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotStartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-"),
+				}
+				andExpr := &sqlparser.AndExpr{Left: v1Expr, Right: v2Expr}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.NotStartsWithStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-").
+					Return(v1Expr, nil)
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.NotStartsWithStr, scheduleIDCol, "my-").
+					Return(v2Expr, nil)
+				storeQCMock.EXPECT().BuildAndExpr(v1Expr, v2Expr).Return(andExpr, nil)
+			},
+			out: &sqlparser.AndExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotStartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotStartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString("my-"),
+				},
+			},
+		},
+
+		{
+			name:        "V1 path NOT EQUAL prefixes value",
+			in:          "ScheduleId != 'my-sched'",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotEqualStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.NotEqualStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-sched").
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.NotEqualStr,
+				Left:     scheduleIDCol,
+				Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-sched"),
+			},
+		},
+
+		{
+			name:        "V1 path IN prefixes values",
+			in:          "ScheduleId IN ('foo', 'bar')",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.InStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(
+						sqlparser.InStr,
+						scheduleIDCol,
+						[]any{primitives.ScheduleWorkflowIDPrefix + "foo", primitives.ScheduleWorkflowIDPrefix + "bar"},
+					).
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.InStr,
+				Left:     scheduleIDCol,
+				Right: sqlparser.ValTuple{
+					NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+					NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+				},
+			},
+		},
+
+		{
+			name:        "V1 path NOT IN prefixes values",
+			in:          "ScheduleId NOT IN ('foo', 'bar')",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotInStr,
+					Left:     scheduleIDCol,
+					Right: sqlparser.ValTuple{
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+						NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+					},
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(
+						sqlparser.NotInStr,
+						scheduleIDCol,
+						[]any{primitives.ScheduleWorkflowIDPrefix + "foo", primitives.ScheduleWorkflowIDPrefix + "bar"},
+					).
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.NotInStr,
+				Left:     scheduleIDCol,
+				Right: sqlparser.ValTuple{
+					NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "foo"),
+					NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "bar"),
+				},
+			},
+		},
+
+		{
+			name:        "V1 path STARTS_WITH prefixes value",
+			in:          "ScheduleId STARTS_WITH 'my-'",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.StartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.StartsWithStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-").
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.StartsWithStr,
+				Left:     scheduleIDCol,
+				Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+			},
+		},
+
+		{
+			name:        "V1 path NOT STARTS_WITH prefixes value",
+			in:          "ScheduleId NOT STARTS_WITH 'my-'",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				out := &sqlparser.ComparisonExpr{
+					Operator: sqlparser.NotStartsWithStr,
+					Left:     scheduleIDCol,
+					Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+				}
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.NotStartsWithStr, scheduleIDCol, primitives.ScheduleWorkflowIDPrefix+"my-").
+					Return(out, nil)
+			},
+			out: &sqlparser.ComparisonExpr{
+				Operator: sqlparser.NotStartsWithStr,
+				Left:     scheduleIDCol,
+				Right:    NewUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + "my-"),
+			},
+		},
 	}
 
 	for _, tc := range testCases {
