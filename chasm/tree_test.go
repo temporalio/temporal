@@ -2068,8 +2068,8 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
-	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	// SubComponent1 was read but not mutated, so its data bytes are unchanged and the write is skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 }
 
@@ -2723,10 +2723,7 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	// With skip-if-clean (default), an unchanged node is not written to storage.
-	// The backend state/status checks below verify the terminated state is preserved
-	// from the prior transaction — UpdateWorkflowStateStatus is NOT re-called here
-	// because the backend already reports COMPLETED.
+	// The terminated state is unchanged from the prior transaction, so the write is skipped.
 	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -2874,7 +2871,8 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	// Immediate pure tasks run inline without changing data bytes, so all writes are skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
