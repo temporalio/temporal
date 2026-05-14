@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -938,15 +937,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
