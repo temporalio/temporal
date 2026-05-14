@@ -1188,7 +1188,7 @@ func (a *Activity) RecordHeartbeat(
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		ActivityPaused:  a.PauseState != nil,
-		// ActivityReset is intentionally not reported via heartbeat; reset takes effect on the next retry.
+		ActivityReset:   a.ActivityReset,
 	}, nil
 }
 

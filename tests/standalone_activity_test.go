@@ -7046,7 +7046,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 
 		// Attempt to poll — the dispatch task was invalidated by the stamp bump, so no task should
 		// be available. Use a short-lived context to avoid blocking the test.
-		shortCtx, shortCancel := context.WithTimeout(ctx, 2*time.Second)
+		shortCtx, shortCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer shortCancel()
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(shortCtx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
@@ -7102,9 +7102,26 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		_, err := env.FrontendClient().PauseActivityExecution(ctx, pauseReq)
 		require.NoError(t, err)
 
+		resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, resp.GetInfo().GetRunState())
+
 		// Second pause with the same request ID should succeed (idempotent no-op).
+		// Note there is no way to
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, pauseReq)
 		require.NoError(t, err)
+
+		resp, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, resp.GetInfo().GetRunState())
 	})
 
 	t.Run("PauseNotFound", func(t *testing.T) {
@@ -8733,7 +8750,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("WhileCancelRequested", func(t *testing.T) {
+	t.Run("WhileCancelRequestedDoesNotFail", func(t *testing.T) {
 		// Reset while the activity is in CANCEL_REQUESTED state.
 		// handleReset sets the ActivityReset flag (same deferred path as STARTED).
 		// NOTE: TransitionRescheduled currently only allows STARTED as a source state, so a
