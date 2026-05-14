@@ -425,3 +425,261 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	s.NotNil(actResp.PollerScalingDecision)
 	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }
+
+func (s *PollerScalingIntegSuite) TestPollerScalingLightlyUsedQueueScalesDown() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 200*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+	pollResultCh := make(chan pollResult, 1)
+
+	go func() {
+		pollResp, pollErr := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		pollResultCh <- pollResult{resp: pollResp, err: pollErr}
+	}()
+
+	// Wait until the poller is registered in the matching engine before starting
+	// the workflow. Without this, the workflow task could be queued before the
+	// poller registers, giving a near-zero wait time and no scale-down decision.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Pollers, "poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Now let the poller sit idle past the 200ms wait-time threshold.
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo
+
+	_, err := s.SdkClient().ExecuteWorkflow(
+		ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.Require().NoError(err)
+
+	poll := <-pollResultCh
+	s.Require().NoError(poll.err)
+	s.Require().NotEmpty(poll.resp.TaskToken)
+	s.Require().NotNil(poll.resp.PollerScalingDecision)
+	s.Require().Equal(int32(-1), poll.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+}
+
+// TestPollerScalingFIFODispatchPreventsScaleDown documents the current FIFO
+// poller dispatch behavior that makes autoscaling scale-down less effective
+// (see https://github.com/temporalio/temporal/issues/8447).
+//
+// With FIFO, the oldest waiting poller always gets the next task. This means
+// all pollers stay warm and none times out, even when fewer pollers would
+// suffice. With LIFO dispatch, the most-recently-connected poller would get
+// the task, letting older excess pollers time out and trigger scale-down.
+//
+// This test asserts the FIFO behavior: with two pollers, the OLDER one
+// receives the task. When the matching engine switches to LIFO dispatch,
+// this test should fail — update it to assert the NEWER poller gets the task.
+func (s *PollerScalingIntegSuite) TestPollerScalingFIFODispatchPreventsScaleDown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+
+	// Start the first (older) poller.
+	olderCh := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		olderCh <- pollResult{resp: resp, err: err}
+	}()
+
+	// Wait until the first poller is registered.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Pollers, 1, "first poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Start the second (newer) poller.
+	newerCh := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		newerCh <- pollResult{resp: resp, err: err}
+	}()
+
+	// Wait until both pollers are registered.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Pollers, 2, "second poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Start a single workflow — exactly one poller should receive the task.
+	_, err := s.SdkClient().ExecuteWorkflow(
+		ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.Require().NoError(err)
+
+	// FIFO: the older poller should get the task, not the newer one.
+	// When matching switches to LIFO, this assertion should flip.
+	select {
+	case poll := <-olderCh:
+		s.Require().NoError(poll.err)
+		s.Require().NotEmpty(poll.resp.TaskToken, "older poller should receive the task (FIFO)")
+	case poll := <-newerCh:
+		// If this branch fires, LIFO dispatch may have been implemented — update this test.
+		s.Failf("newer poller got the task",
+			"expected FIFO dispatch (older poller wins), but newer poller received task token %x", poll.resp.TaskToken)
+	case <-time.After(10 * time.Second): //nolint:forbidigo
+		s.Fail("neither poller received the task within 10s")
+	}
+}
+
+// TestPollerScalingNoDecisionOnIdleQueue documents a limitation: the server
+// only attaches PollerScalingDecision to poll responses that carry a task.
+// On an idle queue (no tasks), polls return empty and never include a
+// scale-down decision — the SDK must infer scale-down from the namespace
+// PollerAutoscaling capability + empty response.
+//
+// This matters for high-task-queue-count environments where most queues are
+// idle: the server can't proactively tell pollers to go away.
+//
+// When the server is enhanced to attach decisions to empty poll responses,
+// this test should fail — update the assertion to expect a non-nil decision.
+func (s *PollerScalingIntegSuite) TestPollerScalingNoDecisionOnIdleQueue() {
+	// Use a short wait time so the poller easily exceeds it.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 100*time.Millisecond)
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Poll with a short deadline on an idle queue (no workflows started).
+	// The poll will time out and return empty.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.Require().NoError(err)
+	s.Require().Empty(resp.TaskToken, "expected empty response on idle queue")
+
+	// The poller waited well past PollerScalingWaitTime, but the server can't
+	// send a scale-down decision because decisions are only attached to task
+	// responses. This is the limitation: PollerScalingDecision is nil even
+	// though a scale-down would be appropriate.
+	s.Require().Nil(resp.PollerScalingDecision,
+		"server currently cannot send scaling decisions on empty poll responses; "+
+			"if this fails, the limitation may have been fixed — update this test")
+}
+
+// TestPollerScalingScaleUpIgnoresRateLimit documents a limitation in the
+// scale-up rate limiter: the effective rate scales linearly with the number
+// of pollers (rate = PollerScalingDecisionsPerSecond * numPollers) instead
+// of being an absolute cap. This creates a positive feedback loop: more
+// pollers → more +1 decisions → even more pollers.
+//
+// This test sets PollerScalingDecisionsPerSecond to 1 (intending at most
+// 1 scale-up decision per second), then shows that two near-simultaneous
+// polls BOTH receive +1 decisions because the per-poller scaling doubles
+// the effective rate.
+//
+// When the rate limiter is fixed to use an absolute cap, the second poll
+// should return a nil decision (rate-limited). Update this test then.
+func (s *PollerScalingIntegSuite) TestPollerScalingScaleUpIgnoresRateLimit() {
+	// Set rate to 1 decision/sec — should mean at most 1 scale-up per second.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingDecisionsPerSecond, 1.0)
+	// Set wait time very high so no scale-down decisions interfere.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 1*time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Create a backlog of workflows.
+	for range 5 {
+		_, err := s.SdkClient().ExecuteWorkflow(
+			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.Require().NoError(err)
+	}
+
+	// Wait for backlog age to exceed the scale-up threshold (50ms, set in suite setup).
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		res, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
+		})
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, res.GetStats().ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+	}, 10*time.Second, 50*time.Millisecond)
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+
+	// Launch two polls simultaneously — both will grab a backlogged task.
+	ch1 := make(chan pollResult, 1)
+	ch2 := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		ch1 <- pollResult{resp: resp, err: err}
+	}()
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		ch2 <- pollResult{resp: resp, err: err}
+	}()
+
+	poll1 := <-ch1
+	poll2 := <-ch2
+	s.Require().NoError(poll1.err)
+	s.Require().NoError(poll2.err)
+	s.Require().NotEmpty(poll1.resp.TaskToken)
+	s.Require().NotEmpty(poll2.resp.TaskToken)
+
+	// Both polls get scale-up decisions even though rate is configured to 1/sec,
+	// because the effective rate = PollerScalingDecisionsPerSecond * numPollers.
+	// When the rate limiter is fixed to be an absolute cap, one of these should
+	// be nil. Update this test then.
+	s.Require().NotNil(poll1.resp.PollerScalingDecision,
+		"expected +1 decision on first poll (backlog exists)")
+	s.Require().Equal(int32(1), poll1.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Require().NotNil(poll2.resp.PollerScalingDecision,
+		"current behavior: second poll also gets +1 despite 1/sec rate limit; "+
+			"if this fails, the rate limiter may have been fixed — update this test")
+	s.Require().Equal(int32(1), poll2.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+}
