@@ -462,7 +462,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.liveness.markAlive()
 
 	c.currentPolls.Add(1)
-	defer c.currentPolls.Add(-1)
+	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+	defer func() {
+		c.currentPolls.Add(-1)
+		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+	}()
 
 	namespaceId := namespace.ID(c.queue.NamespaceId())
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -596,11 +600,17 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
+	if c.queue.Partition().IsRoot() {
+		metrics.WorkerCountPerTaskQueue.With(c.metricsHandler).Record(float64(c.pollerHistory.size()))
+	}
 }
 
 func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
 	if c.pollerHistory != nil {
 		c.pollerHistory.removePoller(id)
+		if c.queue.Partition().IsRoot() {
+			metrics.WorkerCountPerTaskQueue.With(c.metricsHandler).Record(float64(c.pollerHistory.size()))
+		}
 	}
 }
 
