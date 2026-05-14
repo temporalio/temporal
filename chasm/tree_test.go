@@ -382,7 +382,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 		})
 
@@ -406,7 +407,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 
@@ -433,7 +435,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			// Now map is empty and must be deleted.
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
 
@@ -608,7 +611,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.NotEmpty(mutation.UpdatedNodes)
+		// The parent component's data bytes are unchanged; the pointer deletion is recorded in DeletedNodes.
+		s.Empty(mutation.UpdatedNodes)
 		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
