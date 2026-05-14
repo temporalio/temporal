@@ -313,7 +313,7 @@ func (c *Callback) GetNexusCompletion(ctx chasm.Context, requestID string) (nexu
 	// For standalone completions, get the user-supplied value and convert it into the Nexus API type.
 	suppliedCompletion, ok := c.SuppliedCompletion.TryGet(ctx)
 	if !ok {
-		panic("no completion available")
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInvalidArgument("no completion result provided")
 	}
 	return callbackCompletionToNexusCompleteOperationOpts(c, suppliedCompletion)
 }
@@ -378,12 +378,11 @@ func (c *Callback) statusAsAPIExecutionStatus() enumspb.CallbackExecutionStatus 
 		callbackspb.CALLBACK_STATUS_SCHEDULED,
 		callbackspb.CALLBACK_STATUS_BACKING_OFF:
 		return enumspb.CALLBACK_EXECUTION_STATUS_RUNNING
-	case callbackspb.CALLBACK_STATUS_FAILED:
+	case callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_TIMED_OUT:
 		return enumspb.CALLBACK_EXECUTION_STATUS_FAILED
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED
-	case callbackspb.CALLBACK_STATUS_TIMED_OUT:
-		return enumspb.CALLBACK_EXECUTION_STATUS_FAILED
 	case callbackspb.CALLBACK_STATUS_TERMINATED:
 		return enumspb.CALLBACK_EXECUTION_STATUS_TERMINATED
 	default:
