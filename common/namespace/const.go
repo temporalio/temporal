@@ -12,6 +12,6 @@ const (
 	// interpreting zero as infinite.
 	MinRetentionLocal = 1 * time.Hour
 
-	MinTimeSkippingBound  = 1 * time.Second
-	TimeSkippingPrecision = 100 * time.Millisecond
+	MinTimeSkippingBound  = 1 * time.Minute
+	TimeSkippingPrecision = 1 * time.Second
 )
