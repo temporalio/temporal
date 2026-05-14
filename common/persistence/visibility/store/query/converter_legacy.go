@@ -11,9 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/visibility/store"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -55,7 +53,6 @@ type (
 		allowedOperators map[string]struct{}
 		combinedTypeMap  searchattribute.NameTypeMap
 		chasmMapper      *chasm.VisibilitySearchAttributesMapper
-		archetypeID      chasm.ArchetypeID
 	}
 
 	isConverter struct {
@@ -152,7 +149,6 @@ func NewComparisonExprConverter(
 	allowedOperators map[string]struct{},
 	customSaNameType searchattribute.NameTypeMap,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-	archetypeID chasm.ArchetypeID,
 ) ExprConverter {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
@@ -169,7 +165,6 @@ func NewComparisonExprConverter(
 		allowedOperators: allowedOperators,
 		combinedTypeMap:  combinedTypeMap,
 		chasmMapper:      chasmMapper,
-		archetypeID:      archetypeID,
 	}
 }
 
@@ -469,40 +464,9 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, err
 	}
 
-	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
-	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
-	// In the CHASM context (migration period), generate an OR to match both V1 and V2.
-	// TODO: once V1 schedules are fully migrated to CHASM, remove this OR/AND block and only use V2 (unprefixed) values.
-	if alias == sadefs.ScheduleID && colName == sadefs.WorkflowID && c.archetypeID == chasm.SchedulerArchetypeID {
-		v1ColValues := make([]any, len(colValues))
-		for i, v := range colValues {
-			v1ColValues[i] = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", v)
-		}
-		v1Query, err := buildESComparisonQuery(colName, comparisonExpr.Operator, v1ColValues, tp)
-		if err != nil {
-			return nil, err
-		}
-		v2Query, err := buildESComparisonQuery(colName, comparisonExpr.Operator, colValues, tp)
-		if err != nil {
-			return nil, err
-		}
-		// Negative operators use AND so both V1 and V2 forms are excluded.
-		// Positive operators use OR (should) so a match on either form is a hit.
-		if comparisonExpr.Operator == sqlparser.NotEqualStr ||
-			comparisonExpr.Operator == sqlparser.NotInStr ||
-			comparisonExpr.Operator == sqlparser.NotStartsWithStr {
-			return elastic.NewBoolQuery().Must(v1Query, v2Query), nil
-		}
-		return elastic.NewBoolQuery().Should(v1Query, v2Query).MinimumNumberShouldMatch(1), nil
-	}
-
-	return buildESComparisonQuery(colName, comparisonExpr.Operator, colValues, tp)
-}
-
-func buildESComparisonQuery(colName string, operator string, colValues []any, tp enumspb.IndexedValueType) (elastic.Query, error) {
 	var query elastic.Query
 	//nolint:revive // missing default case
-	switch operator {
+	switch comparisonExpr.Operator {
 	case sqlparser.GreaterEqualStr:
 		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
 	case sqlparser.LessEqualStr:
@@ -532,13 +496,13 @@ func buildESComparisonQuery(colName string, operator string, colValues []any, tp
 	case sqlparser.StartsWithStr:
 		v, ok := colValues[0].(string)
 		if !ok {
-			return nil, NewConverterError("right-hand side of '%v' must be a string", operator)
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
 		query = elastic.NewPrefixQuery(colName, v)
 	case sqlparser.NotStartsWithStr:
 		v, ok := colValues[0].(string)
 		if !ok {
-			return nil, NewConverterError("right-hand side of '%v' must be a string", operator)
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
 		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
 	}

@@ -25,7 +25,6 @@ func NewQueryConverterLegacy(
 	fvInterceptor query.FieldValuesInterceptor,
 	saNameType searchattribute.NameTypeMap,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-	archetypeID chasm.ArchetypeID,
 ) *query.ConverterLegacy {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
@@ -36,7 +35,7 @@ func NewQueryConverterLegacy(
 	}
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, true)
-	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType, chasmMapper, archetypeID)
+	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType, chasmMapper)
 	is := query.NewIsConverter(fnInterceptor)
 
 	whereConverter := &query.WhereConverter{

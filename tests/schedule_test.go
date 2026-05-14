@@ -1386,86 +1386,76 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 		return ids
 	}
 
-	// Equality: ScheduleId = 'sid1' should return only sid1.
-	t.Run("Equal", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs(fmt.Sprintf("ScheduleId = '%s'", sid1))
-			require.Len(c, ids, 1)
-			require.Equal(c, sid1, ids[0])
-		}, 15*time.Second, 1*time.Second)
-	})
+	// wantIDs is the exact set of schedule IDs expected in the result.
+	// IsNegativeScheduleIDOperator drives whether an operator excludes or includes:
+	// negative operators (!=, NOT IN, NOT STARTS_WITH) produce AND in the rewriter so both
+	// V1 and V2 forms are excluded; positive operators produce OR so both forms are included.
+	tests := []struct {
+		name    string
+		query   string
+		wantIDs []string
+	}{
+		{
+			name:    "Equal",
+			query:   fmt.Sprintf("ScheduleId = '%s'", sid1),
+			wantIDs: []string{sid1},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("!=") == true
+			name:    "NotEqual",
+			query:   fmt.Sprintf("ScheduleId != '%s'", sid1),
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "StartsWith",
+			query:   "ScheduleId STARTS_WITH 'sched-filter-by-id-'",
+			wantIDs: []string{sid1, sid2},
+		},
+		{
+			name:    "StartsWithSpecific",
+			query:   "ScheduleId STARTS_WITH 'sched-filter-by-id-a'",
+			wantIDs: []string{sid1},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("not starts_with") == true
+			name:    "NotStartsWith",
+			query:   "ScheduleId NOT STARTS_WITH 'sched-filter-by-id-a'",
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "In",
+			query:   fmt.Sprintf("ScheduleId IN ('%s', '%s')", sid1, sid2),
+			wantIDs: []string{sid1, sid2},
+		},
+		{
+			name:    "InSingle",
+			query:   fmt.Sprintf("ScheduleId IN ('%s')", sid2),
+			wantIDs: []string{sid2},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("not in") == true
+			name:    "NotIn",
+			query:   fmt.Sprintf("ScheduleId NOT IN ('%s')", sid1),
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "IsNotNull",
+			query:   "ScheduleId IS NOT NULL",
+			wantIDs: []string{sid1, sid2},
+		},
+	}
 
-	// Not equal: ScheduleId != 'sid1' should return sid2 but not sid1.
-	t.Run("NotEqual", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs(fmt.Sprintf("ScheduleId != '%s'", sid1))
-			require.Contains(c, ids, sid2)
-			require.NotContains(c, ids, sid1)
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// Starts with: common prefix should return both.
-	t.Run("StartsWith", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs("ScheduleId STARTS_WITH 'sched-filter-by-id-'")
-			require.Contains(c, ids, sid1)
-			require.Contains(c, ids, sid2)
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// Starts with specific prefix should return only one.
-	t.Run("StartsWithSpecific", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs("ScheduleId STARTS_WITH 'sched-filter-by-id-a'")
-			require.Len(c, ids, 1)
-			require.Equal(c, sid1, ids[0])
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// Not starts with: should exclude matching schedules.
-	t.Run("NotStartsWith", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs("ScheduleId NOT STARTS_WITH 'sched-filter-by-id-a'")
-			require.Contains(c, ids, sid2)
-			require.NotContains(c, ids, sid1)
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// IN: should return both listed schedules.
-	t.Run("In", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs(fmt.Sprintf("ScheduleId IN ('%s', '%s')", sid1, sid2))
-			require.Contains(c, ids, sid1)
-			require.Contains(c, ids, sid2)
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// IN with single value: should return only that schedule.
-	t.Run("InSingle", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs(fmt.Sprintf("ScheduleId IN ('%s')", sid2))
-			require.Len(c, ids, 1)
-			require.Equal(c, sid2, ids[0])
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// NOT IN: should exclude listed schedules.
-	t.Run("NotIn", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs(fmt.Sprintf("ScheduleId NOT IN ('%s')", sid1))
-			require.Contains(c, ids, sid2)
-			require.NotContains(c, ids, sid1)
-		}, 15*time.Second, 1*time.Second)
-	})
-
-	// IS NOT NULL: all schedules have an ID, so both should appear.
-	t.Run("IsNotNull", func(t *testing.T) {
-		s.EventuallyWithT(func(c *assert.CollectT) {
-			ids := listScheduleIDs("ScheduleId IS NOT NULL")
-			require.Contains(c, ids, sid1)
-			require.Contains(c, ids, sid2)
-		}, 15*time.Second, 1*time.Second)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s.EventuallyWithT(func(c *assert.CollectT) {
+				ids := listScheduleIDs(tc.query)
+				require.Len(c, ids, len(tc.wantIDs))
+				for _, want := range tc.wantIDs {
+					require.Contains(c, ids, want)
+				}
+			}, 15*time.Second, 1*time.Second)
+		})
+	}
 }
 
 func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {

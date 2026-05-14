@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -394,34 +393,6 @@ func (c *QueryConverter[ExprT]) convertComparisonExpr(
 	values, err := c.parseValueExpr(expr.Right, colName.Alias, colName.FieldName, colName.ValueType)
 	if err != nil {
 		return out, err
-	}
-
-	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
-	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
-	if colName.Alias == sadefs.ScheduleID && colName.FieldName == sadefs.WorkflowID {
-		if !isSupportedKeywordOperator(expr.Operator) {
-			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
-		}
-		if c.archetypeID == chasm.SchedulerArchetypeID {
-			// CHASM path handles both V1 (prefixed) and V2 (unprefixed) schedules during migration.
-			// TODO: once V1 schedules are fully migrated to CHASM, remove the OR/AND and only use V2 (unprefixed) values.
-			v1Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, prefixScheduleIDValues(values))
-			if err != nil {
-				return out, err
-			}
-			v2Expr, err := c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, values)
-			if err != nil {
-				return out, err
-			}
-			// Negative operators must use AND so both V1 and V2 forms are excluded.
-			// Positive operators use OR so a match on either V1 or V2 form is a hit.
-			if isNegativeScheduleIDOperator(expr.Operator) {
-				return c.storeQC.BuildAndExpr(v1Expr, v2Expr)
-			}
-			return c.storeQC.BuildOrExpr(v1Expr, v2Expr)
-		}
-		// V1-only path: apply prefix and fall through to keyword handling.
-		values = prefixScheduleIDValues(values)
 	}
 
 	switch colName.ValueType {
@@ -821,15 +792,6 @@ func isSupportedKeywordOperator(operator string) bool {
 	return slices.Contains(supportedKeywordOperators, operator)
 }
 
-// isNegativeScheduleIDOperator returns true for operators that express exclusion.
-// For ScheduleId filters in the CHASM migration path, negative operators require AND
-// (both V1 and V2 forms must be excluded), while positive operators use OR.
-func isNegativeScheduleIDOperator(operator string) bool {
-	return operator == sqlparser.NotEqualStr ||
-		operator == sqlparser.NotInStr ||
-		operator == sqlparser.NotStartsWithStr
-}
-
 func isSupportedKeywordListOperator(operator string) bool {
 	return slices.Contains(supportedKeywordListOperators, operator)
 }
@@ -840,19 +802,4 @@ func isSupportedTextOperator(operator string) bool {
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
 	return slices.Contains(supportedTypesRangeCond, saType)
-}
-
-// prefixScheduleIDValues prepends the V1 schedule workflow ID prefix to all values.
-// Used when translating ScheduleId search attribute comparisons to WorkflowId comparisons.
-func prefixScheduleIDValues(values any) any {
-	switch v := values.(type) {
-	case []any:
-		result := make([]any, len(v))
-		for i, item := range v {
-			result[i] = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", item)
-		}
-		return result
-	default:
-		return primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", v)
-	}
 }

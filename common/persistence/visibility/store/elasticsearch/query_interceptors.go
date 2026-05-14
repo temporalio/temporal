@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -36,7 +35,6 @@ type (
 		chasmMapper    *chasm.VisibilitySearchAttributesMapper
 		metricsHandler metrics.Handler
 		logger         log.Logger
-		archetypeID    chasm.ArchetypeID
 	}
 )
 
@@ -63,7 +61,6 @@ func NewValuesInterceptor(
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	archetypeID chasm.ArchetypeID,
 ) *valuesInterceptor {
 	saTypeMap := store.CombineTypeMaps(csaTypeMap, chasmMapper)
 	return &valuesInterceptor{
@@ -72,7 +69,6 @@ func NewValuesInterceptor(
 		chasmMapper:    chasmMapper,
 		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
 		logger:         logger,
-		archetypeID:    archetypeID,
 	}
 }
 
@@ -132,11 +128,6 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {
 			return nil, err
-		}
-
-		// TODO: once V1 schedules are fully migrated to CHASM, remove this block entirely.
-		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID && vi.archetypeID != chasm.SchedulerArchetypeID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		value, err = vi.validateValueType(name, value, fieldType)

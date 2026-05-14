@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
@@ -43,7 +42,6 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -84,7 +82,6 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -131,7 +128,6 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
 	)
 
 	cases := []struct {
@@ -182,33 +178,6 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 	s.Equal(sadefs.WorkflowID, fieldName)
 }
 
-// Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
-// including prepending the WorkflowIDPrefix.
-func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
-	vi := NewValuesInterceptor(
-		"test-namespace",
-		searchattribute.TestEsNameTypeMap(),
-		nil,
-		metrics.NoopMetricsHandler,
-		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
-	)
-
-	values, err := vi.Values(sadefs.ScheduleID, sadefs.WorkflowID, "test-schedule-id")
-	s.NoError(err)
-	s.Len(values, 1)
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
-
-	values, err = vi.Values(sadefs.ScheduleID,
-		sadefs.WorkflowID,
-		"test-schedule-id-1",
-		"test-schedule-id-2")
-	s.NoError(err)
-	s.Len(values, 2)
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-1", values[0])
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-2", values[1])
-}
-
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	vi := NewValuesInterceptor(
@@ -217,7 +186,6 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
 	)
 
 	values, err := vi.Values(sadefs.ScheduleID, sadefs.ScheduleID, "test-workflow-id")

@@ -2307,7 +2307,6 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 		chasmMapper,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
-		chasm.UnspecifiedArchetypeID,
 	)
 
 	values, err := vi.Values("ChasmCompleted", "TemporalBool01", true)

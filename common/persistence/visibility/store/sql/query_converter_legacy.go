@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -399,35 +398,6 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
 	}
 
-	// ScheduleId is a synthetic SA mapping to WorkflowId. V1 schedules store WorkflowId with a
-	// "temporal-sys-scheduler:" prefix; V2/CHASM schedules store it without the prefix.
-	// In the CHASM context (migration period), generate an OR/AND to match/exclude both V1 and V2.
-	// This block runs after the STARTS_WITH → LIKE conversion above so the V1 clone inherits the
-	// already-converted operator and escape settings.
-	// TODO: once V1 schedules are fully migrated to CHASM, remove this OR/AND block and only use V2 (unprefixed) values.
-	if saColNameExpr.alias == sadefs.ScheduleID && saColNameExpr.fieldName == sadefs.WorkflowID && c.archetypeID == chasm.SchedulerArchetypeID {
-		isNegative := expr.Operator == sqlparser.NotEqualStr ||
-			expr.Operator == sqlparser.NotInStr ||
-			expr.Operator == sqlparser.NotLikeStr
-		v1Expr := &sqlparser.ComparisonExpr{
-			Operator: expr.Operator,
-			Left:     expr.Left,
-			Right:    addSchedulePrefixToSQLExpr(expr.Right),
-			Escape:   expr.Escape,
-		}
-		// Negative operators use AND so both V1 and V2 forms are excluded.
-		// Positive operators use OR so a match on either form is a hit.
-		if isNegative {
-			*exprRef = &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{Left: v1Expr, Right: expr},
-			}
-		} else {
-			*exprRef = &sqlparser.ParenExpr{
-				Expr: &sqlparser.OrExpr{Left: v1Expr, Right: expr},
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -516,11 +486,6 @@ func (c *QueryConverterLegacy) convertValueExpr(
 		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
-		}
-
-		// TODO: once V1 schedules are fully migrated to CHASM, remove this block entirely.
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID && c.archetypeID != chasm.SchedulerArchetypeID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		switch v := value.(type) {
@@ -718,21 +683,4 @@ func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
 		}
 	}
 	return false
-}
-
-// addSchedulePrefixToSQLExpr returns a copy of the SQL value expression with the V1 schedule
-// WorkflowId prefix prepended. Handles both single values (*unsafeSQLString) and tuples (IN clause).
-func addSchedulePrefixToSQLExpr(expr sqlparser.Expr) sqlparser.Expr {
-	switch e := expr.(type) {
-	case *unsafeSQLString:
-		return newUnsafeSQLString(primitives.ScheduleWorkflowIDPrefix + e.Val)
-	case sqlparser.ValTuple:
-		result := make(sqlparser.ValTuple, len(e))
-		for i, item := range e {
-			result[i] = addSchedulePrefixToSQLExpr(item)
-		}
-		return result
-	default:
-		return expr
-	}
 }
