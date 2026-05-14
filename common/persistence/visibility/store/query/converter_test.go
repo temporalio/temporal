@@ -1697,18 +1697,6 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		},
 
 		{
-			name: "success special ScheduleID",
-			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(sadefs.ScheduleID),
-			},
-			out: NewSAColumn(
-				sadefs.ScheduleID,
-				sadefs.WorkflowID,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-		},
-
-		{
 			name: "success backticks",
 			in: &sqlparser.ColName{
 				Name: sqlparser.NewColIdent("`AliasForKeyword01`"),
@@ -1951,15 +1939,6 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			expr:   sqlparser.NewStrVal([]byte("foo")),
 			alias:  sadefs.WorkflowType,
 			field:  sadefs.WorkflowType,
-			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			out:    "foo",
-		},
-
-		{
-			name:   "success special ScheduleID",
-			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  sadefs.ScheduleID,
-			field:  sadefs.WorkflowID,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
 		},

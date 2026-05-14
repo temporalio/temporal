@@ -5124,7 +5124,7 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 		if err != nil {
 			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
-		query, err = scheduler.RewriteScheduleIDQuery(query, chasmEnabled, saMapper, namespaceName)
+		query, err = scheduler.RewriteScheduleIDQuery(query, chasmEnabled, saMapper, saNameType, namespaceName)
 		if err != nil {
 			return "", err
 		}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -11,6 +12,14 @@ import (
 
 // TestMapper only processes "test-namespace"; use it so custom SA lookups resolve correctly.
 var testNS = namespace.Name("test-namespace")
+
+// emptyNameTypeMap has no custom SAs — ScheduleId is synthetic.
+var emptyNameTypeMap = searchattribute.NewNameTypeMap(nil)
+
+// customScheduleIDNameTypeMap simulates a namespace that registered ScheduleId as a custom SA.
+var customScheduleIDNameTypeMap = searchattribute.NewNameTypeMap(map[string]enumspb.IndexedValueType{
+	"ScheduleId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+})
 
 func TestRewriteScheduleIDQuery(t *testing.T) {
 	t.Parallel()
@@ -22,6 +31,7 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 		query        string
 		chasmEnabled bool
 		mapper       searchattribute.Mapper
+		saNameType   *searchattribute.NameTypeMap // nil means emptyNameTypeMap
 		want         string
 	}{
 		// Empty / no-op cases.
@@ -103,6 +113,12 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched')",
 		},
 		{
+			name:         "CHASM TemporalScheduleId alias OR",
+			query:        "TemporalScheduleId = 'my-sched'",
+			chasmEnabled: true,
+			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched')",
+		},
+		{
 			name:         "CHASM starts with OR",
 			query:        "ScheduleId STARTS_WITH 'my-'",
 			chasmEnabled: true,
@@ -151,12 +167,22 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched') and TemporalSchedulePaused = true",
 		},
 
-		// Custom SA named ScheduleId — must NOT be rewritten.
+		// Custom SA named ScheduleId with explicit alias mapping (check 1: mapper).
 		{
-			name:         "custom SA named ScheduleId not rewritten",
+			name:         "custom SA with alias mapping not rewritten",
 			query:        "ScheduleId = 'my-sched'",
 			chasmEnabled: true,
 			mapper:       &searchattribute.TestMapper{WithCustomScheduleID: true},
+			want:         "ScheduleId = 'my-sched'",
+		},
+
+		// Custom SA named ScheduleId registered in the type map without alias (check 2: type map).
+		// This is the common case when a user adds ScheduleId via AddSearchAttributes.
+		{
+			name:         "custom SA in type map not rewritten",
+			query:        "ScheduleId = 'my-sched'",
+			chasmEnabled: true,
+			saNameType:   &customScheduleIDNameTypeMap,
 			want:         "ScheduleId = 'my-sched'",
 		},
 	}
@@ -168,7 +194,11 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			if mapper == nil {
 				mapper = &searchattribute.NoopMapper{}
 			}
-			got, err := RewriteScheduleIDQuery(tc.query, tc.chasmEnabled, mapper, testNS)
+			saNameType := emptyNameTypeMap
+			if tc.saNameType != nil {
+				saNameType = *tc.saNameType
+			}
+			got, err := RewriteScheduleIDQuery(tc.query, tc.chasmEnabled, mapper, saNameType, testNS)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})

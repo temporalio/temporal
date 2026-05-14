@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
+var workflowIDCol = &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.WorkflowID)}
+
 // RewriteScheduleIDQuery rewrites ScheduleId comparisons in the query string to WorkflowId
 // comparisons before the query reaches the visibility store converters.
 //
@@ -19,8 +21,8 @@ import (
 // operators, and AND for negative operators (!=, NOT IN, NOT STARTS_WITH), so both stores are
 // correctly included or excluded.
 //
-// If the user has defined a custom search attribute named ScheduleId that maps to a field other
-// than WorkflowId, this function leaves the expression unchanged.
+// If the user has defined a custom search attribute named ScheduleId, this function leaves the
+// expression unchanged; the converter handles it as a regular keyword SA.
 //
 // TODO: once V1 schedules are fully migrated to CHASM, drop the OR/AND and emit only the
 // unprefixed V2 WorkflowId condition.
@@ -28,6 +30,7 @@ func RewriteScheduleIDQuery(
 	queryStr string,
 	chasmEnabled bool,
 	saMapper searchattribute.Mapper,
+	saNameType searchattribute.NameTypeMap,
 	ns namespace.Name,
 ) (string, error) {
 	if strings.TrimSpace(queryStr) == "" {
@@ -47,7 +50,7 @@ func RewriteScheduleIDQuery(
 		return queryStr, nil
 	}
 
-	changed := rewriteExpr(&sel.Where.Expr, chasmEnabled, saMapper, ns.String())
+	changed := rewriteExpr(&sel.Where.Expr, chasmEnabled, saMapper, saNameType, ns.String())
 	if !changed {
 		return queryStr, nil
 	}
@@ -56,36 +59,34 @@ func RewriteScheduleIDQuery(
 
 // rewriteExpr recursively walks expr and rewrites ScheduleId comparison nodes in-place.
 // Returns true if any rewriting occurred.
-func rewriteExpr(exprRef *sqlparser.Expr, chasmEnabled bool, saMapper searchattribute.Mapper, ns string) bool {
+func rewriteExpr(exprRef *sqlparser.Expr, chasmEnabled bool, saMapper searchattribute.Mapper, saNameType searchattribute.NameTypeMap, ns string) bool {
 	switch e := (*exprRef).(type) {
 	case *sqlparser.AndExpr:
-		l := rewriteExpr(&e.Left, chasmEnabled, saMapper, ns)
-		r := rewriteExpr(&e.Right, chasmEnabled, saMapper, ns)
+		l := rewriteExpr(&e.Left, chasmEnabled, saMapper, saNameType, ns)
+		r := rewriteExpr(&e.Right, chasmEnabled, saMapper, saNameType, ns)
 		return l || r
 	case *sqlparser.OrExpr:
-		l := rewriteExpr(&e.Left, chasmEnabled, saMapper, ns)
-		r := rewriteExpr(&e.Right, chasmEnabled, saMapper, ns)
+		l := rewriteExpr(&e.Left, chasmEnabled, saMapper, saNameType, ns)
+		r := rewriteExpr(&e.Right, chasmEnabled, saMapper, saNameType, ns)
 		return l || r
 	case *sqlparser.ParenExpr:
-		return rewriteExpr(&e.Expr, chasmEnabled, saMapper, ns)
+		return rewriteExpr(&e.Expr, chasmEnabled, saMapper, saNameType, ns)
 	case *sqlparser.NotExpr:
-		return rewriteExpr(&e.Expr, chasmEnabled, saMapper, ns)
+		return rewriteExpr(&e.Expr, chasmEnabled, saMapper, saNameType, ns)
 	case *sqlparser.ComparisonExpr:
-		return rewriteComparison(exprRef, e, chasmEnabled, saMapper, ns)
+		return rewriteComparison(exprRef, e, chasmEnabled, saMapper, saNameType, ns)
 	case *sqlparser.IsExpr:
-		return rewriteIsExpr(e, saMapper, ns)
+		return rewriteIsExpr(e, saMapper, saNameType, ns)
 	}
 	return false
 }
 
 // rewriteComparison rewrites a single ComparisonExpr if its LHS is the synthetic ScheduleId SA.
-func rewriteComparison(exprRef *sqlparser.Expr, expr *sqlparser.ComparisonExpr, chasmEnabled bool, saMapper searchattribute.Mapper, ns string) bool {
+func rewriteComparison(exprRef *sqlparser.Expr, expr *sqlparser.ComparisonExpr, chasmEnabled bool, saMapper searchattribute.Mapper, saNameType searchattribute.NameTypeMap, ns string) bool {
 	col, ok := expr.Left.(*sqlparser.ColName)
-	if !ok || !isSyntheticScheduleIDColumn(col, saMapper, ns) {
+	if !ok || !isScheduleIDToWorkflowIDColumn(col, saMapper, saNameType, ns) {
 		return false
 	}
-
-	workflowIDCol := &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.WorkflowID)}
 
 	if !chasmEnabled {
 		// V1-only: prefix the value and use WorkflowId as column.
@@ -117,9 +118,9 @@ func rewriteComparison(exprRef *sqlparser.Expr, expr *sqlparser.ComparisonExpr, 
 
 // rewriteIsExpr rewrites a ScheduleId IS [NOT] NULL expression to use WorkflowId.
 // No prefix rewriting is needed for IS NULL / IS NOT NULL.
-func rewriteIsExpr(expr *sqlparser.IsExpr, saMapper searchattribute.Mapper, ns string) bool {
+func rewriteIsExpr(expr *sqlparser.IsExpr, saMapper searchattribute.Mapper, saNameType searchattribute.NameTypeMap, ns string) bool {
 	col, ok := expr.Expr.(*sqlparser.ColName)
-	if !ok || !isSyntheticScheduleIDColumn(col, saMapper, ns) {
+	if !ok || !isScheduleIDToWorkflowIDColumn(col, saMapper, saNameType, ns) {
 		return false
 	}
 	expr.Expr = &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.WorkflowID)}
@@ -135,17 +136,14 @@ func IsNegativeScheduleIDOperator(operator string) bool {
 		operator == sqlparser.NotStartsWithStr
 }
 
-// isSyntheticScheduleIDColumn returns true if col refers to the synthetic ScheduleId search
-// attribute (which maps to WorkflowId), as opposed to a user-defined custom SA named ScheduleId.
-func isSyntheticScheduleIDColumn(col *sqlparser.ColName, saMapper searchattribute.Mapper, ns string) bool {
+// isScheduleIDToWorkflowIDColumn returns true if col refers to the ScheduleId search attribute
+// that maps to WorkflowId (the built-in virtual SA), as opposed to a user-defined custom SA
+// named ScheduleId which should be queried as-is.
+func isScheduleIDToWorkflowIDColumn(col *sqlparser.ColName, saMapper searchattribute.Mapper, saNameType searchattribute.NameTypeMap, ns string) bool {
 	alias := col.Name.String()
-	// Apply the custom SA mapper. If the alias resolves to a different field name, it is a
-	// user-defined custom SA and the synthetic rewrite does not apply.
-	if mapped, err := saMapper.GetFieldName(alias, ns); err == nil && mapped != alias {
+	if searchattribute.IsUserDefinedSearchAttribute(alias, saMapper, saNameType, ns) {
 		return false
 	}
-	// The synthetic ScheduleId is identified by the alias matching "ScheduleId" after stripping
-	// the optional "Temporal" reserved prefix (so both ScheduleId and TemporalScheduleId match).
 	return strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID
 }
 
