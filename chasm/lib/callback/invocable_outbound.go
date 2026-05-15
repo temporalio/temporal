@@ -84,11 +84,9 @@ func (n invocableOutbound) Invoke(
 	startTime := time.Now()
 	n.completion.Header = n.callback.Header
 
-	// If the token is set on the callback, pass it along in completion's headers.
+	// If the Nexus callback token is set on the callback, pass it along in completion's headers.
 	if n.callback.GetToken() != "" {
-		// TODO(chrsmith): This is a bug. OperationToken is wrong, we need to add a new field
-		// and wire it to a _different_ header. My mistake.
-		n.completion.OperationToken = n.callback.GetToken()
+		n.completion.CallbackToken = n.callback.GetToken()
 	}
 
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)

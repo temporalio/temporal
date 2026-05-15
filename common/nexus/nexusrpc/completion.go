@@ -12,6 +12,12 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 )
 
+const (
+	// Copy of common/nexus.CallbackTokenHeader, to avoid import cycle.
+	// Header to identify the callback being resolved for callbacks to resolve Nexus operations.
+	commonnexusCallbackTokenHeader = "Temporal-Callback-Token"
+)
+
 // CompletionHTTPClient is a client for sending Nexus operation completion callbacks via HTTP.
 type CompletionHTTPClient struct {
 	baseHTTPClient
@@ -92,10 +98,14 @@ type CompleteOperationOptions struct {
 	// Header to send in the completion request.
 	// Note that this is a Nexus header, not an HTTP header.
 	Header nexus.Header
-	// OperationToken is the unique token for this operation. This is returned by the Nexus handler from the call to
-	// StartOperation. It has no meaning outside the handler, and is used to identify the operation within the handler system.
-	// and is handler-specific.Used when a completion callback is received before a started response.
+	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
+	// started response. (Otherwise, the operation token received from the handler's response to StartOperation will
+	// be used instead.)
 	OperationToken string
+	// CallbackToken is the unique token for the Nexus operation being completed. It is passed to the handler via
+	// the CallbackTokenHeader, but is now an explicit field on the Callback proto. Should be set if the completion
+	// operation is a Nexus callback. (See nexuscommon.CallbackTokenHeader.)
+	CallbackToken string
 	// StartTime is the time the operation started. Used when a completion callback is received before a started response.
 	StartTime time.Time
 	// CloseTime is the time the operation completed. This may be different from the time the completion callback is delivered.
@@ -166,6 +176,9 @@ func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, r
 	}
 	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
 		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
+	}
+	if c.Header.Get(commonnexusCallbackTokenHeader) == "" && c.CallbackToken != "" {
+		request.Header.Set(commonnexusCallbackTokenHeader, c.CallbackToken)
 	}
 	if c.Header.Get(headerOperationStartTime) == "" && !c.StartTime.IsZero() {
 		request.Header.Set(headerOperationStartTime, c.StartTime.Format(http.TimeFormat))
