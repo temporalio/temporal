@@ -7599,7 +7599,7 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	testCases := []struct {
 		name            string
 		featureEnabled  bool
-		standby         bool
+		standby         bool // simulate running on a standby (non-active) cluster
 		activities      map[int64]*persistencespb.ActivityInfo
 		expectedQueues  map[string]int // controlQueue -> expected command count
 		expectedNoTasks bool
