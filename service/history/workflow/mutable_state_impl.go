@@ -4544,6 +4544,14 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 		return nil
 	}
 
+	// Cancel commands are best-effort and only dispatched on the active cluster.
+	// Skip task generation on standby to avoid creating tasks that will be dropped.
+	activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(
+		ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
+	if activeCluster != ms.clusterMetadata.GetCurrentClusterName() {
+		return nil
+	}
+
 	serializer := tasktoken.NewSerializer()
 	wfKey := ms.GetWorkflowKey()
 	nsID := ms.GetNamespaceEntry().ID().String()
