@@ -3,6 +3,7 @@ package nexus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -155,7 +156,7 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 		// This is useful for test and single-node deployments that need endpoint writes
 		// to be visible to GetByName immediately, without waiting for background long poll.
 		if err := r.loadEndpoints(ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("refreshing endpoints: %w", err)
 		}
 	}
 
@@ -178,7 +179,7 @@ func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persist
 		// This is useful for test and single-node deployments that need endpoint writes
 		// to be visible to GetByID immediately, without waiting for background long poll.
 		if err := r.loadEndpoints(ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("refreshing endpoints: %w", err)
 		}
 	}
 
