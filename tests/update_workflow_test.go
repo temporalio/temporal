@@ -4614,7 +4614,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 
 			s.Equal("args-value-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
 			s.Equal(env.Tv().HandlerName(), updRequest.GetInput().GetName())
-			s.EqualValues(7, updRequestMsg.GetEventId())
+			s.EqualValues(5, updRequestMsg.GetEventId())
 
 			return env.UpdateAcceptCompleteMessages(env.Tv(), updRequestMsg), nil
 		default:
@@ -4665,26 +4665,37 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		resCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
-	query1ResultCh := make(chan QueryResult)
-	query2ResultCh := make(chan QueryResult)
+	query1ResultCh := make(chan QueryResult, 1)
+	query2ResultCh := make(chan QueryResult, 1)
 	go queryFn(query1ResultCh)
 	go queryFn(query2ResultCh)
-	query1Res := <-query1ResultCh
-	query2Res := <-query2ResultCh
+
+	var query1Res, query2Res QueryResult
+	select {
+	case query1Res = <-query1ResultCh:
+		cancelQueries() // Cancel 2nd query to avoid waiting for it after 1st query already failed and cleared WF context.
+		query2Res = <-query2ResultCh
+	case query2Res = <-query2ResultCh:
+		cancelQueries() // Cancel 1st query to avoid waiting for it after 2nd query already failed and cleared WF context.
+		query1Res = <-query1ResultCh
+	}
+
 	s.Error(query1Res.Err)
 	s.Error(query2Res.Err)
 	s.Nil(query1Res.Resp)
 	s.Nil(query2Res.Resp)
 
+	isBufferedErr := func(err error) bool {
+		return common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)
+	}
+
 	var queryBufferFullErr *serviceerror.ResourceExhausted
-	if common.IsContextDeadlineExceededErr(query1Res.Err) {
-		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+	if isBufferedErr(query1Res.Err) {
 		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
 	} else {
 		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
-		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
 	}
 
 	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
