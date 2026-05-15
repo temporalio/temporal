@@ -1350,7 +1350,7 @@ type capturingTaskMatchHook struct {
 type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
-	IsSyncMatch       bool
+	SyncMatchOutcome  hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1370,9 +1370,9 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName: h.taskQueueName,
-		TaskQueueType: h.taskQueueType,
-		IsSyncMatch:   event.IsSyncMatch,
+		TaskQueueName:    h.taskQueueName,
+		TaskQueueType:    h.taskQueueType,
+		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1610,7 +1610,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.True(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeSuccess, calls[0].SyncMatchOutcome)
 	s.Nil(calls[0].DeploymentVersion)
 }
 
@@ -1634,7 +1634,74 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.False(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
+	if !s.newMatcher {
+		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
+	}
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// Set rate limit to zero RPS — this blocks all sync matches due to rate limiting.
+	pm.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	pm.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Set up a waiting poller so sync match would succeed if not rate-limited.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	// AddTask should fall through to spool because rate limiting blocked sync match.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeRateLimited, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// No rate limiting configured — task should spool normally without rate limit flag.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNotInvoked() {
@@ -1741,8 +1808,8 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 
 	s.Len(hook1.getCalls(), 1)
 	s.Len(hook2.getCalls(), 1)
-	s.False(hook1.getCalls()[0].IsSyncMatch)
-	s.False(hook2.getCalls()[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook1.getCalls()[0].SyncMatchOutcome)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
 type mockUserDataManager struct {

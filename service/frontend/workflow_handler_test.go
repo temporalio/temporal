@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
@@ -4340,6 +4341,58 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
+	// When multiple partitions route to the same matching host, only one RPC should be sent per host.
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(4) // 4 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Wrap the mock matching client with a Route() that maps partitions to 2 hosts:
+	// root (partition 0) and partition 1 -> host-a, partitions 2 and 3 -> host-b.
+	routingClient := &routingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		routeFn: func(p tqid.Partition) (string, error) {
+			if strings.Contains(p.RpcName(), "/2") || strings.Contains(p.RpcName(), "/3") {
+				return "host-b", nil
+			}
+			return "host-a", nil
+		},
+	}
+	wh.matchingClient = routingClient
+
+	// 4 partitions across 2 hosts x 2 task types = 4 RPCs (not 8).
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(4)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// Verifies graceful degradation: ShutdownWorker succeeds even when poll cancellation fails.
 	// This ensures backward compatibility during rolling upgrades.
@@ -4725,4 +4778,15 @@ func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
+// routingMatchingClient wraps a mock MatchingServiceClient to also implement matching.RoutingClient,
+// allowing tests to verify host-based deduplication in cancelOutstandingWorkerPolls.
+type routingMatchingClient struct {
+	*matchingservicemock.MockMatchingServiceClient
+	routeFn func(p tqid.Partition) (string, error)
+}
+
+func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
+	return r.routeFn(p)
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -65,5 +66,8 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
+		// RecordTaskAdd records the outcome of a task add to this physical queue using
+		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
+		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
 	}
 )

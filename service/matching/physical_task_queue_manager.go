@@ -451,6 +451,15 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
+func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior) {
+	c.metricsHandler.Counter(metrics.TasksAddedCounter.Name()).Record(
+		1,
+		metrics.TaskAddResultTag(result),
+		metrics.ForwardedTag(forwarded),
+		metrics.VersioningBehaviorTag(behavior),
+	)
+}
+
 // PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
