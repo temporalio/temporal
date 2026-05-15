@@ -55,14 +55,14 @@ func hardDeadlockTimeout() time.Duration {
 // test failure. Use t.Context() inside the callback to honor the timeout.
 func Require(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration) {
 	tb.Helper()
-	run(ctx, tb, condition, timeout, pollInterval, "", "await.Require", requireMisuseHint, true)
+	run(ctx, tb, condition, timeout, pollInterval, "", "Require", requireMisuseHint, true)
 }
 
 // Requiref is like [Require] but adds a formatted message to the timeout
 // failure.
 func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration, msg string, args ...any) {
 	tb.Helper()
-	run(ctx, tb, condition, timeout, pollInterval, fmt.Sprintf(msg, args...), "await.Requiref", requireMisuseHint, true)
+	run(ctx, tb, condition, timeout, pollInterval, fmt.Sprintf(msg, args...), "Requiref", requireMisuseHint, true)
 }
 
 func run(
