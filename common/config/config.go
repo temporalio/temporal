@@ -376,12 +376,7 @@ type (
 		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
 		// AddressTranslator translates Cassandra IP addresses, used for cases when IP addresses gocql driver returns are not accessible from the server
 		AddressTranslator *CassandraAddressTranslator `yaml:"addressTranslator"`
-		// ReconnectionPolicy configures gocql's exponential reconnection policy for downed connections.
-		// If not set, gocql is configured with MaxRetries=30, InitialInterval=1s, MaxInterval=10s.
-		// Lowering MaxRetries is recommended on large clusters: gocql calls pool.connect()
-		// synchronously during NewSession (one goroutine per discovered host) and waits for all
-		// per-host pools to finish initial fill before returning, so a single host that is down can
-		// hold session creation for the full retry budget (~275s with the defaults).
+		// ReconnectionPolicy configures gocql's exponential reconnection policy.
 		ReconnectionPolicy *CassandraReconnectionPolicy `yaml:"reconnectionPolicy"`
 	}
 
@@ -408,12 +403,10 @@ type (
 	}
 
 	// CassandraReconnectionPolicy configures the parameters of gocql's ExponentialReconnectionPolicy.
-	// Any zero-valued field falls back to the gocql wrapper default (MaxRetries=30, InitialInterval=1s, MaxInterval=10s).
+	// Any zero-valued field falls back to the gocql wrapper default (MaxRetries=3, InitialInterval=1s, MaxInterval=10s).
 	CassandraReconnectionPolicy struct {
 		// MaxRetries caps the number of reconnection attempts gocql makes when filling a host's pool.
-		// Note: pool.connect() is invoked synchronously during NewSession, so the worst-case wait
-		// for a single down host is roughly InitialInterval + 2*InitialInterval + ... capped at
-		// MaxInterval, summed over MaxRetries. (defaults to 30 if not set)
+		// Defaults to 3.
 		MaxRetries int `yaml:"maxRetries"`
 		// InitialInterval is the wait before the first reconnection attempt; subsequent attempts
 		// double until MaxInterval. (defaults to 1 second if not set)
