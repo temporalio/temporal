@@ -20,6 +20,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/softassert"
 )
 
 // startArgs holds the arguments needed to start a Nexus operation invocation.
@@ -252,7 +253,7 @@ func (i *invocationSystem) Start(
 			OriginalFailure: &nexusFailure,
 		}
 	default:
-		i.logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
+		softassert.Fail(i.logger, "unexpected system nexus start response variant", tag.RequestID(args.requestID))
 		he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 		he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 		return nil, he

@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -41,6 +42,7 @@ var transitionCancellationRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationRescheduled) error {
+		softassert.That(ctx.Logger(), c.NextAttemptScheduleTime != nil, "cancellation rescheduled transition called with nil next attempt schedule time")
 		c.Attempt++
 		c.NextAttemptScheduleTime = nil
 
@@ -64,6 +66,7 @@ var transitionCancellationAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAttemptFailed) error {
+		softassert.That(ctx.Logger(), event.Failure != nil, "cancellation attempt failed transition called with nil failure")
 		currentTime := ctx.Now(c)
 
 		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
@@ -98,6 +101,7 @@ var TransitionCancellationFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.CANCELLATION_STATUS_FAILED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationFailed) error {
+		softassert.That(ctx.Logger(), event.Failure != nil, "cancellation failed transition called with nil failure")
 		currentTime := ctx.Now(c)
 		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
 		c.LastAttemptFailure = event.Failure

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/softassert"
 )
 
 var _ chasm.Component = (*Cancellation)(nil)
@@ -94,6 +95,9 @@ func (c *Cancellation) loadArgs(
 	_ chasm.NoValue,
 ) (cancelArgs, error) {
 	op := c.Operation.Get(ctx)
+	// Cancellation is only scheduled after the operation reaches STARTED, which sets the token.
+	// An empty token here means the start response was malformed or the state is inconsistent.
+	softassert.That(ctx.Logger(), op.OperationToken != "", "cancellation load args called with empty operation token")
 
 	var invocationData InvocationData
 	if store, ok := op.Store.TryGet(ctx); ok {
