@@ -220,6 +220,13 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // GetWorkflowExecutionResult returns the result of a workflow execution if completed,
+  // or the current status if still running. Optionally registers callbacks to be invoked
+  // upon completion.
+  rpc GetWorkflowExecutionResult(GetWorkflowExecutionResultRequest) returns (GetWorkflowExecutionResultResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // ReplicateEventsV2 replicates workflow history events
   rpc ReplicateEventsV2(ReplicateEventsV2Request) returns (ReplicateEventsV2Response) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

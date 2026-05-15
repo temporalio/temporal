@@ -4780,6 +4780,168 @@ func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionResult() {
+	var (
+		config *Config
+		req    *workflowservice.GetWorkflowExecutionResultRequest
+		resp   *workflowservice.GetWorkflowExecutionResultResponse
+		err    error
+	)
+
+	testCases := []struct {
+		name   string
+		setup  func(s *WorkflowHandlerSuite)
+		assert func(s *WorkflowHandlerSuite)
+	}{
+		{
+			name: "NilRequest",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				req = nil
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.Equal(errRequestNotSet, err)
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "FeatureFlagDisabled",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(false)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.Equal(errGetWorkflowExecutionResultAPINotAllowed, err)
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "NamespaceNotFound",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(""), errors.New("namespace not found")).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: "missing-namespace",
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.EqualError(err, "namespace not found")
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "RequestIDTooLong",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+					RequestId: strings.Repeat("a", config.MaxIDLengthLimit()+1),
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.Equal(errRequestIDTooLong, err)
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "InvalidLinks",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+					Links: []*commonpb.Link{
+						{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{}}},
+					},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "InvalidExecution",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: ""},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.Error(err)
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "HistoryClientError",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
+				s.mockHistoryClient.EXPECT().GetWorkflowExecutionResult(gomock.Any(), gomock.Any()).Return(nil, errors.New("history client error")).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.EqualError(err, "history client error")
+				s.Nil(resp)
+			},
+		},
+		{
+			name: "Success",
+			setup: func(s *WorkflowHandlerSuite) {
+				config.EnableGetWorkflowExecutionResult = dc.GetBoolPropertyFnFilteredByNamespace(true)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
+				expectedResp := &historyservice.GetWorkflowExecutionResultResponse{
+					Response: &workflowservice.GetWorkflowExecutionResultResponse{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: testWorkflowID,
+							RunId:      testRunID,
+						},
+						CompletionStatus: &workflowservice.GetWorkflowExecutionResultResponse_Success_{
+							Success: &workflowservice.GetWorkflowExecutionResultResponse_Success{},
+						},
+					},
+				}
+				s.mockHistoryClient.EXPECT().GetWorkflowExecutionResult(gomock.Any(), gomock.Any()).Return(expectedResp, nil).Times(1)
+				req = &workflowservice.GetWorkflowExecutionResultRequest{
+					Namespace: s.testNamespace.String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				}
+			},
+			assert: func(s *WorkflowHandlerSuite) {
+				s.NoError(err)
+				s.NotNil(resp)
+				s.NotNil(resp.GetSuccess())
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			config = s.newConfig()
+			req = nil
+			resp = nil
+			err = nil
+			tc.setup(s)
+			wh := s.getWorkflowHandler(config)
+			resp, err = wh.GetWorkflowExecutionResult(context.Background(), req)
+			tc.assert(s)
+		})
+	}
+}
+
 // routingMatchingClient wraps a mock MatchingServiceClient to also implement matching.RoutingClient,
 // allowing tests to verify host-based deduplication in cancelOutstandingWorkerPolls.
 type routingMatchingClient struct {

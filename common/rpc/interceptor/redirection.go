@@ -47,6 +47,7 @@ var (
 	globalAPIResponses = map[string]responseConstructorFn{
 		"DescribeTaskQueue":                  func() any { return &workflowservice.DescribeTaskQueueResponse{} },
 		"DescribeWorkflowExecution":          func() any { return &workflowservice.DescribeWorkflowExecutionResponse{} },
+		"GetWorkflowExecutionResult":         func() any { return &workflowservice.GetWorkflowExecutionResultResponse{} },
 		"GetWorkflowExecutionHistory":        func() any { return &workflowservice.GetWorkflowExecutionHistoryResponse{} },
 		"GetWorkflowExecutionHistoryReverse": func() any { return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{} },
 		"ListArchivedWorkflowExecutions":     func() any { return &workflowservice.ListArchivedWorkflowExecutionsResponse{} },

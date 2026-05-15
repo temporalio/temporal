@@ -46,6 +46,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.GetWorkflowExecutionHistoryReverseRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
+	case *workflowservice.GetWorkflowExecutionResultRequest:
+		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.ListScheduleMatchingTimesRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.ListTaskQueuePartitionsRequest:

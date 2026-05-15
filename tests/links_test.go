@@ -377,6 +377,35 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BufferedDuringWorkflowTask() {
 	s.Positive(info.GetEventId(), "backlink must reference a real event ID after WFT completion")
 }
 
+func (s *LinksSuite) TestGetWorkflowExecutionResult_LinksAttachedToEvent() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableGetWorkflowExecutionResult, true),
+	)
+	run, err := env.SdkClient().ExecuteWorkflow(
+		env.Context(),
+		client.StartWorkflowOptions{
+			TaskQueue: "dont-care",
+		},
+		"test-workflow-type",
+	)
+	s.NoError(err)
+
+	_, err = env.FrontendClient().GetWorkflowExecutionResult(env.Context(), &workflowservice.GetWorkflowExecutionResultRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+		Links:     links,
+	})
+	s.NoError(err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	event := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+}
+
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
 	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

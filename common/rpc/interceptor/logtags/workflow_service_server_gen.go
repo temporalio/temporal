@@ -197,6 +197,16 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.GetWorkflowExecutionHistoryReverseResponse:
 		return nil
+	case *workflowservice.GetWorkflowExecutionResultRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *workflowservice.GetWorkflowExecutionResultResponse:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
 	case *workflowservice.ListActivityExecutionsRequest:
 		return nil
 	case *workflowservice.ListActivityExecutionsResponse:
