@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -14,9 +17,11 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -29,7 +34,7 @@ type CallbacksOTELSuite struct {
 	parallelsuite.Suite[*CallbacksOTELSuite]
 }
 
-func (s *CallbacksOTELSuite) newEnv() *testcore.TestEnv {
+func (s *CallbacksOTELSuite) newEnv(tp trace.TracerProvider) *testcore.TestEnv {
 	return testcore.NewEnv(s.T(),
 		// Allow insecure callback URLs.
 		testcore.WithDynamicConfig(callbacks.AllowedAddresses, []any{
@@ -38,6 +43,15 @@ func (s *CallbacksOTELSuite) newEnv() *testcore.TestEnv {
 
 		// DISABLE CHASM, since the OTEL integration is only wired up to HSM for now.
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+
+		// Inject a real TracerProvider into the History service so the otelhttp-wrapped
+		// callback transport produces spans with a valid SpanContext, which is what
+		// the W3C TraceContext propagator requires to inject the traceparent header.
+		// Without this, the default NoopTracerProvider produces invalid contexts and
+		// propagation.TraceContext.Inject bails before writing the header.
+		testcore.WithServiceFxOptions(primitives.HistoryService,
+			fx.Decorate(func(trace.TracerProvider) trace.TracerProvider { return tp }),
+		),
 	)
 }
 
@@ -47,7 +61,11 @@ func (s *CallbacksOTELSuite) newEnv() *testcore.TestEnv {
 // non-empty, demonstrating end-to-end OTEL propagation through the History callback
 // executor → otelhttp-wrapped transport → outbound HTTP boundary.
 func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
-	env := s.newEnv()
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	s.T().Cleanup(func() { _ = tp.Shutdown(s.T().Context()) })
+
+	env := s.newEnv(tp)
 	ctx := env.Context()
 
 	const (
