@@ -25,6 +25,7 @@
 /tctl*
 /tdbg
 /fairsim
+/mutationtest
 
 # proto images
 /proto/image.bin
