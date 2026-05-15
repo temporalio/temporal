@@ -187,11 +187,6 @@ type (
 
 const NamespaceCacheRefreshInterval = time.Second
 
-var chasmFxOptions = fx.Options(
-	temporal.ChasmLibraryOptions,
-	chasmtests.Module,
-)
-
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	impl := &TemporalImpl{
@@ -429,7 +424,8 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &schedulerClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -526,7 +522,8 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
 			fx.Populate(&c.chasmVisibilityMgr),
@@ -586,7 +583,8 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -653,7 +651,8 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
