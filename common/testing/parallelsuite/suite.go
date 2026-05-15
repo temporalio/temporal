@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,8 +38,9 @@ type Suite[T testingSuite] struct {
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
 
-	guardT guardT
-	ctx    context.Context
+	guardT  guardT
+	ctx     context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
+	ctxOnce sync.Once
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
@@ -77,10 +79,12 @@ func (s *Suite[T]) T() *testing.T {
 // Context returns the test-scoped context (created from [testcontext]).
 // Inside an [Await] callback, it returns the await-scoped context.
 func (s *Suite[T]) Context() context.Context {
-	if s.ctx != nil {
-		return s.ctx
-	}
-	return testcontext.New(s.T())
+	s.ctxOnce.Do(func() {
+		if s.ctx == nil {
+			s.ctx = testcontext.New(s.T())
+		}
+	})
+	return s.ctx
 }
 
 // Run creates a parallel subtest. The callback receives a fresh copy of the
@@ -130,7 +134,7 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
-	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
 		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
 	}
 	structType := typ.Elem()
@@ -171,8 +175,8 @@ func init() {
 	type ds struct{ Suite[*ds] }
 	ptrType := reflect.TypeFor[*ds]()
 	inheritedMethods = make(map[string]bool, ptrType.NumMethod())
-	for i := range ptrType.NumMethod() {
-		inheritedMethods[ptrType.Method(i).Name] = true
+	for method := range ptrType.Methods() {
+		inheritedMethods[method.Name] = true
 	}
 }
 
@@ -227,8 +231,8 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
 
-	for i := range ptrType.NumMethod() {
-		name := ptrType.Method(i).Name
+	for method := range ptrType.Methods() {
+		name := method.Name
 		if !strings.HasPrefix(name, "Test") && !inheritedMethods[name] {
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: suite %s has exported method %s that does not start with Test; "+
@@ -239,8 +243,8 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 	}
 
 	var methods []reflect.Method
-	for i := range ptrType.NumMethod() {
-		method := ptrType.Method(i)
+	for method := range ptrType.Methods() {
+		method := method
 		if !strings.HasPrefix(method.Name, "Test") {
 			continue
 		}
