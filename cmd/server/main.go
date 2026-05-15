@@ -30,6 +30,31 @@ func main() {
 	_ = app.Run(os.Args)
 }
 
+// loadConfig loads the server configuration using the same three-way strategy
+// as the start command: --config-file, legacy flags, or embedded template.
+func loadConfig(c *cli.Context) (*config.Config, error) {
+	switch {
+	case c.IsSet("config-file"):
+		return config.Load(config.WithConfigFile(c.String("config-file")))
+	case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
+		return config.Load(
+			config.WithEnv(c.String("env")),
+			config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
+			config.WithZone(c.String("zone")),
+		)
+	default:
+		return config.Load(config.WithEmbedded())
+	}
+}
+
+// validateConfigFlags checks that --config-file is not mixed with legacy flags.
+func validateConfigFlags(c *cli.Context) error {
+	if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone") || c.IsSet("root")) {
+		return cli.Exit("ERROR: can not use --config, --env, --zone, or --root with --config-file", 1)
+	}
+	return nil
+}
+
 // buildCLI is the main entry point for the temporal server
 func buildCLI() *cli.App {
 	app := cli.NewApp()
@@ -80,11 +105,26 @@ func buildCLI() *cli.App {
 	app.Commands = []*cli.Command{
 		{
 			Name:      "validate-dynamic-config",
-			Usage:     "Validate a dynamic config file[s] with known keys and types",
-			ArgsUsage: "<file> ...",
+			Usage:     "Validate dynamic config file(s). If no files specified, resolves the path from the server config.",
+			ArgsUsage: "[file] ...",
+			Before:    validateConfigFlags,
 			Action: func(c *cli.Context) error {
+				fileNames := c.Args().Slice()
+
+				// If no files specified, resolve from server config.
+				if len(fileNames) == 0 {
+					cfg, err := loadConfig(c)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
+					}
+					if cfg.DynamicConfigClient == nil || cfg.DynamicConfigClient.Filepath == "" {
+						return cli.Exit("No dynamic config file path found in server configuration.", 1)
+					}
+					fileNames = []string{cfg.DynamicConfigClient.Filepath}
+				}
+
 				total := 0
-				for _, fileName := range c.Args().Slice() {
+				for _, fileName := range fileNames {
 					contents, err := os.ReadFile(fileName)
 					if err != nil {
 						return err
@@ -109,14 +149,11 @@ func buildCLI() *cli.App {
 			Name:      "render-config",
 			Usage:     "Render server config template",
 			ArgsUsage: " ",
+			Before:    validateConfigFlags,
 			Action: func(c *cli.Context) error {
-				cfg, err := config.Load(
-					config.WithEnv(c.String("env")),
-					config.WithConfigDir(c.String("config")),
-					config.WithZone(c.String("zone")),
-				)
+				cfg, err := loadConfig(c)
 				if err != nil {
-					return cli.Exit(fmt.Errorf("Unable to load configuration: %w", err), 1)
+					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 				fmt.Println(cfg.String())
 				return nil
@@ -145,11 +182,7 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
-
-				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone") || c.IsSet("root")) {
-					return cli.Exit("ERROR: can not use --config, --env, --zone, or --root with --config-file", 1)
-				}
-				return nil
+				return validateConfigFlags(c)
 			},
 			Action: func(c *cli.Context) error {
 				services := c.StringSlice("service")
@@ -161,22 +194,7 @@ func buildCLI() *cli.App {
 					services = strings.Split(c.String("services"), ",")
 				}
 
-				var cfg *config.Config
-				var err error
-
-				switch {
-				case c.IsSet("config-file"):
-					cfg, err = config.Load(config.WithConfigFile(c.String("config-file")))
-				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
-					cfg, err = config.Load(
-						config.WithEnv(c.String("env")),
-						config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
-						config.WithZone(c.String("zone")),
-					)
-				default:
-					cfg, err = config.Load(config.WithEmbedded())
-				}
-
+				cfg, err := loadConfig(c)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
