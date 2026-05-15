@@ -5168,6 +5168,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// poll update to ensure same outcome is returned
@@ -5218,6 +5225,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("rejection-of-"+env.Tv().UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
 
 			// poll update to ensure same outcome is returned

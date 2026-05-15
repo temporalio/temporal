@@ -873,6 +873,7 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetRequestId(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
