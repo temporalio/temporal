@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/omes v0.0.0-20260512200559-fcd36ea5dfe3
+	github.com/temporalio/omes v0.0.0-20260515002755-4424de5aad8d
 	go.temporal.io/api v1.62.12-0.20260430203359-15c391664683
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	go.uber.org/zap v1.27.1
