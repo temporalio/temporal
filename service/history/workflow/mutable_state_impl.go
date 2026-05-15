@@ -2439,9 +2439,7 @@ func (ms *MutableStateImpl) IsSignalRequested(
 	// fully ramp the writes to CHASM only.
 	signalExists := false
 	if ms.ChasmSignalBacklinksEnabled() {
-		ctx := context.Background()
-		ms.EnsureChasmWorkflowComponent(ctx)
-		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
 		if err != nil {
 			softassert.Fail(ms.logger, fmt.Sprintf("Unexpected error reading CHASM component: %v", err))
 		}
