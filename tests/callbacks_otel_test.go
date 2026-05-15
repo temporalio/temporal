@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -34,6 +35,9 @@ func (s *CallbacksOTELSuite) newEnv() *testcore.TestEnv {
 		testcore.WithDynamicConfig(callbacks.AllowedAddresses, []any{
 			map[string]any{"Pattern": "*", "AllowInsecure": true},
 		}),
+
+		// DISABLE CHASM, since the OTEL integration is only wired up to HSM for now.
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 }
 
@@ -48,16 +52,19 @@ func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
 
 	const (
 		workflowID      = "run-workflow-test"
-		workflowTimeout = 20 * time.Second
+		workflowTimeout = 5 * time.Second
 		workflowType    = "otel-test-workflow"
-		taskQueue       = "task-queue"
 	)
+	taskQueue := testcore.RandomizeStr(s.T().Name())
 
 	// Create a faux service listening for callbacks.
-	receivedTraceparent := make(chan string, 4)
+	//
+	// Buffered so the callback server can return the HTTP response without
+	// blocking on the channel being read.
+	receivedCallbackRequests := make(chan *http.Request, 4)
 	callbackHandlerSvr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
-		case receivedTraceparent <- r.Header.Get("traceparent"):
+		case receivedCallbackRequests <- r:
 		default:
 		}
 		w.WriteHeader(http.StatusOK)
@@ -72,7 +79,7 @@ func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
 
 	// Construct and start the workflow.
 	wfWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
-	wfWorker.RegisterWorkflow(completingWorkflow)
+	wfWorker.RegisterWorkflowWithOptions(completingWorkflow, workflow.RegisterOptions{Name: workflowType})
 	s.NoError(wfWorker.Start())
 	defer wfWorker.Stop()
 
@@ -113,8 +120,9 @@ func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
 	// With the workflow started, we now wait for the workflow to complete successfully,
 	// and then confirm that we received traces from the callback handler.
 	select {
-	case tp := <-receivedTraceparent:
-		s.NotEmpty(tp, "outbound callback should include W3C traceparent header")
+	case gotReq := <-receivedCallbackRequests:
+		tp := gotReq.Header.Get("traceparent")
+		s.NotEmptyf(tp, "outbound callback should include W3C traceparent header. Got: %v", gotReq.Header)
 	case <-time.After(10 * time.Second):
 		s.Fail("callback never fired within timeout")
 	}
