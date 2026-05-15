@@ -1503,7 +1503,10 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 				Identity:   "test",
 			},
 		)
-		s.Error(err)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
 	})
 
 	// Subtest: Neither stack has the schedule. Delete returns error.
@@ -1517,7 +1520,10 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 				Identity:   "test",
 			},
 		)
-		s.Error(err)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
 	})
 }
 
@@ -1666,7 +1672,10 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 				RequestId:  uuid.NewString(),
 			},
 		)
-		s.Error(err)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
 	})
 }
 
