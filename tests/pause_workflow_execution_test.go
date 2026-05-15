@@ -869,7 +869,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
 			ScheduleToCloseTimeout: 30 * time.Second,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
-		for i := 0; i < iterations; i++ {
+		for range iterations{
 			if err := workflow.ExecuteActivity(ctx, tickActivityName).Get(ctx, nil); err != nil {
 				return err
 			}
