@@ -3336,7 +3336,6 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	var invalidArgumentErr *serviceerror.InvalidArgument
 	var unimplementedErr *serviceerror.Unimplemented
 
 	// nil config is valid
@@ -3355,33 +3354,6 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=true and dynamic config enabled is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
-
-	// MaxSkippedDuration below 1 minute is rejected
-	// error type is InvalidArgument
-	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace), &invalidArgumentErr)
-
-	// MaxSkippedDuration exactly 1 minute is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
-	}, s.testNamespace))
-
-	// MaxElapsedDuration below 1 minute is rejected
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace), &invalidArgumentErr)
-
-	// MaxElapsedDuration exactly 1 minute is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
-	}, s.testNamespace))
-
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
