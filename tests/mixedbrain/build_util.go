@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -81,11 +82,51 @@ func resolveReleaseVersion(serverVersion string, tags []string) semver.Version {
 	return best
 }
 
+// cloudReleasePattern matches cloud-release tags of the form
+// `vX.Y.Z-A.B` (no `-rc.*` suffix). The two pre-release components are the
+// cloud iteration number and patch.
+var cloudReleasePattern = regexp.MustCompile(`^v\d+\.\d+\.\d+-\d+\.\d+$`)
+
+// resolveCloudReleaseVersion returns the highest non-rc cloud-release tag.
+// Cloud RC tags (e.g. v1.32.0-156.0-rc.20260513120230) are excluded — only
+// stable cloud releases like v1.32.0-155.3 are considered. Returns the zero
+// value if no matching tag is found.
+func resolveCloudReleaseVersion(tags []string) semver.Version {
+	var best semver.Version
+	for _, tag := range tags {
+		if !cloudReleasePattern.MatchString(tag) {
+			continue
+		}
+		v, err := semver.ParseTolerant(tag)
+		if err != nil {
+			continue
+		}
+		if v.GT(best) {
+			best = v
+		}
+	}
+	return best
+}
+
 // fetchPreviousMinorTag asks the temporal git remote for tags and resolves
 // the latest patch of the previous minor relative to headers.ServerVersion.
 func fetchPreviousMinorTag(t *testing.T) string {
 	t.Helper()
-	t.Log("Resolving release tags...")
+	return fetchTag(t, "previous-minor", func(tags []string) semver.Version {
+		return resolveReleaseVersion(headers.ServerVersion, tags)
+	})
+}
+
+// fetchLastCloudReleaseTag asks the temporal git remote for tags and resolves
+// the highest non-rc cloud-release tag.
+func fetchLastCloudReleaseTag(t *testing.T) string {
+	t.Helper()
+	return fetchTag(t, "cloud-release", resolveCloudReleaseVersion)
+}
+
+func fetchTag(t *testing.T, label string, resolve func([]string) semver.Version) string {
+	t.Helper()
+	t.Logf("Resolving %s release tags...", label)
 	var version semver.Version
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		out, err := exec.CommandContext(t.Context(), "git", "ls-remote", "--tags", "--refs", temporalRepo).CombinedOutput()
@@ -99,9 +140,9 @@ func fetchPreviousMinorTag(t *testing.T) string {
 			}
 		}
 
-		version = resolveReleaseVersion(headers.ServerVersion, tags)
-		require.NotEqual(collect, semver.Version{}, version, "no tags found for previous minor")
-	}, retryTimeout, 2*time.Second, "fetch release tags")
+		version = resolve(tags)
+		require.NotEqual(collect, semver.Version{}, version, "no %s tag found", label)
+	}, retryTimeout, 2*time.Second, "fetch "+label+" tag")
 	return "v" + version.String()
 }
 
