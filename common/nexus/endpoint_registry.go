@@ -80,7 +80,7 @@ func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryCo
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
 		readThroughCacheSize:   dynamicconfig.NexusReadThroughCacheSize.Get(dc),
 		readThroughCacheTTL:    dynamicconfig.NexusReadThroughCacheTTL.Get(dc),
-		refreshOnRead:          dynamicconfig.RefreshNexusEndpointsOnRead.Get(dc),
+		refreshOnRead:          dynamicconfig.ForceNexusEndpointRefreshOnRead.Get(dc),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
