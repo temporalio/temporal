@@ -54,7 +54,20 @@ func RewriteScheduleIDQuery(
 	if !changed {
 		return queryStr, nil
 	}
-	return sqlparser.String(sel.Where.Expr), nil
+
+	// Reconstruct the query from the rewritten WHERE expression.
+	// If the original query also had a GROUP BY clause, append it so it is preserved for
+	// when GROUP BY support is added to prepareSchedulerQuery — omitting it would silently
+	// drop the clause and cause the ScheduleId issue to resurface once GROUP BY is supported.
+	result := sqlparser.String(sel.Where.Expr)
+	if len(sel.GroupBy) > 0 {
+		groupByCols := make([]string, len(sel.GroupBy))
+		for i, expr := range sel.GroupBy {
+			groupByCols[i] = sqlparser.String(expr)
+		}
+		result += " group by " + strings.Join(groupByCols, ", ")
+	}
+	return result, nil
 }
 
 // rewriteExpr recursively walks expr and rewrites ScheduleId comparison nodes in-place.

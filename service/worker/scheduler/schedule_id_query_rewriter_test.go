@@ -41,6 +41,14 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:  "",
 		},
 		{
+			// ScheduleId is rewritten and GROUP BY is preserved so that when GROUP BY support
+			// is added to prepareSchedulerQuery the rewrite is already in place.
+			name:         "CHASM ScheduleId with GROUP BY rewrites WHERE preserves GROUP BY",
+			query:        "ScheduleId = 'my-sched' Group By TemporalSchedulePaused",
+			chasmEnabled: true,
+			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched') group by TemporalSchedulePaused",
+		},
+		{
 			name:  "whitespace query",
 			query: "   ",
 			want:  "   ",
