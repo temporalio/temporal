@@ -366,6 +366,18 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	s.EqualValues(1, s.taskManager.getQueueDataByKey(tlID).RangeID())
 }
 
+func TestJitteredLongPollTimeout(t *testing.T) {
+	longPollTimeout := time.Minute
+	expectedMaxJitter := time.Duration(float64(longPollTimeout) * longPollJitterCoefficient)
+
+	timeout := jitteredLongPollTimeout(longPollTimeout, func(maxJitter time.Duration) time.Duration {
+		require.Equal(t, expectedMaxJitter, maxJitter)
+		return 3 * time.Second
+	})
+
+	require.Equal(t, 57*time.Second, timeout)
+}
+
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	prtn := newRootPartition(
 		uuid.NewString(),

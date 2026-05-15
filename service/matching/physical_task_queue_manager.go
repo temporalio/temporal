@@ -40,6 +40,10 @@ const (
 	// pollForActivityTask or pollForWorkflowTask handler.
 	returnEmptyTaskTimeBudget = time.Second
 
+	// Max fraction of long poll timeout to subtract as jitter, so SDK retries
+	// do not align after mass poll cancellation.
+	longPollJitterCoefficient = 0.05
+
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
 
