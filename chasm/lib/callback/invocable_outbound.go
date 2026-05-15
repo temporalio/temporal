@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -17,6 +20,17 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+)
+
+// OpenTelemetry attribute keys for outbound callback spans. Mirrors the HSM-side keys in
+// components/callbacks/nexus_invocation.go so the two implementations produce comparable
+// telemetry as we migrate. Standard http.* attributes are set on the inner client span
+// produced by the otelhttp-wrapped transport.
+const (
+	attrTemporalNamespace           = "temporal.namespace"
+	attrTemporalWorkflowID          = "temporal.workflow.id"
+	attrTemporalWorkflowRunID       = "temporal.workflow.run_id"
+	attrTemporalCallbackDestination = "temporal.callback.destination"
 )
 
 // invocableOutbound is an invocable that delivers the Nexus operation completion data to an external destination for
@@ -42,6 +56,17 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	ctx, span := h.tracer.Start(ctx, "CompleteNexusOperation",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String(attrTemporalNamespace, ns.Name().String()),
+			attribute.String(attrTemporalWorkflowID, n.workflowID),
+			attribute.String(attrTemporalWorkflowRunID, n.runID),
+			attribute.String(attrTemporalCallbackDestination, taskAttr.Destination),
+		),
+	)
+	defer span.End()
+
 	if h.httpTraceProvider != nil {
 		traceLogger := log.With(h.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
@@ -69,6 +94,10 @@ func (n invocableOutbound) Invoke(
 
 	n.completion.Header = n.callback.Header
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, err.Error())
+	}
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
