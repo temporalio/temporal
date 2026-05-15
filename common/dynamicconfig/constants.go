@@ -964,7 +964,8 @@ and deployment interaction in matching and history.`,
 		false,
 		`RefreshNexusEndpointsOnRead forces the Nexus endpoint registry to refresh from matching service on read.
 This effectively bypasses the cache so that endpoint writes are visible to readers immediately, instead of after the
-next background long-poll refresh. This should not be turned on in production.`,
+next background long-poll refresh. This should not be turned on in production, as it would introduce scalability
+and reliability problems.`,
 	)
 	NexusReadThroughCacheSize = NewGlobalIntSetting(
 		"system.nexusReadThroughCacheSize",
