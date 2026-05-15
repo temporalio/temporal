@@ -224,13 +224,12 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 
 // CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
-	hostname, _, err := net.SplitHostPort(rpcAddress)
-	if err != nil {
-		d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err))
-	}
-
 	var tlsClientConfig *tls.Config
 	if d.tlsFactory != nil {
+		hostname, _, err := net.SplitHostPort(rpcAddress)
+		if err != nil {
+			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err))
+		}
 		var tlsErr error
 		tlsClientConfig, tlsErr = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 		if tlsErr != nil {
