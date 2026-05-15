@@ -21,7 +21,9 @@ import (
 // testingSuite is the constraint for suite types.
 type testingSuite interface {
 	testifysuite.TestingSuite
+	//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
 	copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite
+	//nolint:revive // see copySuite above.
 	initSuite(t *testing.T, assertT require.TestingT, ctx context.Context)
 }
 
@@ -42,12 +44,15 @@ type Suite[T testingSuite] struct {
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
 // ctx overrides the suite's context; nil means use the default (lazy testcontext.New).
+//
+//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
 func (s *Suite[T]) copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
 	cp.initSuite(t, assertT, ctx)
 	return cp
 }
 
+//nolint:revive // see copySuite above.
 func (s *Suite[T]) initSuite(t *testing.T, assertT require.TestingT, ctx context.Context) {
 	g := &s.guardT
 	g.name = t.Name()
