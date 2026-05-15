@@ -7599,6 +7599,7 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	testCases := []struct {
 		name            string
 		featureEnabled  bool
+		standby         bool
 		activities      map[int64]*persistencespb.ActivityInfo
 		expectedQueues  map[string]int // controlQueue -> expected command count
 		expectedNoTasks bool
@@ -7692,6 +7693,22 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 			},
 			expectedNoTasks: true,
 		},
+		{
+			name:           "standby cluster - no tasks generated",
+			featureEnabled: true,
+			standby:        true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -7716,7 +7733,11 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 
 			namespaceEntry := tests.GlobalNamespaceEntry
 			mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
-			mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
+			activeCluster := cluster.TestCurrentClusterName
+			if tc.standby {
+				activeCluster = cluster.TestAlternativeClusterName
+			}
+			mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), gomock.Any()).Return(activeCluster).AnyTimes()
 			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
