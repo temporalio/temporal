@@ -2443,7 +2443,7 @@ func (ms *MutableStateImpl) IsSignalRequested(
 		ms.EnsureChasmWorkflowComponent(ctx)
 		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
-			panic(fmt.Sprintf("Unexpected error reading CHASM component: %v", err))
+			softassert.Fail(ms.logger, fmt.Sprintf("Unexpected error reading CHASM component: %v", err))
 		}
 		signalExists = wf.HasIncomingSignalEvent(chasmCtx, requestID)
 	}
