@@ -711,6 +711,35 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminGetTaskQueueUserData(c, clientFactory)
 			},
 		},
+		{
+			Name:  "update-fairness-state",
+			Usage: "Update the fairness state for a task queue type",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
+				},
+				&cli.StringFlag{
+					Name:     FlagFairnessState,
+					Usage:    "Fairness state: FAIRNESS_STATE_UNSPECIFIED (reset to config), FAIRNESS_STATE_V0, FAIRNESS_STATE_V1, FAIRNESS_STATE_V2",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminUpdateFairnessState(c, clientFactory)
+			},
+		},
 	}
 }
 

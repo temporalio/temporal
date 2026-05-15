@@ -65,6 +65,7 @@ const (
 	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
+	AdminService_UpdateFairnessState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/UpdateFairnessState"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
 )
 
@@ -159,6 +160,18 @@ type AdminServiceClient interface {
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 }
@@ -598,6 +611,15 @@ func (c *adminServiceClient) GetTaskQueueUserData(ctx context.Context, in *GetTa
 	return out, nil
 }
 
+func (c *adminServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
+	out := new(UpdateFairnessStateResponse)
+	err := c.cc.Invoke(ctx, AdminService_UpdateFairnessState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
 	out := new(MigrateScheduleResponse)
 	err := c.cc.Invoke(ctx, AdminService_MigrateSchedule_FullMethodName, in, out, opts...)
@@ -698,6 +720,18 @@ type AdminServiceServer interface {
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
@@ -841,6 +875,9 @@ func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Con
 }
 func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
+}
+func (UnimplementedAdminServiceServer) UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateFairnessState not implemented")
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
@@ -1676,6 +1713,24 @@ func _AdminService_GetTaskQueueUserData_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_UpdateFairnessState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFairnessStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpdateFairnessState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UpdateFairnessState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpdateFairnessState(ctx, req.(*UpdateFairnessStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MigrateScheduleRequest)
 	if err := dec(in); err != nil {
@@ -1876,6 +1931,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTaskQueueUserData",
 			Handler:    _AdminService_GetTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "UpdateFairnessState",
+			Handler:    _AdminService_UpdateFairnessState_Handler,
 		},
 		{
 			MethodName: "MigrateSchedule",

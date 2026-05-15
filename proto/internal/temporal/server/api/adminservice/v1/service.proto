@@ -227,6 +227,16 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::request-resource-required=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;

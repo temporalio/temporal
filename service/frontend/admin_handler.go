@@ -1885,6 +1885,37 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 	}, nil
 }
 
+func (adh *AdminHandler) UpdateFairnessState(
+	ctx context.Context,
+	request *adminservice.UpdateFairnessStateRequest,
+) (_ *adminservice.UpdateFairnessStateResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = adh.matchingClient.UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     request.GetTaskQueue(),
+		TaskQueueType: request.GetTaskQueueType(),
+		FairnessState: request.GetFairnessState(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.UpdateFairnessStateResponse{}, nil
+}
+
 func (adh *AdminHandler) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,

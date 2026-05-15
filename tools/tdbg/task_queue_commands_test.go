@@ -20,6 +20,7 @@ type (
 		describeTaskQueuePartitionFn    func(request *adminservice.DescribeTaskQueuePartitionRequest) (*adminservice.DescribeTaskQueuePartitionResponse, error)
 		forceUnloadTaskQueuePartitionFn func(request *adminservice.ForceUnloadTaskQueuePartitionRequest) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error)
 		getTaskQueueUserDataFn          func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error)
+		updateFairnessStateFn           func(request *adminservice.UpdateFairnessStateRequest) (*adminservice.UpdateFairnessStateResponse, error)
 	}
 )
 
@@ -87,6 +88,10 @@ func (t *testClient) GetTaskQueueUserData(_ context.Context, request *adminservi
 	return t.getTaskQueueUserDataFn(request)
 }
 
+func (t *testClient) UpdateFairnessState(_ context.Context, request *adminservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*adminservice.UpdateFairnessStateResponse, error) {
+	return t.updateFairnessStateFn(request)
+}
+
 func (s *taskQueueCommandTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
@@ -101,6 +106,9 @@ func (s *taskQueueCommandTestSuite) SetupTest() {
 		},
 		getTaskQueueUserDataFn: func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error) {
 			return &adminservice.GetTaskQueueUserDataResponse{}, nil
+		},
+		updateFairnessStateFn: func(request *adminservice.UpdateFairnessStateRequest) (*adminservice.UpdateFairnessStateResponse, error) {
+			return &adminservice.UpdateFairnessStateResponse{}, nil
 		},
 	}
 	s.app = NewCliApp(func(params *Params) {
@@ -219,4 +227,57 @@ func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
 	resp := errorApp.Run([]string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test"})
 	s.ErrorContains(resp, "unable to get Task Queue User Data")
+}
+
+// TestUpdateFairnessState tests that the cli accepts the various arguments for update-fairness-state.
+func (s *taskQueueCommandTestSuite) TestUpdateFairnessState() {
+	baseCommand := []string{"tdbg", "taskqueue", "update-fairness-state",
+		"--namespace", "default", "--task-queue", "test", "--fairness-state", "FAIRNESS_STATE_V1"}
+
+	// Run shared task-queue-type test cases, skipping sticky-name and partition-id
+	// (not registered flags on this command).
+	for _, test := range testCases {
+		if len(test.inputFlags) > 0 &&
+			(test.inputFlags[0] == "--sticky-name" || test.inputFlags[0] == "--partition-id") {
+			continue
+		}
+		cliCommand := append(baseCommand, test.inputFlags...)
+		resp := s.app.Run(cliCommand)
+		if test.err != nil {
+			s.ErrorContainsf(resp, test.err.Error(), "error present")
+		} else {
+			s.NoError(resp)
+		}
+	}
+
+	// All valid fairness state values succeed.
+	for _, state := range []string{"FAIRNESS_STATE_UNSPECIFIED", "FAIRNESS_STATE_V0", "FAIRNESS_STATE_V1", "FAIRNESS_STATE_V2"} {
+		s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+			"--namespace", "default", "--task-queue", "test", "--fairness-state", state}))
+	}
+
+	// Invalid fairness state value.
+	s.ErrorContains(s.app.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+		"--namespace", "default", "--task-queue", "test", "--fairness-state", "FAIRNESS_STATE_BOGUS"}),
+		"invalid fairness state")
+
+	// Missing required flags are enforced by cli/v2 before the action runs.
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+		"--task-queue", "test", "--fairness-state", "FAIRNESS_STATE_V1"}))
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+		"--namespace", "default", "--fairness-state", "FAIRNESS_STATE_V1"}))
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+		"--namespace", "default", "--task-queue", "test"}))
+
+	// Admin client returns an error: CLI wraps and returns it.
+	errorClient := &testClient{
+		updateFairnessStateFn: func(request *adminservice.UpdateFairnessStateRequest) (*adminservice.UpdateFairnessStateResponse, error) {
+			return nil, errors.New("admin unavailable")
+		},
+	}
+	errorApp := NewCliApp(func(params *Params) { params.ClientFactory = errorClient })
+	errorApp.ExitErrHandler = func(context *cli.Context, err error) {}
+	s.ErrorContains(errorApp.Run([]string{"tdbg", "taskqueue", "update-fairness-state",
+		"--namespace", "default", "--task-queue", "test", "--fairness-state", "FAIRNESS_STATE_V1"}),
+		"unable to update fairness state")
 }

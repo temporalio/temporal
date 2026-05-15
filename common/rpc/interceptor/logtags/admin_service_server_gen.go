@@ -225,6 +225,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.SyncWorkflowStateResponse:
 		return nil
+	case *adminservice.UpdateFairnessStateRequest:
+		return nil
+	case *adminservice.UpdateFairnessStateResponse:
+		return nil
 	default:
 		return nil
 	}

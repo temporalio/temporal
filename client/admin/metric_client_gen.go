@@ -638,3 +638,17 @@ func (c *metricClient) SyncWorkflowState(
 
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *metricClient) UpdateFairnessState(
+	ctx context.Context,
+	request *adminservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.UpdateFairnessStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientUpdateFairnessState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateFairnessState(ctx, request, opts...)
+}
