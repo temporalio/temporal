@@ -65,12 +65,31 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 		return nil, err
 	}
 
-	if (parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero()) || (!parsedQuery.closeTime.IsZero() && !parsedQuery.startTime.IsZero()) {
-		return nil, errors.New("requires a StartTime or CloseTime")
-	}
+	if parsedQuery.workflowID == nil {
+		// If no WorkflowId is provided, then we want to do a time-based query.
+		// In this case, either a StartTime or CloseTime and a SearchPrecision must be provided.
+		// RunId is not supported here and an error should be returned.
+		if parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero() {
+			return nil, errors.New("requires either a StartTime or a CloseTime")
+		}
 
-	if parsedQuery.searchPrecision == nil {
-		return nil, errors.New("SearchPrecision is required when searching for a StartTime or CloseTime")
+		if parsedQuery.searchPrecision == nil {
+			return nil, errors.New("SearchPrecision is required when searching for a StartTime or CloseTime")
+		}
+
+		if parsedQuery.runID != nil {
+			return nil, errors.New("RunId is not supported when searching for a StartTime or CloseTime")
+		}
+	} else {
+		// If WorkflowId is provided, then we want to do a workflowId-based query.
+		// We only support closeTime in this case and if provided, we also require a searchPrecision
+		// StartTime is not supported here and an error should be returned.
+		if !parsedQuery.startTime.IsZero() {
+			return nil, errors.New("StartTime is not supported when searching for a WorkflowId")
+		}
+		if !parsedQuery.closeTime.IsZero() && parsedQuery.searchPrecision == nil {
+			return nil, errors.New("SearchPrecision is required when also filtering by CloseTime")
+		}
 	}
 
 	return parsedQuery, nil
