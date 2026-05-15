@@ -19,7 +19,7 @@ func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval tim
 	tb.Helper()
 	run(testcontext.New(tb), tb, func(t *T) {
 		if !condition() {
-			t.failed = true
+			t.Fail()
 		}
 	}, timeout, pollInterval, "", "await.RequireTrue", requireTrueMisuseHint, false)
 }
@@ -30,7 +30,7 @@ func RequireTruef(tb testing.TB, condition func() bool, timeout, pollInterval ti
 	tb.Helper()
 	run(testcontext.New(tb), tb, func(t *T) {
 		if !condition() {
-			t.failed = true
+			t.Fail()
 		}
 	}, timeout, pollInterval, fmt.Sprintf(msg, args...), "await.RequireTruef", requireTrueMisuseHint, false)
 }

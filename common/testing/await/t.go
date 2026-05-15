@@ -28,22 +28,27 @@ func (t *T) Context() context.Context {
 	return t.tb.Context()
 }
 
+// Fail marks the current attempt as failed without stopping it.
+func (t *T) Fail() {
+	t.failed = true
+}
+
 // Error records an error message for reporting on timeout.
 func (t *T) Error(args ...any) {
-	t.failed = true
+	t.Fail()
 	t.errors = append(t.errors, strings.TrimSuffix(fmt.Sprintln(args...), "\n"))
 }
 
 // Errorf records an error message for reporting on timeout.
 func (t *T) Errorf(format string, args ...any) {
-	t.failed = true
+	t.Fail()
 	t.errors = append(t.errors, fmt.Sprintf(format, args...))
 }
 
 // FailNow is called by require.* on failure. It stops the current attempt.
 // Unlike testing.TB.FailNow(), this does NOT mark the test as failed.
 func (t *T) FailNow() {
-	t.failed = true
+	t.Fail()
 	panic(attemptFailed{})
 }
 
