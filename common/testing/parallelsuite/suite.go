@@ -17,8 +17,8 @@ import (
 // testingSuite is the constraint for suite types.
 type testingSuite interface {
 	testifysuite.TestingSuite
-	copySuite(t *testing.T) testingSuite
-	initSuite(t *testing.T)
+	copySuite(t *testing.T, parallel bool) testingSuite
+	initSuite(t *testing.T, parallel bool)
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -31,21 +31,26 @@ type Suite[T testingSuite] struct {
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
 
-	guardT guardT
+	guardT      guardT
+	runParallel bool
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
-func (s *Suite[T]) copySuite(t *testing.T) testingSuite {
+func (s *Suite[T]) copySuite(t *testing.T, parallel bool) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
-	cp.initSuite(t)
+	cp.initSuite(t, parallel)
 	return cp
 }
 
-func (s *Suite[T]) initSuite(t *testing.T) {
+func (s *Suite[T]) initSuite(t *testing.T, parallel bool) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
 	g.hasSubtests.Store(false)
+	s.runParallel = parallel
+	if s.runParallel {
+		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel tests
+	}
 	s.Assertions = require.New(g)
 	s.ProtoAssertions = protorequire.New(g)
 	s.HistoryRequire = historyrequire.New(g)
@@ -65,8 +70,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
-		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel subtests
-		fn(s.copySuite(t).(T))
+		fn(s.copySuite(t, s.runParallel).(T))
 	})
 }
 
@@ -78,6 +82,18 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, true, args...)
+}
+
+// RunLegacySequential behaves like [Run] but does not mark any test as parallel.
+//
+// It is only intended for backwards-compatibility with legacy behavior to ease migration
+// and should not be used in new tests.
+func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, false, args...)
+}
+
+func run[T testingSuite](t *testing.T, s T, parallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -103,13 +119,11 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	t.Parallel()
+	s.initSuite(t, parallel)
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			t.Parallel()
-
-			cpS := s.copySuite(t)
+			cpS := s.copySuite(t, parallel)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
