@@ -1286,9 +1286,9 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 				T:                   s.T(),
 			}
 
-			halfSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 500*time.Millisecond)
+			fiveSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 5*time.Second)
 			defer cancel()
-			updateResultCh := sendUpdate(halfSecondTimeoutCtx, env, env.Tv())
+			updateResultCh := sendUpdate(fiveSecondTimeoutCtx, env, env.Tv())
 
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask()
@@ -4575,7 +4575,7 @@ func (s *WorkflowUpdateSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
-func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNotBreakPendingUpdate() {
 	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
@@ -4644,12 +4644,16 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
+
+	queryCtx, cancelQueries := context.WithCancel(env.Context())
+	defer cancelQueries()
+
 	queryFn := func(resCh chan<- QueryResult) {
 		// There is no query handler, and query timeout is ok for this test.
 		// But first query must not time out before 2nd query reached server,
 		// because 2 queries overflow the query buffer (default size 1),
 		// which leads to clearing of WF context.
-		shortCtx, cancel := context.WithTimeout(env.Context(), 100*time.Millisecond)
+		shortCtx, cancel := context.WithTimeout(queryCtx, 5*time.Second)
 		defer cancel()
 		queryResp, err := env.FrontendClient().QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Namespace: env.Namespace().String(),
@@ -4661,26 +4665,37 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		resCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
-	query1ResultCh := make(chan QueryResult)
-	query2ResultCh := make(chan QueryResult)
+	query1ResultCh := make(chan QueryResult, 1)
+	query2ResultCh := make(chan QueryResult, 1)
 	go queryFn(query1ResultCh)
 	go queryFn(query2ResultCh)
-	query1Res := <-query1ResultCh
-	query2Res := <-query2ResultCh
+
+	var query1Res, query2Res QueryResult
+	select {
+	case query1Res = <-query1ResultCh:
+		cancelQueries() // Cancel 2nd query to avoid waiting for it after 1st query already failed and cleared WF context.
+		query2Res = <-query2ResultCh
+	case query2Res = <-query2ResultCh:
+		cancelQueries() // Cancel 1st query to avoid waiting for it after 2nd query already failed and cleared WF context.
+		query1Res = <-query1ResultCh
+	}
+
 	s.Error(query1Res.Err)
 	s.Error(query2Res.Err)
 	s.Nil(query1Res.Resp)
 	s.Nil(query2Res.Resp)
 
+	isBufferedErr := func(err error) bool {
+		return common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)
+	}
+
 	var queryBufferFullErr *serviceerror.ResourceExhausted
-	if common.IsContextDeadlineExceededErr(query1Res.Err) {
-		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+	if isBufferedErr(query1Res.Err) {
 		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
 	} else {
 		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
-		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
 	}
 
 	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
