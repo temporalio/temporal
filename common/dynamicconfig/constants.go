@@ -960,6 +960,14 @@ and deployment interaction in matching and history.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	ForceNexusEndpointRefreshOnRead = NewGlobalBoolSetting(
+		"system.forceNexusEndpointRefreshOnRead",
+		false,
+		`ForceNexusEndpointRefreshOnRead forces the Nexus endpoint registry to refresh from matching service on read.
+This effectively bypasses the cache so that endpoint writes are visible to readers immediately, instead of after the
+next background long-poll refresh. This should not be turned on in production, as it would introduce scalability
+and reliability problems.`,
+	)
 	NexusReadThroughCacheSize = NewGlobalIntSetting(
 		"system.nexusReadThroughCacheSize",
 		100,
