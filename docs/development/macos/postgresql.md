@@ -1,27 +1,27 @@
-# Run PostgreSQL v9.6 on macOS
+# Run PostgreSQL v18 on macOS
 
 ### Install
 ```bash
-brew install postgresql@9.6
+brew install postgresql@18
 ```
 
 ### Start
 ```bash
-brew services start postgresql@9.6
+brew services start postgresql@18
 ```
 
 ### Stop
 ```bash
-brew services stop postgresql@9.6
+brew services stop postgresql@18
 ```
 
 ### Post Installation
-Create a user `postgres`
+Create a user `root`
 ```bash
 createuser -s root
 ```
 
-Verify PostgreSQL v9.6 is running and accessible:
+Verify PostgreSQL v18 is running and accessible:
 ```bash
 psql -h 127.0.0.1 -p 5432 -U root -d postgres
 ```
@@ -36,7 +36,7 @@ ALTER USER temporal WITH SUPERUSER;
 
 Change the following file context:
 ```bash
-emacs /usr/local/var/postgresql@9.6/pg_hba.conf
+pico /opt/homebrew/var/postgresql@18/pg_hba.conf
 ```
 from
 ```
@@ -52,7 +52,7 @@ host    all             all             ::1/128                 md5
 ```
 then restart PostgreSQL:
 ```bash
-brew services restart postgresql@9.6
+brew services restart postgresql@18
 ```
 
 Verify password:
@@ -65,7 +65,7 @@ psql -h 127.0.0.1 -p 5432 -U temporal -d postgres
 [TLS Key / Cert Setup Guide](../tls/tls.md)
 
 ```bash
-emacs /usr/local/var/postgresql@9.6/postgresql.conf
+emacs /usr/local/var/postgresql@18/postgresql.conf
 ```
 
 setting the variables below to
@@ -77,7 +77,7 @@ ssl_ca_file=<path to the ca.pem>
 ```
 
 ```bash
-emacs /usr/local/var/postgresql@9.6/pg_hba.conf
+emacs /usr/local/var/postgresql@18/pg_hba.conf
 ```
 
 changes the configs like below
@@ -87,7 +87,7 @@ hostssl    all             all             ::1/128                 md5 clientcer
 ```
 then restart PostgreSQL:
 ```bash
-brew services restart postgresql@9.6
+brew services restart postgresql@18
 ```
 
 Verify TLS & password:
