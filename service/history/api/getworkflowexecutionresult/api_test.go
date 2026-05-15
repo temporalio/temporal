@@ -90,7 +90,7 @@ func TestInvoke_WorkflowCompleted(t *testing.T) {
 			},
 			assertResp: func(t *testing.T, r *workflowservice.GetWorkflowExecutionResultResponse) {
 				t.Helper()
-				protorequire.ProtoEqual(t, failure, r.GetFailure().GetFailure())
+				protorequire.ProtoEqual(t, failure, r.GetFailed().GetFailure())
 			},
 		},
 		{
@@ -106,7 +106,7 @@ func TestInvoke_WorkflowCompleted(t *testing.T) {
 			},
 			assertResp: func(t *testing.T, r *workflowservice.GetWorkflowExecutionResultResponse) {
 				t.Helper()
-				f := r.GetFailure().GetFailure()
+				f := r.GetFailed().GetFailure()
 				require.Equal(t, "workflow execution was canceled", f.GetMessage())
 				protorequire.ProtoEqual(t, details, f.GetCanceledFailureInfo().GetDetails())
 			},
@@ -124,7 +124,7 @@ func TestInvoke_WorkflowCompleted(t *testing.T) {
 			},
 			assertResp: func(t *testing.T, r *workflowservice.GetWorkflowExecutionResultResponse) {
 				t.Helper()
-				f := r.GetFailure().GetFailure()
+				f := r.GetFailed().GetFailure()
 				require.Equal(t, "workflow execution was terminated", f.GetMessage())
 				require.Equal(t, "terminator", f.GetTerminatedFailureInfo().GetIdentity())
 			},
@@ -140,7 +140,7 @@ func TestInvoke_WorkflowCompleted(t *testing.T) {
 			},
 			assertResp: func(t *testing.T, r *workflowservice.GetWorkflowExecutionResultResponse) {
 				t.Helper()
-				f := r.GetFailure().GetFailure()
+				f := r.GetFailed().GetFailure()
 				require.Equal(t, "workflow execution timed out", f.GetMessage())
 				require.NotNil(t, f.GetTimeoutFailureInfo())
 			},
@@ -189,7 +189,7 @@ func TestInvoke_WorkflowRunning_NoLinks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, historytests.WorkflowID, resp.Response.GetExecution().GetWorkflowId())
 	require.Equal(t, historytests.RunID, resp.Response.GetExecution().GetRunId())
-	require.NotNil(t, resp.Response.GetNotCompleted())
+	require.NotNil(t, resp.Response.GetRunning())
 	require.Empty(t, resp.Response.GetLinks())
 }
 
@@ -230,7 +230,7 @@ func TestInvoke_WorkflowRunning_WithLinks(t *testing.T) {
 
 	resp, err := Invoke(context.Background(), makeRequest(incomingLinks), nil, checker)
 	require.NoError(t, err)
-	require.NotNil(t, resp.Response.GetNotCompleted())
+	require.NotNil(t, resp.Response.GetRunning())
 
 	// Link should point to the event that attaches the callbacks to persistence.
 	require.Len(t, resp.Response.GetLinks(), 1)

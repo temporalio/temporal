@@ -217,7 +217,7 @@ func (s *NexusGetWorkflowResultSpecSuite) makeGetResultHandler(env *NexusTestEnv
 			if err != nil {
 				return nil, &nexus.OperationError{State: nexus.OperationStateFailed, Message: err.Error()}
 			}
-			if notCompleted := resp.GetNotCompleted(); notCompleted != nil {
+			if running := resp.GetRunning(); running != nil {
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "get-result-async"}, nil
 			}
 			if success := resp.GetSuccess(); success != nil {
@@ -227,9 +227,9 @@ func (s *NexusGetWorkflowResultSpecSuite) makeGetResultHandler(env *NexusTestEnv
 					return &nexus.HandlerStartOperationResultSync[any]{Value: s}, nil
 				}
 			}
-			if failure := resp.GetFailure(); failure != nil {
+			if failed := resp.GetFailed(); failed != nil {
 				return nil, &nexus.OperationError{
-					State: nexus.OperationStateFailed, Message: failure.GetFailure().GetMessage(),
+					State: nexus.OperationStateFailed, Message: failed.GetFailure().GetMessage(),
 				}
 			}
 			return nil, &nexus.OperationError{

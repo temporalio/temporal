@@ -100,8 +100,8 @@ func wfRunningResponse(mutableState historyi.MutableState) *historyservice.GetWo
 				WorkflowId: executionInfo.GetWorkflowId(),
 				RunId:      executionState.GetRunId(),
 			},
-			CompletionStatus: &workflowservice.GetWorkflowExecutionResultResponse_NotCompleted_{
-				NotCompleted: &workflowservice.GetWorkflowExecutionResultResponse_NotCompleted{},
+			CompletionStatus: &workflowservice.GetWorkflowExecutionResultResponse_Running_{
+				Running: &workflowservice.GetWorkflowExecutionResultResponse_Running{},
 			},
 		},
 	}
@@ -136,14 +136,14 @@ func wfCompletedResponse(
 			},
 		}
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failure_{
-			Failure: &workflowservice.GetWorkflowExecutionResultResponse_Failure{
+		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failed_{
+			Failed: &workflowservice.GetWorkflowExecutionResultResponse_Failed{
 				Failure: completionEvent.GetWorkflowExecutionFailedEventAttributes().GetFailure(),
 			},
 		}
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failure_{
-			Failure: &workflowservice.GetWorkflowExecutionResultResponse_Failure{
+		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failed_{
+			Failed: &workflowservice.GetWorkflowExecutionResultResponse_Failed{
 				Failure: &failurepb.Failure{
 					Message: "workflow execution was canceled",
 					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
@@ -155,8 +155,8 @@ func wfCompletedResponse(
 			},
 		}
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failure_{
-			Failure: &workflowservice.GetWorkflowExecutionResultResponse_Failure{
+		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failed_{
+			Failed: &workflowservice.GetWorkflowExecutionResultResponse_Failed{
 				Failure: &failurepb.Failure{
 					Message: "workflow execution was terminated",
 					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
@@ -168,8 +168,8 @@ func wfCompletedResponse(
 			},
 		}
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failure_{
-			Failure: &workflowservice.GetWorkflowExecutionResultResponse_Failure{
+		resp.Response.CompletionStatus = &workflowservice.GetWorkflowExecutionResultResponse_Failed_{
+			Failed: &workflowservice.GetWorkflowExecutionResultResponse_Failed{
 				Failure: &failurepb.Failure{
 					Message: "workflow execution timed out",
 					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
