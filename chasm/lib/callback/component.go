@@ -16,7 +16,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -63,7 +62,6 @@ type Callback struct {
 // NewEmbeddedCallback returns a Callback component, which will deliver the completion from
 // its parent CHASM component. The parent must implement CompletionSource.
 func NewEmbeddedCallback(
-	ctx chasm.MutableContext,
 	requestID string,
 	registrationTime *timestamppb.Timestamp,
 	cb *callbackspb.Callback,
@@ -76,16 +74,6 @@ func NewEmbeddedCallback(
 			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
 		},
 	}
-}
-
-type newStandaloneCallbackOpts struct {
-	RequestID        string
-	RegistrationTime *timestamppb.Timestamp
-	Callback         *callbackspb.Callback
-
-	ScheduleToCloseTimeout *durationpb.Duration
-	Completion             *callbackpb.CallbackExecutionCompletion
-	SearchAttributes       map[string]*commonpb.Payload
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -145,7 +133,11 @@ func (c *Callback) Terminate(
 		}
 		return chasm.TerminateComponentResponse{}, nil
 	}
-	if err := TransitionTerminated.Apply(c, ctx, EventTerminated{Reason: req.Reason}); err != nil {
+	event := EventTerminated{
+		Identity: req.Identity,
+		Reason:   req.Reason,
+	}
+	if err := TransitionTerminated.Apply(c, ctx, event); err != nil {
 		return chasm.TerminateComponentResponse{}, fmt.Errorf("failed to terminate callback: %w", err)
 	}
 

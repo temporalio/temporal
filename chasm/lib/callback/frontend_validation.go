@@ -107,7 +107,7 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(
 	}
 
 	// Validate the callback to be invoked and its parameters.
-	if err := rv.cbValidator.Validate(ctx, req.GetNamespace(), []*commonpb.Callback{req.Callback}); err != nil {
+	if err := rv.cbValidator.Validate(ctx, req.GetNamespace(), []*commonpb.Callback{req.GetCallback()}); err != nil {
 		return err
 	}
 

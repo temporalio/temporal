@@ -92,8 +92,9 @@ type CompleteOperationOptions struct {
 	// Header to send in the completion request.
 	// Note that this is a Nexus header, not an HTTP header.
 	Header nexus.Header
-	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
-	// started response.
+	// OperationToken is the unique token for this operation. This is returned by the Nexus handler from the call to
+	// StartOperation. It has no meaning outside the handler, and is used to identify the operation within the handler system.
+	// and is handler-specific.Used when a completion callback is received before a started response.
 	OperationToken string
 	// StartTime is the time the operation started. Used when a completion callback is received before a started response.
 	StartTime time.Time

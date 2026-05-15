@@ -337,7 +337,7 @@ func (a *Activity) addCompletionCallbacks(
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewEmbeddedCallback(ctx, requestID, registrationTime, chasmCB)
+		callbackObj := callback.NewEmbeddedCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

@@ -142,16 +142,14 @@ func (h *callbackHandler) DescribeCallbackExecution(
 			func(
 				c *Callback,
 				ctx chasm.Context,
-				req *callbackspb.DescribeCallbackExecutionRequest) (*callbackspb.DescribeCallbackExecutionResponse, error) {
+				_ *callbackspb.DescribeCallbackExecutionRequest) (*callbackspb.DescribeCallbackExecutionResponse, error) {
 				return buildDescriptionProto(ctx, c)
 			},
 			req)
 	}
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
-	// deadline that causes us to send that response before the caller's own deadline (see
-	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
-	// chasm.activity.longPollTimeout.
+	// deadline that causes us to send that response before the caller's own deadline.
 	targetNamespace := req.GetFrontendRequest().GetNamespace()
 	ctx, cancel := contextutil.WithDeadlineBuffer(
 		ctx,
@@ -242,7 +240,6 @@ func (h *callbackHandler) TerminateCallbackExecution(
 	ctx context.Context,
 	req *callbackspb.TerminateCallbackExecutionRequest,
 ) (resp *callbackspb.TerminateCallbackExecutionResponse, err error) {
-
 	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Callback](
@@ -254,6 +251,7 @@ func (h *callbackHandler) TerminateCallbackExecution(
 		),
 		func(c *Callback, ctx chasm.MutableContext, _ *callbackspb.TerminateCallbackExecutionRequest) (*callbackspb.TerminateCallbackExecutionResponse, error) {
 			if _, err := c.Terminate(ctx, chasm.TerminateComponentRequest{
+				Identity:  req.FrontendRequest.GetIdentity(),
 				Reason:    req.FrontendRequest.GetReason(),
 				RequestID: req.FrontendRequest.GetRequestId(),
 			}); err != nil {
@@ -312,7 +310,7 @@ func createStandaloneCallback(
 	now := timestamppb.Now()
 
 	// Create Callback component.
-	cb := NewEmbeddedCallback(ctx, input.RequestID, now, input.Callback)
+	cb := NewEmbeddedCallback(input.RequestID, now, input.Callback)
 	cb.ScheduleToCloseTimeout = input.ScheduleToCloseTimeout
 	cb.SuppliedCompletion = chasm.NewDataField(ctx, input.Completion)
 
