@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -29,12 +32,16 @@ func HTTPCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
-	defaultClient := &http.Client{}
+	defaultClient := &http.Client{
+		Transport: wrapTransportWithOTEL(http.DefaultTransport, tracerProvider, propagator),
+	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
 	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
@@ -51,4 +58,27 @@ func HTTPCallerProviderProvider(
 		}
 	})
 	return m.Get, nil
+}
+
+// wrapTransportWithOTEL wraps a RoundTripper with otelhttp so callback requests carry W3C
+// TraceContext headers (or whichever propagator is configured) and produce a client span.
+// The localClient is already wrapped at the RPCFactory layer; this only covers the
+// defaultClient used for external (non-frontend) callback targets. Returns the transport
+// unmodified when no tracer provider is configured.
+func wrapTransportWithOTEL(
+	rt http.RoundTripper,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
+) http.RoundTripper {
+	if tracerProvider == nil {
+		return rt
+	}
+	if propagator == nil {
+		propagator = propagation.TraceContext{}
+	}
+	return otelhttp.NewTransport(
+		rt,
+		otelhttp.WithTracerProvider(tracerProvider),
+		otelhttp.WithPropagators(propagator),
+	)
 }
