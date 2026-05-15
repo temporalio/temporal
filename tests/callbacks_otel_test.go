@@ -42,7 +42,10 @@ func (s *CallbacksOTELSuite) newEnv(tp trace.TracerProvider) *testcore.TestEnv {
 		}),
 
 		// DISABLE CHASM, since the OTEL integration is only wired up to HSM for now.
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, false),
+
+		// TODO(chrsmith): BUG: This test passes whether or not EnableChasm is set... how?!?
+		// Am I misunderstanding the way things are working (likely).
 
 		// Inject a real TracerProvider into the History service so the otelhttp-wrapped
 		// callback transport produces spans with a valid SpanContext, which is what
