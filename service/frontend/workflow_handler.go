@@ -5120,6 +5120,15 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			return "", err
 		}
 
+		saMapper, err := wh.saMapperProvider.GetMapper(namespaceName)
+		if err != nil {
+			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+		}
+		query, err = scheduler.RewriteScheduleIDQuery(query, chasmEnabled, saMapper, saNameType, namespaceName)
+		if err != nil {
+			return "", err
+		}
+
 		result = fmt.Sprintf("%s AND (%s)", baseQuery, query)
 	}
 
