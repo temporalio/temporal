@@ -118,6 +118,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { testUpdateScheduleBlobSizeLimit(t, newContext) })
 	t.Run("TestListSchedulesPagination", func(t *testing.T) { testListSchedulesPagination(t, newContext) })
 	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
+	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { testListSchedulesFilterByScheduleId(t, newContext) })
 	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { testBufferSizeReportedWhenBuffered(t, newContext) })
 }
 
@@ -1324,6 +1325,147 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 			require.NotEqual(c, sid, e.ScheduleId)
 		}
 	}, 15*time.Second, 1*time.Second)
+}
+
+func testListSchedulesFilterByScheduleId(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid1 := "sched-filter-by-id-alpha"
+	sid2 := "sched-filter-by-id-beta"
+
+	schedule := func(sid string) *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "wf-" + sid,
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			State: &schedulepb.ScheduleState{Paused: true},
+		}
+	}
+
+	ctx := newContext(s.Context())
+
+	// Create two schedules.
+	for _, sid := range []string{sid1, sid2} {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule(sid),
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	// Wait for both schedules to appear in visibility.
+	getScheduleEntryFromVisibility(s, sid1, newContext, nil)
+	getScheduleEntryFromVisibility(s, sid2, newContext, nil)
+
+	listScheduleIDs := func(query string) []string {
+		t.Helper()
+		listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 10,
+			Query:           query,
+		})
+		require.NoError(t, err)
+		var ids []string
+		for _, e := range listResp.Schedules {
+			ids = append(ids, e.ScheduleId)
+		}
+		return ids
+	}
+
+	// Equality: ScheduleId = 'sid1' should return only sid1.
+	t.Run("Equal", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs(fmt.Sprintf("ScheduleId = '%s'", sid1))
+			require.Len(c, ids, 1)
+			require.Equal(c, sid1, ids[0])
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// Not equal: ScheduleId != 'sid1' should return sid2 but not sid1.
+	t.Run("NotEqual", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs(fmt.Sprintf("ScheduleId != '%s'", sid1))
+			require.Contains(c, ids, sid2)
+			require.NotContains(c, ids, sid1)
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// Starts with: common prefix should return both.
+	t.Run("StartsWith", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs("ScheduleId STARTS_WITH 'sched-filter-by-id-'")
+			require.Contains(c, ids, sid1)
+			require.Contains(c, ids, sid2)
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// Starts with specific prefix should return only one.
+	t.Run("StartsWithSpecific", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs("ScheduleId STARTS_WITH 'sched-filter-by-id-a'")
+			require.Len(c, ids, 1)
+			require.Equal(c, sid1, ids[0])
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// Not starts with: should exclude matching schedules.
+	t.Run("NotStartsWith", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs("ScheduleId NOT STARTS_WITH 'sched-filter-by-id-a'")
+			require.Contains(c, ids, sid2)
+			require.NotContains(c, ids, sid1)
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// IN: should return both listed schedules.
+	t.Run("In", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs(fmt.Sprintf("ScheduleId IN ('%s', '%s')", sid1, sid2))
+			require.Contains(c, ids, sid1)
+			require.Contains(c, ids, sid2)
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// IN with single value: should return only that schedule.
+	t.Run("InSingle", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs(fmt.Sprintf("ScheduleId IN ('%s')", sid2))
+			require.Len(c, ids, 1)
+			require.Equal(c, sid2, ids[0])
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// NOT IN: should exclude listed schedules.
+	t.Run("NotIn", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs(fmt.Sprintf("ScheduleId NOT IN ('%s')", sid1))
+			require.Contains(c, ids, sid2)
+			require.NotContains(c, ids, sid1)
+		}, 15*time.Second, 1*time.Second)
+	})
+
+	// IS NOT NULL: all schedules have an ID, so both should appear.
+	t.Run("IsNotNull", func(t *testing.T) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			ids := listScheduleIDs("ScheduleId IS NOT NULL")
+			require.Contains(c, ids, sid1)
+			require.Contains(c, ids, sid2)
+		}, 15*time.Second, 1*time.Second)
+	})
 }
 
 func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
