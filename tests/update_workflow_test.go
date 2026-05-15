@@ -4575,7 +4575,7 @@ func (s *WorkflowUpdateSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
-func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNotBreakPendingUpdate() {
 	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
