@@ -1503,7 +1503,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 				Identity:   "test",
 			},
 		)
-		require.Error(s.T(), err)
+		s.Error(err)
 	})
 
 	// Subtest: Neither stack has the schedule. Delete returns error.
@@ -1517,7 +1517,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 				Identity:   "test",
 			},
 		)
-		require.Error(s.T(), err)
+		s.Error(err)
 	})
 }
 
@@ -1654,7 +1654,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 				ScheduleId:  sid,
 			},
 		)
-		require.NoError(s.T(), err)
+		s.NoError(err)
 
 		_, err = env.FrontendClient().PatchSchedule(
 			testcore.NewContext(),
@@ -1666,7 +1666,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 				RequestId:  uuid.NewString(),
 			},
 		)
-		require.Error(s.T(), err)
+		s.Error(err)
 	})
 }
 

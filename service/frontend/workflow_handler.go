@@ -5003,7 +5003,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		// CHASM owns the schedule unless it returned a routable error
 		// (NotFound/sentinel/closed), in which case V1 is the owner.
 		winnerCtx := v1Ctx
-		if chasmEnabled && chasmErr == nil {
+		if chasmEnabled && (chasmErr == nil || !isSchedulerErrorLegacyRoutable(chasmErr)) {
 			winnerCtx = chasmCtx
 		}
 		for k, v := range contextutil.ContextMetadataGetAll(winnerCtx) {
