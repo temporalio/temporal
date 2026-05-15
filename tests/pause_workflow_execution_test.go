@@ -947,6 +947,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
 			s.False(inPaused,
 				"WORKFLOW_TASK_SCHEDULED at eventId=%d appended after WORKFLOW_EXECUTION_PAUSED (issue #10239 race)",
 				event.EventId)
+		default:
 		}
 	}
 
