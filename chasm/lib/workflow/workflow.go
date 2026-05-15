@@ -169,12 +169,10 @@ func (w *Workflow) UpdateIncomingSignalEvent(
 	requestID string,
 	eventID int64,
 ) error {
-	if !w.HasIncomingSignalEvent(ctx, requestID) {
-		return nil
+	if w.HasIncomingSignalEvent(ctx, requestID) {
+		w.IncomingSignals[requestID].Get(ctx).EventId = eventID
 	}
-	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
-		EventId: eventID,
-	})
+
 	return nil
 }
 

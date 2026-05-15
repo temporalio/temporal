@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/sony/gobreaker"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -264,7 +264,8 @@ func Invoke(
 	if mutableState.ChasmEnabled() {
 		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
-			requestID := generateRequestID(req)
+			// Generate a requestID to tag onto errors for ease of debugging.
+			requestID := uuid.NewString()
 			shard.GetLogger().Error(
 				"failed to get workflow component from CHASM tree",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -764,15 +765,4 @@ func buildNexusOperationCancellationInfo(
 		NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
-}
-
-func generateRequestID(req *historyservice.DescribeWorkflowExecutionRequest) string {
-	descReq := req.GetRequest()
-	return fmt.Sprintf(
-		"desc-wf-%s-%s-%s-%d",
-		descReq.GetNamespace(),
-		descReq.GetExecution().GetWorkflowId(),
-		descReq.GetExecution().GetRunId(),
-		time.Now().UnixMilli(),
-	)
 }

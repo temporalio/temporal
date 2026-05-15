@@ -2298,9 +2298,6 @@ func (ms *MutableStateImpl) GetPendingSignalExternalInfos() map[int64]*persisten
 }
 
 func (ms *MutableStateImpl) GetPendingSignalRequestedIds() []string {
-	if ms.ChasmSignalBacklinksEnabled() {
-		return nil
-	}
 	return convert.StringSetToSlice(ms.pendingSignalRequestedIDs)
 }
 
@@ -2442,12 +2439,13 @@ func (ms *MutableStateImpl) IsSignalRequested(
 	// fully ramp the writes to CHASM only.
 	signalExists := false
 	if ms.ChasmSignalBacklinksEnabled() {
-		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
-		// TODO(long-nt-tran): Handle error from CHASM once fully rolled out and we clean up the fallback
-		// to mutableState set fields
-		if err == nil {
-			signalExists = wf.HasIncomingSignalEvent(chasmCtx, requestID)
+		ctx := context.Background()
+		ms.EnsureChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			panic(fmt.Sprintf("Unexpected error reading CHASM component: %v", err))
 		}
+		signalExists = wf.HasIncomingSignalEvent(chasmCtx, requestID)
 	}
 
 	// TODO(long-nt-tran): Remove fallback to existing map once we fully roll out writes to CHASM signals map
@@ -5854,10 +5852,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	ms.executionInfo.SignalCount++
 
 	// Add signal requestID to workflow CHASM tree (if feature is enabled)
-	signalEventAttrs, ok := event.GetAttributes().(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
-	if !ok {
-		return nil
-	}
+	signalEventAttrs := event.GetAttributes().(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
 		ctx := context.Background()
