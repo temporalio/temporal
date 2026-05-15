@@ -157,7 +157,7 @@ func TestNewCassandraCluster(t *testing.T) {
 			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
 				rp, ok := cluster.ReconnectionPolicy.(*gocql.ExponentialReconnectionPolicy)
 				assert.True(t, ok, "reconnection policy must be ExponentialReconnectionPolicy")
-				assert.Equal(t, 30, rp.MaxRetries)
+				assert.Equal(t, 3, rp.MaxRetries)
 				assert.Equal(t, time.Second, rp.InitialInterval)
 				assert.Equal(t, 10*time.Second, rp.MaxInterval)
 			},

@@ -149,7 +149,7 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	cluster.DisableInitialHostLookup = cfg.DisableInitialHostLookup
 
 	reconnectionPolicy := &gocql.ExponentialReconnectionPolicy{
-		MaxRetries:      30,
+		MaxRetries:      3,
 		InitialInterval: time.Second,
 		MaxInterval:     10 * time.Second,
 	}
