@@ -34,18 +34,21 @@ type CallbacksOTELSuite struct {
 	parallelsuite.Suite[*CallbacksOTELSuite]
 }
 
-func (s *CallbacksOTELSuite) newEnv(tp trace.TracerProvider) *testcore.TestEnv {
+// newEnv builds a test environment with an OTEL-enabled History service.
+//
+// chasmCallbacks toggles dynamicconfig.EnableCHASMCallbacks (NOT dynamicconfig.EnableChasm,
+// which is the broader CHASM-feature switch). Callback routing specifically hinges on
+// EnableCHASMCallbacks: false → HSM-backed components/callbacks; true → chasm/lib/callback.
+func (s *CallbacksOTELSuite) newEnv(tp trace.TracerProvider, chasmCallbacks bool) *testcore.TestEnv {
 	return testcore.NewEnv(s.T(),
 		// Allow insecure callback URLs.
 		testcore.WithDynamicConfig(callbacks.AllowedAddresses, []any{
 			map[string]any{"Pattern": "*", "AllowInsecure": true},
 		}),
 
-		// DISABLE CHASM, since the OTEL integration is only wired up to HSM for now.
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, false),
-
-		// TODO(chrsmith): BUG: This test passes whether or not EnableChasm is set... how?!?
-		// Am I misunderstanding the way things are working (likely).
+		// Route callbacks through CHASM vs HSM.
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, chasmCallbacks),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmCallbacks),
 
 		// Inject a real TracerProvider into the History service so the otelhttp-wrapped
 		// callback transport produces spans with a valid SpanContext, which is what
@@ -58,17 +61,16 @@ func (s *CallbacksOTELSuite) newEnv(tp trace.TracerProvider) *testcore.TestEnv {
 	)
 }
 
-// TestNexusCallback_PropagatesTraceparent runs a workflow that completes immediately with
-// a Nexus completion callback attached. The callback target is a raw httptest.Server that
-// captures the inbound traceparent header. The test asserts the header is present and
-// non-empty, demonstrating end-to-end OTEL propagation through the History callback
-// executor → otelhttp-wrapped transport → outbound HTTP boundary.
-func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
+// runTraceparentTest runs a workflow with a completion callback pointing at a captive
+// httptest.Server and asserts the outbound callback carries a W3C traceparent header.
+// The shared body is used by both the HSM and CHASM variants — the only differing input
+// is the callback-routing dynamic config that newEnv applies.
+func (s *CallbacksOTELSuite) runTraceparentTest(chasmCallbacks bool) {
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	s.T().Cleanup(func() { _ = tp.Shutdown(s.T().Context()) })
 
-	env := s.newEnv(tp)
+	env := s.newEnv(tp, chasmCallbacks)
 	ctx := env.Context()
 
 	const (
@@ -140,6 +142,7 @@ func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
 
 	// With the workflow started, we now wait for the workflow to complete successfully,
 	// and then confirm that we received traces from the callback handler.
+
 	select {
 	case gotReq := <-receivedCallbackRequests:
 		tp := gotReq.Header.Get("traceparent")
@@ -147,4 +150,18 @@ func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent() {
 	case <-time.After(10 * time.Second):
 		s.Fail("callback never fired within timeout")
 	}
+}
+
+// TestNexusCallbackPropagatesTraceparent_HSM exercises the legacy HSM-backed callback
+// path (components/callbacks). End-to-end propagation runs through the History callback
+// executor → otelhttp-wrapped transport → outbound HTTP boundary.
+func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent_HSM() {
+	s.runTraceparentTest(false)
+}
+
+// TestNexusCallbackPropagatesTraceparent_CHASM exercises the CHASM-backed callback
+// path (chasm/lib/callback). Same end-to-end assertion as the HSM variant; gated on
+// dynamicconfig.EnableCHASMCallbacks=true.
+func (s *CallbacksOTELSuite) TestNexusCallbackPropagatesTraceparent_CHASM() {
+	s.runTraceparentTest(true)
 }

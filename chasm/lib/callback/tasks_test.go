@@ -10,6 +10,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -189,6 +190,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
+				tracer: otelnoop.NewTracerProvider().Tracer(callbackTracerScope),
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
@@ -544,6 +546,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				metricsHandler:    metricsHandler,
 				logger:            logger,
 				historyClient:     historyClient,
+				tracer:            otelnoop.NewTracerProvider().Tracer(callbackTracerScope),
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
