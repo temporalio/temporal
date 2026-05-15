@@ -10,6 +10,9 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -543,4 +546,138 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			tc.assertOutcome(t, cb)
 		})
 	}
+}
+
+// runNexusInvocationWithRecorder drives a single nexus-variant callback invocation through
+// the executor with a span-recording tracer provider attached. It returns the spans that
+// the executor produced. The HTTPCaller is wired to caller; namespace, workflow, and run
+// IDs match what the test below asserts on.
+func runNexusInvocationWithRecorder(
+	t *testing.T,
+	caller callbacks.HTTPCaller,
+) []sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+
+	ctrl := gomock.NewController(t)
+	namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
+	namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(
+		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0),
+		nil,
+	)
+	metricsHandler := metrics.NoopMetricsHandler
+
+	root := newRoot(t)
+	cb := callbacks.Callback{
+		CallbackInfo: &persistencespb.CallbackInfo{
+			Callback: &persistencespb.Callback{
+				Variant: &persistencespb.Callback_Nexus_{
+					Nexus: &persistencespb.Callback_Nexus{
+						Url: "http://localhost/callback",
+					},
+				},
+			},
+			State: enumsspb.CALLBACK_STATE_SCHEDULED,
+		},
+	}
+	coll := callbacks.MachineCollection(root)
+	node, err := coll.Add("ID", cb)
+	require.NoError(t, err)
+	env := fakeEnv{node}
+
+	key := definition.NewWorkflowKey("namespace-id", "my-workflow-id", "my-run-id")
+	reg := hsm.NewRegistry()
+	require.NoError(t, callbacks.RegisterExecutor(
+		reg,
+		callbacks.TaskExecutorOptions{
+			NamespaceRegistry: namespaceRegistryMock,
+			MetricsHandler:    metricsHandler,
+			HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
+				return caller
+			},
+			Logger:         log.NewNoopLogger(),
+			TracerProvider: tp,
+			Config: &callbacks.Config{
+				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+				RetryPolicy: func() backoff.RetryPolicy {
+					return backoff.NewExponentialRetryPolicy(time.Second)
+				},
+			},
+		},
+	))
+
+	// Drive the executor. Errors here are reflected in the span status; the test below
+	// asserts on the span, not on the return value.
+	_ = reg.ExecuteImmediateTask(
+		context.Background(),
+		env,
+		hsm.Ref{
+			WorkflowKey: key,
+			StateMachineRef: &persistencespb.StateMachineRef{
+				Path: []*persistencespb.StateMachineKey{
+					{Type: callbacks.StateMachineType, Id: "ID"},
+				},
+			},
+		},
+		callbacks.NewInvocationTask("http://localhost/callback"),
+	)
+
+	return recorder.Ended()
+}
+
+// TestNexusInvocation_OuterSpan_SetsTemporalAttributes verifies the outbound application-frame
+// span records the Temporal-domain attributes consumed by trace UIs.
+func TestNexusInvocation_OuterSpan_SetsTemporalAttributes(t *testing.T) {
+	caller := func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+	}
+
+	ended := runNexusInvocationWithRecorder(t, caller)
+	require.NotEmpty(t, ended, "expected at least one span")
+
+	var outer sdktrace.ReadOnlySpan
+	for _, s := range ended {
+		if s.Name() == "CompleteNexusOperation" {
+			outer = s
+			break
+		}
+	}
+	require.NotNil(t, outer, "expected CompleteNexusOperation span")
+	require.Equal(t, "client", outer.SpanKind().String())
+
+	attrs := map[string]string{}
+	for _, kv := range outer.Attributes() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	require.Equal(t, "ns-name", attrs["temporal.namespace"])
+	require.Equal(t, "my-workflow-id", attrs["temporal.workflow.id"])
+	require.Equal(t, "my-run-id", attrs["temporal.workflow.run_id"])
+	require.Equal(t, "http://localhost/callback", attrs["temporal.callback.destination"])
+
+	require.Equal(t, otelcodes.Unset, outer.Status().Code,
+		"successful invocation should leave status unset")
+}
+
+// TestNexusInvocation_OuterSpan_RecordsCallError verifies that when the HTTP call fails,
+// the outer span has Error status and an event recording the error.
+func TestNexusInvocation_OuterSpan_RecordsCallError(t *testing.T) {
+	caller := func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	}
+
+	ended := runNexusInvocationWithRecorder(t, caller)
+	require.NotEmpty(t, ended)
+
+	var outer sdktrace.ReadOnlySpan
+	for _, s := range ended {
+		if s.Name() == "CompleteNexusOperation" {
+			outer = s
+			break
+		}
+	}
+	require.NotNil(t, outer, "expected CompleteNexusOperation span")
+	require.Equal(t, otelcodes.Error, outer.Status().Code)
+	require.NotEmpty(t, outer.Events(), "expected error event recorded on span")
 }

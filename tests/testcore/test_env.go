@@ -25,9 +25,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -88,6 +90,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	fxOptionsByService    map[primitives.ServiceName][]fx.Option
 }
 
 type dynamicConfigOverride struct {
@@ -106,6 +109,26 @@ func WithDedicatedCluster() TestOption {
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
+	}
+}
+
+// WithServiceFxOptions appends fx options to the named service's fx graph for the test.
+//
+// Example — inject a real TracerProvider into the History service for OTEL assertions:
+//
+//	exporter := tracetest.NewInMemoryExporter()
+//	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+//	env := testcore.NewEnv(t,
+//	    testcore.WithServiceFxOptions(primitives.HistoryService,
+//	        fx.Decorate(func(trace.TracerProvider) trace.TracerProvider { return tp }),
+//	    ),
+//	)
+func WithServiceFxOptions(serviceName primitives.ServiceName, options ...fx.Option) TestOption {
+	return func(o *testOptions) {
+		if o.fxOptionsByService == nil {
+			o.fxOptionsByService = make(map[primitives.ServiceName][]fx.Option)
+		}
+		o.fxOptionsByService[serviceName] = append(o.fxOptionsByService[serviceName], options...)
 	}
 }
 
@@ -150,7 +173,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.fxOptionsByService)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.

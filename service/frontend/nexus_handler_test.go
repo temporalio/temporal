@@ -373,7 +373,7 @@ func TestStartInboundSpan_SetsTemporalAttributes(t *testing.T) {
 		},
 	}
 
-	_, span := h.startTracingSpan(context.Background(), oc, "svc", "op")
+	_, span := h.startInboundSpan(context.Background(), oc, "svc", "op")
 	span.End()
 
 	ended := recorder.Ended()

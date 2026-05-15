@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/trace"
+	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -17,6 +19,10 @@ import (
 	"go.uber.org/fx"
 )
 
+// callbackTracerScope is the OpenTelemetry instrumentation library name reported on spans
+// produced by the callback task executor.
+const callbackTracerScope = "go.temporal.io/server/components/callbacks"
+
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
 type HTTPCallerProvider func(queuescommon.NamespaceIDAndDestination) HTTPCaller
@@ -25,7 +31,7 @@ func RegisterExecutor(
 	registry *hsm.Registry,
 	executorOptions TaskExecutorOptions,
 ) error {
-	exec := taskExecutor{executorOptions}
+	exec := newTaskExecutor(executorOptions)
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
 		exec.executeInvocationTask,
@@ -49,10 +55,25 @@ type TaskExecutorOptions struct {
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
 	ChasmEngine        chasm.Engine
+	// TracerProvider is used to record outbound spans for callback invocations. Optional;
+	// a no-op tracer is used when not supplied (e.g. tests that don't wire OTEL).
+	TracerProvider trace.TracerProvider `optional:"true"`
 }
 
 type taskExecutor struct {
 	TaskExecutorOptions
+	tracer trace.Tracer
+}
+
+func newTaskExecutor(opts TaskExecutorOptions) taskExecutor {
+	tp := opts.TracerProvider
+	if tp == nil {
+		tp = otelnoop.NewTracerProvider()
+	}
+	return taskExecutor{
+		TaskExecutorOptions: opts,
+		tracer:              tp.Tracer(callbackTracerScope),
+	}
 }
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
