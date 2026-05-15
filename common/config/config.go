@@ -403,15 +403,18 @@ type (
 	}
 
 	// CassandraReconnectionPolicy configures the parameters of gocql's ExponentialReconnectionPolicy.
-	// Any zero-valued field falls back to the gocql wrapper default (MaxRetries=3, InitialInterval=1s, MaxInterval=10s).
+	// Unset fields fall back to the gocql wrapper default (MaxRetries=3, InitialInterval=1s, MaxInterval=10s).
 	CassandraReconnectionPolicy struct {
 		// MaxRetries caps the number of reconnection attempts gocql makes when filling a host's pool.
+		// Pointer so an explicit 0 (give up after the first failure) is distinguishable from unset.
 		// Defaults to 3.
-		MaxRetries int `yaml:"maxRetries"`
+		MaxRetries *int `yaml:"maxRetries"`
 		// InitialInterval is the wait before the first reconnection attempt; subsequent attempts
-		// double until MaxInterval. (defaults to 1 second if not set)
+		// double until MaxInterval. Zero is treated as unset to avoid tight reconnect loops.
+		// (defaults to 1 second if not set)
 		InitialInterval time.Duration `yaml:"initialInterval"`
-		// MaxInterval caps the exponential backoff between reconnection attempts. (defaults to 10 seconds if not set)
+		// MaxInterval caps the exponential backoff between reconnection attempts. Zero is treated
+		// as unset to avoid tight reconnect loops. (defaults to 10 seconds if not set)
 		MaxInterval time.Duration `yaml:"maxInterval"`
 	}
 

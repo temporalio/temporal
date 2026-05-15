@@ -15,6 +15,8 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func ptr[T any](v T) *T { return &v }
+
 func TestNewCassandraCluster(t *testing.T) {
 	tests := map[string]struct {
 		cfg    config.Cassandra
@@ -163,7 +165,7 @@ func TestNewCassandraCluster(t *testing.T) {
 		"reconnection_policy_max_retries": {
 			cfg: config.Cassandra{
 				ReconnectionPolicy: &config.CassandraReconnectionPolicy{
-					MaxRetries: 3,
+					MaxRetries: ptr(3),
 				},
 			},
 			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
@@ -173,10 +175,21 @@ func TestNewCassandraCluster(t *testing.T) {
 				assert.Equal(t, 10*time.Second, rp.MaxInterval)
 			},
 		},
+		"reconnection_policy_max_retries_explicit_zero": {
+			cfg: config.Cassandra{
+				ReconnectionPolicy: &config.CassandraReconnectionPolicy{
+					MaxRetries: ptr(0),
+				},
+			},
+			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
+				rp := cluster.ReconnectionPolicy.(*gocql.ExponentialReconnectionPolicy)
+				assert.Equal(t, 0, rp.MaxRetries)
+			},
+		},
 		"reconnection_policy_all_fields": {
 			cfg: config.Cassandra{
 				ReconnectionPolicy: &config.CassandraReconnectionPolicy{
-					MaxRetries:      5,
+					MaxRetries:      ptr(5),
 					InitialInterval: 250 * time.Millisecond,
 					MaxInterval:     2 * time.Second,
 				},

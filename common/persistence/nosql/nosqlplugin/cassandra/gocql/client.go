@@ -154,8 +154,8 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 		MaxInterval:     10 * time.Second,
 	}
 	if rp := cfg.ReconnectionPolicy; rp != nil {
-		if rp.MaxRetries > 0 {
-			reconnectionPolicy.MaxRetries = rp.MaxRetries
+		if rp.MaxRetries != nil {
+			reconnectionPolicy.MaxRetries = *rp.MaxRetries
 		}
 		if rp.InitialInterval > 0 {
 			reconnectionPolicy.InitialInterval = rp.InitialInterval
