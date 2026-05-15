@@ -87,6 +87,14 @@ and provides assertion helpers and safety mechanisms.
 
 It replaces all use of `testify`'s `Suite`.
 
+#### Context shorthand
+
+```go
+ctx := s.Context()
+```
+
+`s.Context()` returns the subtest-scoped context - equivalent to `testcontext.New(s.T())`.
+
 #### Await shorthand
 
 ```go
@@ -164,6 +172,10 @@ func TestFoo(t *testing.T) {
 
 If you don't care about specific value, you can use `Any()` method to generate a random value.
 It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
+
+### testcontext package
+
+There's no need to create your own `context.Context` via `context.WithTimeout`; use `testcontext.New(t)` instead. It returns a test-scoped `context.Context`, memoized per `*testing.T` and canceled on test end or timeout.
 
 ### taskpoller package
 
