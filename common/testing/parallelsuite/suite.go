@@ -21,12 +21,8 @@ import (
 // testingSuite is the constraint for suite types.
 type testingSuite interface {
 	testifysuite.TestingSuite
-	copySuite(t *testing.T, assertT require.TestingT, ctx contextOverride) testingSuite
-	initSuite(t *testing.T, assertT require.TestingT, ctx contextOverride)
-}
-
-type contextOverride struct {
-	ctx context.Context
+	copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite
+	initSuite(t *testing.T, assertT require.TestingT, ctx context.Context)
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -45,17 +41,18 @@ type Suite[T testingSuite] struct {
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-func (s *Suite[T]) copySuite(t *testing.T, assertT require.TestingT, ctx contextOverride) testingSuite {
+// ctx overrides the suite's context; nil means use the default (lazy testcontext.New).
+func (s *Suite[T]) copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
 	cp.initSuite(t, assertT, ctx)
 	return cp
 }
 
-func (s *Suite[T]) initSuite(t *testing.T, assertT require.TestingT, ctx contextOverride) {
+func (s *Suite[T]) initSuite(t *testing.T, assertT require.TestingT, ctx context.Context) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
-	s.ctx = ctx.ctx
+	s.ctx = ctx
 	if assertT == nil {
 		assertT = g
 	}
@@ -88,7 +85,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
 		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel subtests
-		fn(s.copySuite(t, nil, contextOverride{}).(T))
+		fn(s.copySuite(t, nil, nil).(T))
 	})
 }
 
@@ -101,7 +98,7 @@ func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
 func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
 	t := s.T()
 	await.Requiref(s.Context(), t, func(at *await.T) {
-		fn(s.copySuite(t, at, contextOverride{ctx: at.Context()}).(T))
+		fn(s.copySuite(t, at, at.Context()).(T))
 	}, timeout, interval, msg, args...)
 }
 
@@ -156,7 +153,7 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 		t.Run(method.Name, func(t *testing.T) {
 			t.Parallel()
 
-			cpS := s.copySuite(t, nil, contextOverride{})
+			cpS := s.copySuite(t, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
