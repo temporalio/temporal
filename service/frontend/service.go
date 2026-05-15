@@ -231,6 +231,7 @@ type Config struct {
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -400,6 +401,7 @@ func NewConfig(
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
+		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),

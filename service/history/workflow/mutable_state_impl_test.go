@@ -6617,6 +6617,20 @@ func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
 		s.True(hasPendingWork)
 		s.Equal("has pending nexus operations", reason)
 	})
+
+	s.Run("TrueWhenPendingSignalExternal", func() {
+		s.mutableState.pendingSignalInfoIDs[1] = &persistencespb.SignalInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending signal external", reason)
+	})
+
+	s.Run("TrueWhenPendingRequestCancelExternal", func() {
+		s.mutableState.pendingRequestCancelInfoIDs[1] = &persistencespb.RequestCancelInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending request cancel external", reason)
+	})
 }
 
 func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
