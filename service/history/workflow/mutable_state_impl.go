@@ -5852,7 +5852,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	ms.executionInfo.SignalCount++
 
 	// Add signal requestID to workflow CHASM tree (if feature is enabled)
-	signalEventAttrs := event.GetAttributes().(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
+	signalEventAttrs, ok := event.GetAttributes().(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
+	if !ok {
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			fmt.Sprintf(
+				"Expect ApplyWorkflowExecutionSignaled to be called only on signal events, but called from: %v",
+				event,
+			),
+			nil,
+		)
+	}
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
 		ctx := context.Background()
