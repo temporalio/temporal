@@ -86,7 +86,10 @@ func (n invocableOutbound) Invoke(
 
 	// If the Nexus callback token is set on the callback, pass it along in completion's headers.
 	if n.callback.GetToken() != "" {
-		n.completion.CallbackToken = n.callback.GetToken()
+		if n.completion.Header == nil {
+			n.completion.Header = nexus.Header{}
+		}
+		n.completion.Header.Set(commonnexus.CallbackTokenHeader, n.callback.GetToken())
 	}
 
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
