@@ -127,7 +127,7 @@ var TransitionSucceeded = chasm.NewTransition(
 		now := ctx.Now(cb)
 		cb.recordAttempt(now)
 		cb.CloseTime = timestamppb.New(now)
-		cb.LastAttemptFailure = nil
+		// NOTE: We don't clear LastAttemptFailure data intentionally.
 		return nil
 	},
 )

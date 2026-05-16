@@ -98,10 +98,15 @@ func TestValidTransitions(t *testing.T) {
 		// Assert info object is updated.
 		require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.StateMachineState())
 		require.Equal(t, int32(2), callback.Attempt)
-		require.Nil(t, callback.LastAttemptFailure)
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 		require.Nil(t, callback.NextAttemptScheduleTime)
 		require.Equal(t, currentTime, callback.CloseTime.AsTime())
+
+		// The LastAttemptFailure and related data remain unchanged.
+		lastFailure := callback.LastAttemptFailure
+		require.NotNil(t, lastFailure)
+		require.Equal(t, "error message", lastFailure.Message)
+		require.False(t, lastFailure.GetApplicationFailureInfo().NonRetryable)
 
 		_, ok := callback.TerminalFailure.TryGet(mctx)
 		require.False(t, ok)
