@@ -1,7 +1,9 @@
 x-healthcheck-defaults: &healthcheck-defaults
-  interval: 3s
+  interval: 5s # steady-state polling once healthy; avoids ongoing probe overhead
   timeout: 3s
-  retries: 60
+  retries: 3 # ~90s of failures at steady-state before marking unhealthy (startup is covered by start_period)
+  start_period: 60s # probe failures within this window don't count against retries
+  start_interval: 1s # probe every 1s during start_period; trims startup wait
 
 services:
   cassandra:
@@ -38,7 +40,16 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    command: postgres -c max_connections=500
+    command:
+      - postgres
+      - -c
+      - max_connections=500
+      - -c
+      - fsync=off # test DB is ephemeral; skip per-commit fsync
+      - -c
+      - synchronous_commit=off # don't block on WAL flush
+      - -c
+      - full_page_writes=off # torn-page protection irrelevant for tests
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
     healthcheck:
