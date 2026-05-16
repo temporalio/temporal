@@ -97,10 +97,11 @@ func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 	c.Status = status
 }
 
+// ContextMetadata is used for root CHASM components, so this is only applicable
+// for the standalone callback case.
 func (c *Callback) ContextMetadata(ctx chasm.Context) map[string]string {
 	return map[string]string{
-		"request-id": c.RequestId,
-		// Only set for standalone callbacks.
+		"request-id":  c.RequestId,
 		"callback-id": ctx.ExecutionKey().BusinessID,
 	}
 }
@@ -291,7 +292,7 @@ func callbackCompletionToNexusCompleteOperationOpts(
 		return nexusCompletion, nil
 
 	default:
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInvalidArgument("no completion result provided")
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("no completion result provided")
 	}
 }
 
