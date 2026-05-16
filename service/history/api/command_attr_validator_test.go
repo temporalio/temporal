@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -835,6 +836,57 @@ func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_In
 				s.Error(err)
 				var invalidArgument *serviceerror.InvalidArgument
 				s.ErrorAs(err, &invalidArgument)
+			} else {
+				s.NoError(err)
+			}
+		})
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_WorkflowIDLengthLimit() {
+	parentInfo := &persistencespb.WorkflowExecutionInfo{
+		TaskQueue:        "test-parent-task-queue",
+		WorkflowId:       "test-parent-wf-id",
+		WorkflowTypeName: "test-parent-wf-type",
+	}
+
+	for _, tt := range []struct {
+		name        string
+		workflowID  string
+		expectError bool
+	}{
+		{
+			name:       "limit accepted",
+			workflowID: strings.Repeat("a", 1000),
+		},
+		{
+			name:        "over limit rejected",
+			workflowID:  strings.Repeat("a", 1001),
+			expectError: true,
+		},
+	} {
+		s.Run(tt.name, func() {
+			attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+				WorkflowId: tt.workflowID,
+				WorkflowType: &commonpb.WorkflowType{
+					Name: "test-child-wf-type",
+				},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: "test-child-task-queue",
+				},
+				Namespace: "test-ns",
+			}
+			_, err := s.validator.ValidateStartChildExecutionAttributes(
+				s.testNamespaceID,
+				s.testNamespaceID,
+				namespace.Name("test-ns"),
+				attributes,
+				parentInfo,
+				dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second),
+			)
+
+			if tt.expectError {
+				s.ErrorContains(err, "WorkflowId on StartChildWorkflowExecutionCommand exceeds length limit")
 			} else {
 				s.NoError(err)
 			}
