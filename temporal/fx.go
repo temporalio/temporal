@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -157,7 +156,6 @@ var (
 
 	ChasmLibraryOptions = fx.Options(
 		chasm.Module,
-		chasmworkflow.Module,
 		chasmscheduler.Module,
 		chasmcallback.Module,
 	)

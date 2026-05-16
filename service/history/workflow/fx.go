@@ -5,7 +5,7 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func() TaskGeneratorProvider { return defaultTaskGeneratorProvider }),
+	fx.Provide(GetTaskGeneratorProvider),
 	fx.Invoke(populateTaskGeneratorProvider),
 	fx.Provide(RelocatableAttributesFetcherProvider),
 	fx.Invoke(RegisterStateMachine),

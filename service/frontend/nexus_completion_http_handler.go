@@ -328,7 +328,11 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 			RequestId:    completion.GetRequestId(),
 			ComponentRef: completion.GetComponentRef(),
 		},
-		Links: links,
+		Links:          links,
+		OperationToken: req.OperationToken,
+	}
+	if !req.StartTime.IsZero() {
+		hr.StartTime = timestamppb.New(req.StartTime)
 	}
 	if !req.CloseTime.IsZero() {
 		hr.CloseTime = timestamppb.New(req.CloseTime)

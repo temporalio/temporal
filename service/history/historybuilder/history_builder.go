@@ -89,6 +89,11 @@ func New(
 	}
 }
 
+func (b *HistoryBuilder) SetTimeSource(timeSource clock.TimeSource) {
+	b.EventStore.timeSource = timeSource
+	b.EventFactory.timeSource = timeSource
+}
+
 func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 	lastHistory := histories[len(histories)-1]
 	lastEvent := lastHistory[len(lastHistory)-1]
@@ -747,6 +752,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionSignaledEvent(
@@ -755,6 +761,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 		identity,
 		header,
 		externalWorkflowExecution,
+		requestID,
 		links,
 	)
 	event, _ = b.EventStore.add(event)
@@ -765,11 +772,15 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	initialSkippedDuration *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
+		timeSkippingConfig,
+		initialSkippedDuration,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

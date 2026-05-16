@@ -2,6 +2,8 @@ package contextutil
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -11,7 +13,8 @@ type (
 	// metadataContext is used to store workflow and activity metadata
 	metadataContext struct {
 		sync.Mutex
-		Metadata map[string]any
+		Metadata          map[string]any
+		MarkedActivityIDs map[string]struct{}
 	}
 )
 
@@ -22,7 +25,92 @@ const (
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
 	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
+	// MetadataKeyStandaloneActivityType is the context metadata key for standalone activity type.
+	MetadataKeyStandaloneActivityType = "standalone-activity-type"
+	// MetadataKeyStandaloneActivityTaskQueue is the context metadata key for standalone activity task queue.
+	MetadataKeyStandaloneActivityTaskQueue = "standalone-activity-task-queue"
+
+	activityTypePrefix      = "activity-type-"
+	activityTaskQueuePrefix = "activity-task-queue-"
 )
+
+// ActivityTypeKey returns the metadata key for an activity's type, keyed by scheduled event ID.
+func ActivityTypeKey(scheduledEventID int64) string {
+	return activityTypePrefix + strconv.FormatInt(scheduledEventID, 10)
+}
+
+// ActivityTaskQueueKey returns the metadata key for an activity's task queue, keyed by scheduled event ID.
+func ActivityTaskQueueKey(scheduledEventID int64) string {
+	return activityTaskQueuePrefix + strconv.FormatInt(scheduledEventID, 10)
+}
+
+// ContextMetadataGetActivityTypeAndTaskQueue scans the context metadata for a single
+// activity's type and task queue. Returns false if no activity metadata is found
+// or if multiple activities are present.
+func ContextMetadataGetActivityTypeAndTaskQueue(ctx context.Context) (activityType string, taskQueue string, ok bool) {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return "", "", false
+	}
+
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+
+	var foundType, foundTaskQueue bool
+	for key, value := range metadataCtx.Metadata {
+		if strings.HasPrefix(key, activityTypePrefix) {
+			if foundType {
+				return "", "", false
+			}
+			activityType, foundType = value.(string)
+		} else if strings.HasPrefix(key, activityTaskQueuePrefix) {
+			if foundTaskQueue {
+				return "", "", false
+			}
+			taskQueue, foundTaskQueue = value.(string)
+		}
+	}
+
+	return activityType, taskQueue, foundType && foundTaskQueue
+}
+
+// ContextMetadataMarkActivityID marks an activity ID on the context for metadata resolution.
+// The handler knows which activity (from the task token) but not its type or task queue.
+// Mutable state knows the activity details but not which activity the request targets.
+// This bridges the two: the handler marks the ID, and SetContextMetadata (during
+// closeTransaction) resolves it to type and task queue from mutable state.
+// Cannot be used for transactions that remove the activity from mutable state
+// (e.g., activity completion), since it won't be available for resolution.
+func ContextMetadataMarkActivityID(ctx context.Context, activityID string) bool {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return false
+	}
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+	metadataCtx.MarkedActivityIDs[activityID] = struct{}{}
+	return true
+}
+
+// ContextMetadataGetMarkedActivityIDs returns the marked activity IDs from the context.
+func ContextMetadataGetMarkedActivityIDs(ctx context.Context) []string {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return nil
+	}
+
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+
+	if len(metadataCtx.MarkedActivityIDs) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(metadataCtx.MarkedActivityIDs))
+	for id := range metadataCtx.MarkedActivityIDs {
+		ids = append(ids, id)
+	}
+	return ids
+}
 
 // getMetadataContext extracts metadata context from golang context.
 func getMetadataContext(ctx context.Context) *metadataContext {
@@ -40,7 +128,8 @@ func getMetadataContext(ctx context.Context) *metadataContext {
 // WithMetadataContext adds a metadata context to the given context.
 func WithMetadataContext(ctx context.Context) context.Context {
 	metadataCtx := &metadataContext{
-		Metadata: make(map[string]any),
+		Metadata:          make(map[string]any),
+		MarkedActivityIDs: make(map[string]struct{}),
 	}
 	return context.WithValue(ctx, metadataCtxKey, metadataCtx)
 }
@@ -51,7 +140,7 @@ func ContextHasMetadata(ctx context.Context) bool {
 	return getMetadataContext(ctx) != nil
 }
 
-// ContextMetadataSet sets a metadata key-value pair in the context.
+// ContextMetadataSet sets a metadata key-value pair in the context, overwriting any existing value.
 func ContextMetadataSet(ctx context.Context, key string, value any) bool {
 	metadataCtx := getMetadataContext(ctx)
 	if metadataCtx == nil {

@@ -84,7 +84,7 @@ type (
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		chasmWorkflowRegistry  *chasmworkflow.Registry
 		matchingClient         matchingservice.MatchingServiceClient
-		versionMembershipCache worker_versioning.VersionMembershipCache
+		versionCache           worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -126,7 +126,7 @@ func newWorkflowTaskCompletedHandler(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -161,7 +161,7 @@ func newWorkflowTaskCompletedHandler(
 		commandHandlerRegistry: commandHandlerRegistry,
 		chasmWorkflowRegistry:  chasmWorkflowRegistry,
 		matchingClient:         matchingClient,
-		versionMembershipCache: versionMembershipCache,
+		versionCache:           versionCache,
 	}
 }
 
@@ -698,9 +698,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		} else if ai.WorkerControlTaskQueue != "" {
 			if ai.StartedClock == nil {
-				// StartedClock may be nil for activities started before this feature was deployed.
+				// StartedClock is nil when the activity is not currently running on a worker
+				// (e.g., in retry backoff, or started before this feature was deployed).
 				// Skip cancel command; the activity will time out normally.
-				handler.logger.Info("Skipping worker cancel command: activity missing StartedClock (pre-deploy)",
+				handler.logger.Info("Skipping worker cancel command: activity not currently started",
 					tag.WorkflowNamespaceID(handler.mutableState.GetWorkflowKey().NamespaceID),
 					tag.WorkflowID(handler.mutableState.GetWorkflowKey().WorkflowID),
 					tag.WorkflowRunID(handler.mutableState.GetWorkflowKey().RunID),
@@ -1122,7 +1123,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionMembershipCache),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
 	)
 	if err != nil {
 		return nil, err

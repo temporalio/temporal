@@ -12,11 +12,16 @@ import (
 type Config struct {
 	NumberOfShards int32
 
-	EnableReplicationStream             dynamicconfig.BoolPropertyFn
-	EnableSeparateReplicationEnableFlag dynamicconfig.BoolPropertyFn
-	HistoryReplicationDLQV2             dynamicconfig.BoolPropertyFn
+	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
+	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
+	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
 
 	RPS                                         dynamicconfig.IntPropertyFn
+	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableNamespaceFairness                     dynamicconfig.BoolPropertyFn
+	NamespaceFairShareMultiplier                dynamicconfig.FloatPropertyFn
+	FrontendGlobalNamespaceRPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -67,6 +72,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -407,6 +413,7 @@ type Config struct {
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
 	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
+	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -416,16 +423,14 @@ type Config struct {
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Worker-Versioning related settings
-	EnableSuggestCaNOnNewTargetVersion    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableSendTargetVersionChanged        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	UseRevisionNumberForWorkerVersioning  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VersionMembershipCacheTTL             dynamicconfig.DurationPropertyFn
-	VersionMembershipCacheMaxSize         dynamicconfig.IntPropertyFn
-	VersionReactivationSignalCacheTTL     dynamicconfig.DurationPropertyFn
-	VersionReactivationSignalCacheMaxSize dynamicconfig.IntPropertyFn
-	EnableVersionReactivationSignals      dynamicconfig.BoolPropertyFn
-	RoutingInfoCacheTTL                   dynamicconfig.DurationPropertyFn
-	RoutingInfoCacheMaxSize               dynamicconfig.IntPropertyFn
+	EnableSuggestCaNOnNewTargetVersion   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSendTargetVersionChanged       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
+	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
+	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
+	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -436,11 +441,16 @@ func NewConfig(
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		EnableReplicationStream:             dynamicconfig.EnableReplicationStream.Get(dc),
-		EnableSeparateReplicationEnableFlag: dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
-		HistoryReplicationDLQV2:             dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
+		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
+		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
+		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
+		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
+		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
+		EnableNamespaceFairness:              dynamicconfig.EnableHistoryNamespaceFairness.Get(dc),
+		NamespaceFairShareMultiplier:         dynamicconfig.HistoryNamespaceFairShareMultiplier.Get(dc),
+		FrontendGlobalNamespaceRPS:           dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
@@ -491,8 +501,9 @@ func NewConfig(
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbacks:    dynamicconfig.EnableCHASMCallbacks.Get(dc),
-		ExternalPayloadsEnabled: dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableCHASMCallbacks:       dynamicconfig.EnableCHASMCallbacks.Get(dc),
+		EnableCHASMSignalBacklinks: dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		ExternalPayloadsEnabled:    dynamicconfig.ExternalPayloadsEnabled.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -789,6 +800,7 @@ func NewConfig(
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
 		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
+		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
@@ -797,16 +809,14 @@ func NewConfig(
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		// Worker-Versioning related
-		UseRevisionNumberForWorkerVersioning:  dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
-		EnableSuggestCaNOnNewTargetVersion:    dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
-		EnableSendTargetVersionChanged:        dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
-		VersionMembershipCacheTTL:             dynamicconfig.VersionMembershipCacheTTL.Get(dc),
-		VersionMembershipCacheMaxSize:         dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
-		VersionReactivationSignalCacheTTL:     dynamicconfig.VersionReactivationSignalCacheTTL.Get(dc),
-		VersionReactivationSignalCacheMaxSize: dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc),
-		EnableVersionReactivationSignals:      dynamicconfig.EnableVersionReactivationSignals.Get(dc),
-		RoutingInfoCacheTTL:                   dynamicconfig.RoutingInfoCacheTTL.Get(dc),
-		RoutingInfoCacheMaxSize:               dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableSuggestCaNOnNewTargetVersion:   dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
+		EnableSendTargetVersionChanged:       dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
+		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
+		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
+		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
+		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 	}
 
 	return cfg

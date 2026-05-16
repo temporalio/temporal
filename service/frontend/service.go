@@ -171,6 +171,9 @@ type Config struct {
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Enables ID-space collision sentinels, and must be enabled and propagated in
+	// advance of EnableCHASMSchedulerCreation.
+	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -228,6 +231,7 @@ type Config struct {
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -286,7 +290,7 @@ func NewConfig(
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
-		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.FrontendPollWaitForNamespaceRateLimitToken.Get(dc),
+		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
@@ -346,10 +350,11 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnableChasm:                  dynamicconfig.EnableChasm.Get(dc),
-		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
-		EnableCHASMSchedulerRouting:  dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableCHASMSchedulerSentinels: dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -396,6 +401,7 @@ func NewConfig(
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
+		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),

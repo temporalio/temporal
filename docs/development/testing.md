@@ -41,6 +41,33 @@ Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoa
 `assert` records a failure but lets the test continue, which often leads to confusing
 cascading errors.
 
+### Polling with await.Require
+
+For polling/retry loops in tests, use `await.Require` (or `await.Requiref`)
+from `common/testing/await` instead of testify's `EventuallyWithT`.
+
+Use `t.Context()` inside the callback for a context derived from the parent
+context and canceled when the parent context is canceled or the await timeout
+expires.
+
+```go
+await.Require(ctx, t, func(t *await.T) {
+    resp, err := client.GetStatus(t.Context())
+    require.NoError(t, err)
+    require.Equal(t, "ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Use `RequireTrue` instead of testify's `Eventually` for simple local bool-returning predicates.
+
+```go
+await.RequireTrue(t, func() bool {
+    return cache.Ready()
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+`RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -59,6 +86,18 @@ Use `parallelsuite.Suite` to ensure your test suite is fast and safe: it runs al
 and provides assertion helpers and safety mechanisms.
 
 It replaces all use of `testify`'s `Suite`.
+
+#### Await shorthand
+
+```go
+s.Await(func(s *MySuite) {
+    resp, err := client.GetStatus(s.Context())
+    s.NoError(err)
+    s.Equal("ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Inside an `s.Await` callback, `s.Context()` is capped to that await's timeout.
 
 ### testvars package
 
@@ -159,6 +198,22 @@ It is *not* a substitute for regular error handling, validation, or control flow
 
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
+
+### protorequire package
+
+Use `protorequire.ProtoEqual` to compare proto messages with proto semantics.
+Prefer a single `ProtoEqual` call over asserting fields one-by-one, since it catches unexpected field changes and keeps the expected value next to the assertion.
+
+To ignore specific fields on the top-level message (e.g. non-deterministic timestamps), pass `protorequire.IgnoreFields`:
+
+```go
+protorequire.ProtoEqual(t, expected, actual,
+    protorequire.IgnoreFields(
+        "execution_duration",
+        "schedule_time",
+    ),
+)
+```
 
 ### Test Cluster
 

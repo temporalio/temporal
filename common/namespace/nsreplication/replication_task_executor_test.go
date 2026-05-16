@@ -52,6 +52,7 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 		"some random standby cluster name",
 		s.mockMetadataMgr,
 		NewNoopDataMerger(),
+		NewDefaultAdmitter(),
 		logger,
 	).(*taskExecutorImpl)
 }
