@@ -439,6 +439,9 @@ reredirectTask:
 		return "", false, err
 	}
 
+	behavior := directive.GetBehavior()
+	forwarded := params.forwardInfo != nil
+
 	var outcome syncMatchOutcome
 	if isActive {
 		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
@@ -446,9 +449,15 @@ reredirectTask:
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
-			if params.forwardInfo == nil {
+			if !forwarded {
 				pm.processTaskAddHooks(ctx, targetVersion, outcome)
 			}
+
+			syncMatchResult := metrics.TaskAddResultSyncMatch
+			if err != nil {
+				syncMatchResult = taskAddErrResult(err)
+			}
+			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -465,6 +474,7 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
+		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -476,7 +486,10 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
 		pm.processTaskAddHooks(ctx, targetVersion, outcome)
+	} else {
+		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
 
 	return assignedBuildId, false, err
@@ -504,6 +517,14 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			SyncMatchOutcome:  hookOutcome,
 		})
 	}
+}
+
+func taskAddErrResult(err error) string {
+	var resourceExhausted *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhausted) {
+		return metrics.TaskAddResultThrottled
+	}
+	return metrics.TaskAddResultFailure
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {

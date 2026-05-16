@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -331,6 +332,83 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 	s.NoError(err)
 	s.NotNil(resp)
 	proto.Equal(expectedOverrideOptions, resp.GetWorkflowExecutionOptions())
+}
+
+func TestValidateTimeSkippingConfig(t *testing.T) {
+	tenMin := durationpb.New(10 * time.Minute)
+	twentyMin := durationpb.New(20 * time.Minute)
+	maxSkippedTen := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: tenMin}
+	maxSkippedTwenty := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: twentyMin}
+	maxElapsedTen := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: tenMin}
+
+	tcs := []struct {
+		name        string
+		config      *workflowpb.TimeSkippingConfig
+		accumulated *durationpb.Duration
+		wantErr     bool
+	}{
+		{
+			name:   "nil config",
+			config: nil,
+		},
+		{
+			name:        "disabled short-circuits even when bound would be violated",
+			config:      &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxSkippedTen},
+			accumulated: twentyMin,
+		},
+		{
+			name:   "enabled, no bound",
+			config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
+			name:        "MaxElapsedDuration bound is not validated here",
+			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedTen},
+			accumulated: twentyMin,
+		},
+		{
+			name:   "MaxSkipped set, nil accumulated treated as zero",
+			config: &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
+		},
+		{
+			name:        "MaxSkipped > accumulated",
+			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTwenty},
+			accumulated: tenMin,
+		},
+		{
+			name:        "MaxSkipped == accumulated is rejected (must be strictly greater)",
+			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
+			accumulated: tenMin,
+			wantErr:     true,
+		},
+		{
+			name:        "MaxSkipped < accumulated is rejected",
+			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
+			accumulated: twentyMin,
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			info := &persistencespb.WorkflowExecutionInfo{}
+			if tc.accumulated != nil {
+				info.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: tc.accumulated,
+				}
+			}
+			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+
+			err := validateTimeSkippingConfig(tc.config, ms)
+			if tc.wantErr {
+				var invalidArg *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {

@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -726,26 +727,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		)
 	}
 
-	if timeSkippingConfig.GetBound() != nil {
-		switch bound := timeSkippingConfig.GetBound().(type) {
-		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-			if bound.MaxSkippedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewInvalidArgumentf(
-					"Max skipped duration must be at least %s",
-					namespace.MinTimeSkippingDuration,
-				)
-			}
-		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewInvalidArgumentf(
-					"Max elapsed duration must be at least %s",
-					namespace.MinTimeSkippingDuration,
-				)
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported time skipping bound type: %T", bound)
-		}
-	}
 	return nil
 }
 
@@ -791,7 +772,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, errMultiOpNotStartAndUpdate
 	}
 
-	metrics.EventBlobSize.With(wh.metricsScope(ctx)).Record(int64(request.Operations[1].GetUpdateWorkflow().GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
+	metrics.EventBlobSize.With(wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))).Record(int64(request.Operations[1].GetUpdateWorkflow().GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
 
 	historyReq, err := wh.convertToHistoryMultiOperationRequest(ctx, namespaceID, request)
 	if err != nil {
@@ -2325,7 +2306,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+	resp, err := wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   namespaceID.String(),
 		SignalRequest: request,
 	})
@@ -2333,7 +2314,9 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	return &workflowservice.SignalWorkflowExecutionResponse{}, nil
+	return &workflowservice.SignalWorkflowExecutionResponse{
+		Link: resp.GetLink(),
+	}, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
@@ -2451,8 +2434,9 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   resp.GetRunId(),
-		Started: resp.Started,
+		RunId:      resp.GetRunId(),
+		Started:    resp.Started,
+		SignalLink: resp.GetSignalLink(),
 	}, nil
 }
 
@@ -4987,16 +4971,32 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	// Always attempt deletion in both stacks. A schedule may exist in either or
 	// both during dual-stack migration (and a V1 sentinel may linger after a
 	// CHASM-only create). Surface an error only when neither stack succeeded.
+	//
+	// Each path gets its own metadata context so that downstream gRPC trailers
+	// (propagated by TrailerToContextMetadataInterceptor) don't clobber each
+	// other. After both paths complete, the winning side's metadata is copied
+	// into the original context for upstream consumers (e.g. metering).
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, request.Namespace)
 
+	chasmCtx := contextutil.WithMetadataContext(ctx)
 	var chasmErr error
 	if chasmEnabled {
-		_, chasmErr = wh.deleteScheduleCHASM(ctx, request)
+		_, chasmErr = wh.deleteScheduleCHASM(chasmCtx, request)
 	}
-	_, v1Err := wh.deleteScheduleWorkflow(ctx, request)
+	v1Ctx := contextutil.WithMetadataContext(ctx)
+	_, v1Err := wh.deleteScheduleWorkflow(v1Ctx, request)
 
-	// At least one side actually deleted → success.
+	// At least one side actually deleted -> success.
 	if (chasmEnabled && chasmErr == nil) || v1Err == nil {
+		// CHASM owns the schedule unless it returned a routable error
+		// (NotFound/sentinel/closed), in which case V1 is the owner.
+		winnerCtx := v1Ctx
+		if chasmEnabled && (chasmErr == nil || !isSchedulerErrorLegacyRoutable(chasmErr)) {
+			winnerCtx = chasmCtx
+		}
+		for k, v := range contextutil.ContextMetadataGetAll(winnerCtx) {
+			contextutil.ContextMetadataSet(ctx, k, v)
+		}
 		return &workflowservice.DeleteScheduleResponse{}, nil
 	}
 
@@ -5122,6 +5122,15 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 		); err != nil {
+			return "", err
+		}
+
+		saMapper, err := wh.saMapperProvider.GetMapper(namespaceName)
+		if err != nil {
+			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+		}
+		query, err = scheduler.RewriteScheduleIDQuery(query, chasmEnabled, saMapper, saNameType, namespaceName)
+		if err != nil {
 			return "", err
 		}
 
@@ -5337,7 +5346,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 
 	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateWorkflowExecution"))
 	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetRequest().GetInput().GetHeader().Size()))
-	metrics.EventBlobSize.With(wh.metricsScope(ctx)).Record(int64(request.GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
+	metrics.EventBlobSize.With(wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))).Record(int64(request.GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
 
 	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
