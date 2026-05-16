@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/auth/authtest"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
 	"google.golang.org/grpc/metadata"
@@ -196,7 +197,7 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 			}
 		}
 	}
-	s.Require().Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		for _, c := range s.clusters {
 			resp, err := c.AdminClient().ListClusters(testcore.NewContext(), &adminservice.ListClustersRequest{})
 			if err != nil {
@@ -227,7 +228,7 @@ func (s *RemoteClusterAuthSuite) TearDownSuite() {
 func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnRemoteClusterConnection() {
 	// s.captured is populated by background goroutines (cluster metadata refresh, replication setup);
 	// a single-shot read can race their first invocation, especially under CI load.
-	s.Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		for _, c := range s.clusters {
 			for _, call := range s.callsFor(c.ClusterName()) {
 				if call.token == "Bearer "+expectedXDCToken {
@@ -243,7 +244,7 @@ func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnRemoteClusterConnection() {
 // Replication streams are opened once at peer-registration time and reused; we don't clear
 // captures here so the initial open is observable.
 func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnStreamingRPC() {
-	s.Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		for _, c := range s.clusters {
 			for _, call := range s.callsFor(c.ClusterName()) {
 				if strings.Contains(call.api, "StreamWorkflowReplicationMessages") && call.token == "Bearer "+expectedXDCToken {
