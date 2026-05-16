@@ -408,11 +408,6 @@ func (u *Update) AttachCallbacks(
 		// paths call AttachCallbacks within the same transaction.
 		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
 
-	case stateAdmitted:
-		// The update is now admitted by the server but not yet set to the worker.
-		// Return false since at this stage, it's too early to have callbacks attached.
-		return false, nil
-
 	case stateSent:
 		// stateSent: the update has been sent to the worker but not yet accepted.
 		// Buffer the callbacks in memory; they will be flushed to the event store
@@ -448,6 +443,7 @@ func (u *Update) AttachCallbacks(
 		return true, nil
 
 	default:
+		// All other states are too early or not applicable for callback attachment.
 		return false, nil
 	}
 }

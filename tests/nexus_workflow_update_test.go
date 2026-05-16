@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,6 +22,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -503,7 +503,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 	}()
 
 	// Wait until the update is accepted by checking DescribeWorkflowExecution.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetCallbacks(), "callbacks should be present")
@@ -591,7 +591,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetInfli
 	s.NoError(err)
 
 	// Wait for the update to be accepted on the target workflow.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, targetRun.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -722,7 +722,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 	s.NoError(err)
 
 	// Wait for the update to be accepted on the target workflow.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, targetRun.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -852,7 +852,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 
 	// The update is reapplied and completes again in the new run.
 	// Wait for the update to complete in the new run before sending the second operation.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -1091,7 +1091,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowTermi
 	s.NoError(err)
 
 	// Wait for the update to be accepted on the target.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -1178,7 +1178,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowConti
 	s.NoError(err)
 
 	// Wait for the update to be accepted on the target.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -1269,7 +1269,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowFaile
 	s.NoError(err)
 
 	// Wait for the update to be accepted on the target.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
