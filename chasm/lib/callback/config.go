@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
@@ -22,14 +23,14 @@ var EnableStandaloneExecutions = dynamicconfig.NewNamespaceBoolSetting(
 
 var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
 	"callback.longPollBuffer",
-	time.Second,
+	common.DefaultLongPollBuffer,
 	`A buffer used to adjust the callback execution long-poll timeouts.
 The long-poll response is sent before the caller's deadline by this amount of time.`,
 )
 
 var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"callback.longPollTimeout",
-	20*time.Second,
+	common.DefaultLongPollTimeout,
 	`Timeout for callback execution long-poll requests.`,
 )
 
