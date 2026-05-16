@@ -49,10 +49,9 @@ func TestValidTransitions(t *testing.T) {
 		dt := currentTime.Add(time.Second).Sub(callback.NextAttemptScheduleTime.AsTime())
 		require.Less(t, dt, time.Millisecond*200)
 
-		// Because of the retry policy, the first failure isn't terminal.
 		require.Nil(t, callback.CloseTime)
-		_, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
-		require.False(t, hasTermFailure)
+		_, ok := callback.TerminalFailure.TryGet(mctx)
+		require.False(t, ok)
 
 		// Assert backoff task is generated
 		require.Len(t, mctx.Tasks, 1)
@@ -74,8 +73,8 @@ func TestValidTransitions(t *testing.T) {
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 		require.Nil(t, callback.CloseTime)
 		require.Nil(t, callback.NextAttemptScheduleTime)
-		_, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
-		require.False(t, hasTermFailure)
+		_, ok := callback.TerminalFailure.TryGet(mctx)
+		require.False(t, ok)
 
 		// Assert callback task is generated.
 		require.Len(t, mctx.Tasks, 1)
@@ -104,9 +103,8 @@ func TestValidTransitions(t *testing.T) {
 		require.Nil(t, callback.NextAttemptScheduleTime)
 		require.Equal(t, currentTime, callback.CloseTime.AsTime())
 
-		// TerminalFailure may explicitly be set to nil.
-		termFailureValue, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
-		require.True(t, !hasTermFailure || termFailureValue == nil)
+		_, ok := callback.TerminalFailure.TryGet(mctx)
+		require.False(t, ok)
 
 		// Assert no task is generated on success transition
 		require.Empty(t, mctx.Tasks)
@@ -131,16 +129,15 @@ func TestValidTransitions(t *testing.T) {
 		require.Nil(t, callback.NextAttemptScheduleTime)
 		require.Equal(t, currentTime, callback.CloseTime.AsTime())
 
-		// Assert LastAttemptFailure is unchanged.
+		// Assert LastAttemptFailure is the latest, and final failure.
 		lastFailure := callback.LastAttemptFailure
-		require.Equal(t, "error message", lastFailure.Message)
-		require.False(t, lastFailure.GetApplicationFailureInfo().NonRetryable)
+		require.Equal(t, "new failure msg", lastFailure.Message)
+		require.True(t, lastFailure.GetApplicationFailureInfo().NonRetryable)
 
-		// Assert the TerminalFailure field is set to the final error.
-		require.NotNil(t, callback.TerminalFailure, "TerminalFailure not set")
-		termFailure := callback.TerminalFailure.Get(mctx)
-		require.Equal(t, "new failure msg", termFailure.Message)
-		require.True(t, termFailure.GetApplicationFailureInfo().NonRetryable)
+		// Assert the TerminalFailure field is not set.
+		// (It will only have a value on externa failures, like timeouts.)
+		_, ok := callback.TerminalFailure.TryGet(mctx)
+		require.False(t, ok)
 
 		// Assert no tasks generated. In terminal state.
 		require.Empty(t, mctx.Tasks)
@@ -149,6 +146,7 @@ func TestValidTransitions(t *testing.T) {
 
 func TestTerminatedTransition(t *testing.T) {
 	initialCallbackState := &callbackspb.CallbackState{
+		Status:           callbackspb.CALLBACK_STATUS_SCHEDULED,
 		RegistrationTime: timestamppb.New(time.Now()),
 		Callback: &callbackspb.Callback{
 			Variant: &callbackspb.Callback_Nexus_{
@@ -165,6 +163,7 @@ func TestTerminatedTransition(t *testing.T) {
 	emptyTerminateEvent := EventTerminated{}
 	assertEmptyEventResults := func(t *testing.T, mctx *chasm.MockMutableContext, cb *Callback) {
 		// Confirm default reason, but no additional metadata.
+		require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.GetStatus())
 		termFailure := cb.TerminalFailure.Get(mctx)
 		require.Equal(t, "callback execution terminated", termFailure.Message)
 		require.Nil(t, termFailure.GetTerminatedFailureInfo())
@@ -176,6 +175,7 @@ func TestTerminatedTransition(t *testing.T) {
 	}
 	assertPopulatedEventResults := func(t *testing.T, mctx *chasm.MockMutableContext, cb *Callback) {
 		// Confirm user-supplied reason and identity are available.
+		require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.GetStatus())
 		termFailure := cb.TerminalFailure.Get(mctx)
 		require.Equal(t, "user-supplied reason", termFailure.Message)
 		gotTermFailureInfo := termFailure.GetTerminatedFailureInfo()

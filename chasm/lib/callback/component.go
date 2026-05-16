@@ -350,9 +350,17 @@ func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackExecutionOutco
 			Value: val,
 		}
 
-	case callbackspb.CALLBACK_STATUS_FAILED,
-		callbackspb.CALLBACK_STATUS_TIMED_OUT,
-		callbackspb.CALLBACK_STATUS_TERMINATED:
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		// Organic failures leave TerminalFailure nil, and just set LastAttemptFailure.
+		val := &callbackpb.CallbackExecutionOutcome_Failure{
+			Failure: c.LastAttemptFailure,
+		}
+		return &callbackpb.CallbackExecutionOutcome{
+			Value: val,
+		}
+
+	case callbackspb.CALLBACK_STATUS_TERMINATED,
+		callbackspb.CALLBACK_STATUS_TIMED_OUT:
 		val := &callbackpb.CallbackExecutionOutcome_Failure{
 			Failure: c.TerminalFailure.Get(ctx),
 		}

@@ -101,8 +101,6 @@ var TransitionFailed = chasm.NewTransition(
 		cb.recordAttempt(now)
 		cb.CloseTime = timestamppb.New(now)
 
-		// Set the TerminalFailure, but we intentionally leave LastAttemptFailure
-		// as-is for debugability.
 		failure := &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
@@ -111,7 +109,7 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
+		cb.LastAttemptFailure = failure
 
 		return nil
 	},
