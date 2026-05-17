@@ -2,6 +2,8 @@ package scheduler_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -311,4 +313,59 @@ func TestContextMetadata(t *testing.T) {
 		md := sched.ContextMetadata(ctx)
 		require.Nil(t, md)
 	})
+}
+
+func TestLogEvent_Accumulates(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Reset to isolate from any events logged during setup.
+	sched.EventLog.Get(ctx).Events = nil
+
+	messages := []string{"first", "second", "third"}
+	for _, m := range messages {
+		sched.LogEvent(ctx, m)
+	}
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, len(messages))
+	for i, m := range messages {
+		require.Equal(t, m, events[i].Message)
+		require.NotNil(t, events[i].Time)
+	}
+}
+
+func TestLogEvent_TruncatesLongMessages(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	sched.EventLog.Get(ctx).Events = nil
+
+	long := strings.Repeat("x", scheduler.MaxEventLogMessageLen+50)
+	sched.LogEvent(ctx, long)
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, 1)
+	require.Len(t, events[0].Message, scheduler.MaxEventLogMessageLen)
+	require.Equal(t, long[:scheduler.MaxEventLogMessageLen], events[0].Message)
+}
+
+func TestLogEvent_DropsEarliestWhenFull(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Reset to isolate from any events logged during setup.
+	sched.EventLog.Get(ctx).Events = nil
+
+	// Log more than the maximum to force the earliest entries to be dropped.
+	const overflow = 5
+	total := scheduler.MaxEventLogEntries + overflow
+	for i := range total {
+		sched.LogEvent(ctx, fmt.Sprintf("event-%d", i))
+	}
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, scheduler.MaxEventLogEntries)
+
+	// The earliest `overflow` entries should have been dropped; the retained
+	// window starts at event-`overflow` and ends at the most recent event.
+	require.Equal(t, fmt.Sprintf("event-%d", overflow), events[0].Message)
+	require.Equal(t, fmt.Sprintf("event-%d", total-1), events[len(events)-1].Message)
 }
