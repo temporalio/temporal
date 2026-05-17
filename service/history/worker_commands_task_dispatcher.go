@@ -13,6 +13,7 @@ import (
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -156,7 +157,7 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		return fmt.Errorf("failed to dispatch worker commands to control queue %s: %w", task.Destination, err)
 	}
 
-	nexusErr := dispatchResponseToError(resp)
+	nexusErr := commonnexus.DispatchResponseToError(resp)
 	if nexusErr == nil {
 		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("success"))
 		return nil
@@ -169,7 +170,7 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 	var handlerErr *nexus.HandlerError
 	if errors.As(nexusErr, &handlerErr) {
 		// Handler-level error (transport, timeout, internal). These are constructed by
-		// dispatchResponseToError for non-worker-returned failures.
+		// DispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
 			d.logger.Warn("No worker polling control queue",
 				tag.NewStringTag("control_queue", task.Destination))
