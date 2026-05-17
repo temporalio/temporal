@@ -111,7 +111,7 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 		&s.cachedInternodeClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.internodeClientCertProvider, client.ServerName,
-				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification)
+				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification, client.CipherSuites)
 		},
 		s.settings.Internode.IsClientEnabled(),
 	)
@@ -132,7 +132,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
-				useTLS, true, !client.DisableHostVerification)
+				useTLS, true, !client.DisableHostVerification, client.CipherSuites)
 		},
 		useTLS,
 	)
@@ -152,7 +152,8 @@ func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*
 				groupTLS.Client.ServerName,
 				groupTLS.Server.RequireClientAuth,
 				false,
-				!groupTLS.Client.DisableHostVerification)
+				!groupTLS.Client.DisableHostVerification,
+				groupTLS.Client.CipherSuites)
 		},
 		groupTLS.IsClientEnabled(),
 	)
@@ -285,7 +286,11 @@ func newServerTLSConfig(
 ) (*tls.Config, error) {
 
 	clientAuthRequired := config.Server.RequireClientAuth
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, "", "", logger)
+	cipherSuites, err := auth.ParseCipherSuites(config.Server.CipherSuites)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, cipherSuites, "", "", logger)
 	if err != nil {
 		return nil, err
 	}
@@ -304,13 +309,13 @@ func newServerTLSConfig(
 			}
 
 			if perHostCertProvider != nil {
-				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, c.ServerName, logger)
+				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, cipherSuites, remoteAddress, c.ServerName, logger)
 			}
 			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
 				tag.ServerName(c.ServerName), tag.Address(remoteAddress))
-			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
+			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, cipherSuites, remoteAddress, c.ServerName, logger)
 		}
-		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
+		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, cipherSuites, remoteAddress, c.ServerName, logger)
 	}
 
 	return tlsConfig, nil
@@ -319,6 +324,7 @@ func newServerTLSConfig(
 func getServerTLSConfigFromCertProvider(
 	certProvider CertProvider,
 	requireClientAuth bool,
+	cipherSuites []uint16,
 	remoteAddress string,
 	serverName string,
 	logger log.Logger) (*tls.Config, error) {
@@ -352,11 +358,15 @@ func getServerTLSConfigFromCertProvider(
 	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
 		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.ServerName(serverName))
 	}
-	return auth.NewTLSConfigWithCertsAndCAs(
+	tlsCfg := auth.NewTLSConfigWithCertsAndCAs(
 		clientAuthType,
 		[]tls.Certificate{*serverCert},
 		clientCaPool,
-		logger), nil
+		logger)
+	if len(cipherSuites) > 0 {
+		tlsCfg.CipherSuites = cipherSuites
+	}
+	return tlsCfg, nil
 }
 
 func newClientTLSConfig(
@@ -365,7 +375,12 @@ func newClientTLSConfig(
 	isAuthRequired bool,
 	isWorker bool,
 	enableHostVerification bool,
+	cipherSuiteNames []string,
 ) (*tls.Config, error) {
+	cipherSuites, err := auth.ParseCipherSuites(cipherSuiteNames)
+	if err != nil {
+		return nil, err
+	}
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
 	if err != nil {
@@ -389,12 +404,16 @@ func newClientTLSConfig(
 		}
 	}
 
-	return auth.NewDynamicTLSClientConfig(
+	cfg := auth.NewDynamicTLSClientConfig(
 		getCert,
 		serverCa,
 		serverName,
 		enableHostVerification,
-	), nil
+	)
+	if len(cipherSuites) > 0 {
+		cfg.CipherSuites = cipherSuites
+	}
+	return cfg, nil
 }
 
 func (s *localStoreTlsProvider) timerCallback() {

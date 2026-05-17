@@ -24,5 +24,11 @@ type (
 		CertData string `yaml:"certData"`
 		KeyData  string `yaml:"keyData"`
 		CaData   string `yaml:"caData"` // optional depending on server config
+
+		// CipherSuites is an optional list of TLS cipher suite names to restrict TLS 1.0–1.2 connections.
+		// When empty, Go's default secure cipher suites are used (3DES and other weak ciphers are excluded).
+		// Cipher suite names follow Go's naming convention (e.g. "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256").
+		// This field has no effect on TLS 1.3, whose cipher suites are not configurable in Go.
+		CipherSuites []string `yaml:"cipherSuites"`
 	}
 )

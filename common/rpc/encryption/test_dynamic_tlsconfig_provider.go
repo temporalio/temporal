@@ -28,7 +28,7 @@ func (t *TestDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, 
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.InternodeClientCertProvider, t.settings.Internode.Client.ServerName, true, false, true)
+	return newClientTLSConfig(t.InternodeClientCertProvider, t.settings.Internode.Client.ServerName, true, false, true, nil)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
@@ -36,7 +36,7 @@ func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, e
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true)
+	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true, nil)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error) {

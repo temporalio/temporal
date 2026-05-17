@@ -15,6 +15,32 @@ import (
 
 var ErrTLSConfig = errors.New("unable to config TLS")
 
+// ParseCipherSuites converts a list of cipher suite names to their numeric IDs.
+// Both secure (tls.CipherSuites) and insecure (tls.InsecureCipherSuites) suite names are accepted.
+// Returns an error for any unrecognized name.
+// An empty input slice returns a nil slice, which causes Go to use its default secure cipher suites.
+func ParseCipherSuites(names []string) ([]uint16, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	lookup := make(map[string]uint16, len(tls.CipherSuites())+len(tls.InsecureCipherSuites()))
+	for _, s := range tls.CipherSuites() {
+		lookup[s.Name] = s.ID
+	}
+	for _, s := range tls.InsecureCipherSuites() {
+		lookup[s.Name] = s.ID
+	}
+	ids := make([]uint16, 0, len(names))
+	for _, name := range names {
+		id, ok := lookup[name]
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown cipher suite %q", ErrTLSConfig, name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 // Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
 
 func NewEmptyTLSConfig() *tls.Config {
@@ -111,6 +137,14 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	}
 	if clientCert != nil {
 		tlsConfig.Certificates = []tls.Certificate{*clientCert}
+	}
+
+	cipherSuiteIDs, err := ParseCipherSuites(temporalTls.CipherSuites)
+	if err != nil {
+		return nil, err
+	}
+	if len(cipherSuiteIDs) > 0 {
+		tlsConfig.CipherSuites = cipherSuiteIDs
 	}
 
 	return tlsConfig, nil
