@@ -1527,13 +1527,15 @@ func (s *scheduler) addSearchAttributes(
 	attributes *commonpb.SearchAttributes,
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := sadefs.MustEncodeValue(nominal, enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	scheduledByID := sadefs.MustEncodeValue(s.State.ScheduleId, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	fields := payload.MergeMapOfPayload(
+		attributes.GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			sadefs.TemporalScheduledStartTime: scheduledStartTime,
+			sadefs.TemporalScheduledById:      scheduledByID,
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
