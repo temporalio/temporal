@@ -14,7 +14,7 @@ import (
 var validArchs = []string{"amd64", "arm64"}
 
 // defaultCliVersion should be updated to the latest cli version
-const defaultCliVersion = "1.6.1"
+const defaultCliVersion = "1.7.0"
 
 func main() {
 	if len(os.Args) < 2 {
