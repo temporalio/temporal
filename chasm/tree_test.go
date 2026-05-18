@@ -436,6 +436,47 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
+
+		s.Run("Nil map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field that was never set (nil) should not produce any DeletedNodes
+			// entries when the first transaction is closed — there is nothing in persistence
+			// to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			rootNode.value = &TestComponent{} // all map fields are nil
+			rootNode.valueState = valueStateNeedSyncStructure
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a map that never existed")
+		})
+
+		s.Run("Empty (non-nil) map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field initialized to an empty (non-nil) map should also not produce
+			// any DeletedNodes entries — an empty map is equivalent to nil at the
+			// persistence layer and there is nothing to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			var rootComponent TestComponent
+			switch tc.mapField {
+			case "SubComponents":
+				rootComponent.SubComponents = Map[string, *TestSubComponent1]{}
+			case "PendingActivities":
+				rootComponent.PendingActivities = Map[int, *TestSubComponent1]{}
+			default:
+				s.Failf("unexpected mapField", "unknown mapField %q in test case", tc.mapField)
+			}
+			rootNode.value = &rootComponent
+			rootNode.valueState = valueStateNeedSyncStructure
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a newly-created empty map")
+		})
 	}
 }
 
