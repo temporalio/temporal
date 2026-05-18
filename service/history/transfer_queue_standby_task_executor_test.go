@@ -861,6 +861,21 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestCheckParentWorkflowStillExis
 	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
 	s.NoError(s.mockShard.ChasmRegistry().Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
 
+	taskNamespaceID := namespace.ID(uuid.NewString())
+	taskNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: taskNamespaceID.String(), Name: "some random standby task namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		s.version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(taskNamespaceID).Return(taskNamespaceEntry, nil).AnyTimes()
+
 	parentWorkflowKey := definition.NewWorkflowKey(
 		tests.ParentNamespaceID.String(),
 		"some random parent workflow ID",
@@ -868,12 +883,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestCheckParentWorkflowStillExis
 	)
 	transferTask := &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
+			taskNamespaceID.String(),
 			"some random workflow ID",
 			uuid.NewString(),
 		),
 	}
-
 	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil)
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace: tests.ParentNamespace.String(),

@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -84,7 +83,7 @@ func executionExistsOnSource(
 	workflowKey definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
-	currentCluster string,
+	sourceClusterName string,
 	clientBean client.Bean,
 	registry namespace.Registry,
 	chasmRegistry *chasm.Registry,
@@ -105,16 +104,7 @@ func executionExistsOnSource(
 		return true
 	}
 
-	remoteClusterName, err := getSourceClusterName(
-		currentCluster,
-		registry,
-		workflowKey.GetNamespaceID(),
-		workflowKey.GetWorkflowID(),
-	)
-	if err != nil {
-		return true
-	}
-	remoteAdminClient, err := clientBean.GetRemoteAdminClient(remoteClusterName)
+	remoteAdminClient, err := clientBean.GetRemoteAdminClient(sourceClusterName)
 	if err != nil {
 		return true
 	}
@@ -135,7 +125,7 @@ func executionExistsOnSource(
 			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
 			tag.WorkflowID(workflowKey.GetWorkflowID()),
 			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.ClusterName(remoteClusterName),
+			tag.ClusterName(sourceClusterName),
 			tag.Error(err))
 	}
 	return true
@@ -239,25 +229,6 @@ func getStandbyPostActionFn(
 
 	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
-}
-
-func getSourceClusterName(
-	currentCluster string,
-	registry namespace.Registry,
-	namespaceID string,
-	workflowID string,
-) (string, error) {
-	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
-	if err != nil {
-		return "", err
-	}
-
-	remoteClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
-	if remoteClusterName == currentCluster {
-		// namespace has turned active, retry the task
-		return "", errors.New("namespace becomes active when processing task as standby")
-	}
-	return remoteClusterName, nil
 }
 
 func getActiveClusterName(

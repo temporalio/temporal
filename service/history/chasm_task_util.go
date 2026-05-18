@@ -93,21 +93,24 @@ func discardChasmSideEffectTask(
 	tree historyi.ChasmTree,
 	task *tasks.ChasmTask,
 	logger log.Logger,
-	clusterName string,
+	_ string,
 	clientBean client.Bean,
 	namespaceRegistry namespace.Registry,
 ) error {
-	if !executionExistsOnSource(
-		ctx,
-		taskWorkflowKey(task),
-		getTaskArchetypeID(task),
-		logger,
-		clusterName,
-		clientBean,
-		namespaceRegistry,
-		registry,
-	) {
-		return nil
+	sourceClusterName, err := getActiveClusterName(namespaceRegistry, task.GetNamespaceID(), task.GetWorkflowID())
+	if err == nil {
+		if !executionExistsOnSource(
+			ctx,
+			taskWorkflowKey(task),
+			getTaskArchetypeID(task),
+			logger,
+			sourceClusterName,
+			clientBean,
+			namespaceRegistry,
+			registry,
+		) {
+			return nil
+		}
 	}
 
 	executionKey := chasm.ExecutionKey{
@@ -131,7 +134,7 @@ func discardChasmSideEffectTask(
 	}
 
 	engineCtx := chasm.NewEngineContext(ctx, engine)
-	err := tree.ExecuteSideEffectDiscardTask(
+	err = tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
 		executionKey,
 		task,
