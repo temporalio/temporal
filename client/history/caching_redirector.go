@@ -212,10 +212,13 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 	defer r.mu.Unlock()
 
 	if cached, ok := r.mu.cache[opEntry.shardID]; ok {
-		if cached.address == opEntry.address {
-			delete(r.mu.cache, cached.shardID)
-			r.unrefAddrLocked(cached.address)
+		if cached.address != opEntry.address {
+			// Another goroutine has updated the cache since we read opEntry.
+			// Their entry is fresher than our SOL hint; retry against it.
+			return cached, true
 		}
+		delete(r.mu.cache, cached.shardID)
+		r.unrefAddrLocked(cached.address)
 	}
 
 	solErrNewOwner := rpcAddress(solErr.OwnerHost)
