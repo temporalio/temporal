@@ -88,9 +88,9 @@ const (
 
 	InitialConflictToken = 1
 
-	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
-	// query so it can be changed without breaking history.)
-	maxListMatchingTimesCount = 1000
+	// MaxListMatchingTimesCount is the maximum number of times to list per ListMatchingTimes
+	// query. (This is used only in a query so it can be changed without breaking history.)
+	MaxListMatchingTimesCount = 1000
 
 	rateLimitedErrorType            = "RateLimited"
 	workflowExecutionAlreadyStarted = "serviceerror.WorkflowExecutionAlreadyStarted"
@@ -1126,7 +1126,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(req.StartTime)
-	for range maxListMatchingTimesCount {
+	for range MaxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
 		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
