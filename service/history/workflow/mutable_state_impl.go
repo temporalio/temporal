@@ -4057,32 +4057,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
 
 	if tsi == nil {
-		return serviceerror.NewInternal(
-			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
-		)
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		return serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	}
-	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
-		return serviceerror.NewInternal(
-			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
-		)
+	if timeNotSet(attr.TargetTime) && !attr.GetDisabledAfterBound() {
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: no TargetTime and not disabled after bound", opTag)
+		return serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	}
 
-	if tsi.GetAccumulatedSkippedDuration() == nil {
-		tsi.AccumulatedSkippedDuration = durationpb.New(0)
-	}
-	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
 	if !timeNotSet(attr.TargetTime) {
-		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		asd := tsi.GetAccumulatedSkippedDuration().AsDuration()
+		asd += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
+		tsi.TaskRegenerationStatus = TimerRegenStatusNeeded
 	}
-	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
 	tsi.Config.Enabled = !attr.GetDisabledAfterBound()
-
 	if attr.GetDisabledAfterBound() && tsi.GetCurrentElapsedDurationBound() != nil {
 		tsi.CurrentElapsedDurationBound.HasReached = true
 	}
-
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
@@ -8592,7 +8587,6 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// todo@time-skipping: impacts of paused workflow to be considered
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
@@ -9120,6 +9114,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			ms.workflowTaskUpdated = false
 		}
 	}
+	ms.applyIncomingTimeSkippingInfo(current, incoming)
 
 	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
@@ -9154,6 +9149,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.StateMachineTimers,
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
+			&info.TimeSkippingInfo,
 		}
 		if !isSnapshot {
 			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
@@ -9168,6 +9164,36 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	ms.ClearStickyTaskQueue()
 
 	return nil
+}
+
+// applyIncomingTimeSkippingInfo is used in state-based replication
+// and merges the incoming TimeSkippingInfo (from a replication mutation/snapshot) into current,
+// and the task regeneration status is maintained locally.
+func (ms *MutableStateImpl) applyIncomingTimeSkippingInfo(
+	current *persistencespb.WorkflowExecutionInfo,
+	incoming *persistencespb.WorkflowExecutionInfo,
+) {
+	if incoming.GetTimeSkippingInfo() == nil {
+		// State-based replication sends the full ExecutionInfo; nil incoming TSI
+		// means the active has no TSI (workflow never enabled time-skipping), so
+		// mirror that on the standby.
+		current.TimeSkippingInfo = nil
+		return
+	}
+	newTSI := common.CloneProto(incoming.TimeSkippingInfo)
+	currentSD := current.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	incomingSD := incoming.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	// maintain the local task regeneration status
+	if incomingSD != currentSD {
+		newTSI.TaskRegenerationStatus = TimerRegenStatusNeeded
+	} else {
+		if incomingSD == 0 {
+			newTSI.TaskRegenerationStatus = TimerRegenStatusUnset
+		} else {
+			newTSI.TaskRegenerationStatus = TimerRegenStatusCompleted
+		}
+	}
+	current.TimeSkippingInfo = newTSI
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
