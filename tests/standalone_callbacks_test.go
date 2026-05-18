@@ -28,7 +28,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -139,11 +138,7 @@ func (s *StandaloneCallbackSuite) newEnv() *testcore.TestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(callback.EnableStandaloneExecutions, true),
-
-		// QUIRK: The configuration for setting the callback allow list
-		// is in the HSM code. The chasm/lib/callback AllowedAddresses
-		// field isn't used.
-		testcore.WithDynamicConfig(hsmcallbacks.AllowedAddresses, []any{
+		testcore.WithDynamicConfig(callback.AllowedAddresses, []any{
 			map[string]any{"Pattern": "*", "AllowInsecure": true},
 		}),
 	)

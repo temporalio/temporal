@@ -113,6 +113,20 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
+var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"callback.allowedAddresses",
+	allowedAddressConverter,
+	AddressMatchRules{},
+	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
+URLs: "temporal://system" and "temporal://internal" are always allowed. The default is no address rules.
+URLs are checked against each in order when starting a workflow or activitiy with attached callbacks or a standalone
+callback and only need to match one to pass validation.  This configuration is required for external endpoint targets;
+any invalid entries are ignored. Each entry is a map with possible values:
+     - "Pattern":string (required) the host:port pattern to which this config applies.
+        Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything,
+        'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
+     - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
+
 type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
@@ -171,6 +185,35 @@ func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 				"invalid url: callback address does not allow insecure connections: %v", u)
 	}
 	return true, nil
+}
+
+func allowedAddressConverter(val any) (AddressMatchRules, error) {
+	type entry struct {
+		Pattern       string
+		AllowInsecure bool
+	}
+	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
+	if err != nil {
+		return AddressMatchRules{}, err
+	}
+
+	configs := []AddressMatchRule{}
+	for _, e := range intermediate {
+		if e.Pattern == "" {
+			// Skip configs with missing / unparsable Pattern
+			continue
+		}
+		re, err := regexp.Compile(addressPatternToRegexp(e.Pattern))
+		if err != nil {
+			// Skip configs with malformed Pattern
+			continue
+		}
+		configs = append(configs, AddressMatchRule{
+			Regexp:        re,
+			AllowInsecure: e.AllowInsecure,
+		})
+	}
+	return AddressMatchRules{Rules: configs}, nil
 }
 
 func addressPatternToRegexp(pattern string) string {
