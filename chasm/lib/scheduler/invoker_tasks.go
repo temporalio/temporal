@@ -138,6 +138,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
 	var callback *commonpb.Callback
+	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
 	// outside of this function (outside of the MS lock).
@@ -145,6 +146,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 		ctx,
 		invokerRef,
 		func(i *Invoker, ctx chasm.Context, _ any) (struct{}, error) {
+			now = ctx.Now(i)
+
 			invoker = &Invoker{
 				InvokerState: common.CloneProto(i.InvokerState),
 			}
@@ -186,7 +189,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback)
+	sres, startResults := h.startWorkflows(ictx, now, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback)
 	result = result.Append(sres)
 
 	// Record action results on the Invoker (internal state), as well as the
@@ -300,6 +303,7 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 // startWorkflows executes the provided list of starts, returning a result with their outcomes.
 func (h *InvokerExecuteTaskHandler) startWorkflows(
 	ctx invokerTaskHandlerContext,
+	now time.Time,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
@@ -335,7 +339,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			startResult, err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
+			startResult, err := h.startWorkflow(newCtx, now, metricsHandler, scheduler, start, lastCompletionState, callback)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -531,6 +535,7 @@ func (h *InvokerProcessBufferTaskHandler) startWorkflowDeadline(
 
 func (h *InvokerExecuteTaskHandler) startWorkflow(
 	ctx context.Context,
+	now time.Time,
 	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
@@ -592,7 +597,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	actualStartTime := time.Now()
+	actualStartTime := now
 
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
