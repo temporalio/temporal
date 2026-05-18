@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
@@ -126,9 +126,9 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNo
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
 		for _, c := range s.clusters {
-			resp, err := c.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+			resp, err := c.FrontendClient().DescribeNamespace(t.Context(), &workflowservice.DescribeNamespaceRequest{
 				Namespace: namespace,
 			})
 			require.NoError(t, err)
