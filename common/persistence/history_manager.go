@@ -365,6 +365,8 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 		return nil, err
 	}
 
+	dataSize := len(blob.Data)
+
 	var encodingOverride string
 	blob, encodingOverride, err = m.maybeCompressHistoryBlob(blob)
 	if err != nil {
@@ -390,6 +392,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 			EncodingOverride:  encodingOverride,
 			PrevTransactionID: request.PrevTransactionID,
 			TransactionID:     request.TransactionID,
+			DataSize:          dataSize,
 		},
 		ShardID: request.ShardID,
 	}
@@ -441,6 +444,8 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	}
 
 	blob := request.History
+	dataSize := len(blob.Data)
+
 	var encodingOverride string
 	blob, encodingOverride, err = m.maybeCompressHistoryBlob(blob)
 	if err != nil {
@@ -467,6 +472,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 			EncodingOverride:  encodingOverride,
 			PrevTransactionID: request.PrevTransactionID,
 			TransactionID:     request.TransactionID,
+			DataSize:          dataSize,
 		},
 		ShardID: request.ShardID,
 	}
@@ -509,7 +515,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 
 	return &AppendHistoryNodesResponse{
-		Size: len(req.Node.Events.Data),
+		Size: req.Node.DataSize,
 	}, err
 }
 
@@ -526,7 +532,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 	return &AppendHistoryNodesResponse{
-		Size: len(request.History.Data),
+		Size: req.Node.DataSize,
 	}, err
 }
 
