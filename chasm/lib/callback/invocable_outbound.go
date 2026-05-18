@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -15,7 +16,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/components/nexusoperations"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
@@ -41,7 +41,7 @@ func (n invocableOutbound) WrapError(result invocationResult, err error) error {
 	// If the error is due to a completion of a Nexus operation being delivered before the
 	// operation has officially started, we want to avoid triggering the circuit breakers.
 	// Since the actual destination is working fine, and the failure is due to a data race.
-	if errors.Is(err, nexusoperations.ErrOperationNotStarted) {
+	if errors.Is(err, &serviceerror.NexusOperationNotStarted{}) {
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (n invocableOutbound) Invoke(
 		// If the error from trying to resolve a Nexus operation that hasn't yet been marked
 		// as started, it is safe to retry. (n.WrapError will ensure repeated failures of this
 		// kind won't cause the SystemCallback to trip the circuit breaker.)
-		isErrNotStarted := errors.Is(err, nexusoperations.ErrOperationNotStarted)
+		isErrNotStarted := errors.Is(err, &serviceerror.NexusOperationNotStarted{})
 		if n.isSystemCallback() && isErrNotStarted {
 			retryable = true
 		}

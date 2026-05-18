@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/nexusoperations"
 )
 
 // Confirm that callback delivery failures due to the Nexus operation not having
@@ -32,7 +32,7 @@ func TestCallbacksToUnstartedNexusOperations(t *testing.T) {
 	// result being saved on the Callback.
 	mctx := &chasm.MockMutableContext{}
 	_, err := cb.saveResult(mctx, saveResultInput{
-		result:      invocationResultRetry{err: nexusoperations.ErrOperationNotStarted},
+		result:      invocationResultRetry{err: serviceerror.NewNexusOperationNotStarted("nexus operation not started", "req-id")},
 		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 
