@@ -17,17 +17,20 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type basicRedirectorSuite struct {
-	suite.Suite
-	*require.Assertions
+type (
+	basicRedirectorSuite struct {
+		suite.Suite
+		*require.Assertions
 
-	controller  *gomock.Controller
-	connections *MockconnectionPool[historyservice.HistoryServiceClient]
-	resolver    *membership.MockServiceResolver
-}
+		controller  *gomock.Controller
+		connections *MockconnectionPool[historyservice.HistoryServiceClient]
+		resolver    *membership.MockServiceResolver
+	}
+)
 
 func TestBasicRedirectorSuite(t *testing.T) {
-	suite.Run(t, new(basicRedirectorSuite))
+	s := new(basicRedirectorSuite)
+	suite.Run(t, s)
 }
 
 func (s *basicRedirectorSuite) SetupTest() {
@@ -61,8 +64,10 @@ func opErrorTest(s *basicRedirectorSuite, clientOp ClientOperation[historyservic
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).Times(1)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
@@ -104,8 +109,10 @@ func (s *basicRedirectorSuite) TestShardOwnershipLostErrors() {
 	testAddr2 := rpcAddress("testaddr2")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).Times(2)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(2)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr1).Return(s.clientConn(mockClient)).Times(2)
@@ -147,12 +154,13 @@ func (s *basicRedirectorSuite) TestClientForTargetByShard() {
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).Times(1)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
-
 	r := NewBasicRedirector(s.connections, s.resolver)
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)

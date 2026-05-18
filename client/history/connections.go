@@ -22,7 +22,7 @@ type (
 
 	connectionPoolImpl[C any] struct {
 		mu struct {
-			sync.Mutex
+			sync.RWMutex
 			conns map[rpcAddress]clientConnection[C]
 		}
 
@@ -62,26 +62,38 @@ func NewConnectionPool[C any](
 }
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
+	c.mu.RLock()
+	cc, ok := c.mu.conns[addr]
+	c.mu.RUnlock()
+	if ok {
+		return cc
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cc, ok := c.mu.conns[addr]
-	if !ok {
-		grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
-		cc = clientConnection[C]{
-			grpcClient: c.clientCtor(grpcConn),
-			grpcConn:   grpcConn,
-		}
-		c.mu.conns[addr] = cc
+
+	if cc, ok = c.mu.conns[addr]; ok {
+		return cc
 	}
+	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
+	cc = clientConnection[C]{
+		grpcClient: c.clientCtor(grpcConn),
+		grpcConn:   grpcConn,
+	}
+
+	c.mu.conns[addr] = cc
 	return cc
 }
 
 func (c *connectionPoolImpl[C]) getAllClientConns() []clientConnection[C] {
 	hostInfos := c.historyServiceResolver.Members()
+
 	var clientConns []clientConnection[C]
 	for _, hostInfo := range hostInfos {
-		clientConns = append(clientConns, c.getOrCreateClientConn(rpcAddress(hostInfo.GetAddress())))
+		cc := c.getOrCreateClientConn(rpcAddress(hostInfo.GetAddress()))
+		clientConns = append(clientConns, cc)
 	}
+
 	return clientConns
 }
 

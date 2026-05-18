@@ -127,8 +127,11 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 	r.mu.RLock()
 	entry, ok := r.mu.cache[shardID]
 	r.mu.RUnlock()
-	if ok && (entry.staleAt.IsZero() || time.Now().Before(entry.staleAt)) {
-		return entry, nil
+	if ok {
+		if entry.staleAt.IsZero() || time.Now().Before(entry.staleAt) {
+			return entry, nil
+		}
+		// Otherwise, check below under write lock.
 	}
 
 	r.mu.Lock()
@@ -136,14 +139,18 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 
 	// Recheck under write lock.
 	entry, ok = r.mu.cache[shardID]
-	if ok && (entry.staleAt.IsZero() || time.Now().Before(entry.staleAt)) {
-		return entry, nil
+	if ok {
+		if entry.staleAt.IsZero() || time.Now().Before(entry.staleAt) {
+			return entry, nil
+		}
+		// Fall through; cacheAddLocked will overwrite and unref the stale entry.
 	}
 
 	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
 		return cacheEntry[C]{}, err
 	}
+
 	return r.cacheAddLocked(shardID, address), nil
 }
 
@@ -178,6 +185,7 @@ func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) ca
 		// longer the shard owner.
 	}
 	r.mu.cache[shardID] = entry
+
 	return entry
 }
 
@@ -209,6 +217,12 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if cached, ok := r.mu.cache[opEntry.shardID]; ok {
+		if cached.address == opEntry.address {
+			r.removeEntryLocked(cached)
+		}
+	}
+
 	solErrNewOwner := rpcAddress(solErr.OwnerHost)
 	if len(solErrNewOwner) != 0 && solErrNewOwner != opEntry.address {
 		r.logger.Info("historyClient: updating cache from shard ownership lost error",
@@ -218,10 +232,6 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 		return r.cacheAddLocked(opEntry.shardID, solErrNewOwner), true
 	}
 
-	// No usable new-owner hint: evict the stale entry if it still matches.
-	if cached, ok := r.mu.cache[opEntry.shardID]; ok && cached.address == opEntry.address {
-		r.removeEntryLocked(cached)
-	}
 	return cacheEntry[C]{}, false
 }
 
@@ -258,6 +268,7 @@ func (r *CachingRedirector[C]) staleCheck() {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	now := time.Now()
 	for shardID, entry := range r.mu.cache {
 		if !entry.staleAt.IsZero() {

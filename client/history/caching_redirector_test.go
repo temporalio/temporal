@@ -20,18 +20,21 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type cachingRedirectorSuite struct {
-	suite.Suite
-	*require.Assertions
+type (
+	cachingRedirectorSuite struct {
+		suite.Suite
+		*require.Assertions
 
-	controller  *gomock.Controller
-	connections *MockconnectionPool[historyservice.HistoryServiceClient]
-	logger      log.Logger
-	resolver    *membership.MockServiceResolver
-}
+		controller  *gomock.Controller
+		connections *MockconnectionPool[historyservice.HistoryServiceClient]
+		logger      log.Logger
+		resolver    *membership.MockServiceResolver
+	}
+)
 
 func TestCachingRedirectorSuite(t *testing.T) {
-	suite.Run(t, new(cachingRedirectorSuite))
+	s := new(cachingRedirectorSuite)
+	suite.Run(t, s)
 }
 
 func (s *cachingRedirectorSuite) SetupTest() {
@@ -43,6 +46,10 @@ func (s *cachingRedirectorSuite) SetupTest() {
 	s.resolver = membership.NewMockServiceResolver(s.controller)
 	s.resolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.resolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
+}
+
+func (s *cachingRedirectorSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *cachingRedirectorSuite) clientConn(c historyservice.HistoryServiceClient) clientConnection[historyservice.HistoryServiceClient] {
@@ -79,8 +86,10 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).Times(1)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
@@ -92,11 +101,15 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		}
 		return opErr
 	}
-	r := s.newCachingDirector(0)
+	r := NewCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
 	defer r.stop()
 
 	for range 3 {
-		err := r.Execute(context.Background(), shardID, clientOp)
+		err := r.Execute(
+			context.Background(),
+			shardID,
+			clientOp,
+		)
 		verify(err)
 	}
 }
@@ -119,8 +132,10 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp ClientOperation[histo
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).Times(1)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
@@ -133,7 +148,11 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp ClientOperation[histo
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := r.Execute(ctx, shardID, clientOp)
+	err := r.Execute(
+		ctx,
+		shardID,
+		clientOp,
+	)
 	verify(err)
 }
 
@@ -200,18 +219,24 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 		)
 	}
 
-	// opCall 1: SOL hint matches current owner — entry deleted, no new entry.
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).Times(1)
+	// opCall 1: return SOL, but with same owner as current.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(1)
+
 	err := doExecute()
 	s.Error(err)
 	solErr := &serviceerrors.ShardOwnershipLost{}
 	s.ErrorAs(err, &solErr)
 	s.Equal(string(testAddr1), solErr.OwnerHost)
 
-	// opCall 2: SOL with empty hint — entry deleted, no new entry.
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).Times(1)
+	// opCall 2: return SOL, but with empty new owner hint.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(1)
+
 	err = doExecute()
 	s.Error(err)
 	solErr = &serviceerrors.ShardOwnershipLost{}
@@ -219,14 +244,17 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	s.Empty(solErr.OwnerHost)
 	s.Equal(3, opCalls)
 
-	// opCall 3 & 4: SOL with new owner hint, then success.
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).Times(1)
+	// opCall 3 & 4: return SOL with new owner hint.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(1)
+
 	err = doExecute()
 	s.NoError(err)
 	s.Equal(5, opCalls)
 
-	// opCall 5: cached entry for testAddr2 — no new lookup or acquire.
+	// OpCall 5: should use cached lookup & connection, so no additional mocks.
 	err = doExecute()
 	s.NoError(err)
 }
@@ -235,8 +263,10 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).Times(1)
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
@@ -248,7 +278,7 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 	s.NoError(err)
 	s.Equal(mockClient, cli)
 
-	// Second call hits the cache; no additional mocks required.
+	// No additional mocks; lookup should have been cached
 	cli, err = r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
@@ -269,17 +299,23 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 	r := s.newCachingDirector(staleTTL)
 	defer r.stop()
 
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).Times(1)
+	// Trigger the creation of a cache entry for the shard.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
+		Times(1)
 
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
 
-	// Membership update changes the owner — entry marked stale.
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).Times(1)
+	// Now simulate a membership update that changes the shard owner.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
+		Times(1)
 
+	// Simulate the update, should see the entry marked as stale.
 	r.membershipUpdateCh <- &membership.ChangedEvent{}
 	s.Eventually(func() bool {
 		r.mu.RLock()
@@ -288,9 +324,11 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		return !entry.staleAt.IsZero()
 	}, 4*staleTTL, 10*time.Millisecond)
 
-	// After TTL expires the entry is re-resolved to testAddr2.
-	s.resolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
-		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).Times(1)
+	// Wait for the stale TTL to expire so clientForShardID re-resolves the shard owner.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
+		Times(1)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		cli, err = r.clientForShardID(shardID)
