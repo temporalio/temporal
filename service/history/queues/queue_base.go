@@ -132,7 +132,7 @@ func newQueueBase(
 		exclusiveReaderHighWatermark = ackLevel
 	}
 
-	monitor := newMonitor(category.Type(), shard.GetTimeSource(), &options.MonitorOptions)
+	monitor := newMonitor(category.Type(), shard.GetTimeSource(), logger, metricsHandler, &options.MonitorOptions)
 	readerRateLimiter := newShardReaderRateLimiter(
 		options.MaxPollRPS,
 		hostReaderRateLimiter,

@@ -292,6 +292,8 @@ func (f *outboundQueueFactory) CreateQueue(
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,
 				// Shared configuration with other queues.
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckLagDuration:      f.Config.QueueReaderStuckLagDuration,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.OutboundProcessorMaxPollRPS,
