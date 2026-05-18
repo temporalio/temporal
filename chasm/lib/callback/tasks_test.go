@@ -192,7 +192,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err = chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&library{
 				InvocationTaskHandler: handler,
 			})
 			require.NoError(t, err)
@@ -547,7 +547,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err = chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&library{
 				InvocationTaskHandler: handler,
 			})
 			require.NoError(t, err)

@@ -129,6 +129,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	activity.FrontendModule,
+	callback.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -885,6 +886,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	callbackHandler callback.FrontendHandler,
 	callbackValidator callback.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
@@ -924,6 +926,7 @@ func HandlerProvider(
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
 		activityHandler,
+		callbackHandler,
 		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,

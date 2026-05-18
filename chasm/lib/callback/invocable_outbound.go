@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -28,7 +29,23 @@ type invocableOutbound struct {
 	attempt           int32
 }
 
+func (n invocableOutbound) isSystemCallback() bool {
+	c := n.callback
+	if c == nil {
+		return false
+	}
+	return c.Url == commonnexus.SystemCallbackURL
+}
+
 func (n invocableOutbound) WrapError(result invocationResult, err error) error {
+	// If the error is due to a completion of a Nexus operation being delivered before the
+	// operation has officially started, we want to avoid triggering the circuit breakers.
+	// Since the actual destination is working fine, and the failure is due to a data race.
+	var opNotStarted *serviceerror.NexusOperationNotStarted
+	if errors.As(err, &opNotStarted) {
+		return err
+	}
+
 	if retry, ok := result.(invocationResultRetry); ok {
 		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
@@ -66,8 +83,16 @@ func (n invocableOutbound) Invoke(
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
-
 	n.completion.Header = n.callback.Header
+
+	// If the Nexus callback token is set on the callback, pass it along in completion's headers.
+	if n.callback.GetToken() != "" {
+		if n.completion.Header == nil {
+			n.completion.Header = nexus.Header{}
+		}
+		n.completion.Header.Set(commonnexus.CallbackTokenHeader, n.callback.GetToken())
+	}
+
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
@@ -79,6 +104,16 @@ func (n invocableOutbound) Invoke(
 	if err != nil {
 		retryable := isRetryableCallError(err)
 		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+
+		// If the error from trying to resolve a Nexus operation that hasn't yet been marked
+		// as started, it is safe to retry. (n.WrapError will ensure repeated failures of this
+		// kind won't cause the SystemCallback to trip the circuit breaker.)
+		var opNotStarted *serviceerror.NexusOperationNotStarted
+		isErrNotStarted := errors.As(err, &opNotStarted)
+		if n.isSystemCallback() && isErrNotStarted {
+			retryable = true
+		}
+
 		if retryable {
 			return invocationResultRetry{err}
 		}

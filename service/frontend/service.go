@@ -238,6 +238,7 @@ type Config struct {
 
 	// CHASM archetypes
 	Activity *activity.Config
+	Callback *callback.Config
 }
 
 // IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
@@ -406,7 +407,9 @@ func NewConfig(
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 
+		// CHASM component configurations.
 		Activity: activity.ConfigProvider(dc),
+		Callback: callback.ConfigProvider(dc),
 	}
 }
 

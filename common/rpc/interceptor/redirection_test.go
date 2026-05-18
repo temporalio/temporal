@@ -213,6 +213,14 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"TerminateActivityExecution":     {},
 		"DeleteActivityExecution":        {},
 
+		"StartCallbackExecution":     {},
+		"DescribeCallbackExecution":  {},
+		"PollCallbackExecution":      {},
+		"ListCallbackExecutions":     {},
+		"CountCallbackExecutions":    {},
+		"TerminateCallbackExecution": {},
+		"DeleteCallbackExecution":    {},
+
 		"CountNexusOperationExecutions":        {},
 		"DeleteNexusOperationExecution":        {},
 		"DescribeNexusOperationExecution":      {},

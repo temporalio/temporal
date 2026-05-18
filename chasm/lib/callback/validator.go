@@ -47,6 +47,10 @@ func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*com
 	}
 
 	for _, cb := range cbs {
+		if cb == nil {
+			return serviceerror.NewInvalidArgument("invalid callback: not set")
+		}
+
 		switch variant := cb.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
 			rawURL := variant.Nexus.GetUrl()

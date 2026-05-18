@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.callbacks.proto.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -9,9 +10,6 @@ import "temporal/api/failure/v1/message.proto";
 option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
 
 message CallbackState {
-  // Trigger for when the workflow is closed.
-  message WorkflowClosed {}
-
   // Information on how this callback should be invoked (e.g. its URL and type).
   Callback callback = 1;
   // The time when the callback was registered.
@@ -33,6 +31,15 @@ message CallbackState {
 
   // Request ID that added the callback.
   string request_id = 9;
+  // Request ID that terminated the callback, if applicable. Used for idempotency.
+  string terminate_request_id = 10;
+
+  // The time when the callback reached a terminal state.
+  google.protobuf.Timestamp close_time = 11;
+
+  // (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
+  // is called to when the result gets delivered.
+  google.protobuf.Duration schedule_to_close_timeout = 12;
 }
 
 // Status of a callback.
@@ -49,6 +56,10 @@ enum CallbackStatus {
   CALLBACK_STATUS_FAILED = 4;
   // Callback has succeeded.
   CALLBACK_STATUS_SUCCEEDED = 5;
+  // Callback was terminated by request. Only relevant for standalone callbacks.
+  CALLBACK_STATUS_TERMINATED = 6;
+  // Callback exceeded the schedule-to-close timeout.
+  CALLBACK_STATUS_TIMED_OUT = 7;
 }
 
 message Callback {
@@ -59,6 +70,8 @@ message Callback {
     string url = 1;
     // Header to attach to callback request.
     map<string, string> header = 2;
+    // Token identifying the target callback to resolve.
+    string token = 3;
   }
 
   reserved 1; // For a generic callback mechanism to be added later.

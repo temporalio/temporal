@@ -58,13 +58,14 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	header := nexus.Header(c.callback.GetHeader())
-	if header == nil {
-		header = nexus.Header{}
+	// Get the token from the dedicated Token field, falling back to the header for backwards compat.
+	encodedRef := c.callback.GetToken()
+	if encodedRef == "" {
+		header := nexus.Header(c.callback.GetHeader())
+		if header != nil {
+			encodedRef = header.Get(commonnexus.CallbackTokenHeader)
+		}
 	}
-
-	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedRef == "" {
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}

@@ -7,11 +7,31 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+var EnableStandaloneExecutions = dynamicconfig.NewNamespaceBoolSetting(
+	"callback.enableStandaloneExecutions",
+	false,
+	`Toggles standalone callback execution functionality on the server.`,
+)
+
+var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.longPollBuffer",
+	common.DefaultLongPollBuffer,
+	`A buffer used to adjust the callback execution long-poll timeouts.
+The long-poll response is sent before the caller's deadline by this amount of time.`,
+)
+
+var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.longPollTimeout",
+	common.DefaultLongPollTimeout,
+	`Timeout for callback execution long-poll requests.`,
 )
 
 var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
@@ -24,6 +44,13 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
+)
+
+var MaxCallbackScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.limit.scheduleToCloseTimeout",
+	0,
+	`Maximum allowed duration of a callback execution. Commands that specify no schedule-to-close timeout
+or a longer timeout than permitted will have their schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
@@ -39,13 +66,31 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	// callback.* settings.
+	EnableStandaloneExecutions        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LongPollBuffer                    dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxCallbackScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout                    dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                       func() backoff.RetryPolicy
+
+	// Settings defined elsewhere.
+	CHASMEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMCallbacksEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// Validation related config.
+	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLength        dynamicconfig.IntPropertyFn // Used to check CallbackID, RequestID, etc.
 }
 
-func configProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout: RequestTimeout.Get(dc),
+		EnableStandaloneExecutions:        EnableStandaloneExecutions.Get(dc),
+		LongPollBuffer:                    LongPollBuffer.Get(dc),
+		LongPollTimeout:                   LongPollTimeout.Get(dc),
+		MaxCallbackScheduleToCloseTimeout: MaxCallbackScheduleToCloseTimeout.Get(dc),
+		RequestTimeout:                    RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -55,6 +100,13 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+
+		CHASMEnabled:          dynamicconfig.EnableChasm.Get(dc),
+		CHASMCallbacksEnabled: dynamicconfig.EnableCHASMCallbacks.Get(dc),
+
+		MaxIDLength:        dynamicconfig.MaxIDLengthLimit.Get(dc),
+		BlobSizeLimitError: dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:  dynamicconfig.BlobSizeLimitWarn.Get(dc),
 	}
 }
 
@@ -80,6 +132,10 @@ func (a AddressMatchRules) Validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
 	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
+	}
+	// To avoid a confusing error, where url.Parse would fail becase of a missing scheme.
+	if rawURL == "" {
+		return status.Errorf(codes.InvalidArgument, "invalid callback url: not set")
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {

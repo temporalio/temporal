@@ -136,6 +136,17 @@ func fabricateStartedEventIfMissing(
 		return nil
 	}
 
+	// If the operation hasn't started yet and the completion doesn't include an operation token,
+	// reject the request. This handles the race where a completion arrives before the start
+	// handler returns with the operation token. The caller will retry and by then the start
+	// handler will have returned and recorded the token.
+	//
+	// TODO(NEXUS-369): We should delay the completion somehow, e.g. using a chasm.PollComponent,
+	// to allow avoid surfacing any traisent errors to users.
+	if operationToken == "" {
+		return serviceerror.NewNexusOperationNotStarted("nexus operation not started", requestID)
+	}
+
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return err

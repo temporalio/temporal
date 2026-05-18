@@ -209,6 +209,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
+		nil, // Not testing callback handler here
 		nexusoperation.NewFrontendHandler(
 			nil,
 			nil,

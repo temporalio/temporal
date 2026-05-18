@@ -76,11 +76,13 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 ) (any, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
 		method := info.FullMethod
-		if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
-			method = configs.PollWorkflowHistoryAPIName
-		} else if IsLongPollDescribeActivityExecutionRequest(req) {
-			method = configs.PollActivityExecutionAPIName
+
+		// Potentially consider the request as something else, for cases where a typically
+		// normal API is called in a long polling-mode.
+		if longPollingName, ok := mapToLongPollingRequest(req); ok {
+			method = longPollingName
 		}
+
 		if ni.pollWaitForToken(ns.String()) {
 			if _, ok := ni.pollMethods[info.FullMethod]; ok {
 				if err := ni.Wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
@@ -158,22 +160,21 @@ func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name,
 	return nil
 }
 
-func IsLongPollGetWorkflowExecutionHistoryRequest(
-	req any,
-) bool {
+// mapToLongPollingRequest returns the endpoint name that should be used instead, if the
+// request is a non-standard long polling operation.
+//
+// e.g. DescribeActivityExecution is usually sync. But takes an optional LongPollToken,
+// which if set, then the request should be treated as the dedicated long polling version
+// (configs.PollActivityExecutionAPIName) instead.
+func mapToLongPollingRequest(req any) (string, bool) {
 	switch request := req.(type) {
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
-		return request.GetWaitNewEvent()
-	}
-	return false
-}
-
-func IsLongPollDescribeActivityExecutionRequest(
-	req any,
-) bool {
-	switch request := req.(type) {
+		return configs.PollWorkflowHistoryAPIName, request.GetWaitNewEvent()
 	case *workflowservice.DescribeActivityExecutionRequest:
-		return len(request.GetLongPollToken()) > 0
+		return configs.PollActivityExecutionAPIName, len(request.GetLongPollToken()) > 0
+	case *workflowservice.DescribeCallbackExecutionRequest:
+		return configs.PollCallbackExecutionAPIName, len(request.GetLongPollToken()) > 0
 	}
-	return false
+
+	return "", false
 }
