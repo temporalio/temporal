@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -311,64 +313,86 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 	})
 
 	s.Run("LongPollTimeoutReturnsEmptyResponse", func(s *NexusStandaloneTestSuite) {
-		env := s.newTestEnv()
-		endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexustest.Handler{
-			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		// The timeout imposed by the server is essentially
+		// Min(CallerTimeout - LongPollBuffer, LongPollTimeout).
+		for _, tc := range []struct {
+			name      string
+			setup     func(*NexusTestEnv)
+			callerCtx func(*NexusTestEnv) (context.Context, context.CancelFunc)
+		}{
+			{
+				name: "LongPollTimeoutExpiresBeforeCallerDeadline",
+				setup: func(env *NexusTestEnv) {
+					env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+				},
+				callerCtx: func(env *NexusTestEnv) (context.Context, context.CancelFunc) {
+					return context.WithTimeout(env.Context(), 9999*time.Millisecond)
+				},
 			},
-		})
+			{
+				name: "LongPollTimeoutExpiresWithoutCallerDeadline",
+				setup: func(env *NexusTestEnv) {
+					env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+				},
+				callerCtx: func(env *NexusTestEnv) (context.Context, context.CancelFunc) {
+					return env.Context(), func() {}
+				},
+			},
+			{
+				name: "LongPollBufferForcesResponse",
+				setup: func(env *NexusTestEnv) {
+					env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, common.DefaultLongPollTimeout-time.Second)
+				},
+				callerCtx: func(env *NexusTestEnv) (context.Context, context.CancelFunc) {
+					return env.Context(), func() {}
+				},
+			},
+		} {
+			env := s.newTestEnv()
+			endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexustest.Handler{
+				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+				},
+			})
 
-		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "test-op",
-			Endpoint:    endpointName,
-		})
-		s.NoError(err)
+			startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+				OperationId: "test-op",
+				Endpoint:    endpointName,
+			})
+			s.NoError(err)
 
-		// Ensure the operation is in a stable STARTED state.
-		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-			Namespace:   env.Namespace().String(),
-			OperationId: "test-op",
-			RunId:       startResp.RunId,
-			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
-		})
-		s.NoError(err)
+			// Ensure the operation is in a stable STARTED state.
+			_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       startResp.RunId,
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			})
+			s.NoError(err)
 
-		firstResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   env.Namespace().String(),
-			OperationId: "test-op",
-			RunId:       startResp.RunId,
-		})
-		s.NoError(err)
-		s.NotEmpty(firstResp.GetLongPollToken())
+			firstResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       startResp.RunId,
+			})
+			s.NoError(err)
+			s.NotEmpty(firstResp.GetLongPollToken())
 
-		s.Run("CallerDeadlineNotExceeded", func(s *NexusStandaloneTestSuite) {
-			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
-			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+			tc.setup(env)
+			ctx, cancel := tc.callerCtx(env)
 
-			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			startTime := time.Now()
+			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
 				Namespace:     env.Namespace().String(),
 				OperationId:   "test-op",
 				RunId:         startResp.RunId,
 				LongPollToken: firstResp.GetLongPollToken(),
 			})
-			s.NoError(err)
-			protorequire.ProtoEqual(s.T(), &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
-		})
-
-		s.Run("NoCallerDeadline", func(s *NexusStandaloneTestSuite) {
-			// Frontend still imposes its own deadline upstream, so the buffer must fit within that.
-			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, 29*time.Second)
-			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
-
-			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(context.Background(), &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:     env.Namespace().String(),
-				OperationId:   "test-op",
-				RunId:         startResp.RunId,
-				LongPollToken: firstResp.GetLongPollToken(),
-			})
-			s.NoError(err)
-			protorequire.ProtoEqual(s.T(), &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
-		})
+			cancel()
+			s.NoError(err, tc.name)
+			s.Less(time.Since(startTime), 5*time.Second, "%s took too long to timeout", tc.name)
+			s.True(proto.Equal(&workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp), tc.name)
+		}
 	})
 
 	s.Run("IncludeOutcome_Success", func(s *NexusStandaloneTestSuite) {

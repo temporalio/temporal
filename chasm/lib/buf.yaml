@@ -5,9 +5,6 @@ deps:
 breaking:
   use:
     - WIRE
-  ignore:
-    # TODO(bergundy): remove after 10154 is merged
-    - chasm/lib/workflow/proto/v1/state.proto
 lint:
   use:
     - DEFAULT

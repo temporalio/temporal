@@ -19,3 +19,9 @@ message NexusCancellationParentData {
   // Event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event.
   int64 requested_event_id = 1;
 }
+
+// IncomingSignalData records the event associated with a signal's request ID, which allows
+// DescribeWorkflow to resolve RequestIDRef signal backlinks.
+message IncomingSignalData {
+  int64 event_id = 1;
+}
