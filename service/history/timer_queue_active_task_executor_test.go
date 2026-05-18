@@ -2620,3 +2620,102 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		})
 	}
 }
+
+func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat_DedupUnderSkip() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowRunTimeout:  durationpb.New(72 * time.Hour),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	// Long timeouts so the activity-timer loop in executeActivityTimeoutTask
+	// doesn't fire on its own (it uses ms.Now() = wall+1h under the configured
+	// skip). HeartbeatTimeout is strictly shorter so CreateNextActivityTimer
+	// emits the heartbeat task first, setting TimerTaskStatusCreatedHeartbeat.
+	const (
+		otherTimeout = 24 * time.Hour
+		heartbeatTO  = 12 * time.Hour
+	)
+	scheduledEvent, _ := addActivityTaskScheduledEventWithRetry(
+		mutableState,
+		event.GetEventId(),
+		"activity", "activity-type", "taskqueue", nil,
+		otherTimeout, otherTimeout, otherTimeout, heartbeatTO,
+		&commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(1 * time.Second),
+			BackoffCoefficient: 1.2,
+			MaximumInterval:    durationpb.New(5 * time.Second),
+			MaximumAttempts:    5,
+		},
+	)
+	startedEvent := addActivityTaskStartedEvent(mutableState, scheduledEvent.GetEventId(), "identity")
+	// Activity has retry policy → started event is transient (nil) but
+	// activityInfo.StartedTime is set; this is the same shape as the _Noop test.
+	s.Nil(startedEvent)
+
+	timerSequence := workflow.NewTimerSequence(mutableState)
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
+	modified, err := timerSequence.CreateNextActivityTimer()
+	s.NoError(err)
+	s.True(modified)
+	createdTask := mutableState.InsertTasks[tasks.CategoryTimer][0]
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, createdTask.(*tasks.ActivityTimeoutTask).TimeoutType)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
+	// Attach time-skipping state to the persisted MS so ToRealTime sees a 1h offset
+	// on reload. After load, pendingActivityTimerHeartbeats[id] is reset to the
+	// year-2000 sentinel by NewMutableStateFromDB, and ToRealTime(year 2000) = 1999-12-31 23:00.
+	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+
+	// 1999-12-31 23:30 — strictly between ToRealTime(year 2000) and year 2000.
+	// Lands in the 1h window where the fix and the bug diverge.
+	heartbeatYear2000Reset := time.Unix(946684800, 0).UTC()
+	timerTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Attempt:             1,
+		TaskID:              s.mustGenerateTaskID(),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		VisibilityTimestamp: heartbeatYear2000Reset.Add(-30 * time.Minute),
+		EventID:             scheduledEvent.GetEventId(),
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// Dedup fires only with the ToRealTime fix; that's what makes
+	// updateMutableState=true and forces an UpdateWorkflowExecution call.
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NoError(resp.ExecutionErr,
+		"dedup branch must fire under accumulated skip via ToRealTime(heartbeatTimeoutVis); without it the executor would short-circuit with errNoTimerFired")
+}

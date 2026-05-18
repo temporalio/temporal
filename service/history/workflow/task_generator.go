@@ -1131,5 +1131,8 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			})
 		}
 	}
+	// todo@time-skipping: not supported yet
+	// ChasmTaskPure (in-memory CHASM pure tasks) hasn't been supported yet.
+	// HSM timer (callbacks, nexusoperations) hasn't been supported yet.
 	return nil
 }
