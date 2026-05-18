@@ -259,3 +259,16 @@ func getSourceClusterName(
 	}
 	return remoteClusterName, nil
 }
+
+func getActiveClusterName(
+	registry namespace.Registry,
+	namespaceID string,
+	workflowID string,
+) (string, error) {
+	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return "", err
+	}
+
+	return namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID}), nil
+}

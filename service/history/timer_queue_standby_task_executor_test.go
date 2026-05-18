@@ -2336,14 +2336,22 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	}
 
 	s.Run("WithHandler", func() {
-		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {})
+		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(nil).Times(1)
+		})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
-		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+		s.NoError(resp.ExecutionErr)
 	})
 
 	s.Run("WithoutHandler", func() {
-		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {})
+		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(chasm.ErrTaskDiscarded).Times(1)
+		})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
 		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
