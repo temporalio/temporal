@@ -6271,6 +6271,94 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NotNil(t, engine.shutdownWorkers.Get("worker-2"))
 	})
 
+	t.Run("tree fan-out: children grouped by host send one RPC per host", func(t *testing.T) {
+		// Tree: 0 -> {1, 2, 3, 4} (degree=20, 5 partitions).
+		// Partitions 1,2 route to host-a; partitions 3,4 route to host-b.
+		// Expect 2 RPCs (one per host), not 4 (one per child).
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+
+		routeFn := func(p tqid.Partition) (string, error) {
+			// Partitions 1,2 -> host-a; partitions 3,4 -> host-b.
+			// RpcName for partition N>0 contains "/N", e.g. "/_sys/test-queue/3".
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/3") || strings.Contains(rpcName, "/4") {
+				return "host-b", nil
+			}
+			return "host-a", nil
+		}
+		routingMock := &routingMatchingClient{
+			MockMatchingServiceClient: mockMatchingClient,
+			routeFn:                   routeFn,
+		}
+
+		// Expect exactly 2 RPCs: one to host-a with partitions {1,2}, one to host-b with {3,4}.
+		rpcsByHost := map[string][]int32{} // host -> partition IDs received
+		var mu sync.Mutex
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				var ids []int32
+				for _, p := range req.GetPartitions() {
+					ids = append(ids, p.GetNormalPartitionId())
+				}
+				// Determine which host this RPC was for by looking at routing partition.
+				host, _ := routeFn(tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), "test-namespace-id"))
+				mu.Lock()
+				rpcsByHost[host] = ids
+				mu.Unlock()
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: int32(len(ids))}, nil
+			}).
+			Times(2)
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(5)
+		config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(20)
+
+		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     routingMock,
+			logger:                log.NewNoopLogger(),
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// Root cancels 1 local + 2 hosts return 2 + 2 = 5 total
+		require.Equal(t, int32(5), resp.CancelledCount)
+		// Verify grouping: 2 RPCs, each carrying the right partitions.
+		require.Len(t, rpcsByHost, 2, "should send exactly 2 RPCs (one per host)")
+		require.ElementsMatch(t, []int32{1, 2}, rpcsByHost["host-a"])
+		require.ElementsMatch(t, []int32{3, 4}, rpcsByHost["host-b"])
+	})
+
 	t.Run("tree fan-out: failed partitions are tracked in response", func(t *testing.T) {
 		// Tree: 0 -> {1, 2}. Child 1 fails, child 2 succeeds.
 		// Verify failed_partitions is reported in response.
@@ -6299,4 +6387,15 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int32(2), resp.CancelledCount)
 	})
+}
+
+// routingMatchingClient wraps a mock matching client with a Route() method
+// so it satisfies the matching.RoutingClient interface for host-grouping tests.
+type routingMatchingClient struct {
+	*matchingservicemock.MockMatchingServiceClient
+	routeFn func(p tqid.Partition) (string, error)
+}
+
+func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
+	return r.routeFn(p)
 }

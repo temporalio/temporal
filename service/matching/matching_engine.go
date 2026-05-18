@@ -1333,16 +1333,35 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 		}
 	}
 
-	// Fan out to child partitions in the tree. Children of partition P are [P*D+1, ..., P*D+D].
+	// Fan out to child partitions in the tree.
+	childCancelled, childFailed := e.fanOutPollCancellationToChildren(ctx, request)
+
+	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
+		CancelledCount:   cancelledCount + childCancelled,
+		FailedPartitions: childFailed,
+	}, nil
+}
+
+// fanOutPollCancellationToChildren computes child partitions in the tree (children of P
+// are [P*D+1, ..., P*D+D]), groups them by destination matching host, and sends one RPC
+// per host carrying all co-located partitions. When Route() is unavailable or fails,
+// each partition falls back to an individual RPC.
+func (e *matchingEngineImpl) fanOutPollCancellationToChildren(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+) (cancelledCount int32, failedPartitions int32) {
 	numPartitions := int(request.GetPartitionCount())
 	degree := int(request.GetDegree())
 	if degree <= 0 || numPartitions <= 0 {
-		return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: cancelledCount}, nil
+		return 0, 0
 	}
 
-	var totalChildCancelled atomic.Int32
-	var failedPartitions atomic.Int32
-	var wg sync.WaitGroup
+	routingClient, ok := e.matchingRawClient.(matching.RoutingClient)
+	if !ok {
+		routingClient = nil
+	}
+	childrenByHost := map[string][]*taskqueuespb.TaskQueuePartition{}
+	ungroupedCounter := 0
 	for _, partitionProto := range request.GetPartitions() {
 		partitionID := int(partitionProto.GetNormalPartitionId())
 		firstChild := partitionID*degree + 1
@@ -1352,38 +1371,65 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 				TaskQueueType: partitionProto.GetTaskQueueType(),
 				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(childID)},
 			}
-			wg.Go(func() {
-				// TODO: group children by destination host (via Route()) to send one RPC per host
-				// with multiple partitions, instead of one RPC per child.
-				childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-					NamespaceId:        request.GetNamespaceId(),
-					TaskQueuePartition: childPartitionProto,
-					Partitions:         []*taskqueuespb.TaskQueuePartition{childPartitionProto},
-					Workers:            request.GetWorkers(),
-					PartitionCount:     request.GetPartitionCount(),
-					Degree:             request.GetDegree(),
-				}
-				resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
-				if err != nil {
-					failedPartitions.Add(1)
-					e.logger.Warn("Failed to cancel outstanding worker polls for child partition",
-						tag.NewInt32("partition-id", int32(childID)),
-						tag.NewInt32("partition-count", int32(numPartitions)),
-						tag.NewInt32("degree", int32(degree)),
-						tag.Error(err))
-					return
-				}
-				totalChildCancelled.Add(resp.GetCancelledCount())
-				failedPartitions.Add(resp.GetFailedPartitions())
-			})
+			host := e.resolveHostForPartition(routingClient, childPartitionProto, request.GetNamespaceId(), childID, &ungroupedCounter)
+			childrenByHost[host] = append(childrenByHost[host], childPartitionProto)
 		}
 	}
-	wg.Wait()
 
-	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
-		CancelledCount:   cancelledCount + totalChildCancelled.Load(),
-		FailedPartitions: failedPartitions.Load(),
-	}, nil
+	var totalChildCancelled atomic.Int32
+	var totalFailedPartitions atomic.Int32
+	var wg sync.WaitGroup
+
+	for _, children := range childrenByHost {
+		wg.Go(func() {
+			childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        request.GetNamespaceId(),
+				TaskQueuePartition: children[0], // routing key
+				Partitions:         children,
+				Workers:            request.GetWorkers(),
+				PartitionCount:     request.GetPartitionCount(),
+				Degree:             request.GetDegree(),
+			}
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
+			if err != nil {
+				totalFailedPartitions.Add(int32(len(children)))
+				e.logger.Warn("Failed to cancel outstanding worker polls for child partitions",
+					tag.NewInt("partition-count", len(children)),
+					tag.Error(err))
+				return
+			}
+			totalChildCancelled.Add(resp.GetCancelledCount())
+			totalFailedPartitions.Add(resp.GetFailedPartitions())
+		})
+	}
+
+	wg.Wait()
+	return totalChildCancelled.Load(), totalFailedPartitions.Load()
+}
+
+// resolveHostForPartition returns the matching host for a child partition via Route().
+// If routing is unavailable or fails, returns a unique key so the partition gets its own RPC.
+func (e *matchingEngineImpl) resolveHostForPartition(
+	routingClient matching.RoutingClient,
+	partitionProto *taskqueuespb.TaskQueuePartition,
+	namespaceID string,
+	childID int,
+	ungroupedCounter *int,
+) string {
+	if routingClient != nil {
+		childPartition := tqid.PartitionFromPartitionProto(partitionProto, namespaceID)
+		host, err := routingClient.Route(childPartition)
+		if err == nil {
+			return host
+		}
+		e.logger.Warn("Failed to resolve matching host for poll cancellation grouping, sending individual RPC",
+			tag.NewInt32("partition-id", int32(childID)),
+			tag.Error(err))
+	}
+	// Use unique key so this partition gets its own RPC.
+	host := fmt.Sprintf("_ungrouped_%d", *ungroupedCounter)
+	*ungroupedCounter++
+	return host
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so
