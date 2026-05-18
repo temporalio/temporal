@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -843,22 +842,13 @@ func OperatorHandlerProvider(
 }
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
-// so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
-// TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
-// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
+// so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
 	return callback.NewValidator(
 		callback.MaxPerExecution.Get(dc),
 		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		func(ns string) callback.AddressMatchRules {
-			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
-			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
-			for i, r := range hsmRules.Rules {
-				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
-			}
-			return callback.AddressMatchRules{Rules: chasmRules}
-		},
+		callback.AllowedAddresses.Get(dc),
 	)
 }
 
