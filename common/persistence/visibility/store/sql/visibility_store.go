@@ -266,24 +266,16 @@ func (s *VisibilityStore) countChasmExecutions(
 		return nil, err
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	queryParams, err := buildQueryParams(
 		namespace.ID(request.NamespaceId),
 		namespace.Name(request.Namespace),
-		resolvedQuery,
+		request.Query,
 		sqlQC,
 		saTypeMap,
 		saMapper,
 		mapper,
 		request.ArchetypeId,
+		time.Time{},
 	)
 	if err != nil {
 		var converterErr *query.ConverterError
@@ -323,22 +315,13 @@ func (s *VisibilityStore) countChasmExecutionsLegacy(
 		return nil, err
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		namespace.Name(request.Namespace),
 		namespace.ID(request.NamespaceId),
 		saTypeMap,
 		saMapper,
-		resolvedQuery,
+		request.Query,
 		mapper,
 		request.ArchetypeId,
 	)
@@ -405,24 +388,16 @@ func (s *VisibilityStore) listExecutionsInternal(
 		queryTime = pageToken.QueryTime.UTC()
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, queryTime)
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	queryParams, err := buildQueryParams(
 		request.NamespaceID,
 		request.Namespace,
-		resolvedQuery,
+		request.Query,
 		sqlQC,
 		saTypeMap,
 		saMapper,
 		request.ChasmMapper,
 		request.ArchetypeID,
+		queryTime,
 	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
@@ -521,25 +496,16 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 		queryTime = pageToken.QueryTime.UTC()
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, queryTime)
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
 		saTypeMap,
 		saMapper,
-		resolvedQuery,
+		request.Query,
 		request.ChasmMapper,
 		request.ArchetypeID,
-	)
+	).WithAnchor(queryTime)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
@@ -613,22 +579,13 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 		return nil, err
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
 		saTypeMap,
 		saMapper,
-		resolvedQuery,
+		request.Query,
 		nil,
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -673,24 +630,16 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		return nil, err
 	}
 
-	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
-	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
 	queryParams, err := buildQueryParams(
 		request.NamespaceID,
 		request.Namespace,
-		resolvedQuery,
+		request.Query,
 		sqlQC,
 		saTypeMap,
 		saMapper,
 		nil,
 		chasm.UnspecifiedArchetypeID,
+		time.Time{},
 	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
@@ -1004,10 +953,12 @@ func buildQueryParams(
 	saMapper searchattribute.Mapper,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	archetypeID chasm.ArchetypeID,
+	anchor time.Time,
 ) (*query.QueryParams[sqlparser.Expr], error) {
 	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper).
 		WithChasmMapper(chasmMapper).
-		WithArchetypeID(archetypeID)
+		WithArchetypeID(archetypeID).
+		WithAnchor(anchor)
 
 	queryParams, err := c.Convert(queryString)
 	if err != nil {

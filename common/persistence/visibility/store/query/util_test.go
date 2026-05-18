@@ -181,7 +181,7 @@ func TestGetUnsafeStringTupleValues(t *testing.T) {
 	}
 }
 
-func TestParseExecutionDurationStr(t *testing.T) {
+func TestParseDurationStr(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		input         string
@@ -224,7 +224,7 @@ func TestParseExecutionDurationStr(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			got, err := ParseExecutionDurationStr(tc.input)
+			got, err := ParseDurationStr(tc.input)
 			if tc.expectedErr == nil {
 				require.NoError(t, err)
 				require.Equal(t, tc.expectedValue, got)

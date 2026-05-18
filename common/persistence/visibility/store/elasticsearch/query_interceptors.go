@@ -154,7 +154,7 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 		}
 	case sadefs.ExecutionDuration:
 		if durationStr, isString := value.(string); isString {
-			duration, err := query.ParseExecutionDurationStr(durationStr)
+			duration, err := query.ParseDurationStr(durationStr)
 			if err != nil {
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s: %v (%v)", name, value, err)

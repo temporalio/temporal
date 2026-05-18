@@ -455,7 +455,7 @@ func resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperatio
 	if batchParams.GetBatchStartTime() == nil || query == "" {
 		return query, nil
 	}
-	return visquery.ResolveRelativeTimes(query, batchParams.BatchStartTime.AsTime())
+	return visquery.ResolveNow(query, batchParams.BatchStartTime.AsTime())
 }
 
 func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {

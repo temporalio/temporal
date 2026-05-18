@@ -1021,7 +1021,7 @@ func (s *activitiesSuite) TestBatchActivityWithProtobuf_ResolvesRelativeTimestam
 		BatchStartTime: timestamppb.New(anchor),
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       "test-namespace",
-			VisibilityQuery: "StartTime > NOW() - 5h",
+			VisibilityQuery: "StartTime > NOW() - '5h'",
 		},
 	}
 
