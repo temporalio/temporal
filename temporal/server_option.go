@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
@@ -195,6 +196,13 @@ func WithChainedFrontendGrpcInterceptors(
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customFrontendInterceptors = interceptors
+	})
+}
+
+// WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
+func WithTokenProvider(tp auth.TokenProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.tokenProvider = tp
 	})
 }
 

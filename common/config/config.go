@@ -640,6 +640,17 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
+		// GraceWindow controls how long before token expiry the credential refreshes proactively.
+		// Accepts a Go duration string (e.g. "30s", "5m"). Zero falls back to the 30s default.
+		GraceWindow time.Duration `yaml:"graceWindow"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

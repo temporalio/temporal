@@ -29,7 +29,7 @@ type (
 )
 
 type (
-	// JWTAudienceMapper returns JWT audience for a given request
+	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil from streaming RPCs.
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
@@ -197,7 +197,10 @@ func (a *Interceptor) InterceptStream(
 		tlsConnection := TLSInfoFromContext(ctx)
 
 		authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
-			// JWTAudienceMapper only supports UnaryServerInfo; no request is available at stream init.
+			// No request body or *grpc.UnaryServerInfo at stream init; per-RPC audience mappers see nils.
+			if a.audienceGetter != nil {
+				return a.audienceGetter.Audience(ctx, nil, nil)
+			}
 			return ""
 		})
 
