@@ -530,6 +530,9 @@ type (
 		PrevTransactionID int64
 		// The events to be appended
 		Events *commonpb.DataBlob
+		// EncodingOverride, if non-empty, overrides Events.EncodingType for the data_encoding column.
+		// Used when the blob is compressed (e.g. "proto3+zstd").
+		EncodingOverride string
 	}
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
