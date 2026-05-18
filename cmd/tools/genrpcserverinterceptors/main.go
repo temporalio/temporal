@@ -137,13 +137,6 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 	case messageType.AssignableTo(workflowExecutionGetterT):
 		pd.WorkflowIDGetter = "GetWorkflowExecution().GetWorkflowId()"
 		pd.RunIDGetter = "GetWorkflowExecution().GetRunId()"
-	case messageType.AssignableTo(taskTokenGetterT):
-		for _, ert := range excludeTaskTokenTypes {
-			if messageType.AssignableTo(ert) {
-				return pd
-			}
-		}
-		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
 		// Might have any combination of these, or none.
 		if messageType.AssignableTo(workflowIDGetterT) {
@@ -157,6 +150,25 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 		}
 		if messageType.AssignableTo(operationIDGetterT) {
 			pd.OperationIDGetter = "GetOperationId()"
+		}
+	}
+
+	if pd.ActivityIDGetter == "" && messageType.AssignableTo(activityIDGetterT) {
+		pd.ActivityIDGetter = "GetActivityId()"
+	}
+	if pd.OperationIDGetter == "" && messageType.AssignableTo(operationIDGetterT) {
+		pd.OperationIDGetter = "GetOperationId()"
+	}
+	if messageType.AssignableTo(taskTokenGetterT) {
+		excluded := false
+		for _, ert := range excludeTaskTokenTypes {
+			if messageType.AssignableTo(ert) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			pd.TaskTokenGetter = "GetTaskToken()"
 		}
 	}
 

@@ -172,10 +172,12 @@ func (c *customServerStatsHandler) annotateTags(
 	for _, logTag := range c.tags.Extract(payload, methodName) {
 		var k string
 		switch logTag.Key() {
+		case tag.ActivityIDKey:
+			k = ActivityIDKey
 		case tag.WorkflowIDKey:
 			k = WorkflowIDKey
-		case tag.WorkflowRunIDKey:
-			k = WorkflowRunIDKey
+		case tag.ChasmRunIDKey, tag.WorkflowRunIDKey:
+			k = RunIDKey
 		default:
 			continue
 		}
