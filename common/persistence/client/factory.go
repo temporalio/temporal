@@ -206,6 +206,7 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		f.eventBlobCache,
 		f.logger,
 		f.config.TransactionSizeLimit,
+		f.config.HistoryNodeBlobCompressionThreshold,
 		f.enableBestEffortDeleteTasksOnWorkflowUpdate,
 	)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
