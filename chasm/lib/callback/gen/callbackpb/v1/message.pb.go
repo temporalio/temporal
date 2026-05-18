@@ -46,7 +46,7 @@ const (
 	// Callback was terminated by request. Only relevant for standalone callbacks.
 	CALLBACK_STATUS_TERMINATED CallbackStatus = 6
 	// Callback exceeded the schedule-to-close timeout.
-	CALLBACK_STATUS_TIMED_OUT CallbackStatus = 7 // TODO(chrsmith): Wire this new state in.
+	CALLBACK_STATUS_TIMED_OUT CallbackStatus = 7
 )
 
 // Enum value maps for CallbackStatus.
