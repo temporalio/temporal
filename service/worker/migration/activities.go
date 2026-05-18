@@ -38,6 +38,7 @@ import (
 type (
 	replicationTasksHeartbeatDetails struct {
 		NextIndex                        int
+		DeferredIndices                  []int // indices skipped over due to shard contention; retried each pass
 		CheckPoint                       time.Time
 		LastNotVerifiedWorkflowExecution *ExecutionInfo
 	}
@@ -915,49 +916,102 @@ func (a *activities) verifySingleReplicationTask(
 	}
 }
 
-func (a *activities) verifyReplicationTasks(
+// verifyBatch scans executions in two phases:
+//  1. Retry items from deferredIndices that were skipped in previous passes.
+//  2. Sequential scan starting at startIndex, with skip-ahead once checkpoint age exceeds skipAheadAfter.
+//
+// When skip-ahead is active and an item fails, the item and all consecutive items on the same
+// source shard are added to the deferred set without further RPC calls, on the premise that the
+// whole shard is contended. The scan then continues from the first item on a different shard.
+//
+// onProgress is called after each successful verification (deferred or sequential) with the
+// updated sequential frontier and remaining deferred set; callers should update their checkpoint
+// and heartbeat inside this callback.
+//
+// Returns: next sequential index, remaining deferred indices, done (all verified), last unverified
+// execution (nil if scan completed or all remaining items were deferred).
+func (a *activities) verifyBatch(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	details *replicationTasksHeartbeatDetails,
-	remotAdminClient adminservice.AdminServiceClient,
+	startIndex int,
+	deferredIndices []int,
+	checkpoint time.Time,
+	skipAheadAfter time.Duration,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	heartbeat func(details replicationTasksHeartbeatDetails),
-) (bool, error) {
+	onProgress func(nextIndex int, remainingDeferred []int),
+) (nextIndex int, remainingDeferred []int, done bool, lastUnverified *ExecutionInfo, err error) {
 	start := time.Now()
-	progress := false
 	defer func() {
-		if progress {
-			// Update CheckPoint when there is a progress
-			details.CheckPoint = time.Now()
-		}
-
-		heartbeat(*details)
 		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
 
-	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
-		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remotAdminClient, ns, we)
-		if err != nil {
-			return false, err
+	// Phase 1: retry deferred items from previous passes.
+	remaining := make([]int, 0, len(deferredIndices))
+	for retryIdx, idx := range deferredIndices {
+		we := request.Executions[idx]
+		r, verifyErr := a.verifySingleReplicationTask(ctx, request, remoteAdminClient, ns, we)
+		if verifyErr != nil {
+			// Preserve all not-yet-processed deferred indices so they survive the retry.
+			remaining = append(remaining, deferredIndices[retryIdx:]...)
+			return startIndex, remaining, false, nil, verifyErr
 		}
-
-		if !r.isVerified() {
-			details.LastNotVerifiedWorkflowExecution = we
-			return false, nil
+		if r.isVerified() {
+			// Include not-yet-tried deferred items so the heartbeat is complete if the
+			// activity crashes between iterations.
+			onProgress(startIndex, append(remaining, deferredIndices[retryIdx+1:]...))
+		} else {
+			remaining = append(remaining, idx)
 		}
-
-		heartbeat(*details)
-		progress = true
 	}
 
-	return true, nil
+	// Phase 2: sequential scan, deferring stuck items once past the skip-ahead threshold.
+	pastThreshold := time.Since(checkpoint) >= skipAheadAfter
+	for i := startIndex; i < len(request.Executions); i++ {
+		we := request.Executions[i]
+		r, verifyErr := a.verifySingleReplicationTask(ctx, request, remoteAdminClient, ns, we)
+		if verifyErr != nil {
+			return i, remaining, false, nil, verifyErr
+		}
+		if r.isVerified() {
+			onProgress(i+1, remaining)
+		} else if pastThreshold {
+			// Defer this item and any consecutive items on the same source shard without
+			// further RPC calls: if one item on a shard is stuck, its siblings likely are too.
+			hotShard := common.WorkflowIDToHistoryShard(request.NamespaceID, we.BusinessID, a.HistoryShardCount)
+			deferStart := i
+			remaining = append(remaining, i)
+			for i+1 < len(request.Executions) {
+				next := request.Executions[i+1]
+				if common.WorkflowIDToHistoryShard(request.NamespaceID, next.BusinessID, a.HistoryShardCount) != hotShard {
+					break
+				}
+				i++
+				remaining = append(remaining, i)
+			}
+			a.Logger.Info("verifyBatch deferring stuck executions",
+				tag.WorkflowNamespace(request.Namespace),
+				tag.Int32("ShardID", hotShard),
+				tag.Int("DeferredCount", i-deferStart+1),
+				tag.Int("TotalDeferred", len(remaining)),
+			)
+			// Continue the outer loop from the next different-shard item.
+		} else {
+			return i, remaining, false, we, nil
+		}
+	}
+
+	return len(request.Executions), remaining, len(remaining) == 0, nil, nil
 }
 
 const (
 	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
+	// defaultSkipAheadAfter is the duration after the last verified item at which verifyBatch
+	// starts deferring stuck items instead of blocking. Chosen as half the non-retryable timeout
+	// so there is still time to detect genuine failures after skip-ahead begins.
+	defaultSkipAheadAfter = defaultNoProgressNotRetryableTimeout / 2
 )
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
@@ -968,12 +1022,11 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 			return response, err
 		}
 	} else {
-		details.NextIndex = 0
 		details.CheckPoint = time.Now()
 		activity.RecordHeartbeat(ctx, details)
 	}
 
-	remotAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
 	if err != nil {
 		return response, err
 	}
@@ -983,41 +1036,61 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		return response, err
 	}
 
-	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
+	// Verify if replication tasks exist on target cluster. There are several cases where an
+	// execution is not found on the target cluster:
 	//  1. replication lag
 	//  2. Zombie workflow execution
 	//  3. workflow execution was deleted (due to retention) after replication task was created
 	//  4. workflow execution was not applied successfully on target cluster (i.e, bug)
 	//
-	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
-	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
-	// being verified. If no progress is made for long enough, then
-	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
-	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
-	//    non-retryable error and force-replication will fail.
+	// The verification step is retried every VerifyInterval to handle #1. Progress is recorded
+	// in the activity heartbeat: checkpoint is updated whenever an execution is successfully
+	// verified. If no progress is made for defaultNoProgressNotRetryableTimeout, the activity
+	// returns a non-retryable error indicating a likely bug (#4).
 	for {
-		// Since replication has a lag, sleep first.
-		time.Sleep(request.VerifyInterval)
+		// Since replication has a lag, wait before each scan.
+		select {
+		case <-time.After(request.VerifyInterval):
+		case <-ctx.Done():
+			return response, ctx.Err()
+		}
 
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remotAdminClient, nsEntry,
-			func(d replicationTasksHeartbeatDetails) {
-				activity.RecordHeartbeat(ctx, d)
-			})
+		nextIndex, remainingDeferred, done, lastUnverified, err := a.verifyBatch(
+			ctx, request,
+			details.NextIndex, details.DeferredIndices,
+			details.CheckPoint, defaultSkipAheadAfter,
+			remoteAdminClient, nsEntry,
+			func(nextIdx int, remaining []int) {
+				details.NextIndex = nextIdx
+				details.DeferredIndices = remaining
+				details.CheckPoint = time.Now()
+				activity.RecordHeartbeat(ctx, details)
+			},
+		)
+
+		details.NextIndex = nextIndex
+		details.DeferredIndices = remainingDeferred
+		if lastUnverified != nil {
+			details.LastNotVerifiedWorkflowExecution = lastUnverified
+		} else if len(remainingDeferred) > 0 {
+			details.LastNotVerifiedWorkflowExecution = request.Executions[remainingDeferred[0]]
+		}
+		activity.RecordHeartbeat(ctx, details)
+
 		if err != nil {
 			return response, err
 		}
 
-		if verified {
+		if done {
 			response.VerifiedWorkflowCount = int64(len(request.Executions))
 			return response, nil
 		}
 
-		diff := time.Since(details.CheckPoint)
-		if diff > defaultNoProgressNotRetryableTimeout {
-			// Potentially encountered a missing execution, return non-retryable error
+		staleDuration := time.Since(details.CheckPoint)
+		if staleDuration > defaultNoProgressNotRetryableTimeout {
 			return response, temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable): could not find WorkflowExecution: '%v' in TargetCluster: '%s': Checkpoint: '%v', ",
-					diff.Minutes(),
+					staleDuration.Minutes(),
 					details.LastNotVerifiedWorkflowExecution, request.TargetClusterName, details.CheckPoint),
 				"",
 				nil)

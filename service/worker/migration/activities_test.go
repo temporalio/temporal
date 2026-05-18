@@ -133,6 +133,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.NoError(err)
 
 	s.a = &activities{
+		HistoryShardCount:                1,
 		NamespaceRegistry:                s.mockNamespaceRegistry,
 		namespaceReplicationQueue:        s.mockNamespaceReplicationQueue,
 		clientFactory:                    s.mockClientFactory,
@@ -348,7 +349,10 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
-	s.Equal(0, lastHeartBeat.NextIndex)
+	// With skip-ahead active (checkpoint is past the threshold), the item is deferred rather than
+	// stopping the sequential frontier; NextIndex advances to 1 (past the only item).
+	s.Equal(1, lastHeartBeat.NextIndex)
+	s.Equal([]int{0}, lastHeartBeat.DeferredIndices)
 	s.Equal(execution1, lastHeartBeat.LastNotVerifiedWorkflowExecution)
 }
 
@@ -502,15 +506,8 @@ Loop:
 	return executions
 }
 
-type mockHeartBeatRecorder struct {
-	lastHeartBeat replicationTasksHeartbeatDetails
-}
-
-func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetails) {
-	m.lastHeartBeat = details
-}
-
-func (s *activitiesSuite) Test_verifyReplicationTasks() {
+func (s *activitiesSuite) TestVerifyBatch() {
+	s.a.HistoryShardCount = 1 // deterministic shard mapping for all test executions
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -518,44 +515,40 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	}
 
 	ctx := context.TODO()
+	notPastThreshold := time.Now()
 
 	var tests = []struct {
 		remoteExecutionStates []executionState
-		nextIndex             int
-		expectedVerified      bool
+		startIndex            int
+		expectedDone          bool
 		expectedErr           error
 		expectedNextIndex     int
 	}{
 		{
-			expectedVerified: true,
-			expectedErr:      nil,
+			expectedDone: true,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:             0,
-			expectedVerified:      true,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          true,
 			expectedNextIndex:     4,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:             2,
-			expectedVerified:      true,
-			expectedErr:           nil,
+			startIndex:            2,
+			expectedDone:          true,
 			expectedNextIndex:     4,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
-			nextIndex:             0,
-			expectedVerified:      false,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          false,
 			expectedNextIndex:     2,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound, executionFound, executionNotfound},
-			nextIndex:             0,
-			expectedVerified:      false,
-			expectedErr:           nil,
+			startIndex:            0,
+			expectedDone:          false,
 			expectedNextIndex:     2,
 		},
 	}
@@ -570,38 +563,130 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		SkipForceReload: true,
 	})).Return(completeState, nil).AnyTimes()
 
-	checkPointTime := time.Now()
 	for _, tc := range tests {
-		var recorder mockHeartBeatRecorder
-		// mockRemoteClient := workflowservicemock.NewMockWorkflowServiceClient(s.controller)
-		request.Executions = createExecutions(s.mockRemoteAdminClient, tc.remoteExecutionStates, tc.nextIndex)
-		details := replicationTasksHeartbeatDetails{
-			NextIndex:  tc.nextIndex,
-			CheckPoint: checkPointTime,
-		}
+		request.Executions = createExecutions(s.mockRemoteAdminClient, tc.remoteExecutionStates, tc.startIndex)
 
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+		var progressCallCount int
+		var lastProgressIndex int
+		nextIndex, remainingDeferred, done, lastUnverified, err := s.a.verifyBatch(
+			ctx, &request,
+			tc.startIndex, nil, notPastThreshold, defaultSkipAheadAfter,
+			s.mockRemoteAdminClient, &testNamespace,
+			func(ni int, rem []int) {
+				lastProgressIndex = ni
+				progressCallCount++
+			},
+		)
+
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
-		s.Equal(tc.expectedVerified, verified)
-		s.Equal(tc.expectedNextIndex, details.NextIndex)
-		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
-		s.Equal(recorder.lastHeartBeat, details)
-		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
-			s.Equal(execution1, details.LastNotVerifiedWorkflowExecution)
+		s.Equal(tc.expectedDone, done)
+		s.Equal(tc.expectedNextIndex, nextIndex)
+		s.Empty(remainingDeferred)
+		s.GreaterOrEqual(len(tc.remoteExecutionStates), nextIndex)
+
+		if nextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[nextIndex] == executionNotfound {
+			s.Equal(execution1, lastUnverified)
 		}
 
 		if len(request.Executions) > 0 {
-			// Except for empty Executions, all should set new CheckPoint to indicate making progress.
-			s.True(checkPointTime.Before(details.CheckPoint))
+			// Except for empty Executions, onProgress should have been called for progress.
+			s.Positive(progressCallCount)
+			s.Equal(nextIndex, lastProgressIndex)
 		}
 	}
 }
 
-func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
-	var recorder mockHeartBeatRecorder
+// Test_verifyBatchSkipAhead verifies that once the skip-ahead threshold is exceeded, stuck items
+// are deferred and the scan continues past them. With HistoryShardCount=1 all executions share a
+// single shard, so the first failure causes all remaining items to be bulk-deferred without
+// further RPC calls — exercising the shard-aware consecutive-defer optimisation.
+func (s *activitiesSuite) TestVerifyBatchSkipAhead() {
+	s.a.HistoryShardCount = 1
+	ctx := context.TODO()
+	pastThreshold := time.Time{} // zero time is always past any positive threshold
 
+	// Mocks: only items 0 (found) and 1 (not-found) are tried; items 2-4 share the same
+	// shard as 1 and are bulk-deferred without RPC calls.
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       mockedNamespace,
+		Execution:       &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
+		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
+		SkipForceReload: true,
+	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1) // item 0 found
+
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       mockedNamespace,
+		Execution:       &commonpb.WorkflowExecution{WorkflowId: execution1.BusinessID, RunId: execution1.RunID},
+		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
+		SkipForceReload: true,
+	})).Return(nil, serviceerror.NewNotFound("")).Times(1) // item 1 not found (triggers skip-ahead)
+
+	request := verifyReplicationTasksRequest{
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []*ExecutionInfo{execution1, execution1, execution1, execution1, execution1}, // 5 items, all shard 1
+	}
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(completeState, nil).AnyTimes()
+
+	var progressCallCount int
+	nextIndex, remainingDeferred, done, lastUnverified, err := s.a.verifyBatch(
+		ctx, &request,
+		0, nil, pastThreshold, defaultSkipAheadAfter,
+		s.mockRemoteAdminClient, &testNamespace,
+		func(ni int, rem []int) { progressCallCount++ },
+	)
+
+	s.NoError(err)
+	s.False(done)
+	s.Equal(5, nextIndex)                         // scan reached the end
+	s.Equal([]int{1, 2, 3, 4}, remainingDeferred) // item 1 and all same-shard items deferred
+	s.Nil(lastUnverified)                         // no sequential stop point; items were deferred
+	s.Equal(1, progressCallCount)                 // only item 0 was verified
+}
+
+// Test_verifyBatchDeferredRetry verifies that items in deferredIndices are retried at the start
+// of each call and removed from the deferred set when they succeed.
+func (s *activitiesSuite) TestVerifyBatchDeferredRetry() {
+	s.a.HistoryShardCount = 1
+	ctx := context.TODO()
+
+	// Three executions; items 0 and 2 were previously deferred. The sequential frontier is at 3
+	// (past the end), so only the deferred retry phase runs.
+	executions := []*ExecutionInfo{execution1, execution1, execution1}
+	request := verifyReplicationTasksRequest{
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        executions,
+	}
+
+	// Deferred items 0 and 2 are now found on the remote cluster.
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).
+		Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(2)
+
+	var progressCallCount int
+	nextIndex, remainingDeferred, done, _, err := s.a.verifyBatch(
+		ctx, &request,
+		3, []int{0, 2}, time.Now(), defaultSkipAheadAfter,
+		s.mockRemoteAdminClient, &testNamespace,
+		func(ni int, rem []int) { progressCallCount++ },
+	)
+
+	s.NoError(err)
+	s.True(done)
+	s.Equal(3, nextIndex)      // sequential frontier unchanged
+	s.Empty(remainingDeferred) // both deferred items verified
+	s.Equal(2, progressCallCount)
+}
+
+func (s *activitiesSuite) TestVerifyBatchNoProgress() {
+	s.a.HistoryShardCount = 1
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -619,23 +704,21 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 		SkipForceReload: true,
 	})).Return(completeState, nil).AnyTimes()
 
-	checkPointTime := time.Now()
-	details := replicationTasksHeartbeatDetails{
-		NextIndex:  0,
-		CheckPoint: checkPointTime,
-	}
-
 	ctx := context.TODO()
-	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+
+	var firstProgressCount int
+	nextIndex, _, done, _, err := s.a.verifyBatch(
+		ctx, &request,
+		0, nil, time.Now(), defaultSkipAheadAfter,
+		s.mockRemoteAdminClient, &testNamespace,
+		func(ni int, rem []int) { firstProgressCount++ },
+	)
 	s.NoError(err)
-	s.False(verified)
-	// Verify has made progress.
-	s.True(checkPointTime.Before(details.CheckPoint))
-	s.Equal(2, details.NextIndex)
+	s.False(done)
+	s.Equal(2, nextIndex)
+	s.Equal(2, firstProgressCount) // items 0 and 1 verified
 
-	prevDetails := details
-
-	// Mock for one more NotFound call
+	// Mock for one more NotFound call when retrying from nextIndex.
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -647,14 +730,22 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
-	// All results should be either NotFound or cached and no progress should be made.
-	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+	// Retrying from the same index makes no progress.
+	var secondProgressCount int
+	nextIndex2, _, done2, _, err := s.a.verifyBatch(
+		ctx, &request,
+		nextIndex, nil, time.Now(), defaultSkipAheadAfter,
+		s.mockRemoteAdminClient, &testNamespace,
+		func(ni int, rem []int) { secondProgressCount++ },
+	)
 	s.NoError(err)
-	s.False(verified)
-	s.Equal(prevDetails, details)
+	s.False(done2)
+	s.Equal(nextIndex, nextIndex2)
+	s.Equal(0, secondProgressCount)
 }
 
-func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
+func (s *activitiesSuite) TestVerifyBatchSkipRetention() {
+	s.a.HistoryShardCount = 1
 	request := verifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
@@ -663,21 +754,20 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	}
 
 	var tests = []struct {
-		deleteDiff time.Duration // diff between deleteTime and now
-		verified   bool
+		deleteDiff   time.Duration // diff between deleteTime and now
+		expectedDone bool
 	}{
 		{
-			-30 * time.Second,
-			true,
+			deleteDiff:   -30 * time.Second,
+			expectedDone: true,
 		},
 		{
-			30 * time.Second,
-			false,
+			deleteDiff:   30 * time.Second,
+			expectedDone: false,
 		},
 	}
 
 	for _, tc := range tests {
-		var recorder mockHeartBeatRecorder
 		deleteTime := time.Now().Add(tc.deleteDiff)
 		retention := time.Hour
 		closeTime := deleteTime.Add(-retention)
@@ -723,12 +813,18 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		ns, nsErr := namespace.FromPersistentState(detail, factory(detail))
 		s.Require().NoError(nsErr)
 
-		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, ns, recorder.hearbeat)
+		_, _, done, lastUnverified, err := s.a.verifyBatch(
+			ctx, &request,
+			0, nil, time.Now(), defaultSkipAheadAfter,
+			s.mockRemoteAdminClient, ns,
+			func(int, []int) {},
+		)
 		s.NoError(err)
-		s.Equal(tc.verified, verified)
-		s.Equal(recorder.lastHeartBeat, details)
+		s.Equal(tc.expectedDone, done)
+		if !done {
+			s.Equal(execution1, lastUnverified)
+		}
 	}
 }
 
