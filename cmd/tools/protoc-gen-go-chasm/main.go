@@ -224,7 +224,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.unindent() // close if
 	w.println("} else {")
 	w.indent() // start else
-	w.println("redirector = history.NewBasicRedirector(connections, resolver, logger)")
+	w.println("redirector = history.NewBasicRedirector(connections, resolver)")
 	w.unindent() // close else
 	w.println("}")
 	w.println("return &%s{", structName)

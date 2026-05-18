@@ -49,7 +49,7 @@ func NewSchedulerServiceLayeredClient(
 			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
 		)
 	} else {
-		redirector = history.NewBasicRedirector(connections, resolver, logger)
+		redirector = history.NewBasicRedirector(connections, resolver)
 	}
 	return &SchedulerServiceLayeredClient{
 		metricsHandler: metricsHandler,

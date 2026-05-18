@@ -50,7 +50,7 @@ func NewTestServiceLayeredClient(
 			dynamicconfig.HistoryClientOwnershipCachingStaleTTL.Get(dc),
 		)
 	} else {
-		redirector = history.NewBasicRedirector(connections, resolver, logger)
+		redirector = history.NewBasicRedirector(connections, resolver)
 	}
 	return &TestServiceLayeredClient{
 		metricsHandler: metricsHandler,

@@ -1,3 +1,6 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination connection_pool_mock.go
+//go:generate perl -pi -e s/clientConnection(?!\[)/clientConnection[C]/g connection_pool_mock.go
+
 package history
 
 import (
@@ -19,7 +22,7 @@ type (
 
 	connectionPoolImpl[C any] struct {
 		mu struct {
-			sync.RWMutex
+			sync.Mutex
 			conns map[rpcAddress]clientConnection[C]
 		}
 
@@ -59,38 +62,26 @@ func NewConnectionPool[C any](
 }
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
-	c.mu.RLock()
-	cc, ok := c.mu.conns[addr]
-	c.mu.RUnlock()
-	if ok {
-		return cc
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if cc, ok = c.mu.conns[addr]; ok {
-		return cc
+	cc, ok := c.mu.conns[addr]
+	if !ok {
+		grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
+		cc = clientConnection[C]{
+			grpcClient: c.clientCtor(grpcConn),
+			grpcConn:   grpcConn,
+		}
+		c.mu.conns[addr] = cc
 	}
-	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
-	cc = clientConnection[C]{
-		grpcClient: c.clientCtor(grpcConn),
-		grpcConn:   grpcConn,
-	}
-
-	c.mu.conns[addr] = cc
 	return cc
 }
 
 func (c *connectionPoolImpl[C]) getAllClientConns() []clientConnection[C] {
 	hostInfos := c.historyServiceResolver.Members()
-
 	var clientConns []clientConnection[C]
 	for _, hostInfo := range hostInfos {
-		cc := c.getOrCreateClientConn(rpcAddress(hostInfo.GetAddress()))
-		clientConns = append(clientConns, cc)
+		clientConns = append(clientConns, c.getOrCreateClientConn(rpcAddress(hostInfo.GetAddress())))
 	}
-
 	return clientConns
 }
 
@@ -98,6 +89,7 @@ func (c *connectionPoolImpl[C]) resetConnectBackoff(cc clientConnection[C]) {
 	cc.grpcConn.ResetConnectBackoff()
 }
 
+// closeConn removes the conn for addr from the pool and closes it.
 func (c *connectionPoolImpl[C]) closeConn(addr rpcAddress) {
 	c.mu.Lock()
 	cc, ok := c.mu.conns[addr]

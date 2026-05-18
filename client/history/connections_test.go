@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.uber.org/mock/gomock"
@@ -24,10 +23,10 @@ func newTestConn(t *testing.T, addr string) *grpc.ClientConn {
 	return conn
 }
 
-func TestConnectionPool_CloseConnRemovesAndCloses(t *testing.T) {
+func TestConnectionPool_CloseConn(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	resolver := membership.NewMockServiceResolver(ctrl)
-	rpcFactory := common.NewMockRPCFactory(ctrl)
+	rpcFactory := NewMockRPCFactory(ctrl)
 	rpcFactory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
 		func(addr string) *grpc.ClientConn { return newTestConn(t, addr) },
 	).AnyTimes()
@@ -37,17 +36,15 @@ func TestConnectionPool_CloseConnRemovesAndCloses(t *testing.T) {
 	require.NotEqual(t, connectivity.Shutdown, cc.grpcConn.GetState())
 
 	pool.closeConn("addr:7235")
-
 	require.Eventually(t, func() bool {
 		return cc.grpcConn.GetState() == connectivity.Shutdown
 	}, 2*time.Second, 10*time.Millisecond, "closed gRPC conn should reach Shutdown state")
 
-	pool.mu.RLock()
+	pool.mu.Lock()
 	_, stillCached := pool.mu.conns["addr:7235"]
-	pool.mu.RUnlock()
+	pool.mu.Unlock()
 	require.False(t, stillCached, "closed addr should be removed from the pool")
 
-	// closeConn is idempotent.
 	require.NotPanics(t, func() { pool.closeConn("addr:7235") })
 	require.NotPanics(t, func() { pool.closeConn("never-existed") })
 }

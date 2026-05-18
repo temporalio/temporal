@@ -134,14 +134,16 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
+	// Extract the references the goroutine and clientProvider need. The
+	// runtime.AddCleanup target (cf) must not be reachable from any state
+	// the cleanup closure or the goroutine retains, so neither captures cf.
+	logger := cf.logger
+	rpcFactory := cf.rpcFactory
 	clientProvider := func(clientKey string) (any, func() error, error) {
-		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
+		connection := rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
-	cache := common.NewClientCache(keyResolver, clientProvider, cf.logger)
-	// The goroutine cancels when the factory is GC'd. The closure must not
-	// capture cf, so we extract the references it needs first.
-	logger := cf.logger
+	cache := common.NewClientCache(keyResolver, clientProvider, logger)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())

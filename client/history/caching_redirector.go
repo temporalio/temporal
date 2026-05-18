@@ -34,7 +34,8 @@ type (
 	CachingRedirector[C any] struct {
 		mu struct {
 			sync.RWMutex
-			cache map[int32]cacheEntry[C]
+			cache    map[int32]cacheEntry[C]
+			addrRefs map[rpcAddress]int
 		}
 
 		connections            connectionPool[C]
@@ -62,6 +63,7 @@ func NewCachingRedirector[C any](
 		listenerName:           fmt.Sprintf("cachingRedirectorListener-%s", uuid.New().String()),
 	}
 	r.mu.cache = make(map[int32]cacheEntry[C])
+	r.mu.addrRefs = make(map[rpcAddress]int)
 
 	r.goros.Go(r.eventLoop)
 
@@ -125,42 +127,35 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 	r.mu.RLock()
 	entry, ok := r.mu.cache[shardID]
 	r.mu.RUnlock()
-	if ok {
-		if entry.staleAt.IsZero() || time.Now().Before(entry.staleAt) {
-			return entry, nil
-		}
-		// Otherwise, check below under write lock.
+	if ok && (entry.staleAt.IsZero() || time.Now().Before(entry.staleAt)) {
+		return entry, nil
 	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Recheck under write lock.
 	entry, ok = r.mu.cache[shardID]
-	if ok {
-		if entry.staleAt.IsZero() || time.Now().Before(entry.staleAt) {
-			r.mu.Unlock()
-			return entry, nil
-		}
-		// Delete and fallthrough below to re-check ownership.
-		delete(r.mu.cache, shardID)
+	if ok && (entry.staleAt.IsZero() || time.Now().Before(entry.staleAt)) {
+		return entry, nil
 	}
 
 	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
-		r.mu.Unlock()
 		return cacheEntry[C]{}, err
 	}
-
-	newEntry := r.cacheAddLocked(shardID, address)
-	r.mu.Unlock()
-	// Skip closing the connection if the new owner has same address.
-	if ok && entry.address != address {
-		r.connections.closeConn(entry.address)
-	}
-	return newEntry, nil
+	return r.cacheAddLocked(shardID, address), nil
 }
 
 func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) cacheEntry[C] {
+	// Pre-bump the new addr's ref before removing the previous entry, so
+	// removeEntryLocked doesn't drop refs to zero in the same-addr case
+	// (which would close-then-reopen the live gRPC conn).
+	r.mu.addrRefs[addr]++
+	if old, ok := r.mu.cache[shardID]; ok {
+		r.removeEntryLocked(old)
+	}
+
 	// New history instances might reuse the address of a previously live history
 	// instance. Since we don't currently close GRPC connections when they become
 	// unused or idle, we might have a GRPC connection that has gone into its
@@ -183,8 +178,19 @@ func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) ca
 		// longer the shard owner.
 	}
 	r.mu.cache[shardID] = entry
-
 	return entry
+}
+
+// removeEntryLocked deletes entry from the cache and releases its ref on the
+// underlying gRPC conn, closing it when no other cache entry references it.
+// Caller must hold r.mu.
+func (r *CachingRedirector[C]) removeEntryLocked(entry cacheEntry[C]) {
+	delete(r.mu.cache, entry.shardID)
+	r.mu.addrRefs[entry.address]--
+	if r.mu.addrRefs[entry.address] <= 0 {
+		delete(r.mu.addrRefs, entry.address)
+		r.connections.closeConn(entry.address)
+	}
 }
 
 func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
@@ -194,6 +200,7 @@ func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
 			delete(r.mu.cache, shardID)
 		}
 	}
+	delete(r.mu.addrRefs, address)
 	r.mu.Unlock()
 	r.connections.closeConn(address)
 }
@@ -201,12 +208,6 @@ func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
 func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *serviceerrors.ShardOwnershipLost) (cacheEntry[C], bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	if cached, ok := r.mu.cache[opEntry.shardID]; ok {
-		if cached.address == opEntry.address {
-			delete(r.mu.cache, cached.shardID)
-		}
-	}
 
 	solErrNewOwner := rpcAddress(solErr.OwnerHost)
 	if len(solErrNewOwner) != 0 && solErrNewOwner != opEntry.address {
@@ -217,6 +218,10 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 		return r.cacheAddLocked(opEntry.shardID, solErrNewOwner), true
 	}
 
+	// No usable new-owner hint: evict the stale entry if it still matches.
+	if cached, ok := r.mu.cache[opEntry.shardID]; ok && cached.address == opEntry.address {
+		r.removeEntryLocked(cached)
+	}
 	return cacheEntry[C]{}, false
 }
 
@@ -252,13 +257,12 @@ func (r *CachingRedirector[C]) staleCheck() {
 	staleTTL := r.staleTTL()
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	now := time.Now()
-	var toClose []rpcAddress
 	for shardID, entry := range r.mu.cache {
 		if !entry.staleAt.IsZero() {
 			if now.After(entry.staleAt) {
-				delete(r.mu.cache, shardID)
-				toClose = append(toClose, entry.address)
+				r.removeEntryLocked(entry)
 			}
 			continue
 		}
@@ -269,9 +273,5 @@ func (r *CachingRedirector[C]) staleCheck() {
 				r.mu.cache[shardID] = entry
 			}
 		}
-	}
-	r.mu.Unlock()
-	for _, addr := range toClose {
-		r.connections.closeConn(addr)
 	}
 }

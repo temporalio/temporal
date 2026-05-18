@@ -64,7 +64,7 @@ func NewClient(
 		)
 	} else {
 		logger.Info("historyClient: ownership caching disabled")
-		redirector = NewBasicRedirector(connections, historyServiceResolver, logger)
+		redirector = NewBasicRedirector(connections, historyServiceResolver)
 	}
 
 	return &clientImpl{
