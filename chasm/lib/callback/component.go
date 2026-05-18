@@ -16,6 +16,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -74,6 +75,51 @@ func NewEmbeddedCallback(
 			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
 		},
 	}
+}
+
+// newStandaloneCallbackInput is the bundle of inputs to the CHASM execution.
+type newStandaloneCallbackInput struct {
+	RequestID              string
+	Callback               *callbackspb.Callback
+	ScheduleToCloseTimeout *durationpb.Duration
+	Completion             *callbackpb.CallbackExecutionCompletion
+	SearchAttributes       map[string]*commonpb.Payload
+}
+
+// newStandaloneCallback constructs a new Callback component in standalone mode.
+// The Callback is immediately transitioned to SCHEDULED state to begin invocation.
+func newStandaloneCallback(
+	ctx chasm.MutableContext,
+	input *newStandaloneCallbackInput,
+) (*Callback, error) {
+	now := timestamppb.Now()
+
+	// Create Callback component.
+	cb := NewEmbeddedCallback(input.RequestID, now, input.Callback)
+	cb.ScheduleToCloseTimeout = input.ScheduleToCloseTimeout
+	cb.SuppliedCompletion = chasm.NewDataField(ctx, input.Completion)
+
+	visibility := chasm.NewVisibilityWithData(ctx, input.SearchAttributes, nil)
+	cb.Visibility = chasm.NewComponentField(ctx, visibility)
+
+	// Immediately schedule the callback for invocation.
+	if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
+		return nil, fmt.Errorf("failed to schedule callback: %w", err)
+	}
+
+	// Schedule the timeout as applicable.
+	if durationProto := input.ScheduleToCloseTimeout; durationProto != nil {
+		if duration := durationProto.AsDuration(); duration > 0 {
+			timeoutTime := now.AsTime().Add(duration)
+			ctx.AddTask(
+				cb,
+				chasm.TaskAttributes{ScheduledTime: timeoutTime},
+				&callbackspb.ScheduleToCloseTimeoutTask{},
+			)
+		}
+	}
+
+	return cb, nil
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {

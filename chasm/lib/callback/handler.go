@@ -3,17 +3,12 @@ package callback
 import (
 	"context"
 	"errors"
-	"fmt"
 
-	callbackpb "go.temporal.io/api/callback/v1"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/contextutil"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type callbackHandler struct {
@@ -32,10 +27,10 @@ func (h *callbackHandler) StartCallbackExecution(
 	ctx context.Context,
 	req *callbackspb.StartCallbackExecutionRequest,
 ) (resp *callbackspb.StartCallbackExecutionResponse, err error) {
-	frontendReq := req.FrontendRequest
+	frontendReq := req.GetFrontendRequest()
 
 	// Gather all the data necessary to create the Callback component.
-	input := &createStandaloneCallbackInput{
+	input := &newStandaloneCallbackInput{
 		RequestID:              frontendReq.GetRequestId(),
 		ScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
 		Completion:             frontendReq.GetCompletion(),
@@ -59,10 +54,10 @@ func (h *callbackHandler) StartCallbackExecution(
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
-			NamespaceID: req.NamespaceId,
+			NamespaceID: req.GetNamespaceId(),
 			BusinessID:  frontendReq.GetCallbackId(),
 		},
-		createStandaloneCallback,
+		newStandaloneCallback,
 		input,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
 		// Relying on these default policies. No configuration knobs are exposed to users.
@@ -112,10 +107,10 @@ func (h *callbackHandler) DescribeCallbackExecution(
 			Info: info,
 		}
 
-		if req.FrontendRequest.GetIncludeInput() {
+		if req.GetFrontendRequest().GetIncludeInput() {
 			resp.Input = c.SuppliedCompletion.Get(ctx)
 		}
-		if req.FrontendRequest.GetIncludeOutcome() {
+		if req.GetFrontendRequest().GetIncludeOutcome() {
 			resp.Outcome = c.outcome(ctx)
 		}
 
@@ -127,8 +122,8 @@ func (h *callbackHandler) DescribeCallbackExecution(
 	compRef := chasm.NewComponentRef[*Callback](
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.FrontendRequest.GetCallbackId(),
-			RunID:       req.FrontendRequest.GetRunId(),
+			BusinessID:  req.GetFrontendRequest().GetCallbackId(),
+			RunID:       req.GetFrontendRequest().GetRunId(),
 		},
 	)
 
@@ -197,13 +192,13 @@ func (h *callbackHandler) PollCallbackExecution(
 
 	ref := chasm.NewComponentRef[*Callback](
 		chasm.ExecutionKey{
-			NamespaceID: req.NamespaceId,
-			BusinessID:  req.FrontendRequest.GetCallbackId(),
-			RunID:       req.FrontendRequest.GetRunId(),
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  req.GetFrontendRequest().GetCallbackId(),
+			RunID:       req.GetFrontendRequest().GetRunId(),
 		},
 	)
 
-	ns := req.FrontendRequest.GetNamespace()
+	ns := req.GetFrontendRequest().GetNamespace()
 	ctx, cancel := contextutil.WithDeadlineBuffer(
 		ctx,
 		h.config.LongPollTimeout(ns),
@@ -240,20 +235,22 @@ func (h *callbackHandler) TerminateCallbackExecution(
 	ctx context.Context,
 	req *callbackspb.TerminateCallbackExecutionRequest,
 ) (resp *callbackspb.TerminateCallbackExecutionResponse, err error) {
+
+	frontendReq := req.GetFrontendRequest()
 	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Callback](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.GetCallbackId(),
-				RunID:       req.FrontendRequest.GetRunId(),
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  frontendReq.GetCallbackId(),
+				RunID:       frontendReq.GetRunId(),
 			},
 		),
 		func(c *Callback, ctx chasm.MutableContext, _ *callbackspb.TerminateCallbackExecutionRequest) (*callbackspb.TerminateCallbackExecutionResponse, error) {
 			if _, err := c.Terminate(ctx, chasm.TerminateComponentRequest{
-				Identity:  req.FrontendRequest.GetIdentity(),
-				Reason:    req.FrontendRequest.GetReason(),
-				RequestID: req.FrontendRequest.GetRequestId(),
+				Identity:  frontendReq.GetIdentity(),
+				Reason:    frontendReq.GetReason(),
+				RequestID: frontendReq.GetRequestId(),
 			}); err != nil {
 				return nil, err
 			}
@@ -274,9 +271,9 @@ func (h *callbackHandler) DeleteCallbackExecution(
 	if err = chasm.DeleteExecution[*Callback](
 		ctx,
 		chasm.ExecutionKey{
-			NamespaceID: req.NamespaceId,
-			BusinessID:  req.FrontendRequest.GetCallbackId(),
-			RunID:       req.FrontendRequest.GetRunId(),
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  req.GetFrontendRequest().GetCallbackId(),
+			RunID:       req.GetFrontendRequest().GetRunId(),
 		},
 		chasm.DeleteExecutionRequest{
 			TerminateComponentRequest: chasm.TerminateComponentRequest{
@@ -290,49 +287,4 @@ func (h *callbackHandler) DeleteCallbackExecution(
 	return &callbackspb.DeleteCallbackExecutionResponse{
 		FrontendResponse: &workflowservice.DeleteCallbackExecutionResponse{},
 	}, nil
-}
-
-// createStandaloneCallbackInput is the bundle of inputs to the CHASM execution.
-type createStandaloneCallbackInput struct {
-	RequestID              string
-	Callback               *callbackspb.Callback
-	ScheduleToCloseTimeout *durationpb.Duration
-	Completion             *callbackpb.CallbackExecutionCompletion
-	SearchAttributes       map[string]*commonpb.Payload
-}
-
-// createStandaloneCallback constructs a new Callback component in standalone mode.
-// The Callback is immediately transitioned to SCHEDULED state to begin invocation.
-func createStandaloneCallback(
-	ctx chasm.MutableContext,
-	input *createStandaloneCallbackInput,
-) (*Callback, error) {
-	now := timestamppb.Now()
-
-	// Create Callback component.
-	cb := NewEmbeddedCallback(input.RequestID, now, input.Callback)
-	cb.ScheduleToCloseTimeout = input.ScheduleToCloseTimeout
-	cb.SuppliedCompletion = chasm.NewDataField(ctx, input.Completion)
-
-	visibility := chasm.NewVisibilityWithData(ctx, input.SearchAttributes, nil)
-	cb.Visibility = chasm.NewComponentField(ctx, visibility)
-
-	// Immediately schedule the callback for invocation.
-	if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
-		return nil, fmt.Errorf("failed to schedule callback: %w", err)
-	}
-
-	// Schedule the timeout as applicable.
-	if durationProto := input.ScheduleToCloseTimeout; durationProto != nil {
-		if duration := durationProto.AsDuration(); duration > 0 {
-			timeoutTime := now.AsTime().Add(duration)
-			ctx.AddTask(
-				cb,
-				chasm.TaskAttributes{ScheduledTime: timeoutTime},
-				&callbackspb.ScheduleToCloseTimeoutTask{},
-			)
-		}
-	}
-
-	return cb, nil
 }
