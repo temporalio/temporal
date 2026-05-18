@@ -407,7 +407,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 							)
 						} else {
 							require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-							require.Nil(col, callbackInfo.LastAttemptFailure)
+							// callbackInfo.LastAttemptFailure will be preserved, even if a later attempt is successful.
 						}
 						descCbs = append(descCbs, callbackInfo.Callback)
 					}
