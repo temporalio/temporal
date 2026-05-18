@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	visquery "go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -73,6 +74,7 @@ type page struct {
 	submittedCount int
 	successCount   int
 	errorCount     int
+	pageToken      []byte
 	nextPageToken  []byte
 	pageNumber     int
 	prev, next     *page
@@ -122,6 +124,7 @@ func fetchPage(
 		// No query provided, return empty page
 		return &page{
 			executionInfos: []*workflowpb.WorkflowExecutionInfo{},
+			pageToken:      pageToken,
 			nextPageToken:  []byte{},
 			pageNumber:     pageNumber,
 		}, nil
@@ -147,6 +150,7 @@ func fetchPage(
 
 	return &page{
 		executionInfos: executionInfos,
+		pageToken:      pageToken,
 		nextPageToken:  resp.NextPageToken,
 		pageNumber:     pageNumber,
 	}, nil
@@ -194,6 +198,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 		p = &page{
 			executionInfos: executionInfos,
+			pageToken:      config.initialPageToken,
 			nextPageToken:  config.initialPageToken,
 			pageNumber:     hbd.CurrentPage,
 		}
@@ -219,8 +224,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			nextPage.prev = p
 			p = nextPage
 
-			hbd.CurrentPage = p.pageNumber
-			hbd.PageToken = p.nextPageToken
 		}
 
 		select {
@@ -240,6 +243,9 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			for page := resultPage; page != nil && page.done(); page = page.next {
 				hbd.SuccessCount += page.successCount
 				hbd.ErrorCount += page.errorCount
+				if updateHeartbeatCheckpoint(&hbd, page) {
+					activity.RecordHeartbeat(ctx, hbd)
+				}
 				page.prev = nil
 			}
 
@@ -260,6 +266,35 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	}
 
 	return hbd, nil
+}
+
+// updateHeartbeatCheckpoint advances the heartbeat checkpoint to the next unprocessed page
+// once completedPage and all its predecessors are done. Returns true if the checkpoint changed.
+func updateHeartbeatCheckpoint(hbd *HeartBeatDetails, completedPage *page) bool {
+	if completedPage == nil || hbd == nil {
+		return false
+	}
+
+	var nextPage int
+	var nextToken []byte
+	switch {
+	case completedPage.next != nil:
+		nextPage = completedPage.next.pageNumber
+		nextToken = completedPage.next.pageToken
+	case completedPage.hasNext():
+		nextPage = completedPage.pageNumber + 1
+		nextToken = completedPage.nextPageToken
+	default:
+		nextPage = completedPage.pageNumber
+		nextToken = nil
+	}
+
+	if hbd.CurrentPage == nextPage && slices.Equal(hbd.PageToken, nextToken) {
+		return false
+	}
+	hbd.CurrentPage = nextPage
+	hbd.PageToken = nextToken
+	return true
 }
 
 type activities struct {
@@ -322,10 +357,18 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		visibilityQuery = adminReq.GetVisibilityQuery()
+		rawQuery, err := resolveRelativeTimestamps(adminReq.GetVisibilityQuery(), batchParams)
+		if err != nil {
+			return hbd, err
+		}
+		visibilityQuery = rawQuery
 		executions = adminReq.GetExecutions()
 	} else {
-		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+		rawQuery, err := resolveRelativeTimestamps(batchParams.Request.VisibilityQuery, batchParams)
+		if err != nil {
+			return hbd, err
+		}
+		visibilityQuery = a.adjustQueryBatchTypeEnum(rawQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
 	}
 
@@ -384,6 +427,15 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+// resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the anchor.
+// Returns the query unchanged if BatchStartTime is not set or the query contains no NOW().
+func resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
+	if batchParams.GetBatchStartTime() == nil || query == "" {
+		return query, nil
+	}
+	return visquery.ResolveRelativeTimes(query, batchParams.BatchStartTime.AsTime())
 }
 
 func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {

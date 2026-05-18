@@ -15,6 +15,7 @@ import (
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -118,6 +119,8 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 	}
 
 	batchParams = setDefaultParams(batchParams)
+	batchParams.BatchStartTime = timestamppb.New(workflow.GetInfo(ctx).WorkflowStartTime.UTC())
+
 	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartbeatTimeout.AsDuration()
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails

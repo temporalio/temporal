@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -39,10 +40,16 @@ func (s *batcherSuite) TearDownTest() {
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	var ac *activities
-	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
-		SuccessCount: 42,
-		ErrorCount:   27,
-	}, nil)
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, input *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+			s.Require().NotNil(input.GetBatchStartTime())
+			s.False(input.GetBatchStartTime().AsTime().IsZero())
+			return HeartBeatDetails{
+				SuccessCount: 42,
+				ErrorCount:   27,
+			}, nil
+		},
+	)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
 		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
@@ -71,10 +78,16 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	var ac *activities
-	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
-		SuccessCount: 42,
-		ErrorCount:   27,
-	}, nil)
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, input *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+			s.Require().NotNil(input.GetBatchStartTime())
+			s.False(input.GetBatchStartTime().AsTime().IsZero())
+			return HeartBeatDetails{
+				SuccessCount: 42,
+				ErrorCount:   27,
+			}, nil
+		},
+	)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
 		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
