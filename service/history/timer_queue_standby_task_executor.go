@@ -794,12 +794,20 @@ func (t *timerQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeD
 	if postActionInfo == nil {
 		return nil
 	}
+	sourceClusterName, err := getActiveClusterName(
+		t.shardContext.GetNamespaceRegistry(),
+		taskInfo.GetNamespaceID(),
+		taskInfo.GetWorkflowID(),
+	)
+	if err != nil {
+		return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	}
 	if !executionExistsOnSource(
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
 		logger,
-		t.clusterName,
+		sourceClusterName,
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),

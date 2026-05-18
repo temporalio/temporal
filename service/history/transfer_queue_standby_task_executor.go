@@ -677,12 +677,20 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 	if postActionInfo == nil {
 		return nil
 	}
+	sourceClusterName, err := getActiveClusterName(
+		t.shardContext.GetNamespaceRegistry(),
+		taskInfo.GetNamespaceID(),
+		taskInfo.GetWorkflowID(),
+	)
+	if err != nil {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	}
 	if !executionExistsOnSource(
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
 		logger,
-		t.clusterName,
+		sourceClusterName,
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
@@ -706,12 +714,20 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
+	sourceClusterName, err := getActiveClusterName(
+		t.shardContext.GetNamespaceRegistry(),
+		taskInfo.GetNamespaceID(),
+		taskInfo.GetWorkflowID(),
+	)
+	if err != nil {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	}
 	if !executionExistsOnSource(
 		ctx,
 		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
 		logger,
-		t.clusterName,
+		sourceClusterName,
 		t.clientBean,
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),

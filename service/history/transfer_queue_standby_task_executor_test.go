@@ -24,6 +24,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -856,6 +857,43 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.Equal(randomErr, verificationErr.Unwrap())
 }
 
+func (s *transferQueueStandbyTaskExecutorSuite) TestCheckParentWorkflowStillExistOnSourceBeforeDiscardUsesTaskNamespaceActiveCluster() {
+	s.transferQueueStandbyTaskExecutor.clusterName = cluster.TestCurrentClusterName
+	s.NoError(s.mockShard.ChasmRegistry().Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+
+	parentWorkflowKey := definition.NewWorkflowKey(
+		tests.ParentNamespaceID.String(),
+		"some random parent workflow ID",
+		uuid.NewString(),
+	)
+	transferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			"some random workflow ID",
+			uuid.NewString(),
+		),
+	}
+
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(s.mockRemoteAdminClient, nil)
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace: tests.ParentNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: parentWorkflowKey.WorkflowID,
+			RunId:      parentWorkflowKey.RunID,
+		},
+		Archetype:       chasm.WorkflowArchetype,
+		SkipForceReload: true,
+	})).Return(nil, serviceerror.NewNotFound(""))
+
+	err := s.transferQueueStandbyTaskExecutor.checkParentWorkflowStillExistOnSourceBeforeDiscard(
+		context.Background(),
+		transferTask,
+		&verifyCompletionRecordedPostActionInfo{parentWorkflowKey: &parentWorkflowKey},
+		s.logger,
+	)
+	s.NoError(err)
+}
+
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1410,22 +1448,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	}
 
 	s.Run("WithHandler", func() {
-		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
-			tree.EXPECT().ExecuteSideEffectDiscardTask(
-				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-			).Return(nil).Times(1)
-		})
+		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
-		s.NoError(resp.ExecutionErr)
+		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
 	})
 
 	s.Run("WithoutHandler", func() {
-		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {
-			tree.EXPECT().ExecuteSideEffectDiscardTask(
-				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-			).Return(chasm.ErrTaskDiscarded).Times(1)
-		})
+		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
 		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
