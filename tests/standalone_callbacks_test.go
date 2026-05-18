@@ -11,8 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -568,17 +566,17 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 			waitUpTo      = 3 * time.Second
 			checkInterval = 200 * time.Millisecond
 		)
-		s.EventuallyWithT(func(t *assert.CollectT) {
+		s.Await(func(scs *StandaloneCallbackSuite) {
 			pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				CallbackId: callbackID,
 			})
-			require.NoError(t, err)
-			require.NotNil(t, pollResp.GetOutcome())
+			scs.NoError(err)
+			scs.NotNil(pollResp.GetOutcome())
 
-			require.NotNil(t, pollResp.GetOutcome().GetFailure())
-			require.NotNil(t, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())
-			require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+			scs.NotNil(pollResp.GetOutcome().GetFailure())
+			scs.NotNil(pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())
+			scs.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 		}, waitUpTo, checkInterval)
 	})
 }
@@ -627,13 +625,13 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 		waitUpTo      = 3 * time.Second
 		checkInterval = 100 * time.Millisecond
 	)
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		_, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 			RunId:      runID,
 		})
-		require.ErrorContains(t, err, "not found")
+		scs.ErrorContains(err, "not found")
 	}, waitUpTo, checkInterval)
 }
 
@@ -812,47 +810,47 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackIDs[i], time.Minute)
 	}
 
-	// List callback executions. Visibility indexing happens be async, so use EventuallyWithT.
+	// List callback executions. Visibility indexing happens be async, so use s.Await(...).
 	const (
 		waitUpTo      = 5 * time.Second
 		checkInterval = 200 * time.Millisecond
 	)
 
 	// Verify returned data includes our callback IDs and has valid fields.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, len(listResp.GetExecutions()), 2)
+		scs.NoError(err)
+		scs.GreaterOrEqual(len(listResp.GetExecutions()), 2)
 
 		// Collect returned callback IDs and verify fields.
 		foundIDs := make(map[string]bool)
 		for _, exec := range listResp.GetExecutions() {
 			foundIDs[exec.GetCallbackId()] = true
-			require.NotEmpty(t, exec.GetCallbackId())
-			require.NotNil(t, exec.GetCreateTime())
+			scs.NotEmpty(exec.GetCallbackId())
+			scs.NotNil(exec.GetCreateTime())
 		}
 		for _, id := range callbackIDs {
-			require.True(t, foundIDs[id], "expected callback %s in list response", id)
+			scs.True(foundIDs[id], "expected callback %s in list response", id)
 		}
-	}, waitUpTo, checkInterval, "Didn't find expected results from ListCallbackExecutions")
+	}, waitUpTo, checkInterval)
 
 	// List with ExecutionStatus query filter — newly started callbacks should be "Running".
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`ExecutionStatus = "Running" AND CallbackId = %q`, callbackIDs[0]),
 		})
-		require.NoError(t, err)
-		require.Len(t, listResp.GetExecutions(), 1)
+		scs.NoError(err)
+		scs.Len(listResp.GetExecutions(), 1)
 		gotCb := listResp.GetExecutions()[0]
-		require.Equal(t, callbackIDs[0], gotCb.GetCallbackId())
-		require.NotNil(t, gotCb.CreateTime)
-		require.Nil(t, gotCb.CloseTime) // Not in terminal state.
-	}, waitUpTo, checkInterval, "Didn't find Running callback")
+		scs.Equal(callbackIDs[0], gotCb.GetCallbackId())
+		scs.NotNil(gotCb.CreateTime)
+		scs.Nil(gotCb.CloseTime) // Not in terminal state.
+	}, waitUpTo, checkInterval)
 
 	// Terminate one callback to test filtering by terminal status.
 	_, err := env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
@@ -865,40 +863,40 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 	s.NoError(err)
 
 	// List with ExecutionStatus = "Terminated" should find the terminated callback.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`ExecutionStatus = "Terminated" AND CallbackId = %q`, callbackIDs[1]),
 		})
-		require.NoError(t, err)
-		require.Len(t, listResp.GetExecutions(), 1)
+		scs.NoError(err)
+		scs.Len(listResp.GetExecutions(), 1)
 		gotCb := listResp.GetExecutions()[0]
-		require.Equal(t, callbackIDs[1], gotCb.GetCallbackId())
-		require.NotNil(t, gotCb.CreateTime)
-		require.NotNil(t, gotCb.CloseTime)
+		scs.Equal(callbackIDs[1], gotCb.GetCallbackId())
+		scs.NotNil(gotCb.CreateTime)
+		scs.NotNil(gotCb.CloseTime)
 		// If Created and CloseTime are within 1ns, either the system is crazy-fast
 		// or there is a bug where we are not fetching the current time twice.
-		require.Greater(t, gotCb.CloseTime.AsTime(), gotCb.CreateTime.AsTime())
-	}, waitUpTo, checkInterval, "Didn't find Terminated callbacks")
+		scs.Greater(gotCb.CloseTime.AsTime(), gotCb.CreateTime.AsTime())
+	}, waitUpTo, checkInterval)
 
 	// Count callback executions.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		countResp, err := env.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, countResp.GetCount(), int64(2))
+		scs.NoError(err)
+		scs.GreaterOrEqual(countResp.GetCount(), int64(2))
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Count with ExecutionStatus filter should only count scheduled callbacks.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		countResp, err := env.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			Query:     `ExecutionStatus = "Running"`,
 		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, countResp.GetCount(), int64(1))
+		scs.NoError(err)
+		scs.GreaterOrEqual(countResp.GetCount(), int64(1))
 	}, waitUpTo, checkInterval)
 }
 
@@ -938,15 +936,15 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() 
 	s.NoError(err)
 
 	// Verify the search attribute is queryable via list.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(scs *StandaloneCallbackSuite) {
 		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`CustomKeywordField = %q AND CallbackId = %q`, saValue, callbackID),
 		})
-		require.NoError(t, err)
-		require.Len(t, listResp.GetExecutions(), 1)
-		require.Equal(t, callbackID, listResp.GetExecutions()[0].GetCallbackId())
+		scs.NoError(err)
+		scs.Len(listResp.GetExecutions(), 1)
+		scs.Equal(callbackID, listResp.GetExecutions()[0].GetCallbackId())
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
