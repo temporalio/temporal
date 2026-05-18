@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1041,19 +1042,15 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 
 	// Wait for visibility records to appear.
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d'", tests.ArchetypeID)
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: namespaceName,
-				PageSize:  10,
-				Query:     visQuery,
-			})
-			require.NoError(t, err)
-			assert.Len(t, resp.Executions, numExecutions) //nolint:forbidigo
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: namespaceName,
+			PageSize:  10,
+			Query:     visQuery,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Executions, numExecutions)
+	}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 	// Delete the namespace, which should trigger DeleteExecution for all CHASM executions.
 	_, err = s.OperatorClient().DeleteNamespace(testcore.NewContext(), &operatorservice.DeleteNamespaceRequest{
@@ -1062,23 +1059,19 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 	s.NoError(err)
 
 	// Verify all CHASM executions are cleaned up from visibility.
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: namespaceName,
-				PageSize:  10,
-				Query:     visQuery,
-			})
-			var notFound *serviceerror.NamespaceNotFound
-			if errors.As(err, &notFound) {
-				return // namespace fully deleted is also acceptable
-			}
-			require.NoError(t, err)
-			assert.Empty(t, resp.Executions) //nolint:forbidigo
-		},
-		20*time.Second*debug.TimeoutMultiplier,
-		time.Second,
-	)
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: namespaceName,
+			PageSize:  10,
+			Query:     visQuery,
+		})
+		var notFound *serviceerror.NamespaceNotFound
+		if errors.As(err, &notFound) {
+			return // namespace fully deleted is also acceptable
+		}
+		require.NoError(t, err)
+		require.Empty(t, resp.Executions)
+	}, 20*time.Second*debug.TimeoutMultiplier, time.Second)
 }
 
 // TODO: More tests here...
