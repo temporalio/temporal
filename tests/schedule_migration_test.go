@@ -49,6 +49,7 @@ func TestScheduleMigrationTestSuite(t *testing.T) {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -87,7 +88,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -144,7 +145,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -175,7 +176,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -210,6 +211,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
 	)
@@ -259,7 +261,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -319,6 +321,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -367,7 +370,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -401,7 +404,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -437,6 +440,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
@@ -484,7 +488,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -508,7 +512,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -608,6 +612,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
@@ -648,7 +653,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -660,7 +665,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -670,7 +675,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 }
@@ -678,6 +683,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCreationAndMigration() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
@@ -779,6 +785,7 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
@@ -819,7 +826,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -831,7 +838,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -914,6 +921,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
@@ -955,7 +963,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 				ScheduleId: sid,
 				Schedule:   schedule,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -1024,6 +1032,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -1062,7 +1071,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -1101,7 +1110,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -1137,7 +1146,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -1179,6 +1188,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	// a CHASM sentinel (which would block the migration activity).
 	env := testcore.NewEnv(
 		t,
+		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithSdkWorker(),
 	)
 
@@ -1259,7 +1269,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	require.NoError(t, err)
 
@@ -1325,6 +1335,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
@@ -1532,6 +1543,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	env := testcore.NewEnv(
 		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
@@ -1698,6 +1710,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
+		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
