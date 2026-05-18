@@ -207,7 +207,7 @@ var (
 
 		// P5: Low priority APIs
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
-		// Similarly, `Describe{resource}Execution` are a long poll API if LongPollToken is set.
+		// Describe{resource}Execution APIs are also considered a long poll if LongPollToken is set.
 		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName:   5,
 		PollActivityExecutionAPIName: 5,
