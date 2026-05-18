@@ -197,7 +197,7 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
-		false,
+		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
 	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
