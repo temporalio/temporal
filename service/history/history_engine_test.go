@@ -5047,7 +5047,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // Test signal workflow task by dedup request ID & workflow finished
@@ -5095,7 +5095,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {

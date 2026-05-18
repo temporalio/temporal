@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
@@ -77,6 +78,7 @@ func TestBuildQueryParams(t *testing.T) {
 					&searchattribute.TestMapper{},
 					nil,
 					chasm.UnspecifiedArchetypeID,
+					time.Time{},
 				)
 				if tc.err != "" {
 					r.Error(err)

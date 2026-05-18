@@ -309,7 +309,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				Links:       []nexus.Link{callerNexusLink},
 			})
 			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
 		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(s, result, err, headerCapture.lastHeaders)
@@ -568,7 +568,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		s.Eventually(func() bool {
 			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: header})
 			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
 		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(s, err, headerCapture.lastHeaders)
