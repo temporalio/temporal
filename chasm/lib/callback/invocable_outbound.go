@@ -41,7 +41,8 @@ func (n invocableOutbound) WrapError(result invocationResult, err error) error {
 	// If the error is due to a completion of a Nexus operation being delivered before the
 	// operation has officially started, we want to avoid triggering the circuit breakers.
 	// Since the actual destination is working fine, and the failure is due to a data race.
-	if errors.Is(err, &serviceerror.NexusOperationNotStarted{}) {
+	var opNotStarted *serviceerror.NexusOperationNotStarted
+	if errors.As(err, &opNotStarted) {
 		return err
 	}
 
@@ -107,7 +108,8 @@ func (n invocableOutbound) Invoke(
 		// If the error from trying to resolve a Nexus operation that hasn't yet been marked
 		// as started, it is safe to retry. (n.WrapError will ensure repeated failures of this
 		// kind won't cause the SystemCallback to trip the circuit breaker.)
-		isErrNotStarted := errors.Is(err, &serviceerror.NexusOperationNotStarted{})
+		var opNotStarted *serviceerror.NexusOperationNotStarted
+		isErrNotStarted := errors.As(err, &opNotStarted)
 		if n.isSystemCallback() && isErrNotStarted {
 			retryable = true
 		}
