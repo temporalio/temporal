@@ -82,9 +82,6 @@ type Config struct {
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLength        dynamicconfig.IntPropertyFn // Used to check CallbackID, RequestID, etc.
-
-	// NOTE: The configuration setting defining the allowlist of supported callback
-	// addresses is defined in components/callbacks/config.go, via AllowedAddresses.
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
