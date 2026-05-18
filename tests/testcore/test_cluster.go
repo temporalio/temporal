@@ -149,12 +149,24 @@ type defaultPersistenceTestBaseFactory struct{}
 // GetPersistenceTestDefaults returns the default persistence options based on CLI flags.
 // Use this when creating TestClusterConfig to ensure proper database configuration.
 func GetPersistenceTestDefaults() persistencetests.TestBaseOptions {
-	return *persistencetests.GetTestClusterOption(cliFlags.persistenceType, cliFlags.persistenceDriver)
+	opts := *persistencetests.GetTestClusterOption(cliFlags.persistenceType, cliFlags.persistenceDriver)
+	if os.Getenv("TEMPORAL_REUSE_SCHEMA") == "true" && cliFlags.persistenceDriver != "sqlite" {
+		opts.DBName = "temporal"
+		opts.SkipSchemaSetup = true
+	}
+	return opts
 }
 
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
 	defaults := GetPersistenceTestDefaults()
+	// Schema-specific flags are only inherited by blank options (dedicated clusters).
+	// Explicitly-constructed options, like the shared SQLite cluster, must not inherit
+	// these flags even when the store type happens to match.
+	isBlank := options.DBName == "" && options.StoreType == ""
 	options.ApplyDefaults(&defaults)
+	if isBlank {
+		options.SkipSchemaSetup = defaults.SkipSchemaSetup
+	}
 
 	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
 		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.

@@ -282,7 +282,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
-			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
+			NumHistoryShards: cmp.Or(params.NumHistoryShards, 2),
 		},
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
