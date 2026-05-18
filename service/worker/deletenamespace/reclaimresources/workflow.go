@@ -153,17 +153,13 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	var la *LocalActivities
 
-	// TODO: remove version check and 9s const after v1.27 release.
-	namespaceCacheRefreshDelay := 9 * time.Second
-	v := workflow.GetVersion(ctx, "namespace-refresh-dc", workflow.DefaultVersion, 0)
-	if v != workflow.DefaultVersion {
-		// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
-		// Wait for namespace cache refresh to make sure no new executions are created. 2 seconds are a random buffer.
-		ctx0 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err = workflow.ExecuteLocalActivity(ctx0, la.GetNamespaceCacheRefreshInterval).Get(ctx, &namespaceCacheRefreshDelay)
-		if err != nil {
-			return result, err
-		}
+	// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
+	// Wait for namespace cache refresh to make sure no new executions are created. 2 seconds are a random buffer.
+	ctx0 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var namespaceCacheRefreshDelay time.Duration
+	err = workflow.ExecuteLocalActivity(ctx0, la.GetNamespaceCacheRefreshInterval).Get(ctx, &namespaceCacheRefreshDelay)
+	if err != nil {
+		return result, err
 	}
 
 	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay+2*time.Second)
