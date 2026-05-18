@@ -1,6 +1,3 @@
-//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination connection_pool_mock.go
-//go:generate perl -pi -e s/clientConnection(?!\[)/clientConnection[C]/g connection_pool_mock.go
-
 package history
 
 import (

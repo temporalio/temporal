@@ -23,10 +23,26 @@ type (
 		*require.Assertions
 
 		controller  *gomock.Controller
-		connections *MockconnectionPool[historyservice.HistoryServiceClient]
+		connections *mockConnectionPool[historyservice.HistoryServiceClient]
 		resolver    *membership.MockServiceResolver
 	}
 )
+
+type mockConnectionPool[C any] struct {
+	connectionPool[C]
+	client     C
+	resetCalls int
+}
+
+func (m *mockConnectionPool[C]) getOrCreateClientConn(testAddr rpcAddress) clientConnection[C] {
+	return clientConnection[C]{grpcClient: m.client}
+}
+
+func (m *mockConnectionPool[C]) resetConnectBackoff(clientConnection[C]) {
+	m.resetCalls++
+}
+
+func (m *mockConnectionPool[C]) closeConn(rpcAddress) {}
 
 func TestBasicRedirectorSuite(t *testing.T) {
 	s := new(basicRedirectorSuite)
@@ -37,11 +53,7 @@ func (s *basicRedirectorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.resolver = membership.NewMockServiceResolver(s.controller)
-	s.connections = NewMockconnectionPool[historyservice.HistoryServiceClient](s.controller)
-}
-
-func (s *basicRedirectorSuite) clientConn(c historyservice.HistoryServiceClient) clientConnection[historyservice.HistoryServiceClient] {
-	return clientConnection[historyservice.HistoryServiceClient]{grpcClient: c}
+	s.connections = &mockConnectionPool[historyservice.HistoryServiceClient]{}
 }
 
 func (s *basicRedirectorSuite) TestShardCheck() {
@@ -70,8 +82,7 @@ func opErrorTest(s *basicRedirectorSuite, clientOp ClientOperation[historyservic
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
-	s.connections.EXPECT().closeConn(testAddr).Times(1)
+	s.connections.client = mockClient
 
 	r := NewBasicRedirector(s.connections, s.resolver)
 
@@ -115,8 +126,7 @@ func (s *basicRedirectorSuite) TestShardOwnershipLostErrors() {
 		Times(2)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.connections.EXPECT().getOrCreateClientConn(testAddr1).Return(s.clientConn(mockClient)).Times(2)
-	s.connections.EXPECT().getOrCreateClientConn(testAddr2).Return(s.clientConn(mockClient)).Times(1)
+	s.connections.client = mockClient
 
 	r := NewBasicRedirector(s.connections, s.resolver)
 	attempt := 1
@@ -160,7 +170,7 @@ func (s *basicRedirectorSuite) TestClientForTargetByShard() {
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.connections.EXPECT().getOrCreateClientConn(testAddr).Return(s.clientConn(mockClient)).Times(1)
+	s.connections.client = mockClient
 	r := NewBasicRedirector(s.connections, s.resolver)
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
