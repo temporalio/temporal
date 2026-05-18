@@ -143,7 +143,7 @@ for signal / start / signal with start API if namespace is not active`,
 	HistoryNodeBlobCompressionThreshold = NewGlobalIntSetting(
 		"system.historyNodeBlobCompressionThreshold",
 		0,
-		`HistoryNodeBlobCompressionThreshold is the minimum blob size in bytes to trigger zstd compression for history_node data. 0 disables compression (default). Enable only after all nodes are upgraded.`,
+		`HistoryNodeBlobCompressionThreshold is the minimum blob size in bytes to trigger compression for history_node data. 0 disables compression (default). Enable only after all nodes are upgraded.`,
 	)
 	DisallowQuery = NewNamespaceBoolSetting(
 		"system.disallowQuery",
