@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,16 +19,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type UserTimersTestSuite struct {
-	testcore.FunctionalTestBase
-}
+func TestUserTimersSequential(t *testing.T) {
+	s := testcore.NewEnv(t)
 
-func TestUserTimersTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(UserTimersTestSuite))
-}
-
-func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"
 	tl := "functional-user-timers-sequential-test-taskqueue"
