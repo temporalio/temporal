@@ -109,12 +109,10 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
-	// Registered before Step 4 so a cancel during the HANDOVER write still triggers
-	// the reset; the reset activity is idempotent so a no-op pre-Step-4 is fine.
-	defer func() {
-		// ** Final Step: Reset namespace state from Handover -> Registered. This helps ensure that whether
-		//                handover failed or succeeded, the namespace (for whichever cluster it is Active on)
-		//                is able to process traffic again.
+	// ** Final Step: Reset namespace state from Handover -> Registered. This helps ensure that whether
+	//                handover failed or succeeded, the namespace (for whichever cluster it is Active on)
+	//                is able to process traffic again.
+	resetState := func() {
 		resetStateRequest := updateStateRequest{
 			Namespace: params.Namespace,
 			NewState:  enumspb.REPLICATION_STATE_NORMAL,
@@ -129,11 +127,17 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		} else {
 			err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
 		}
-		// Don't clobber an earlier step's error.
 		if err != nil && retErr == nil {
 			retErr = err
 		}
-	}()
+	}
+
+	// Register before Step 4 so a cancel during the HANDOVER write still triggers the reset.
+	// The reset activity is idempotent so a no-op pre-Step-4 is fine.
+	deferBeforeHandover := workflow.GetVersion(ctx, "defer-before-handover-write-20260510", workflow.DefaultVersion, 1) > workflow.DefaultVersion
+	if deferBeforeHandover {
+		defer resetState()
+	}
 
 	// ** Step 4: RecoverOrInitialize Handover (WARNING: Namespace cannot serve traffic while in this state)
 	handoverRequest := updateStateRequest{
@@ -143,6 +147,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, handoverRequest).Get(ctx, nil)
 	if err != nil {
 		return err
+	}
+	if !deferBeforeHandover {
+		defer resetState()
 	}
 
 	// ** Step 5: Wait for Remote Cluster to completely drain its Replication Tasks
