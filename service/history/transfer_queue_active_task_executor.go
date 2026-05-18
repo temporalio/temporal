@@ -663,6 +663,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	if targetNamespaceEntry == nil {
+		metrics.SignalExternalWorkflowExecutionFailed.With(t.metricHandler).Record(
+			1,
+			metrics.StringTag("failed_cause", enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -682,6 +687,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// handle workflow signal itself
 	if task.NamespaceID == targetNamespaceID.String() && task.WorkflowID == attributes.GetWorkflowExecution().GetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
+		metrics.SignalExternalWorkflowExecutionFailed.With(t.metricHandler).Record(
+			1,
+			metrics.StringTag("failed_cause", enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -708,7 +718,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by returning nil error.
 		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-			// for retryable error just return
+			// Transient errors are retried by the task framework; don't emit the failure metric here.
 			return err
 		}
 		var failedCause enumspb.SignalExternalWorkflowExecutionFailedCause
@@ -721,8 +731,21 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
 			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
+			metrics.SignalExternalWorkflowExecutionFailed.With(t.metricHandler).Record(
+				1,
+				metrics.StringTag("failed_cause", enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED.String()),
+				metrics.StringTag("source", "remote_call"),
+			)
 			return err
 		}
+		// Metric is emitted when the failure cause is detected, before recording the
+		// SignalExternalWorkflowExecutionFailed history event. If the event fails to
+		// commit, the task will be retried and the metric emitted again.
+		metrics.SignalExternalWorkflowExecutionFailed.With(t.metricHandler).Record(
+			1,
+			metrics.StringTag("failed_cause", failedCause.String()),
+			metrics.StringTag("source", "remote_call"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
