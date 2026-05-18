@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -4564,6 +4565,80 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
 	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)
+}
+
+// GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
+// in-flight activities that have a worker control queue.
+func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
+	if !ms.config.EnableCancelActivityWorkerCommand() {
+		return nil
+	}
+
+	// Cancel commands are best-effort and only dispatched on the active cluster.
+	// Skip task generation on standby to avoid creating tasks that will be dropped.
+	activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(
+		ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
+	if activeCluster != ms.clusterMetadata.GetCurrentClusterName() {
+		return nil
+	}
+
+	serializer := tasktoken.NewSerializer()
+	wfKey := ms.GetWorkflowKey()
+	nsID := ms.GetNamespaceEntry().ID().String()
+
+	commandsByQueue := make(map[string][]*workerpb.WorkerCommand)
+	for _, ai := range ms.pendingActivityInfoIDs {
+		// No control queue means the activity was started before this feature was deployed.
+		if ai.WorkerControlTaskQueue == "" {
+			continue
+		}
+		if ai.StartedClock == nil {
+			// StartedClock is nil when the activity is not currently started (e.g. in retry backoff)
+			// or was started before this feature was deployed. Skip cancel command.
+			ms.logger.Debug("Skipping worker cancel command: activity not currently started",
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID),
+				tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+			)
+			continue
+		}
+
+		taskToken, err := serializer.Serialize(tasktoken.NewActivityTaskToken(
+			nsID,
+			wfKey.WorkflowID,
+			wfKey.RunID,
+			ai.ScheduledEventId,
+			ai.ActivityId,
+			ai.ActivityType.GetName(),
+			ai.Attempt,
+			ai.StartedClock,
+			ai.Version,
+			ai.StartVersion,
+			nil,
+		))
+		if err != nil {
+			return err
+		}
+
+		commandsByQueue[ai.WorkerControlTaskQueue] = append(
+			commandsByQueue[ai.WorkerControlTaskQueue],
+			&workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: taskToken,
+					},
+				},
+			},
+		)
+	}
+
+	for controlQueue, commands := range commandsByQueue {
+		if err := ms.AddWorkerCommandsTasks(commands, controlQueue); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(
