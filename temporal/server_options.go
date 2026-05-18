@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -41,23 +42,25 @@ type (
 
 		startupSynchronizationMode synchronizationModeParams
 
-		logger                          log.Logger
-		namespaceLogger                 log.Logger
-		authorizer                      authorization.Authorizer
-		tlsConfigProvider               encryption.TLSConfigProvider
-		claimMapper                     authorization.ClaimMapper
-		audienceGetter                  authorization.JWTAudienceMapper
-		persistenceServiceResolver      resolver.ServiceResolver
-		elasticsearchHttpClient         *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
-		dynamicConfigClient             dynamicconfig.Client
-		customDataStoreFactory          persistenceClient.AbstractDataStoreFactory
-		customVisibilityStoreFactory    visibility.VisibilityStoreFactory
-		customHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		clientFactoryProvider           client.FactoryProvider
-		searchAttributesMapper          searchattribute.Mapper
-		customFrontendInterceptors      []grpc.UnaryServerInterceptor
-		metricHandler                   metrics.Handler
+		logger                           log.Logger
+		namespaceLogger                  log.Logger
+		authorizer                       authorization.Authorizer
+		tlsConfigProvider                encryption.TLSConfigProvider
+		claimMapper                      authorization.ClaimMapper
+		audienceGetter                   authorization.JWTAudienceMapper
+		persistenceServiceResolver       resolver.ServiceResolver
+		elasticsearchHttpClient          *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
+		dynamicConfigClient              dynamicconfig.Client
+		customDataStoreFactory           persistenceClient.AbstractDataStoreFactory
+		customVisibilityStoreFactory     visibility.VisibilityStoreFactory
+		customHistoryArchiverFactory     provider.CustomHistoryArchiverFactory
+		customVisibilityArchiverFactory  provider.CustomVisibilityArchiverFactory
+		clientFactoryProvider            client.FactoryProvider
+		searchAttributesMapper           searchattribute.Mapper
+		customFrontendInterceptors       []grpc.UnaryServerInterceptor
+		customFrontendStreamInterceptors []grpc.StreamServerInterceptor
+		metricHandler                    metrics.Handler
+		serviceFxOptions                 map[primitives.ServiceName][]fx.Option
 	}
 )
 

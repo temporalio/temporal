@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -198,10 +199,33 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
+// WithChainedFrontendGrpcStreamInterceptors sets a chain of ordered custom stream interceptors that will be invoked for
+// all Frontend gRPC API calls. The list of custom interceptors will be appended to the end of the internal
+// ServerInterceptors.
+func WithChainedFrontendGrpcStreamInterceptors(
+	interceptors ...grpc.StreamServerInterceptor,
+) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customFrontendStreamInterceptors = interceptors
+	})
+}
+
 // WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricsHandler interface
 // metrics.MetricsHandler is the base interface for publishing metric events
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithFxOptionsForService adds Fx options to the service graph for a specific service.
+// This is intended for advanced embedding and tests that need to populate or decorate
+// dependencies inside the per-service application.
+func WithFxOptionsForService(name primitives.ServiceName, opts ...fx.Option) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		if s.serviceFxOptions == nil {
+			s.serviceFxOptions = make(map[primitives.ServiceName][]fx.Option)
+		}
+		s.serviceFxOptions[name] = append(s.serviceFxOptions[name], opts...)
 	})
 }

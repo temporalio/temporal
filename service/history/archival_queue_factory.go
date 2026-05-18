@@ -113,6 +113,7 @@ func (f *archivalQueueFactory) CreateQueue(
 	shard historyi.ShardContext,
 ) queues.Queue {
 	executor := f.newArchivalTaskExecutor(shard, f.WorkflowCache)
+	executor = wrapExecutorWithTestHooks(executor, f.TestHooks)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}

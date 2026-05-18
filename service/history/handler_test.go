@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -69,4 +70,24 @@ func TestDescribeHistoryHost(t *testing.T) {
 		ShardId: 2,
 	})
 	assert.NoError(t, err)
+}
+
+func TestAddTasks_GetEngineErr(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	controller := shard.NewMockController(ctrl)
+	shardContext := historyi.NewMockShardContext(ctrl)
+	h := Handler{
+		controller: controller,
+	}
+
+	expectedErr := errors.New("example shard engine error")
+	controller.EXPECT().GetShardByID(int32(1)).Return(shardContext, nil)
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(nil, expectedErr)
+
+	_, err := h.AddTasks(context.Background(), &historyservice.AddTasksRequest{
+		ShardId: 1,
+	})
+	assert.ErrorContains(t, err, expectedErr.Error())
 }

@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
@@ -85,13 +85,14 @@ type (
 		ESConfig                        *esclient.Config
 		MockAdminClient                 map[string]adminservice.AdminServiceClient
 		FaultInjection                  *config.FaultInjection
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		// ServiceFxOptions can be populated using WithFxOptionsForService.
+		// ServiceFxOptions can be populated using focused TestClusterOption helpers.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
@@ -319,33 +320,25 @@ func newClusterWithPersistenceTestBaseFactory(
 	}
 
 	temporalParams := &TemporalParams{
-		ClusterMetadataConfig:            clusterMetadataConfig,
-		PersistenceConfig:                pConfig,
-		MetadataMgr:                      testBase.MetadataManager,
-		ClusterMetadataManager:           testBase.ClusterMetadataManager,
-		ShardMgr:                         testBase.ShardMgr,
-		ExecutionManager:                 testBase.ExecutionManager,
-		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
-		AbstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
-		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
-		TaskMgr:                          testBase.TaskMgr,
-		Logger:                           logger,
-		ESConfig:                         clusterConfig.ESConfig,
-		ESClient:                         esClient,
-		ArchiverMetadata:                 archiverBase.metadata,
-		ArchiverProvider:                 archiverBase.provider,
-		FrontendConfig:                   clusterConfig.FrontendConfig,
-		HistoryConfig:                    clusterConfig.HistoryConfig,
-		MatchingConfig:                   clusterConfig.MatchingConfig,
-		WorkerConfig:                     clusterConfig.WorkerConfig,
-		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger),
-		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
-		TLSConfigProvider:                tlsConfigProvider,
-		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
-		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
-		HostsByProtocolByService:         hostsByProtocolByService,
-		SpanExporters:                    clusterConfig.SpanExporters,
+		ClusterMetadataConfig:    clusterMetadataConfig,
+		PersistenceConfig:        pConfig,
+		ExecutionManager:         testBase.ExecutionManager,
+		AbstractDataStoreFactory: testBase.AbstractDataStoreFactory,
+		VisibilityStoreFactory:   testBase.VisibilityStoreFactory,
+		Logger:                   logger,
+		ESConfig:                 clusterConfig.ESConfig,
+		ESClient:                 esClient,
+		ArchiverMetadata:         archiverBase.metadata,
+		ArchiverProvider:         archiverBase.provider,
+		WorkerConfig:             clusterConfig.WorkerConfig,
+		MockAdminClient:          clusterConfig.MockAdminClient,
+		DCRedirectionPolicy:      clusterConfig.DCRedirectionPolicy,
+		DynamicConfigOverrides:   clusterConfig.DynamicConfigOverrides,
+		TLSConfigProvider:        tlsConfigProvider,
+		ServiceFxOptions:         clusterConfig.ServiceFxOptions,
+		TaskCategoryRegistry:     temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
+		HostsByProtocolByService: hostsByProtocolByService,
+		SpanExporters:            clusterConfig.SpanExporters,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -598,6 +591,10 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 // TODO (alex): expose only needed objects from TemporalImpl.
 func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
+}
+
+func (tc *TestCluster) InjectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
+	return tc.host.injectHook(t, hook, scope)
 }
 
 func (tc *TestCluster) WorkerGRPCAddress() string {

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -106,6 +107,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 		func(params TaskExecutorParams) TaskExecutor {
 			return s.mockReplicationTaskExecutor
 		},
+		testhooks.NewTestHooks(),
 		NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	)
 }

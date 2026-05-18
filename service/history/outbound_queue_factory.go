@@ -253,6 +253,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 	)
 
+	executor = wrapExecutorWithTestHooks(executor, f.TestHooks)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}

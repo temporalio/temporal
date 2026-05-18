@@ -151,6 +151,7 @@ func (f *timerQueueFactory) CreateQueue(
 		standbyExecutor,
 		logger,
 	)
+	executor = wrapExecutorWithTestHooks(executor, f.TestHooks)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}

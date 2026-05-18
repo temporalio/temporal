@@ -25,11 +25,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -113,14 +111,11 @@ func WithSdkWorker() TestOption {
 	}
 }
 
-// WithFxOptions appends fx options to a specific service's fx graph. This
-// implies a dedicated cluster because custom fx options cannot be shared
-// across tests.
-func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
+func WithFrontendContextMetadataTrailer() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
-		o.dedicatedReason = "custom fx options used"
+		o.clusterOptions = append(o.clusterOptions, withFrontendContextMetadataTrailer())
+		o.dedicatedReason = "frontend context metadata trailer enabled"
 	}
 }
 

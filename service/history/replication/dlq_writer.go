@@ -4,7 +4,9 @@ import (
 	"context"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
@@ -124,16 +126,22 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 // This is a helper function to make it easier to change the DLQWriteRequest format in the future.
 func writeTaskToDLQ(
 	ctx context.Context,
+	testHooks testhooks.TestHooks,
 	dlqWriter DLQWriter,
 	sourceShardID int32,
 	sourceClusterName string,
 	targetShardID int32,
 	replicationTaskInfo *persistencespb.ReplicationTaskInfo,
 ) error {
-	return dlqWriter.WriteTaskToDLQ(ctx, DLQWriteRequest{
+	request := DLQWriteRequest{
 		SourceShardID:       sourceShardID,
 		SourceCluster:       sourceClusterName,
 		TargetShardID:       targetShardID,
 		ReplicationTaskInfo: replicationTaskInfo,
-	})
+	}
+	err := dlqWriter.WriteTaskToDLQ(ctx, request)
+	if hook, ok := testhooks.Get(testHooks, testhooks.HistoryReplicationDLQWrite, namespace.ID(replicationTaskInfo.GetNamespaceId())); ok {
+		hook(request)
+	}
+	return err
 }
