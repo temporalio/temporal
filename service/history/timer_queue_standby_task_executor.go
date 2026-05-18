@@ -239,7 +239,6 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.UserTimerTask,
 ) error {
-	referenceTime := t.Now()
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
@@ -248,6 +247,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 
 		timerSequence := t.getTimerSequence(mutableState)
 		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
+		referenceTime := mutableState.Now()
 		if len(timerSequenceIDs) > 0 {
 			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
@@ -299,13 +299,13 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
-	referenceTime := t.Now()
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
 			return nil, nil
 		}
 
+		referenceTime := mutableState.Now()
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
 		timerSequenceIDs := timerSequence.LoadAndSortActivityTimers()
@@ -340,7 +340,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToRealTime(heartbeatTimeoutVis)) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}
