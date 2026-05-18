@@ -51,6 +51,10 @@ type (
 
 		chasmMapper *chasm.VisibilitySearchAttributesMapper
 		archetypeID chasm.ArchetypeID
+
+		// anchor is the reference time used to resolve NOW() expressions. When zero,
+		// getAnchor() falls back to time.Now().UTC() at resolution time.
+		anchor time.Time
 	}
 
 	queryParamsLegacy struct {
@@ -119,6 +123,20 @@ func newQueryConverterInternal(
 	}
 }
 
+// WithAnchor sets the reference time used to resolve NOW() expressions in the query.
+// If not set, time.Now().UTC() is used at resolution time.
+func (c *QueryConverterLegacy) WithAnchor(t time.Time) *QueryConverterLegacy {
+	c.anchor = t.UTC()
+	return c
+}
+
+func (c *QueryConverterLegacy) getAnchor() time.Time {
+	if c.anchor.IsZero() {
+		c.anchor = time.Now().UTC()
+	}
+	return c.anchor
+}
+
 func (c *QueryConverterLegacy) BuildSelectStmt(
 	pageSize int,
 	nextPageToken []byte,
@@ -177,6 +195,11 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 
 	//nolint:revive
 	selectStmt, _ := stmt.(*sqlparser.Select)
+	if selectStmt.Where != nil {
+		if err := query.ResolveNowInExpr(&selectStmt.Where.Expr, c.getAnchor()); err != nil {
+			return nil, err
+		}
+	}
 	err = c.convertSelectStmt(selectStmt)
 	if err != nil {
 		return nil, err
