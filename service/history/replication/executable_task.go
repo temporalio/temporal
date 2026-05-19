@@ -27,6 +27,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -166,6 +167,41 @@ func (e *ExecutableTaskImpl) SourceClusterName() string {
 
 func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {
 	return e.replicationTask
+}
+
+func executeReplicationTask(
+	testHooks testhooks.TestHooks,
+	replicationTask *replicationspb.ReplicationTask,
+	execute func() error,
+) error {
+	if hook, ok := testhooks.Get(testHooks, testhooks.HistoryReplicationTaskInterceptor, replicationTaskNamespaceID(replicationTask)); ok {
+		return hook(replicationTask, execute)
+	}
+	return execute()
+}
+
+func replicationTaskNamespaceID(replicationTask *replicationspb.ReplicationTask) namespace.ID {
+	if rawTaskInfo := replicationTask.GetRawTaskInfo(); rawTaskInfo != nil {
+		return namespace.ID(rawTaskInfo.GetNamespaceId())
+	}
+	switch attr := replicationTask.GetAttributes().(type) {
+	case *replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes:
+		return namespace.ID(attr.SyncWorkflowStateTaskAttributes.GetWorkflowState().GetExecutionInfo().GetNamespaceId())
+	case *replicationspb.ReplicationTask_SyncActivityTaskAttributes:
+		return namespace.ID(attr.SyncActivityTaskAttributes.GetNamespaceId())
+	case *replicationspb.ReplicationTask_HistoryTaskAttributes:
+		return namespace.ID(attr.HistoryTaskAttributes.GetNamespaceId())
+	case *replicationspb.ReplicationTask_SyncHsmAttributes:
+		return namespace.ID(attr.SyncHsmAttributes.GetNamespaceId())
+	case *replicationspb.ReplicationTask_BackfillHistoryTaskAttributes:
+		return namespace.ID(attr.BackfillHistoryTaskAttributes.GetNamespaceId())
+	case *replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes:
+		return namespace.ID(attr.VerifyVersionedTransitionTaskAttributes.GetNamespaceId())
+	case *replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes:
+		return namespace.ID(attr.SyncVersionedTransitionTaskAttributes.GetNamespaceId())
+	default:
+		return ""
+	}
 }
 
 func (e *ExecutableTaskImpl) Ack() {

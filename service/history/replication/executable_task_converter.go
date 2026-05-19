@@ -7,6 +7,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testhooks"
 )
 
 type (
@@ -47,6 +48,15 @@ func (e *executableTaskConverterImpl) Convert(
 			metrics.OperationTag(TaskOperationTag(replicationTask)),
 		)
 		tasks[index] = e.convertOne(sourceClusterName, serverShardKey, replicationTask)
+		if hook, ok := testhooks.Get(
+			e.processToolBox.TestHooks,
+			testhooks.HistoryReplicationTaskAfterConvert,
+			testhooks.GlobalScope,
+		); ok {
+			if task, ok := hook(sourceClusterName, replicationTask, tasks[index]).(TrackableExecutableTask); ok {
+				tasks[index] = task
+			}
+		}
 	}
 	return tasks
 }
