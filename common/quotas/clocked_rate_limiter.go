@@ -146,10 +146,7 @@ func (l ClockedRateLimiter) SetLimitAt(t time.Time, newLimit rate.Limit) {
 }
 
 func (l ClockedRateLimiter) SetBurstAt(t time.Time, newBurst int) {
-	// Clamp burst to at least 1 whenever the limiter has a positive rate.
-	// A zero burst with a positive rate would permanently stall the limiter.
-	// A zero burst with a zero rate is preserved to keep the "fully paused"
-	// semantic used by callers that disable rate limiting via rate=0,burst=0.
+	// Clamp burst to >=1 when rate is positive; burst=0 with rate=0 is allowed for pause.
 	if newBurst < 1 && l.rateLimiter.Limit() > 0 {
 		newBurst = 1
 	}
