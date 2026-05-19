@@ -581,6 +581,134 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	s.True(bi.GetHasReached())
 }
 
+// TestBound_MaxElapsed_PausedWorkflow verifies that the TimeSkippingTimerTask (bound
+// disable) fires and writes the disable-transition event even when the workflow is
+// paused, consistent with how executeUserTimerTimeoutTask fires timer-fired events
+// without a pause check. After unpause, no additional skip fires because
+// Config.Enabled is already false.
+//
+// Sequence:
+//
+//	WT1 → start timer1 (29:58); skip fires (transition 1)
+//	WT2 (timer1 fired) → schedule activity1
+//	Pause workflow
+//	Bound TimeSkippingTimerTask fires while paused → transition 2 (DisabledAfterBound=true)
+//	AT1 → complete activity (still paused)
+//	Unpause → no additional skip (Config.Enabled=false already)
+//	WT3 → complete workflow
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PausedWorkflow() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	const (
+		bound       = 30 * time.Minute
+		timer1Dur   = 29*time.Minute + 58*time.Second
+		minuteToler = time.Minute
+	)
+
+	cfg := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+	}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: schedule timer1.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", timer1Dur)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2 (timer1 fired): schedule activity1. The close transaction regenerates the
+	// bound task with wall VisibilityTime ≈ startTime+2s, so it fires in ~2s real time.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Pause the workflow before the bound timer task fires.
+	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "bound timer pause test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for the bound's TimeSkippingTimerTask to fire while both the activity is
+	// in-flight and the workflow is paused. executeTimeSkippingTimerTask only checks
+	// IsWorkflowExecutionRunning (not pause status), so it writes the disable event
+	// regardless, setting HasReached=true.
+	s.Eventually(func() bool {
+		ms := s.getMutableState(env, tv.WorkflowID(), runID)
+		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
+		bi := tsi.GetCurrentElapsedDurationBound()
+		return bi != nil && bi.GetHasReached()
+	}, 30*time.Second, 200*time.Millisecond, "expected bound timer task to fire while workflow is paused")
+
+	// AT1: complete the activity (workflow still paused).
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+
+	// Unpause: close-transaction checks shouldExecuteTimeSkipping which returns false
+	// because Config.Enabled is already false — no additional transition fires.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "bound timer unpause test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// WT3 (unpaused, activity completed): complete workflow.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 2, "expected exactly two transitions: skip-to-timer1 + bound-disable")
+
+	first := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+	s.False(first.GetDisabledAfterBound())
+	s.NotNil(first.GetTargetTime())
+
+	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+	s.True(second.GetDisabledAfterBound(), "second transition must be the bound-disable event")
+
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+	})
+	s.NoError(err)
+	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
+	secondVirtual := transitions[1].GetEventTime().AsTime().Sub(startTime)
+	s.InDelta(float64(bound), float64(secondVirtual), float64(minuteToler))
+
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(tsi)
+	s.False(tsi.GetConfig().GetEnabled(), "Config.Enabled must be false after bound reached")
+	bi := tsi.GetCurrentElapsedDurationBound()
+	s.NotNil(bi)
+	s.True(bi.GetHasReached(), "HasReached must be true after bound timer fired")
+}
+
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
