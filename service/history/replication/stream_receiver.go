@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -55,7 +56,16 @@ type (
 		slowSubmissionMu         sync.RWMutex
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
 	}
+
+	executeInterceptedTask struct {
+		TrackableExecutableTask
+		execute func() error
+	}
 )
+
+func (t executeInterceptedTask) Execute() error {
+	return t.execute()
+}
 
 func NewClusterShardKey(
 	ClusterID int32,
@@ -373,6 +383,18 @@ func (r *StreamReceiverImpl) processMessages(
 			if err != nil {
 				return err
 			}
+
+			// Tests use this hook to pause replication tasks before they are applied.
+			if hook, ok := testhooks.Get(r.TestHooks, testhooks.HistoryReplicationTaskInterceptor, testhooks.GlobalScope); ok {
+				originalTask := task
+				task = executeInterceptedTask{
+					TrackableExecutableTask: originalTask,
+					execute: func() error {
+						return hook(originalTask.ReplicationTask(), originalTask.Execute)
+					},
+				}
+			}
+
 			start := time.Now()
 			scheduler.Submit(task)
 			end := time.Now()

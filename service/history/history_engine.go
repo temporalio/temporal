@@ -329,6 +329,7 @@ func NewEngineWithShardContext(
 		serializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
+		testHooks,
 		dlqWriter,
 	)
 

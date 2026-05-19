@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -124,6 +125,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
+		testhooks.TestHooks{},
 		NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	).(*taskProcessorImpl)
 }
