@@ -39,7 +39,7 @@ func NewNexusOperationServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewNexusOperationServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewNexusOperationServiceClient, logger)
 	var redirector history.Redirector[NexusOperationServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(

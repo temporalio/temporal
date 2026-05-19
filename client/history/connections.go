@@ -3,6 +3,8 @@ package history
 import (
 	"sync"
 
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
 )
@@ -24,6 +26,7 @@ type (
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             RPCFactory
 		clientCtor             func(grpc.ClientConnInterface) C
+		logger                 log.Logger
 	}
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
@@ -35,6 +38,7 @@ type (
 		getOrCreateClientConn(addr rpcAddress) clientConnection[C]
 		getAllClientConns() []clientConnection[C]
 		resetConnectBackoff(clientConnection[C])
+		closeConn(addr rpcAddress)
 	}
 )
 
@@ -42,11 +46,13 @@ func NewConnectionPool[C any](
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
+	logger log.Logger,
 ) *connectionPoolImpl[C] {
 	c := &connectionPoolImpl[C]{
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
 		clientCtor:             clientCtor,
+		logger:                 logger,
 	}
 	c.mu.conns = make(map[rpcAddress]clientConnection[C])
 	return c
@@ -90,4 +96,19 @@ func (c *connectionPoolImpl[C]) getAllClientConns() []clientConnection[C] {
 
 func (c *connectionPoolImpl[C]) resetConnectBackoff(cc clientConnection[C]) {
 	cc.grpcConn.ResetConnectBackoff()
+}
+
+// closeConn removes the conn for addr from the pool and closes it.
+func (c *connectionPoolImpl[C]) closeConn(addr rpcAddress) {
+	c.mu.Lock()
+	cc, ok := c.mu.conns[addr]
+	if ok {
+		delete(c.mu.conns, addr)
+	}
+	c.mu.Unlock()
+	if ok {
+		if err := cc.grpcConn.Close(); err != nil {
+			c.logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
+		}
+	}
 }

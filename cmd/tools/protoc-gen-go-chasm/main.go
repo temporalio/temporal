@@ -209,7 +209,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("return nil, err")
 	w.unindent()
 	w.println("}")
-	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient)", svc.GoName)
+	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient, logger)", svc.GoName)
 	w.println("var redirector history.Redirector[%sClient]", svc.GoName)
 	w.println("if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {")
 	w.indent() // start if

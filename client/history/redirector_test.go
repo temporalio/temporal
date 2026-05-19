@@ -42,6 +42,8 @@ func (m *mockConnectionPool[C]) resetConnectBackoff(clientConnection[C]) {
 	m.resetCalls++
 }
 
+func (m *mockConnectionPool[C]) closeConn(rpcAddress) {}
+
 func TestBasicRedirectorSuite(t *testing.T) {
 	s := new(basicRedirectorSuite)
 	suite.Run(t, s)

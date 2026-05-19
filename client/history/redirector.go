@@ -76,6 +76,10 @@ func (r *BasicRedirector[C]) redirectLoop(ctx context.Context, address rpcAddres
 		}
 		clientConn := r.connections.getOrCreateClientConn(address)
 		err := op(ctx, clientConn.grpcClient)
+		if maybeHostDownError(err) {
+			r.connections.closeConn(address)
+			return err
+		}
 		var solErr *serviceerrors.ShardOwnershipLost
 		if !errors.As(err, &solErr) || len(solErr.OwnerHost) == 0 {
 			return err

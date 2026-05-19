@@ -5,9 +5,11 @@ package matching
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -16,6 +18,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
@@ -50,6 +53,7 @@ func NewClient(
 	logger log.Logger,
 	lb LoadBalancer,
 	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
+	resolver membership.ServiceResolver,
 ) matchingservice.MatchingServiceClient {
 	c := &clientImpl{
 		timeout:         timeout,
@@ -66,6 +70,34 @@ func NewClient(
 	// Clean up on gc, since we can't easily hook into fx here.
 	c.partitionCache.Start()
 	runtime.AddCleanup(c, func(cache *partitionCache) { cache.Stop() }, c.partitionCache)
+
+	// Evict cached clients whose host leaves the membership ring.
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer cancel()
+		listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
+		ch := make(chan *membership.ChangedEvent, 1)
+		if err := resolver.AddListener(listenerName, ch); err != nil {
+			logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
+			return
+		}
+		defer func() {
+			if err := resolver.RemoveListener(listenerName); err != nil {
+				logger.Warn("Error removing membership listener", tag.Error(err))
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-ch:
+				for _, h := range event.HostsRemoved {
+					clients.Evict(h.GetAddress())
+				}
+			}
+		}
+	}()
+	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 
 	return c
 }

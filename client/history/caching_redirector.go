@@ -34,7 +34,8 @@ type (
 	CachingRedirector[C any] struct {
 		mu struct {
 			sync.RWMutex
-			cache map[int32]cacheEntry[C]
+			cache    map[int32]cacheEntry[C]
+			addrRefs map[rpcAddress]int
 		}
 
 		connections            connectionPool[C]
@@ -62,6 +63,7 @@ func NewCachingRedirector[C any](
 		listenerName:           fmt.Sprintf("cachingRedirectorListener-%s", uuid.New().String()),
 	}
 	r.mu.cache = make(map[int32]cacheEntry[C])
+	r.mu.addrRefs = make(map[rpcAddress]int)
 
 	r.goros.Go(r.eventLoop)
 
@@ -143,6 +145,7 @@ func (r *CachingRedirector[C]) getOrCreateEntry(shardID int32) (cacheEntry[C], e
 		}
 		// Delete and fallthrough below to re-check ownership.
 		delete(r.mu.cache, shardID)
+		r.unrefAddrLocked(entry.address)
 	}
 
 	address, err := shardLookup(r.historyServiceResolver, shardID)
@@ -176,8 +179,19 @@ func (r *CachingRedirector[C]) cacheAddLocked(shardID int32, addr rpcAddress) ca
 		// longer the shard owner.
 	}
 	r.mu.cache[shardID] = entry
+	r.mu.addrRefs[addr]++
 
 	return entry
+}
+
+// unrefAddrLocked decrements addrRefs for addr; closes the pooled conn when
+// no cache entry still references it. Caller must hold r.mu.
+func (r *CachingRedirector[C]) unrefAddrLocked(addr rpcAddress) {
+	r.mu.addrRefs[addr]--
+	if r.mu.addrRefs[addr] <= 0 {
+		delete(r.mu.addrRefs, addr)
+		r.connections.closeConn(addr)
+	}
 }
 
 func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
@@ -189,6 +203,8 @@ func (r *CachingRedirector[C]) cacheDeleteByAddress(address rpcAddress) {
 			delete(r.mu.cache, shardID)
 		}
 	}
+	delete(r.mu.addrRefs, address)
+	r.connections.closeConn(address)
 }
 
 func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *serviceerrors.ShardOwnershipLost) (cacheEntry[C], bool) {
@@ -196,9 +212,13 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 	defer r.mu.Unlock()
 
 	if cached, ok := r.mu.cache[opEntry.shardID]; ok {
-		if cached.address == opEntry.address {
-			delete(r.mu.cache, cached.shardID)
+		if cached.address != opEntry.address {
+			// Another goroutine has updated the cache since we read opEntry.
+			// Their entry is fresher than our SOL hint; retry against it.
+			return cached, true
 		}
+		delete(r.mu.cache, cached.shardID)
+		r.unrefAddrLocked(cached.address)
 	}
 
 	solErrNewOwner := rpcAddress(solErr.OwnerHost)
@@ -252,6 +272,7 @@ func (r *CachingRedirector[C]) staleCheck() {
 		if !entry.staleAt.IsZero() {
 			if now.After(entry.staleAt) {
 				delete(r.mu.cache, shardID)
+				r.unrefAddrLocked(entry.address)
 			}
 			continue
 		}

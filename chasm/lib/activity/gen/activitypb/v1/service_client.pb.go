@@ -39,7 +39,7 @@ func NewActivityServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewActivityServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewActivityServiceClient, logger)
 	var redirector history.Redirector[ActivityServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
