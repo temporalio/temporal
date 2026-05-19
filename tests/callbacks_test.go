@@ -54,13 +54,22 @@ func TestCallbacksSuiteCHASM(t *testing.T) {
 	})
 }
 
-func runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
+func (c *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
 	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
 		srv.Close()
 	})
 	return srv.URL
+}
+
+func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	env := testcore.NewEnv(s.T(), opts...)
+	env.OverrideDynamicConfig(
+		callback.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+	return env
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.TestOption) {
@@ -142,7 +151,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 				CompletionCallbacks: cbs,
 			}
 
-			_, err := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
 			s.Equal(tc.message, err.Error())
@@ -195,13 +204,9 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 
 	for _, tc := range cases {
 		s.Run(tc.name, func(s *CallbacksSuite) {
-			env := testcore.NewEnv(s.T(), opts...)
-			env.OverrideDynamicConfig(
-				callback.AllowedAddresses,
-				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-			)
+			env := s.newTestEnv(opts...)
 
-			ctx := env.Context()
+			ctx := s.Context()
 			sdkClient := env.SdkClient()
 
 			workflowType := "test"
@@ -215,7 +220,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 				close(ch.requestCh)
 				close(ch.requestCompleteCh)
 			}()
-			callbackAddress := runNexusCompletionHTTPServer(s.T(), ch)
+			callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 			env.SdkWorker().RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
 
@@ -397,13 +402,9 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
-	env.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+	env := s.newTestEnv(opts...)
 
-	ctx := env.Context()
+	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -417,7 +418,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-	callbackAddress := runNexusCompletionHTTPServer(s.T(), ch)
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 	// A workflow that completes once it has been reset.
 	longRunningWorkflow := func(ctx workflow.Context) error {
@@ -579,11 +580,7 @@ func blockingWorkflow(ctx workflow.Context) error {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
-	env.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+	env := s.newTestEnv(opts...)
 
 	/*
 	 * 1. Start WF w/ no callbacks and immediately terminate
@@ -592,7 +589,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 	 * 4. Verify callback is called
 	 */
 
-	ctx := env.Context()
+	ctx := s.Context()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	workflowID := env.Tv().WorkflowID()
@@ -605,7 +602,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-	callbackAddress := runNexusCompletionHTTPServer(s.T(), ch)
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 	env.SdkWorker().RegisterWorkflow(blockingWorkflow)
 
