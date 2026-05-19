@@ -307,6 +307,7 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetRequestId(),
 		request.GetLinks(),
 	); err != nil {
 		return err

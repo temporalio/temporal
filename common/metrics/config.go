@@ -66,6 +66,9 @@ type (
 		// (instead of milliseconds).
 		// This config only takes effect when using prometheus via opentelemetry framework
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
+		// TagsCacheMaxSize controls the maximum number of entries in the metrics
+		// tag cache. When the cache is full, all entries are cleared. Default: 10000.
+		TagsCacheMaxSize int `yaml:"tagsCacheMaxSize"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter

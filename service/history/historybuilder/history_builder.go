@@ -752,6 +752,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionSignaledEvent(
@@ -760,6 +761,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 		identity,
 		header,
 		externalWorkflowExecution,
+		requestID,
 		links,
 	)
 	event, _ = b.EventStore.add(event)

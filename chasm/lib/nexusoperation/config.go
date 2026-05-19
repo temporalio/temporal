@@ -6,6 +6,7 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -15,14 +16,14 @@ import (
 
 var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.longPollTimeout",
-	20*time.Second,
+	common.DefaultLongPollTimeout,
 	`Maximum timeout for nexus operation long-poll requests. Actual wait may be shorter to leave
 longPollBuffer before the caller deadline.`,
 )
 
 var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.longPollBuffer",
-	time.Second,
+	common.DefaultLongPollBuffer,
 	`A buffer used to adjust the nexus operation long-poll timeouts.
  Specifically, nexus operation long-poll requests are timed out at a time which leaves at least the buffer's duration
  remaining before the caller's deadline, if permitted by the caller's deadline.`,
@@ -235,6 +236,8 @@ type Config struct {
 	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataSummarySize          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataDetailsSize          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -262,6 +265,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),

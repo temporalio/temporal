@@ -903,6 +903,7 @@ func (d *namespaceHandler) createResponse(
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
 			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
+			StandaloneNexusOperation:        d.config.EnableChasm(info.Name) && d.config.StandaloneNexusOperationsEnabled(info.Name),
 			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
 			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
 			PollerAutoscaling:               true,

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -24,8 +23,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
-
-const longPollSoftTimeout = time.Second
 
 //nolint:revive // cognitive complexity 39 (> max enabled 25)
 func GetOrPollWorkflowMutableState(
@@ -191,7 +188,7 @@ func GetOrPollWorkflowMutableState(
 
 		// Send back response just before caller context would time out.
 		longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, longPollSoftTimeout)
+		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, common.DefaultLongPollBuffer)
 		defer cancel()
 
 		for {

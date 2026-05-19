@@ -11,7 +11,4 @@ const (
 	// namespaces. Allow short values but disallow zero to avoid confusion with
 	// interpreting zero as infinite.
 	MinRetentionLocal = 1 * time.Hour
-
-	// MinTimeSkippingDuration is the minimum duration for time skipping.
-	MinTimeSkippingDuration = 1 * time.Minute
 )
