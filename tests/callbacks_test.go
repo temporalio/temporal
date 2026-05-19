@@ -54,7 +54,7 @@ func TestCallbacksSuiteCHASM(t *testing.T) {
 	})
 }
 
-func (c *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
+func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
 	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
