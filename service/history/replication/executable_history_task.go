@@ -99,11 +99,6 @@ func (e *ExecutableHistoryTask) Execute() error {
 		return nil
 	}
 	e.MarkExecutionStart()
-	if err := beforeExecuteReplicationTask(e.TestHooks, e.ReplicationTask()); err != nil {
-		afterExecuteReplicationTask(e.TestHooks, e.ReplicationTask())
-		return err
-	}
-	defer afterExecuteReplicationTask(e.TestHooks, e.ReplicationTask())
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

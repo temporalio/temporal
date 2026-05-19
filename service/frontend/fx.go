@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -794,7 +793,6 @@ func NamespaceDLQHandlerProvider(
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
-	testHooks testhooks.TestHooks,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -802,7 +800,6 @@ func NamespaceDLQHandlerProvider(
 		namespaceDataMerger,
 		namespaceAdmitter,
 		logger,
-		testHooks,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,

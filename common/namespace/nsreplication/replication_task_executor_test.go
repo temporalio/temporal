@@ -17,7 +17,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -55,7 +54,6 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 		NewNoopDataMerger(),
 		NewDefaultAdmitter(),
 		logger,
-		testhooks.NewTestHooks(),
 	).(*taskExecutorImpl)
 }
 

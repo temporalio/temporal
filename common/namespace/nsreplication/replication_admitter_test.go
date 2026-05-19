@@ -12,7 +12,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -78,7 +77,6 @@ func newExecutorForAdmitterTest(t *testing.T, admitter NamespaceReplicationAdmit
 		NewNoopDataMerger(),
 		admitter,
 		log.NewTestLogger(),
-		testhooks.NewTestHooks(),
 	).(*taskExecutorImpl)
 	return exec, mockMgr
 }

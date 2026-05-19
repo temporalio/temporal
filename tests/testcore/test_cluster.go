@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
@@ -591,10 +590,6 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 // TODO (alex): expose only needed objects from TemporalImpl.
 func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
-}
-
-func (tc *TestCluster) InjectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
-	return tc.host.injectHook(t, hook, scope)
 }
 
 func (tc *TestCluster) WorkerGRPCAddress() string {

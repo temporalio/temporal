@@ -92,7 +92,7 @@ func newKey[T any, S any]() Key[T, S] {
 	var zero S
 	var s ScopeType
 	switch any(zero).(type) {
-	case namespace.ID, namespace.Name:
+	case namespace.ID:
 		s = ScopeNamespace
 	case global:
 		s = ScopeGlobal

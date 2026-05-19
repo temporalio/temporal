@@ -22,7 +22,7 @@ func TestFunctionalTestBaseSuite(t *testing.T) {
 }
 
 func (s *FunctionalTestBaseSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster()
+	s.SetupSuiteWithCluster()
 }
 
 func (s *FunctionalTestBaseSuite) TearDownSuite() {

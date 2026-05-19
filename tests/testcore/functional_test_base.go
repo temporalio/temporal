@@ -116,21 +116,34 @@ func init() {
 	sdkworker.SetBinaryChecksum("oss-server-test")
 }
 
-func withFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
+// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
+// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
+// obtain the shard controller for the history service, you can do this:
+//
+//	var shardController shard.Controller
+//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
+//	// now you can use shardController during your test
+//
+// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
+// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
+// each one.
+//
+// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
+func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
 	}
 }
 
 func WithHistoryTaskQueueManagerCapture(target *persistence.HistoryTaskQueueManager) TestClusterOption {
-	return withFxOptionsForService(
+	return WithFxOptionsForService(
 		primitives.HistoryService,
 		fx.Populate(target),
 	)
 }
 
 func withFrontendContextMetadataTrailer() TestClusterOption {
-	return withFxOptionsForService(
+	return WithFxOptionsForService(
 		primitives.FrontendService,
 		fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
 			return interceptor.NewContextMetadataInterceptor(true, logger)

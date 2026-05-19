@@ -46,7 +46,7 @@ func TestAddTasksSuite(t *testing.T) {
 }
 
 func (s *AddTasksSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster()
+	s.SetupSuiteWithCluster()
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {
