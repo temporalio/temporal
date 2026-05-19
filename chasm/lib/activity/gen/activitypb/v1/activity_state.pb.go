@@ -456,14 +456,12 @@ type ActivityAttemptState struct {
 	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
 	// case of implicit retries.
 	StartRequestId string `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
-	// The name of the SDK of the worker that most recently picked up an attempt of this activity
-	// (from the gRPC `client-name` header on PollActivityTaskQueue). Overwritten on each new attempt.
-	// Empty if no worker has ever picked up this activity, or if the most recent worker did not send
-	// a client-name header.
+	// The name of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+	// `client-name` header on PollActivityTaskQueue). Overwritten on each new attempt. Empty if no worker has ever
+	// picked up this activity, or if the most recent worker did not send a client-name header.
 	SdkName string `protobuf:"bytes,10,opt,name=sdk_name,json=sdkName,proto3" json:"sdk_name,omitempty"`
-	// The version of the SDK of the worker that most recently picked up an attempt of this activity
-	// (from the gRPC `client-version` header on PollActivityTaskQueue). Same overwrite semantics as
-	// sdk_name.
+	// The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+	// `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
 	SdkVersion    string `protobuf:"bytes,11,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
