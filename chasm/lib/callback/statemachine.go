@@ -27,6 +27,20 @@ var TransitionScheduled = chasm.NewTransition(
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
 		}
 		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
+
+		// Schedule the timeout as applicable.
+		if durationProto := cb.ScheduleToCloseTimeout; durationProto != nil {
+			now := ctx.Now(cb)
+			if duration := durationProto.AsDuration(); duration > 0 {
+				timeoutTime := now.Add(duration)
+				ctx.AddTask(
+					cb,
+					chasm.TaskAttributes{ScheduledTime: timeoutTime},
+					&callbackspb.ScheduleToCloseTimeoutTask{},
+				)
+			}
+		}
+
 		return nil
 	},
 )

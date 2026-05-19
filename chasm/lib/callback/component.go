@@ -107,18 +107,6 @@ func newStandaloneCallback(
 		return nil, fmt.Errorf("failed to schedule callback: %w", err)
 	}
 
-	// Schedule the timeout as applicable.
-	if durationProto := input.ScheduleToCloseTimeout; durationProto != nil {
-		if duration := durationProto.AsDuration(); duration > 0 {
-			timeoutTime := now.AsTime().Add(duration)
-			ctx.AddTask(
-				cb,
-				chasm.TaskAttributes{ScheduledTime: timeoutTime},
-				&callbackspb.ScheduleToCloseTimeoutTask{},
-			)
-		}
-	}
-
 	return cb, nil
 }
 
