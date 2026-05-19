@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -1225,4 +1226,150 @@ func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 	s.NotNil(descResp.GetOutcome().GetFailure())
 	s.NotNil(descResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, descResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+}
+
+// TestCallbackBeforeNexusOperationStart tests the situation where the standalone callback is
+// called BEFORE the NexusStartOperation request is complete. (And the Temporal server sees
+// a completion for a Nexus operation that doesn't yet exist.)
+func (s *StandaloneCallbackSuite) TestCallbackBeforeNexusOperationStart() {
+	env := s.newEnv()
+	ctx := env.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	fakeSvc := startFakeExternalService(ctx, env.FrontendClient())
+
+	// Wait group used in the nexusHandler to block returning from
+	// OnStartOperation until we can inspect the results of the async
+	// StartCallbackExecution call.
+	var waitForExternalSvc sync.WaitGroup
+	waitForExternalSvc.Add(1)
+
+	nexusEndpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	nexusHandler := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			// Send the request to the external service, which will call
+			// StartCallbackExecution.
+			completion := &callbackpb.CallbackExecutionCompletion{
+				Result: &callbackpb.CallbackExecutionCompletion_Success{
+					Success: testcore.MustToPayload(s.T(), "success"),
+				},
+			}
+			fakeSvc.incomingRequests <- externalRequestInfo{
+				Namespace: env.Namespace().String(),
+				Token:     options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
+				URL:       options.CallbackURL,
+
+				Result: completion,
+			}
+
+			// Block waiting for the result from the fake svc to get the result
+			// BEFORE we return from the StartNexusOperation call.
+			waitForExternalSvc.Wait()
+
+			// End the Nexus operation, reporting back to Temporal the Nexus operation
+			// has officially started.
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationToken: fmt.Sprintf("operation-token-%s", uuid.NewString()),
+			}, nil
+		},
+	}
+
+	// Start the Nexus server, register the endpoint, start a workflow to
+	// invoke the Nexus operation.
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(s.T(), listenAddr, nexusHandler)
+	createNexusEndpointReq := &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: nexusEndpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	}
+	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, createNexusEndpointReq)
+	s.NoError(err, "Error registering Nexus endpoint")
+
+	// Calling Workflow
+	callerWf := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(nexusEndpointName, "nexus-service")
+		fut := c.ExecuteOperation(ctx, "nexus-op", "input", workflow.NexusOperationOptions{})
+
+		var nexusOpResult string
+		err := fut.Get(ctx, &nexusOpResult)
+		return nexusOpResult, err
+	}
+
+	callerWfWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	callerWfWorker.RegisterWorkflow(callerWf)
+	s.NoError(callerWfWorker.Start(), "Error starting calling workflow Worker")
+	defer callerWfWorker.Stop()
+
+	// Start the workflow, triggering the Nexus operation.
+	startOpts := client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}
+	callerWfRun, err := env.SdkClient().ExecuteWorkflow(ctx, startOpts, callerWf)
+	s.NoError(err, "Error running the caller Workflow")
+
+	// By pulling an item from the channel, we can confirm the fake service was able
+	// to successfully call StartCallbackExecution before the Nexus handler responded.
+	gotResult := <-fakeSvc.requestResults
+	env.NoError(gotResult.Error)
+	env.NotEmpty(gotResult.CallbackID)
+	env.NotEmpty(gotResult.RunID)
+
+	// Get the callback's status on the Temporal side. Wait until we see some sort of failure
+	// when trying to invoke the callback.
+	var gotLastFailure *failurepb.Failure
+	const (
+		waitUpTo      = 3 * time.Second
+		checkInterval = 200 * time.Millisecond
+	)
+	s.Await(func(scs *StandaloneCallbackSuite) {
+		shortTimeout, cancelFn := context.WithTimeout(ctx, time.Second)
+		callbackState, err := env.FrontendClient().DescribeCallbackExecution(shortTimeout, &workflowservice.DescribeCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			CallbackId: gotResult.CallbackID,
+			RunId:      gotResult.RunID,
+		})
+		cancelFn()
+
+		scs.NoError(err)
+
+		exState := callbackState.GetInfo()
+		scs.NotNil(exState)
+
+		// The callback starts in STANDBY. We are waiting for it to have been invoked at least once.
+		scs.NotEqual(enumspb.CALLBACK_STATE_STANDBY, exState.State)
+		// It shouldn't be in a terminal state.
+		scs.NotEqual(enumspb.CALLBACK_STATE_FAILED, exState.State)
+		scs.NotEqual(enumspb.CALLBACK_STATE_SUCCEEDED, exState.State)
+
+		gotLastFailure = exState.LastAttemptFailure
+		scs.NotNil(gotLastFailure)
+	}, waitUpTo, checkInterval)
+
+	// Confirm the last failure is what we expect. The frontend returns a retryable BAD_REQUEST nexus.HandlerError,
+	// but that gets observed as a retryable ISE.
+	env.Equal("handler error (INTERNAL)", gotLastFailure.Message)
+
+	// We are done inspecting the started StandaloneCallbackExecution, now have the Nexus operation
+	// officially "start". This will then have the callback retry again, and this time not fail
+	// with the NexusOperationNotStarted error.
+	waitForExternalSvc.Done()
+
+	// At this point, wait until the workflow has completed successfully. This implicitly verifies
+	// that the callback was retried and successfully completed.
+	var gotPayload string
+	s.NoError(callerWfRun.Get(ctx, &gotPayload))
+	s.Equal("success", gotPayload)
 }

@@ -144,7 +144,11 @@ func fabricateStartedEventIfMissing(
 	// TODO(NEXUS-369): We should delay the completion somehow, e.g. using a chasm.PollComponent,
 	// to allow avoid surfacing any traisent errors to users.
 	if operationToken == "" {
-		return serviceerror.NewNexusOperationNotStarted("nexus operation not started", requestID)
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeBadRequest,
+			Message:       "nexus operation not started",
+			RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
+		}
 	}
 
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
