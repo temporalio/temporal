@@ -146,6 +146,9 @@ func (l ClockedRateLimiter) SetLimitAt(t time.Time, newLimit rate.Limit) {
 }
 
 func (l ClockedRateLimiter) SetBurstAt(t time.Time, newBurst int) {
+	if newBurst < 1 {
+		newBurst = 1
+	}
 	l.rateLimiter.SetBurstAt(t, newBurst)
 }
 
