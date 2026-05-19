@@ -2,11 +2,13 @@ package tests
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -23,6 +25,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	sdkconverter "go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -273,9 +276,6 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.NoError(run.Get(ctx, &response))
 	s.True(response.Started)
 
-	err = s.SdkClient().TerminateWorkflow(ctx, workflowID, response.GetRunId(), "test cleanup")
-	s.NoError(err)
-
 	// Verify the linkage from the handler workflow in the caller's history.
 	it := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	var opScheduledEvent *historypb.HistoryEvent
@@ -319,11 +319,11 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.Equal(opScheduledEvent.GetEventId(), link.GetWorkflowEvent().GetEventRef().EventId)
 
 	// Verify the request ID info is recorded correctly in the handler workflow's description.
-	// desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, response.RunID)
-	// s.NoError(err)
-	// requestIDInfos := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()
-	// requestID := slices.Collect(maps.Keys(requestIDInfos))[0]
-	// s.Equal(opScheduledEvent.GetNexusOperationScheduledEventAttributes().GetRequestId(), requestID)
+	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, response.GetRunId())
+	s.NoError(err)
+	requestIDInfos := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	requestID := slices.Collect(maps.Keys(requestIDInfos))[0]
+	s.Equal(opScheduledEvent.GetNexusOperationScheduledEventAttributes().GetRequestId(), requestID)
 }
 
 // TestSignalExistingWorkflow verifies that SWS called from a workflow signals an already-running
@@ -907,14 +907,12 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
 	s.NotEmpty(resp.RunId)
 
 	// Verify the workflow eventually becomes running after the delay.
-	s.Eventually(func() bool {
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 		desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: resp.RunId},
 		})
-		if err != nil {
-			return false
-		}
-		return desc.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		require.NoError(t, err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.WorkflowExecutionInfo.Status)
 	}, startDelay+5*time.Second, 200*time.Millisecond)
 }
