@@ -214,7 +214,8 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	err = node.syncSubComponents()
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
-	s.Len(node.mutation.DeletedNodes, 1)
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -692,8 +693,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 1)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	// SubComponent11 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -713,11 +714,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 3)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
-
+	// SubComponent1 and its children were never persisted (nil LVT), so no storage deletes are needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"])
 }
 
@@ -2175,8 +2173,8 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
-	s.Len(mutations.DeletedNodes, 1)
-	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(mutations.DeletedNodes)
 
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)

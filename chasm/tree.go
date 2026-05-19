@@ -816,22 +816,6 @@ func marshalDeterministic(m proto.Message) ([]byte, error) {
 }
 
 func (n *Node) serializeComponentNode() error {
-	// TypeId is written once during the first serialization and never changes afterwards
-	// (a component's type is fixed at registration time). Nodes loaded from storage
-	// already carry the correct TypeId, identified by a non-nil LastUpdateVersionedTransition;
-	// skip the registry lookup for them to avoid redundant work.
-	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
-	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
-		}
-		componentAttr.TypeId = rc.componentID
-	}
-
 	for field := range n.valueFields() {
 		if field.err != nil {
 			return field.err
@@ -851,6 +835,17 @@ func (n *Node) serializeComponentNode() error {
 		}
 
 		n.serializedNode.Data = blob
+
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			rc, ok := n.registry.componentFor(n.value)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component type is not registered",
+					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			}
+			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+		}
 
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
@@ -1739,16 +1734,14 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 
-		// A nil LastUpdateVersionedTransition means the node is brand new and must always be written.
-		// Content comparison only applies to component nodes; data, collection, and pointer
-		// nodes are always written when dirty.
-		// prevData holds a pointer to the existing blob without copying it; serialize()
-		// replaces node.serializedNode.Data with a new blob, so prevData retains the
-		// original for comparison.
+		// Skip writing nodes whose serialized content hasn't changed. A nil
+		// LastUpdateVersionedTransition means the node is brand new and must be written.
+		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
+		// blob, leaving prevData pointing at the original for comparison.
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := node.isComponent() &&
+		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
@@ -1760,7 +1753,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 
-		// Data bytes are unchanged: revert the versioned transition bump and skip persistence.
+		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
 		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
 			node.setValueState(valueStateSynced)
@@ -2628,6 +2621,8 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// Only record the deletion if the node was previously persisted.
+	//
 	// TODO: consider remove entries from UpdatedNodes map as well
 	// if the same node is updated and then deleted in the same transaction.
 	//
@@ -2638,10 +2633,12 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
 	//   first with a deletion only mutation for tombstone nodes, and then an
 	//   update only mutation.
-	if isSystemDelete {
-		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
-	} else {
-		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		if isSystemDelete {
+			n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+		} else {
+			n.mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
 	}
 
 	n.cleanupCachedTasks()
