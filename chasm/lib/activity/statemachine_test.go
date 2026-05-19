@@ -284,7 +284,7 @@ func TestTransitionRescheduled(t *testing.T) {
 func TestTransitionStarted(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	ctx.MockContext.GoCtx = headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", "")
+	ctx.GoCtx = headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", "")
 	attemptState := &activitypb.ActivityAttemptState{
 		Count:       1,
 		StartedTime: timestamppb.New(defaultTime),
