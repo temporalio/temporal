@@ -100,6 +100,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
 )
 
@@ -232,3 +233,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+// TODO(saa-expose-sdk-meta): remove once go.temporal.io/api adds sdk_name/sdk_version to
+// ActivityExecutionInfo. Local checkout has the field added.
+replace go.temporal.io/api => /Users/fredtzeng/GolandProjects/api-go
