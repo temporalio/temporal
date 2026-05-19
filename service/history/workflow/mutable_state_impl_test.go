@@ -3942,7 +3942,7 @@ func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
 	if !found {
 		return []string{}
 	}
-	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	s.NoError(err)
 	buildIDs, ok := decoded.([]string)
 	s.True(ok)
@@ -3954,7 +3954,7 @@ func (s *mutableStateSuite) getUsedDeploymentVersionsFromMutableState() []string
 	if !found {
 		return []string{}
 	}
-	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	s.NoError(err)
 	usedDeploymentVersions, ok := decoded.([]string)
 	s.True(ok)

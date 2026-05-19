@@ -3639,7 +3639,7 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
-	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return nil, err
 	}
@@ -3685,7 +3685,7 @@ func (ms *MutableStateImpl) loadUsedDeploymentVersions() ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
-	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return nil, err
 	}
