@@ -24,7 +24,8 @@ func new{{upFirst $decorator}} (
         {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
         func (d {{$decorator}}) {{$method.Declaration}} {
-            err = d.generator.generate("{{ $method.Name }}").inject(func() error {
+            {{- $request := (index $method.Params 1) }}
+            err = d.generator.generate("{{ $method.Name }}", {{ $request.Name }}).inject(func() error {
                 {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
                 return err
             })
