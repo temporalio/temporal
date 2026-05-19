@@ -14,9 +14,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Returns a serviceerror.InvalidArgument error for a missing required field.
@@ -112,17 +112,8 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(
 	}
 
 	// ScheduleToCloseTimeout
-	if schedToCloseTimeout := req.GetScheduleToCloseTimeout(); schedToCloseTimeout != nil {
-		if schedToCloseTimeout.AsDuration() <= 0 {
-			return serviceerror.NewInvalidArgument("schedule_to_close_timeout must be positive")
-		}
-
-		// Clamp the ScheduleToCloseTimeout to the maximum allowed if set.
-		maxAllowed := rv.config.MaxCallbackScheduleToCloseTimeout(req.Namespace)
-		if maxAllowed > 0 {
-			clamped := min(schedToCloseTimeout.AsDuration(), maxAllowed)
-			req.ScheduleToCloseTimeout = durationpb.New(clamped)
-		}
+	if err := timestamp.ValidateAndCapProtoDuration(req.GetScheduleToCloseTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("schedule_to_close_timeout is invalid: %v", err)
 	}
 
 	// Validate the input data to deliver to the callback URL, currently only one kind is supported (Completion).

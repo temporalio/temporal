@@ -718,7 +718,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.ScheduleToCloseTimeout = durationpb.New(-time.Second)
 			},
-			errMsg: "schedule_to_close_timeout must be positive",
+			errMsg: "schedule_to_close_timeout is invalid: negative duration",
 		},
 	}
 
