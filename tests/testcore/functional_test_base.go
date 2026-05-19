@@ -95,6 +95,7 @@ type (
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
@@ -128,6 +129,12 @@ func init() {
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.DCRedirectionPolicy = policy
 	}
 }
 
@@ -284,6 +291,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
+		DCRedirectionPolicy:             params.DCRedirectionPolicy,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,
