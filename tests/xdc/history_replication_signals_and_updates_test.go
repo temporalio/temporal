@@ -25,15 +25,14 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -47,14 +46,11 @@ type (
 	// that push their tasks into test-specific (i.e. workflow-specific) buffers.
 	hrsuTestSuite struct {
 		xdcBaseSuite
-		namespaceTaskExecutor nsreplication.TaskExecutor
 		// The injection is performed once, at the level of the test suite, but we need the modified executors to be
-		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
-		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
-		// unique per test (due to the use of TestVars).
-		testMapLock          sync.Mutex
-		testsByWorkflowId    map[string]*hrsuTest
-		testsByNamespaceName map[string]*hrsuTest
+		// able to route history replication tasks to test-specific (i.e. workflow-specific) buffers. Each test
+		// registers itself as it starts. Workflow ID is unique per test due to the use of TestVars.
+		testMapLock       sync.Mutex
+		testsByWorkflowID map[string]*hrsuTest
 	}
 	// Each test starts its own workflow, in its own namespace.
 	hrsuTest struct {
@@ -62,7 +58,7 @@ type (
 		// Per-test buffer of namespace replication tasks.
 		// TODO (dan): buffer namespace replication tasks from each cluster separately, as we do for history replication
 		// tasks.
-		namespaceReplicationTasks chan *replicationspb.NamespaceTaskAttributes
+		namespaceReplicationTasks chan *hrsuNamespaceReplicationTask
 		cluster1                  hrsuTestCluster
 		cluster2                  hrsuTestCluster
 		s                         *hrsuTestSuite
@@ -74,15 +70,9 @@ type (
 		inboundHistoryReplicationTasks chan *hrsuTestExecutableTask
 		t                              *hrsuTest
 	}
-	// Used to inject a modified namespace replication task executor.
-	hrsuTestNamespaceReplicationTaskExecutor struct {
-		replicationTaskExecutor nsreplication.TaskExecutor
-		s                       *hrsuTestSuite
-	}
-	// Used to inject a modified history event replication task executor.
-	hrsuTestExecutableTaskConverter struct {
-		converter replication.ExecutableTaskConverter
-		s         *hrsuTestSuite
+	hrsuNamespaceReplicationTask struct {
+		task    *replicationspb.NamespaceTaskAttributes
+		execute func(context.Context, *replicationspb.NamespaceTaskAttributes) error
 	}
 	// Used to inject a modified history event replication task executor.
 	hrsuTestExecutableTask struct {
@@ -110,31 +100,22 @@ func (s *hrsuTestSuite) SetupSuite() {
 		dynamicconfig.HistoryLongPollExpirationInterval.Key(): 100 * time.Millisecond,
 	}
 	s.logger = log.NewTestLogger()
-	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.WorkerService,
-			fx.Decorate(
-				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
-					s.namespaceTaskExecutor = executor
-					return &hrsuTestNamespaceReplicationTaskExecutor{
-						replicationTaskExecutor: executor,
-						s:                       s,
-					}
-				},
-			),
-		),
-		testcore.WithFxOptionsForService(primitives.HistoryService,
-			fx.Decorate(
-				func(converter replication.ExecutableTaskConverter) replication.ExecutableTaskConverter {
-					return &hrsuTestExecutableTaskConverter{
-						converter: converter,
-						s:         s,
-					}
-				},
-			),
-		),
-	)
-	s.testsByWorkflowId = make(map[string]*hrsuTest)
-	s.testsByNamespaceName = make(map[string]*hrsuTest)
+	s.setupSuite()
+	for _, cluster := range s.clusters {
+		cluster.InjectHook(s.T(), testhooks.NewHook(
+			testhooks.HistoryReplicationTaskAfterConvert,
+			func(sourceCluster string, replicationTask any, executable any) any {
+				return &hrsuTestExecutableTask{
+					sourceCluster:           sourceCluster,
+					s:                       s,
+					TrackableExecutableTask: executable.(replication.TrackableExecutableTask),
+					replicationTask:         replicationTask.(*replicationspb.ReplicationTask),
+					result:                  make(chan error),
+				}
+			},
+		), testhooks.GlobalScope)
+	}
+	s.testsByWorkflowID = make(map[string]*hrsuTest)
 }
 
 func (s *hrsuTestSuite) SetupTest() {
@@ -151,15 +132,13 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	ns := tv.NamespaceName().String()
 	t := hrsuTest{
 		tv:                        tv,
-		namespaceReplicationTasks: make(chan *replicationspb.NamespaceTaskAttributes, taskBufferCapacity),
+		namespaceReplicationTasks: make(chan *hrsuNamespaceReplicationTask, taskBufferCapacity),
 		s:                         s,
 	}
 	// Register test with the suite, so that globally modified task executors can push tasks to test-specific buffers.
 	s.testMapLock.Lock()
-	s.testsByWorkflowId[tv.WorkflowID()] = &t
-	s.testsByNamespaceName[ns] = &t
+	s.testsByWorkflowID[tv.WorkflowID()] = &t
 	s.testMapLock.Unlock()
-
 	t.cluster1 = t.newHrsuTestCluster(ns, s.clusters[0])
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusters[1])
 	t.registerMultiRegionNamespace(ctx)
@@ -173,6 +152,26 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, cluster *testcore.TestCluster) 
 		Logger:    log.NewSdkLogger(t.s.logger),
 	})
 	t.s.NoError(err)
+
+	interceptNamespaceReplicationTask := func(
+		_ context.Context,
+		task *replicationspb.NamespaceTaskAttributes,
+		execute func(context.Context, *replicationspb.NamespaceTaskAttributes) error,
+	) error {
+		t.namespaceReplicationTasks <- &hrsuNamespaceReplicationTask{
+			task:    task,
+			execute: execute,
+		}
+		return nil
+	}
+
+	// Inject a hook to intercept namespace replication tasks and buffer them for inspection.
+	cluster.InjectHook(
+		t.s.T(),
+		testhooks.NewHook(testhooks.NamespaceReplicationTaskInterceptor, interceptNamespaceReplicationTask),
+		namespace.Name(ns),
+	)
+
 	return hrsuTestCluster{
 		testCluster:                    cluster,
 		client:                         sdkClient,
@@ -657,10 +656,10 @@ func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 // type is encountered with the specified failover version.
 func (t *hrsuTest) executeNamespaceReplicationTasksUntil(ctx context.Context, operation enumsspb.NamespaceOperation) {
 	for {
-		task := <-t.namespaceReplicationTasks
-		err := t.s.namespaceTaskExecutor.Execute(ctx, task)
+		bufferedTask := <-t.namespaceReplicationTasks
+		err := bufferedTask.execute(ctx, bufferedTask.task)
 		t.s.NoError(err)
-		if task.NamespaceOperation == operation {
+		if bufferedTask.task.NamespaceOperation == operation {
 			return
 		}
 	}
@@ -694,47 +693,10 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 	return events
 }
 
-func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, task *replicationspb.NamespaceTaskAttributes) error {
-	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
-	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
-	ns := task.Info.Name
-	e.s.testMapLock.Lock()
-	test := e.s.testsByNamespaceName[ns]
-	e.s.testMapLock.Unlock()
-	if test == nil {
-		// This can happen after a test has completed
-		return fmt.Errorf("failed to retrieve test for namespace %s", ns)
-	}
-	test.namespaceReplicationTasks <- task
-	// Report success, although we have merely buffered the task and will execute it later.
-	return nil
-}
-
-// Convert the replication tasks using the testcore converter, and wrap them in our own executable tasks.
-func (t *hrsuTestExecutableTaskConverter) Convert(
-	taskClusterName string,
-	clientShardKey replication.ClusterShardKey,
-	serverShardKey replication.ClusterShardKey,
-	replicationTasks ...*replicationspb.ReplicationTask,
-) []replication.TrackableExecutableTask {
-	convertedTasks := t.converter.Convert(taskClusterName, clientShardKey, serverShardKey, replicationTasks...)
-	testExecutableTasks := make([]replication.TrackableExecutableTask, len(convertedTasks))
-	for i, task := range convertedTasks {
-		testExecutableTasks[i] = &hrsuTestExecutableTask{
-			sourceCluster:           taskClusterName,
-			s:                       t.s,
-			TrackableExecutableTask: task,
-			replicationTask:         replicationTasks[i],
-			result:                  make(chan error),
-		}
-	}
-	return testExecutableTasks
-}
-
 // Execute pushes the task to a buffer and waits for it to be executed.
 func (task *hrsuTestExecutableTask) Execute() error {
 	task.s.testMapLock.Lock()
-	test := task.s.testsByWorkflowId[task.workflowId()]
+	test := task.s.testsByWorkflowID[task.workflowId()]
 	task.s.testMapLock.Unlock()
 	if test == nil {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())

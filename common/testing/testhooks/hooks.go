@@ -1,8 +1,10 @@
 package testhooks
 
 import (
+	"context"
 	"time"
 
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -18,6 +20,10 @@ var (
 	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
+	ReplicationDLQWrite                      = newKey[func(any), namespace.ID]()
+	HistoryReplicationTaskInterceptor        = newKey[func(any, func() error) error, namespace.ID]()
+	HistoryReplicationTaskAfterConvert       = newKey[func(string, any, any) any, global]()
+	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func(context.Context, *replicationspb.NamespaceTaskAttributes) error) error, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.
