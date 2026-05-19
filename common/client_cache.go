@@ -121,7 +121,7 @@ func (c *clientCacheImpl) Evict(key string) {
 	c.cacheLock.Unlock()
 
 	if ok && entry.release != nil {
-		if err := entry.release(); err != nil && c.logger != nil {
+		if err := entry.release(); err != nil {
 			c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
 		}
 	}
