@@ -356,6 +356,272 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	s.True(proto.Equal(inputConfig, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
 }
 
+// ---------------------------------------------------------------------------
+// Area 2: Workflow pause
+// ---------------------------------------------------------------------------
+
+// TestTimeSkipping_PauseBlocksSkip verifies that time skipping does not fire
+// while a workflow is paused, but resumes (and fires) as soon as the workflow
+// is unpaused.
+//
+// Sequence:
+//
+//	WT1 → schedule activity + start 1-hour timer
+//	Pause workflow via API
+//	AT1 → complete activity
+//	(verify: no TimeSkippingTransitionedEvent yet)
+//	Unpause workflow → closeTransaction fires time-skip (no in-flight work)
+//	WT2 → timer has fired; complete workflow
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PauseBlocksSkip() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := env.Context()
+
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: schedule an activity and start a 1-hour timer.
+	// Activity is in-flight; time skipping is blocked regardless of pause.
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				scheduleActivityCmd(tv),
+				startTimerCmd("pause-timer", time.Hour),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Pause the workflow before the activity finishes.
+	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "time-skipping pause test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Activity completes. Without our fix, the close transaction would see
+	// "no in-flight work + 1h timer pending" and fire time skipping here.
+	// With the fix, IsWorkflowExecutionStatusPaused() blocks the transition.
+	_, err = poller.PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+
+	// While paused: verify no TimeSkippingTransitionedEvent has been written yet.
+	historyWhilePaused := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+	})
+	s.False(
+		hasEventType(historyWhilePaused, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"time skipping must not fire while workflow is paused",
+	)
+
+	// Unpause. The unpause close-transaction finds: running, not-paused, no
+	// in-flight work, 1h timer pending → fires skip transition + regenerates the
+	// timer task at near-now.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "time-skipping unpause test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// WT2: timer has fired (time-skipping fired on unpause). Complete the workflow.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+	})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED),
+		"pause event must be in history")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"time-skipping must fire after unpause")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED),
+		"timer must fire after time-skipping")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED),
+		"workflow must complete")
+}
+
+// ---------------------------------------------------------------------------
+// Area 3: Canceled timer
+// ---------------------------------------------------------------------------
+
+// TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget confirms that a timer
+// canceled via command is excluded from the skip-target calculation.
+//
+// If a canceled timer were mistakenly used, the accumulated skip would be
+// larger than the sum of only the surviving timers' durations.
+//
+// Sequence:
+//
+//	WT1 → start timer-A (1h) + timer-B (5h)
+//	Time-skip fires to timer-A (nearest); accumulated = 1h
+//	timer-A fires → WT2
+//	WT2 → cancel timer-B + start timer-C (2h)
+//	Time-skip fires to timer-C (2h); accumulated = 1h + 2h = 3h
+//	timer-C fires → WT3 → complete workflow
+//	Verify: AccumulatedSkippedDuration == 3h (not 1h+4h=5h from canceled timer-B)
+func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	const (
+		timerADuration = time.Hour
+		timerBDuration = 5 * time.Hour
+		timerCDuration = 2 * time.Hour
+		runTimeout     = 10 * time.Hour
+	)
+
+	runID := s.startWorkflowWithTimeSkipping(env, tv, runTimeout)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: start timer-A (1h) and timer-B (5h). No activities — time skipping
+	// fires on this close transaction and targets timer-A (the nearest candidate).
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				startTimerCmd("timer-A", timerADuration),
+				startTimerCmd("timer-B", timerBDuration),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2: timer-A has fired. Cancel timer-B and start timer-C (2h).
+	// ApplyTimerCanceledEvent deletes timer-B from pendingTimerInfoIDs so it is
+	// invisible to calculateTimeSkippingTransition.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
+					Attributes: &commandpb.Command_CancelTimerCommandAttributes{
+						CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
+							TimerId: "timer-B",
+						},
+					},
+				},
+				startTimerCmd("timer-C", timerCDuration),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT3: timer-C has fired (time-skip targeted it at 2h, not the 4h remaining
+	// on the now-canceled timer-B). Complete the workflow.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Accumulated skip must be exactly 1h + 2h = 3h.
+	// If timer-B (canceled) had been used it would be 1h + 4h = 5h.
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	accumulated := ms.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.Equal(timerADuration+timerCDuration, accumulated,
+		"AccumulatedSkippedDuration must equal sum of non-canceled timer durations (1h+2h=3h), not include the canceled timer-B")
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+	})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_CANCELED), "timer-B must be canceled")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
+// ---------------------------------------------------------------------------
+// Area 4: Pending workflow task (including speculative) blocks skip
+// ---------------------------------------------------------------------------
+
+// TestTimeSkipping_PendingWorkflowTaskBlocksSkip confirms that a pending
+// workflow task (HasPendingWorkflowTask == true) is treated as in-flight work
+// that blocks time skipping.  This covers both normal and speculative workflow
+// tasks: both set WorkflowTaskScheduledEventId when scheduled.
+//
+// Sequence:
+//
+//	WT1 → schedule activity + start 1-hour timer
+//	AT1 → complete activity → WFT pending (HasPendingWorkflowTask=true)
+//	(time skipping is blocked here even though no activity is in flight)
+//	WT2 → drain (no commands) → closeTransaction fires time-skip
+//	WT3 → timer has fired; complete workflow
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingWorkflowTaskBlocksSkip() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: schedule an activity and start a 1-hour timer.
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				scheduleActivityCmd(tv),
+				startTimerCmd("wft-block-timer", time.Hour),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Activity completes. A new WFT is now pending to deliver the activity
+	// completion to the workflow. HasPendingWorkflowTask() == true blocks skip.
+	_, err = poller.PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+
+	// Time skipping must not have fired yet: WFT is still pending.
+	historyAfterActivity := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+	})
+	s.False(
+		hasEventType(historyAfterActivity, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"time skipping must not fire while a WFT is pending (even if no activity is in flight)",
+	)
+
+	// WT2: drain. closeTransaction now finds: not paused, not blocked by WFT,
+	// no activity, 1h timer pending → fires the skip transition.
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+
+	// WT3: timer has fired (time-skipping regenerated the timer task at near-now).
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+	})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"time-skipping must fire after the WFT drains")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED),
+		"timer must fire via time-skipping")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
+// ---------------------------------------------------------------------------
+
 func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),

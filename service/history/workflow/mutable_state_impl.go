@@ -8799,7 +8799,7 @@ func (ms *MutableStateImpl) closeTransactionHandleTimeSkipping(
 ) (regenTimerTasksForTimeSkipping bool) {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		if !ms.IsWorkflowExecutionRunning() {
+		if !ms.IsWorkflowExecutionRunning() || ms.IsWorkflowExecutionStatusPaused() {
 			return false
 		}
 		if shouldExecute, transition := ms.shouldExecuteTimeSkipping(); shouldExecute {
@@ -8837,8 +8837,7 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// todo@time-skipping: impacts of paused workflow to be considered
-		if !ms.IsWorkflowExecutionRunning() {
+		if !ms.IsWorkflowExecutionRunning() || ms.IsWorkflowExecutionStatusPaused() {
 			return nil
 		}
 		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
@@ -9998,6 +9997,8 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 }
 
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
+	// HasPendingWorkflowTask covers both normal and speculative workflow tasks (e.g. for
+	// UpdateWorkflowExecution): both set WorkflowTaskScheduledEventId when scheduled.
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
 	}
@@ -10046,6 +10047,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 		noSkippingReason = "workflow is not running"
 		return false, nil
 	}
+	if ms.IsWorkflowExecutionStatusPaused() {
+		noSkippingReason = "workflow is paused"
+		return false, nil
+	}
 	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
 		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
 		return false, nil
@@ -10088,6 +10093,8 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		}
 	}
 
+	// GetPendingTimerInfos returns only active (non-canceled) timers; canceled timers
+	// are removed from pendingTimerInfoIDs via DeleteUserTimer in ApplyTimerCanceledEvent.
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		advance(timerInfo.ExpiryTime.AsTime(), false)
 	}
