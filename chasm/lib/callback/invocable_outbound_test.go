@@ -2,18 +2,18 @@ package callback
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 )
 
@@ -46,7 +46,7 @@ func TestInvocableOutbound_Invoke(t *testing.T) {
 			},
 		},
 		{
-			name:        "non-retryable-http-error",
+			name:        "non-retryable-status-code",
 			callbackURL: "http://localhost/callback",
 			caller: func(_ *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
@@ -57,7 +57,7 @@ func TestInvocableOutbound_Invoke(t *testing.T) {
 			},
 		},
 		{
-			name:        "retryable-http-error",
+			name:        "retryable-status-code",
 			callbackURL: "http://localhost/callback",
 			caller: func(_ *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
@@ -68,18 +68,38 @@ func TestInvocableOutbound_Invoke(t *testing.T) {
 			},
 		},
 		{
-			name:        "operation-not-started-for-system-callback",
-			callbackURL: commonnexus.SystemCallbackURL,
+			name:        "retryable-error-dns",
+			callbackURL: "http://localhost/callback",
 			caller: func(_ *http.Request) (*http.Response, error) {
-				return nil, serviceerror.NewNexusOperationNotStarted("nexus operation not started", "request-id")
+				return nil, &net.DNSError{
+					Err:         "no such host",
+					Name:        "example.invalid",
+					Server:      "1.1.1.1:11",
+					IsNotFound:  true,
+					IsTimeout:   false,
+					IsTemporary: false,
+				}
 			},
 			assertResult: func(t *testing.T, result invocationResult) {
-				// The completion must remain retryable so it can be redelivered after the
-				// start handler returns, and the original error type must be preserved so
-				// WrapError can avoid tripping the circuit breaker.
 				require.IsType(t, invocationResultRetry{}, result)
-				var opNotStarted *serviceerror.NexusOperationNotStarted
-				require.ErrorAs(t, result.error(), &opNotStarted)
+				require.ErrorContains(t, result.error(), "lookup example.invalid on 1.1.1.1:11: no such host")
+			},
+		},
+		{
+			name:        "retryable-error-conntimeout",
+			callbackURL: "http://localhost/callback",
+			caller: func(_ *http.Request) (*http.Response, error) {
+				return nil, &net.OpError{
+					Op:     "dial",
+					Net:    "tcp",
+					Source: nil,
+					Addr:   &net.TCPAddr{IP: net.ParseIP("192.168.0.1"), Port: 80},
+					Err:    os.ErrDeadlineExceeded,
+				}
+			},
+			assertResult: func(t *testing.T, result invocationResult) {
+				require.IsType(t, invocationResultRetry{}, result)
+				require.ErrorContains(t, result.error(), "dial tcp 192.168.0.1:80: i/o timeout")
 			},
 		},
 	}
