@@ -87,6 +87,14 @@ and provides assertion helpers and safety mechanisms.
 
 It replaces all use of `testify`'s `Suite`.
 
+#### Context shorthand
+
+```go
+ctx := s.Context()
+```
+
+`s.Context()` returns the subtest-scoped context - equivalent to `testcontext.New(s.T())`.
+
 #### Await shorthand
 
 ```go
@@ -165,6 +173,10 @@ func TestFoo(t *testing.T) {
 If you don't care about specific value, you can use `Any()` method to generate a random value.
 It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
 
+### testcontext package
+
+There's no need to create your own `context.Context` via `context.WithTimeout`; use `testcontext.New(t)` instead. It returns a test-scoped `context.Context`, memoized per `*testing.T` and canceled on test end or timeout.
+
 ### taskpoller package
 
 For end-to-end testing, consider using `taskpoller.TaskPoller` to handle workflow tasks. This is
@@ -214,6 +226,42 @@ protorequire.ProtoEqual(t, expected, actual,
     ),
 )
 ```
+
+### historyrequire package
+
+`historyrequire` has assertions to verify workflow event histories.
+
+Use `EqualHistoryEvents` to assert the full event sequence:
+
+```go
+events := env.GetHistory(env.Namespace().String(), workflowExecution)
+s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled {"Attempt": 1}
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
+```
+
+Optional inline JSON (e.g. `{"Attempt": 1}`) can be used to assert on specific attributes.
+
+Use `ContainsHistoryEvents` when you only care about a particular segment:
+
+```go
+s.ContainsHistoryEvents(`
+  4 WorkflowTaskFailed {"Identity": "worker-1"}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, events)
+```
+
+Use `RequireHistoryEvent` when you only care about a single event type:
+
+```go
+completed := s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+require.Equal(t, "expected-result", completed.GetWorkflowExecutionCompletedEventAttributes().Result)
+```
+
+Or use `RequireNoHistoryEvent` when you expect no event of a given type to be present.
 
 ### Test Cluster
 

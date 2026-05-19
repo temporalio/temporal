@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -126,7 +125,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
 	s.OverrideDynamicConfig(callback.MaxPerExecution, 2)
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
 	)
 
@@ -165,7 +164,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
@@ -421,7 +420,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
@@ -611,7 +610,7 @@ func blockingWorkflow(ctx workflow.Context) error {
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() {
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 

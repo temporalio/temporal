@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -34,7 +35,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -1711,7 +1711,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 

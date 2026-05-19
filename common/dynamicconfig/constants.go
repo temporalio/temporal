@@ -1079,6 +1079,15 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
 
+	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
+		"frontend.deleteNamespaceUseChasmDeleteExecution",
+		false,
+		`DeleteNamespaceUseChasmDeleteExecution controls whether the delete namespace workflow uses the
+DeleteExecution history service API (CHASM engine path) for non-workflow CHASM executions, instead
+of ForceDeleteWorkflowExecution. Only enable after all history and worker services have been upgraded
+to a version that supports the DeleteExecution API.`,
+	)
+
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeleteActivityRPS",
 		100,
