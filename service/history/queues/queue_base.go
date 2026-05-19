@@ -246,6 +246,11 @@ func (p *queueBase) Stop() {
 	p.readerGroup.Stop()
 	p.rescheduler.Stop()
 	p.checkpointTimer.Stop()
+
+	// Final flush so acked tasks aren't re-dispatched on restart.
+	if err := p.doCheckpoint(true); err != nil {
+		p.logger.Warn("Final checkpoint on Stop failed", tag.Error(err))
+	}
 }
 
 func (p *queueBase) Category() tasks.Category {
@@ -290,6 +295,13 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	err := p.doCheckpoint(false)
+	p.resetCheckpointTimer(err)
+}
+
+// doCheckpoint runs a checkpoint pass without resetting the timer. When
+// onShutdown is true, skips the UpdateShard call (rejected once Stopped).
+func (p *queueBase) doCheckpoint(onShutdown bool) error {
 	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		tasksCompleted += r.ShrinkSlices()
@@ -340,17 +352,18 @@ func (p *queueBase) checkpoint() {
 		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
 		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
 		// serves traffic based on the persisted shardInfo.
-		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
-		if err != nil {
-			p.resetCheckpointTimer(err)
-			return
+		if err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark); err != nil {
+			return err
 		}
 
 		p.exclusiveDeletionHighWatermark = newExclusiveDeletionHighWatermark
 	}
 
-	err := p.updateQueueState(tasksCompleted, readerScopes)
-	p.resetCheckpointTimer(err)
+	if onShutdown {
+		// Skip UpdateShard.
+		return nil
+	}
+	return p.updateQueueState(tasksCompleted, readerScopes)
 }
 
 func (p *queueBase) updateShardRangeID() bool {

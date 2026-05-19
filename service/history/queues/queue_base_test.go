@@ -229,6 +229,8 @@ func (s *queueBaseSuite) TestStartStop() {
 	<-doneCh
 	<-base.checkpointTimer.C
 
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 	s.mockRescheduler.EXPECT().Stop().Times(1)
 	base.Stop()
 	s.False(base.checkpointTimer.Stop())

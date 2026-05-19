@@ -62,6 +62,7 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	taskTypeID := chasm.GenerateTypeID("TestLib.MyTask")
 	chasmTask := &tasks.ChasmTask{
