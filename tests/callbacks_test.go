@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -354,7 +354,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 				// Start event contains all callbacks attached to the first workflow.
 				s.ProtoElementsMatch(cbs, startEventAttr.CompletionCallbacks)
 
-				assert.EventuallyWithT(s.T(), func(col *assert.CollectT) {
+				await.Require(s.Context(), s.T(), func(col *await.T) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 					require.NoError(col, err)
 					require.Len(col, description.Callbacks, len(cbs))
@@ -547,8 +547,8 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
 		}
 	}
 
-	assert.EventuallyWithT(s.T(),
-		func(t *assert.CollectT) {
+	await.Require(s.Context(), s.T(),
+		func(t *await.T) {
 			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
 			// state.
 			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
