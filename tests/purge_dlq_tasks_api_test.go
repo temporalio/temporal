@@ -11,11 +11,8 @@ import (
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 )
 
@@ -23,8 +20,7 @@ type (
 	PurgeDLQTasksSuite struct {
 		testcore.FunctionalTestBase
 
-		dlq              *faultyDLQ
-		sdkClientFactory sdk.ClientFactory
+		dlq persistence.HistoryTaskQueueManager
 	}
 	purgeDLQTasksTestCase struct {
 		name      string
@@ -39,10 +35,6 @@ type (
 		workflowErrorExpectation func(err error)
 		deleteTasksErr           error
 	}
-	faultyDLQ struct {
-		persistence.HistoryTaskQueueManager
-		err error
-	}
 )
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
@@ -50,28 +42,9 @@ func TestPurgeDLQTasksSuite(t *testing.T) {
 	suite.Run(t, new(PurgeDLQTasksSuite))
 }
 
-func (q *faultyDLQ) DeleteTasks(
-	ctx context.Context,
-	request *persistence.DeleteTasksRequest,
-) (*persistence.DeleteTasksResponse, error) {
-	if q.err != nil {
-		return nil, q.err
-	}
-
-	return q.HistoryTaskQueueManager.DeleteTasks(ctx, request)
-}
-
 func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(
-		testcore.WithFxOptionsForService(primitives.HistoryService,
-			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
-				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
-				return s.dlq
-			}),
-		),
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Populate(&s.sdkClientFactory),
-		),
+		testcore.WithHistoryTaskQueueManagerCapture(&s.dlq),
 	)
 }
 
@@ -159,7 +132,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 
 			s.NoError(err)
-			client := s.sdkClientFactory.GetSystemClient()
+			client := s.SystemSdkClient()
 
 			var jobToken adminservice.DLQJobToken
 			err = jobToken.Unmarshal(purgeDLQTasksResponse.JobToken)

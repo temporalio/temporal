@@ -114,6 +114,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
 		f.Config.ExternalPayloadsEnabled,
 	)
+	executor = wrapExecutorWithTestHooks(executor, f.TestHooks)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}

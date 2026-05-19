@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -53,6 +54,7 @@ type (
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 		DLQWriter            *queues.DLQWriter
 		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
+		TestHooks            testhooks.TestHooks
 		Serializer           serialization.Serializer
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
@@ -73,6 +75,31 @@ type (
 		Factories []QueueFactory `group:"queueFactory"`
 	}
 )
+
+type historyQueueTestHookExecutor struct {
+	delegate  queues.Executor
+	testHooks testhooks.TestHooks
+}
+
+func (e historyQueueTestHookExecutor) Execute(ctx context.Context, executable queues.Executable) queues.ExecuteResponse {
+	if hook, ok := testhooks.Get(
+		e.testHooks,
+		testhooks.HistoryTaskInterceptor,
+		namespace.ID(executable.GetNamespaceID()),
+	); ok {
+		if response, handled := hook(executable); handled {
+			return response.(queues.ExecuteResponse)
+		}
+	}
+	return e.delegate.Execute(ctx, executable)
+}
+
+func wrapExecutorWithTestHooks(executor queues.Executor, testHooks testhooks.TestHooks) queues.Executor {
+	return historyQueueTestHookExecutor{
+		delegate:  executor,
+		testHooks: testHooks,
+	}
+}
 
 var QueueModule = fx.Options(
 	circuitbreakerpool.Module,

@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
@@ -95,6 +96,7 @@ type (
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
@@ -125,9 +127,33 @@ func init() {
 // This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
 // scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
 // each one.
+//
+// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithHistoryTaskQueueManagerCapture(target *persistence.HistoryTaskQueueManager) TestClusterOption {
+	return WithFxOptionsForService(
+		primitives.HistoryService,
+		fx.Populate(target),
+	)
+}
+
+func withFrontendContextMetadataTrailer() TestClusterOption {
+	return WithFxOptionsForService(
+		primitives.FrontendService,
+		fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+			return interceptor.NewContextMetadataInterceptor(true, logger)
+		}),
+	)
+}
+
+func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.DCRedirectionPolicy = policy
 	}
 }
 
@@ -235,6 +261,14 @@ func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
 	return s.sdkClient
 }
 
+func (s *FunctionalTestBase) SystemSdkClient() sdkclient.Client {
+	client, err := sdkclient.NewClientFromExisting(s.SdkClient(), sdkclient.Options{
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.NoError(err)
+	return client
+}
+
 func (s *FunctionalTestBase) TaskQueue() string {
 	return s.taskQueue
 }
@@ -284,6 +318,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
+		DCRedirectionPolicy:             params.DCRedirectionPolicy,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,

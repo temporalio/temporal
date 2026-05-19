@@ -23,15 +23,12 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1328,11 +1325,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
-		testcore.WithFxOptions(primitives.FrontendService,
-			fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
-				return interceptor.NewContextMetadataInterceptor(true, logger)
-			}),
-		),
+		testcore.WithFrontendContextMetadataTrailer(),
 	)
 
 	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {
@@ -1535,11 +1528,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
-		testcore.WithFxOptions(primitives.FrontendService,
-			fx.Decorate(func(logger log.Logger) *interceptor.ContextMetadataInterceptor {
-				return interceptor.NewContextMetadataInterceptor(true, logger)
-			}),
-		),
+		testcore.WithFrontendContextMetadataTrailer(),
 	)
 
 	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {

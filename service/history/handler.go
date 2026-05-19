@@ -113,33 +113,32 @@ type (
 	NewHandlerArgs struct {
 		fx.In
 
-		Config                       *configs.Config
-		Logger                       log.SnTaggedLogger
-		ThrottledLogger              log.ThrottledLogger
-		PersistenceExecutionManager  persistence.ExecutionManager
-		PersistenceShardManager      persistence.ShardManager
-		PersistenceHealthSignal      persistence.HealthSignalAggregator
-		HistoryHealthSignal          interceptor.HealthSignalAggregator
-		HealthServer                 *health.Server
-		PersistenceVisibilityManager manager.VisibilityManager
-		HistoryServiceResolver       membership.ServiceResolver
-		MetricsHandler               metrics.Handler
-		PayloadSerializer            serialization.Serializer
-		TimeSource                   clock.TimeSource
-		NamespaceRegistry            namespace.Registry
-		SaProvider                   searchattribute.Provider
-		ClusterMetadata              cluster.Metadata
-		ArchivalMetadata             archiver.ArchivalMetadata
-		HostInfoProvider             membership.HostInfoProvider
-		ShardController              shard.Controller
-		EventNotifier                events.Notifier
-		TracerProvider               trace.TracerProvider
-		TaskQueueManager             persistence.HistoryTaskQueueManager
-		TaskCategoryRegistry         tasks.TaskCategoryRegistry
-		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
-		ChasmEngine                  chasm.Engine
-		ChasmRegistry                *chasm.Registry
-
+		Config                          *configs.Config
+		Logger                          log.SnTaggedLogger
+		ThrottledLogger                 log.ThrottledLogger
+		PersistenceExecutionManager     persistence.ExecutionManager
+		PersistenceShardManager         persistence.ShardManager
+		PersistenceHealthSignal         persistence.HealthSignalAggregator
+		HistoryHealthSignal             interceptor.HealthSignalAggregator
+		HealthServer                    *health.Server
+		PersistenceVisibilityManager    manager.VisibilityManager
+		HistoryServiceResolver          membership.ServiceResolver
+		MetricsHandler                  metrics.Handler
+		PayloadSerializer               serialization.Serializer
+		TimeSource                      clock.TimeSource
+		NamespaceRegistry               namespace.Registry
+		SaProvider                      searchattribute.Provider
+		ClusterMetadata                 cluster.Metadata
+		ArchivalMetadata                archiver.ArchivalMetadata
+		HostInfoProvider                membership.HostInfoProvider
+		ShardController                 shard.Controller
+		EventNotifier                   events.Notifier
+		TracerProvider                  trace.TracerProvider
+		TaskQueueManager                persistence.HistoryTaskQueueManager
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		DLQMetricsEmitter               *persistence.DLQMetricsEmitter
+		ChasmEngine                     chasm.Engine
+		ChasmRegistry                   *chasm.Registry
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
