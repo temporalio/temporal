@@ -10,14 +10,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -239,17 +237,7 @@ func (w *Workflow) NexusOperationInvocationData(
 		)
 	}
 
-	token, err := proto.Marshal(&tokenspb.HistoryEventRef{
-		EventId:      parentData.GetScheduledEventId(),
-		EventBatchId: parentData.GetScheduledEventBatchId(),
-	})
-	if err != nil {
-		return nexusoperation.InvocationData{}, serviceerror.NewInternalf(
-			"failed to marshal history event ref: %v", err,
-		)
-	}
-
-	event, err := w.LoadHistoryEvent(ctx, token)
+	event, err := w.LoadHistoryEvent(ctx, parentData.GetScheduledEventToken())
 	if err != nil {
 		return nexusoperation.InvocationData{}, err
 	}

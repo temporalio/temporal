@@ -207,6 +207,7 @@ type (
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
@@ -892,8 +893,17 @@ func (n *Node) syncSubComponents() error {
 				internalField.Set(reflect.ValueOf(internal))
 			}
 		case fieldKindSubMap:
-			if field.val.IsNil() {
-				// If Map field is nil then delete all collection items nodes and collection node itself.
+			// Validate map type before doing anything with it.
+			if !field.val.IsNil() && field.val.Kind() != reflect.Map {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"CHASM map must be of map type",
+					fmt.Errorf("node %s", n.nodeName))
+			}
+
+			if field.val.IsNil() || len(field.val.MapKeys()) == 0 {
+				// nil or empty map: skip without creating a collection node.
+				// Any existing collection node will be removed by deleteChildren below.
 				continue
 			}
 
@@ -903,19 +913,6 @@ func (n *Node) syncSubComponents() error {
 				collectionNode.initSerializedCollectionNode()
 				collectionNode.setValueState(valueStateNeedSyncStructure)
 				n.children[field.name] = collectionNode
-			}
-
-			// Validate map type.
-			if field.val.Kind() != reflect.Map {
-				return softassert.UnexpectedInternalErr(
-					n.logger,
-					"CHASM map must be of map type",
-					fmt.Errorf("node %s", n.nodeName))
-			}
-
-			if len(field.val.MapKeys()) == 0 {
-				// If Map field is empty then delete all collection items nodes and collection node itself.
-				continue
 			}
 
 			mapValT := field.typ.Elem()
@@ -1290,6 +1287,8 @@ func (n *Node) deserializeComponentNode(
 					}
 					mapFieldV.SetMapIndex(mapKeyV, chasmFieldV)
 				}
+			} else if field.val.IsNil() {
+				field.val.Set(reflect.MakeMap(field.typ))
 			}
 		case fieldKindMutableState:
 			field.val.Set(reflect.ValueOf(NewMSPointer(n.backend)))

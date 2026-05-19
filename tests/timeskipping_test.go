@@ -13,6 +13,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -494,6 +496,98 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := env.Context()
+
+	// Target workflow B. No worker polls B; the SignalExternal RPC will land a
+	// WorkflowExecutionSignaled event in B's history directly. Distinct task
+	// queue so B's idle first WT can't interfere with the SDK worker.
+	tvB := tv.WithWorkflowIDNumber(2).WithTaskQueueNumber(2)
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tvB.WorkflowID(),
+		WorkflowType:        tvB.WorkflowType(),
+		TaskQueue:           tvB.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.NoError(err)
+
+	// CoordinatorWorkflow: emits the 1h timer and the SignalExternal command in
+	// the same WFT response, then waits for whichever future resolves first.
+	coordinatorWorkflow := func(wfCtx workflow.Context, targetWorkflowID string) error {
+		timerFuture := workflow.NewTimer(wfCtx, time.Hour)
+		signalFuture := workflow.SignalExternalWorkflow(
+			wfCtx, targetWorkflowID, "", "test-pending-signal", nil)
+
+		workflow.NewSelector(wfCtx).
+			AddFuture(timerFuture, func(_ workflow.Future) {}).
+			AddFuture(signalFuture, func(_ workflow.Future) {}).
+			Select(wfCtx)
+		return nil
+	}
+	const coordinatorTypeName = "CoordinatorWorkflow"
+	env.SdkWorker().RegisterWorkflowWithOptions(coordinatorWorkflow, workflow.RegisterOptions{
+		Name: coordinatorTypeName,
+	})
+
+	// SDK's StartWorkflowOptions doesn't expose TimeSkippingConfig (as of SDK
+	// v1.41), so start workflow A directly through the frontend. Use the SDK
+	// worker's task queue so the registered coordinator picks up the WT.
+	input, err := converter.GetDefaultDataConverter().ToPayloads(tvB.WorkflowID())
+	s.NoError(err)
+
+	tvA := tv.WithWorkflowIDNumber(1)
+	wallStart := time.Now()
+	aResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tvA.WorkflowID(),
+		WorkflowType:        &commonpb.WorkflowType{Name: coordinatorTypeName},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               input,
+		WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+
+	// Wait for A to finish through the SDK.
+	err = env.SdkClient().GetWorkflow(ctx, tvA.WorkflowID(), aResp.RunId).Get(ctx, nil)
+	s.NoError(err)
+	wallElapsed := time.Since(wallStart)
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tvA.WorkflowID(),
+		RunId:      aResp.RunId,
+	})
+
+	// The signal future resolved (its completion event landed in A's history).
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED),
+		"ExternalWorkflowExecutionSignaled event must appear in A's history")
+
+	// The timer never fired — the signal won the Selector. If the new branch in
+	// hasInflightWorkToPreventTimeSkipping were missing, skip could fire at WT1
+	// close, shift the timer to near-now, and race the signal — making this
+	// assertion flaky.
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED),
+		"TimerFired must NOT appear — the signal future must resolve before the 1h timer fires")
+
+	// Workflow A closed via the signal branch.
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED),
+		"workflow A must complete")
+
+	// Wall elapsed must be well under the 1h timer — the workflow should
+	// finish as soon as the signal completes (sub-second on a healthy cluster).
+	s.Less(wallElapsed, 5*time.Minute,
+		"test wall elapsed = %v; the workflow should complete promptly after the signal succeeds, well before the 1h timer would fire",
+		wallElapsed)
 }
 
 // TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no

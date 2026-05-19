@@ -684,6 +684,11 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
 }
 
+// ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.
+func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
+	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
+}
+
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
 // Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
@@ -1305,6 +1310,37 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	}
 	ms.currentTransactionAddedStateMachineEventTypes = append(ms.currentTransactionAddedStateMachineEventTypes, t)
 	return event
+}
+
+// GenerateEventLoadToken generates a token for loading a history event at a later time. The token encodes the event ID
+// and the batch ID (if applicable) which can be used to load the event from the events cache.
+func (ms *MutableStateImpl) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	attrs := reflect.ValueOf(event.Attributes).Elem()
+
+	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
+	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
+		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
+	}
+
+	f := attrs.Field(0).Interface()
+
+	var eventBatchID int64
+	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
+		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
+	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		// WFEStarted is always stored in the first batch of events.
+		eventBatchID = 1
+	} else {
+		// By default, events aren't referenceable as they may end up buffered.
+		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
+	}
+	ref := &tokenspb.HistoryEventRef{
+		EventId:      event.EventId,
+		EventBatchId: eventBatchID,
+	}
+	return proto.Marshal(ref)
 }
 
 func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
@@ -2399,8 +2435,22 @@ func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
 func (ms *MutableStateImpl) IsSignalRequested(
 	requestID string,
 ) bool {
-	_, ok := ms.pendingSignalRequestedIDs[requestID]
-	return ok
+	// First check CHASM map, then fallback to existing set fields -- will be cleaned up once we
+	// fully ramp the writes to CHASM only.
+	signalExists := false
+	if ms.ChasmSignalBacklinksEnabled() {
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+		if err != nil {
+			softassert.Fail(ms.logger, fmt.Sprintf("Unexpected error reading CHASM component: %v", err))
+		}
+		signalExists = wf.HasIncomingSignalEvent(chasmCtx, requestID)
+	}
+
+	// TODO(long-nt-tran): Remove fallback to existing map once we fully roll out writes to CHASM signals map
+	if !signalExists {
+		_, signalExists = ms.pendingSignalRequestedIDs[requestID]
+	}
+	return signalExists
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
@@ -2424,6 +2474,12 @@ func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
 func (ms *MutableStateImpl) AddSignalRequested(
 	requestID string,
 ) {
+	if ms.ChasmSignalBacklinksEnabled() {
+		// Signal deduplication is managed by CHASM IncomingSignals; the CHASM write
+		// happens in ApplyWorkflowExecutionSignaled.
+		// TODO(long-nt-tran): Cleanup this path after ChasmSignalBacklinksEnabled is rolled out.
+		return
+	}
 	if ms.pendingSignalRequestedIDs == nil {
 		ms.pendingSignalRequestedIDs = make(map[string]struct{})
 	}
@@ -2438,6 +2494,11 @@ func (ms *MutableStateImpl) AddSignalRequested(
 func (ms *MutableStateImpl) DeleteSignalRequested(
 	requestID string,
 ) {
+	if ms.ChasmSignalBacklinksEnabled() {
+		// Signal IDs are kept in CHASM IncomingSignals for backlink resolution.
+		// TODO(long-nt-tran): Clean up this path after config is rolled out.
+		return
+	}
 	delete(ms.pendingSignalRequestedIDs, requestID)
 	delete(ms.updateSignalRequestedIDs, requestID)
 	ms.deleteSignalRequestedIDs[requestID] = struct{}{}
@@ -5739,6 +5800,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
+	requestID string,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
@@ -5747,6 +5809,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		identity,
 		header,
 		nil,
+		requestID,
 		links,
 	)
 }
@@ -5757,6 +5820,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
@@ -5770,6 +5834,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		identity,
 		header,
 		externalWorkflowExecution,
+		requestID,
 		links,
 	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
@@ -5779,10 +5844,40 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
-	_ *historypb.HistoryEvent,
+	event *historypb.HistoryEvent,
 ) error {
 	// Increment signal count in mutable state for this workflow execution
 	ms.executionInfo.SignalCount++
+
+	// Add signal requestID to workflow CHASM tree (if feature is enabled)
+	signalEventAttrs, ok := event.GetAttributes().(*historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes)
+	if !ok {
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			fmt.Sprintf(
+				"Expect ApplyWorkflowExecutionSignaled to be called only on signal events, but called from: %v",
+				event,
+			),
+			nil,
+		)
+	}
+	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
+	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
+		ctx := context.Background()
+		ms.EnsureChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+		if err != nil {
+			return err
+		}
+		// Persist the signal requestID to the current eventID.
+		// - For buffered events (normal processing path), event.GetEventId() returns the common.BufferedEventID and will be resolved later.
+		// - For already-persisted events (rebuild/replay path), event.GetEventId() returns the real history event ID.
+		nsTag := metrics.NamespaceTag(ms.GetNamespaceEntry().Name().String())
+		if err := wf.AddIncomingSignalEvent(chasmCtx, requestID, event.GetEventId()); err != nil {
+			return err
+		}
+		metrics.ChasmIncomingSignalWritten.With(ms.metricsHandler.WithTags(nsTag)).Record(1)
+	}
 	return nil
 }
 
@@ -6400,10 +6495,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	if ai.Paused {
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-			activityInfo.StartedEventId = common.EmptyEventID
-			activityInfo.StartVersion = common.EmptyVersion
-			activityInfo.StartedTime = nil
-			activityInfo.RequestId = ""
+			ClearActivityStartedState(activityInfo)
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
 			if ms.config.EnableActivityRetryStampIncrement() {
@@ -8115,7 +8207,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 func (ms *MutableStateImpl) updatePendingEventIDs(
 	scheduledIDToStartedID map[int64]int64,
 	requestIDToEventID map[string]int64,
-) {
+) error {
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
 			activityInfo.StartedEventId = startedEventID
@@ -8130,12 +8222,29 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 		}
 	}
 	if len(requestIDToEventID) > 0 {
+		var wf *chasmworkflow.Workflow
+		var chasmCtx chasm.MutableContext
+		var err error
+		if ms.ChasmSignalBacklinksEnabled() {
+			wf, chasmCtx, err = ms.ChasmWorkflowComponent(context.Background())
+			if err != nil {
+				return err
+			}
+		}
+
 		for requestID, eventID := range requestIDToEventID {
 			if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
 				requestIDInfo.EventId = eventID
 			}
+			if wf != nil {
+				// UpdateIncomingSignalEvent is a no-op for non-signal request IDs as they won't exist in the map.
+				if err := wf.UpdateIncomingSignalEvent(chasmCtx, requestID, eventID); err != nil {
+					return err
+				}
+			}
 		}
 	}
+	return nil
 }
 
 func (ms *MutableStateImpl) updateWithLastWriteEvent(
@@ -8865,6 +8974,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 }
 
 func (ms *MutableStateImpl) applySignalRequestedIds(signalRequestedIds []string, incomingExecutionInfo *persistencespb.WorkflowExecutionInfo) {
+	// TODO(long-nt-tran): Deprecate this function once we fully ramp up writing signals to workflow CHASM component
 	if transitionhistory.Compare(
 		incomingExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition,
 		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition,
@@ -9642,7 +9752,6 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 	return tsc, initialSkipped
 }
 
-// hasInflightWorkToPreventTimeSkipping checks if there is no-inflight work and time can skip.
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
@@ -9650,17 +9759,18 @@ func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string
 	if len(ms.GetPendingActivityInfos()) > 0 {
 		return true, "has pending activity"
 	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
-		return true, "has pending child execution"
-	}
 	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
 		return true, "has pending nexus operations"
 	}
-
-	// TODO@time-skipping: handle pending external transfer tasks
-	// (signals and cancel requests), their completion is not guaranteed to trigger
-	// a mutable state mutation — and without one, time skipping won't be re-triggered.
-	// We need a separate mechanism to catch these missed trigger opportunities.
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		return true, "has pending child execution"
+	}
+	if len(ms.GetPendingSignalExternalInfos()) > 0 {
+		return true, "has pending signal external"
+	}
+	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
+		return true, "has pending request cancel external"
+	}
 	return false, ""
 }
 
@@ -9687,13 +9797,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 			)
 		}
 	}()
-
 	if !ms.IsWorkflowExecutionRunning() {
 		noSkippingReason = "workflow is not running"
 		return false, nil
 	}
-
-	// pending work exists
 	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
 		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
 		return false, nil

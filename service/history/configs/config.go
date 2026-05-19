@@ -19,6 +19,9 @@ type Config struct {
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableNamespaceFairness                     dynamicconfig.BoolPropertyFn
+	NamespaceFairShareMultiplier                dynamicconfig.FloatPropertyFn
+	FrontendGlobalNamespaceRPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -69,6 +72,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -444,6 +448,9 @@ func NewConfig(
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
+		EnableNamespaceFairness:              dynamicconfig.EnableHistoryNamespaceFairness.Get(dc),
+		NamespaceFairShareMultiplier:         dynamicconfig.HistoryNamespaceFairShareMultiplier.Get(dc),
+		FrontendGlobalNamespaceRPS:           dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
@@ -494,8 +501,9 @@ func NewConfig(
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbacks:    dynamicconfig.EnableCHASMCallbacks.Get(dc),
-		ExternalPayloadsEnabled: dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableCHASMCallbacks:       dynamicconfig.EnableCHASMCallbacks.Get(dc),
+		EnableCHASMSignalBacklinks: dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		ExternalPayloadsEnabled:    dynamicconfig.ExternalPayloadsEnabled.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB

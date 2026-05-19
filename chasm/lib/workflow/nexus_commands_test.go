@@ -54,7 +54,7 @@ func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
 }
 
 var defaultConfig = &nexusoperation.Config{
-	EnableChasmNexus:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperationsPerWorkflow: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
@@ -143,7 +143,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("chasm nexus not enabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
-			EnableChasmNexus: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.ErrorIs(t, err, ErrCommandNotSupported)
@@ -593,8 +593,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 		opParentData := &workflowpb.NexusOperationParentData{}
 		require.NoError(t, op.ParentData.UnmarshalTo(opParentData))
 		require.EqualExportedValues(t, &workflowpb.NexusOperationParentData{
-			ScheduledEventId:      event.EventId,
-			ScheduledEventBatchId: 1, // WorkflowTaskCompletedEventID
+			ScheduledEventId:    event.EventId,
+			ScheduledEventToken: []byte("test token"),
 		}, opParentData)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
@@ -641,7 +641,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 func TestHandleCancelCommand(t *testing.T) {
 	t.Run("chasm nexus not enabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
-			EnableChasmNexus: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.ErrorIs(t, err, ErrCommandNotSupported)
