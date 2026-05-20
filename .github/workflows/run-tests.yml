@@ -328,15 +328,13 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Generate test summary
-        uses: mikepenz/action-junit-report@v6
+      - name: Write test summary
         if: ${{ !cancelled() }}
-        with:
-          report_paths: ./.testoutput/junit.*.xml
-          detailed_summary: true
-          check_annotations: false
-          annotate_only: true
-          skip_annotations: true
+        run: |
+          summary="$(make -s print-test-summary)"
+          if [ -n "$summary" ]; then
+            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -428,15 +426,13 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Generate test summary
-        uses: mikepenz/action-junit-report@v6
+      - name: Write test summary
         if: ${{ !cancelled() }}
-        with:
-          report_paths: ./.testoutput/junit.*.xml
-          detailed_summary: true
-          check_annotations: false
-          annotate_only: true
-          skip_annotations: true
+        run: |
+          summary="$(make -s print-test-summary)"
+          if [ -n "$summary" ]; then
+            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -567,15 +563,13 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Generate test summary
-        uses: mikepenz/action-junit-report@v6
+      - name: Write test summary
         if: ${{ !cancelled() }}
-        with:
-          report_paths: ./.testoutput/junit.*.xml
-          detailed_summary: true
-          check_annotations: false
-          annotate_only: true
-          skip_annotations: true
+        run: |
+          summary="$(make -s print-test-summary)"
+          if [ -n "$summary" ]; then
+            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5

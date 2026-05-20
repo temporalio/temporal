@@ -163,3 +163,19 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// This should not happen as CHASM only supports Nexus callbacks currently
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }
+
+// ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,
+// triggering their invocation. Used by both workflows and standalone activities
+// when the execution reaches a terminal state.
+func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *Callback]) error {
+	for _, field := range callbacks {
+		cb := field.Get(ctx)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

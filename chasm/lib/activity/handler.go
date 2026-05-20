@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -61,16 +62,24 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
+	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
+			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, err
+			}
+
+			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+					return nil, err
+				}
 			}
 
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
@@ -80,8 +89,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, nil
 		},
-		req.GetFrontendRequest(),
-		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
+		frontendReq,
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
@@ -94,10 +103,38 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	// Attach callbacks to an existing activity when on_conflict_options.attach_completion_callbacks is set.
+	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+	cbs := frontendReq.GetCompletionCallbacks()
+	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+		requestID := frontendReq.GetRequestId()
+		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			ref,
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
+			},
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
 			RunId:   result.ExecutionKey.RunID,
 			Started: result.Created,
+			Link: &commonpb.Link{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  frontendReq.GetNamespace(),
+						ActivityId: frontendReq.GetActivityId(),
+						RunId:      result.ExecutionKey.RunID,
+					},
+				},
+			},
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil

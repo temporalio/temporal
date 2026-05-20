@@ -307,18 +307,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
 		)
-		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
-		// workflow is not found in source cluster, cleanup workflow in target cluster
-		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
-		defer cancel()
-		return e.DeleteWorkflow(
-			ctx,
-			definition.NewWorkflowKey(
-				e.NamespaceID,
-				e.WorkflowID,
-				e.RunID,
-			),
-		)
+		// workflow is not found in source cluster, cleanup workflow in target cluster.
+		// This handles workflow deletion from source cluster and this is optional as deletion operation will replicate to target clusters.
+		deletionTask := NewExecutableDeleteExecutionTask(e.ProcessToolBox, e.TaskID(), e.TaskCreationTime(), e.SourceClusterName(), e.SourceShardKey(), e.ReplicationTask())
+		return deletionTask.Execute()
 	default:
 		return err
 	}

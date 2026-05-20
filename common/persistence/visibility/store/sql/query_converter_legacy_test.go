@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -771,17 +770,6 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 			},
 			output: "('foo', 'bar')",
-			err:    nil,
-		},
-		{
-			name:  "ScheduleId transformation",
-			input: "'test-schedule'",
-			args: map[string]any{
-				"saName":      sadefs.ScheduleID,
-				"saFieldName": sadefs.WorkflowID,
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),
 			err:    nil,
 		},
 	}

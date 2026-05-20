@@ -104,6 +104,10 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task, nsName))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
+	case *tasks.WorkerCommandsTask:
+		// Worker commands are best-effort and only executed on the active cluster.
+		// On standby, simply drop the task.
+		return respond(nil)
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
@@ -162,10 +166,9 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 			"standby task executor returned retryable error",
 			err,
 		)
-		return err
 	}
 
-	return nil
+	return err
 }
 
 func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(

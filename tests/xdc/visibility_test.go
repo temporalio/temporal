@@ -175,9 +175,10 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 				return false
 			}
 			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
-			if len(fields) != 3 {
+			if len(fields) < 3 {
 				return false
 			}
+			s.Len(fields, 3)
 
 			searchValBytes := fields["CustomTextField"]
 			var searchVal string

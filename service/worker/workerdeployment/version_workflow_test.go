@@ -478,7 +478,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	// Mock propagation check
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	// Send delete update
+	// Send delete update, and query inside OnComplete to avoid a race with the wall clock timer
+	// (RegisterDelayedCallback uses a real wall-clock timer when activities are running, so a
+	// separate 5ms callback could fire before d.deleteVersion is set on a slow machine).
 	s.env.RegisterDelayedCallback(func() {
 		deleteArgs := &deploymentspb.DeleteVersionArgs{
 			SkipDrainage: false,
@@ -491,17 +493,14 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
+				// Query immediately after the handler returns — d.deleteVersion is guaranteed true here.
+				val, queryErr := s.env.QueryWorkflow(QueryDescribeVersion)
+				s.Require().Error(queryErr, "query should fail after deletion")
+				s.Nil(val)
+				s.Contains(queryErr.Error(), "worker deployment version deleted")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
-
-	// Query after deletion - should fail
-	s.env.RegisterDelayedCallback(func() {
-		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-		s.Require().Error(err, "query should fail after deletion")
-		s.Nil(val)
-		s.Contains(err.Error(), "worker deployment version deleted")
-	}, 5*time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: tv.NamespaceName().String(),

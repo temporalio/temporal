@@ -95,9 +95,11 @@ type (
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
+		EnableWorkerService             bool
 		FaultInjectionConfig            *config.FaultInjection
 		NumHistoryShards                int32
 		SharedCluster                   bool
@@ -131,6 +133,12 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
+func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.DCRedirectionPolicy = policy
+	}
+}
+
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
 	return func(params *TestClusterParams) {
 		if params.DynamicConfigOverrides == nil {
@@ -150,6 +158,12 @@ func WithArchivalEnabled() TestClusterOption {
 func WithMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
+	}
+}
+
+func withWorkerService(enabled bool) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.EnableWorkerService = enabled
 	}
 }
 
@@ -284,6 +298,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
+		DCRedirectionPolicy:             params.DCRedirectionPolicy,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,
@@ -291,6 +306,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMTLS:                      params.EnableMTLS,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
+		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 
 	// Apply configuration for shared clusters.
@@ -368,7 +384,8 @@ func (s *FunctionalTestBase) checkTestShard() {
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
-		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
+		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
+		EnableWorkerService: true,
 	}
 	for _, opt := range options {
 		opt(&params)
@@ -633,7 +650,7 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
+	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -679,6 +696,7 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	for _, behavior := range AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func() {
+			s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
 			if behavior.ForceTaskForward || behavior.ForcePollForward {
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
@@ -692,6 +710,7 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
+// Deprecated: use (*TestEnv).WaitForChannel instead.
 func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {
@@ -701,6 +720,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
+// Deprecated: use (*TestEnv).SendToChannel instead.
 func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {

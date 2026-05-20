@@ -167,8 +167,7 @@ func newTaskQueuePartitionManager(
 // computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
 // based on fairnessState, autoEnable, and the base dynamic config values.
 func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
-	isSticky := pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	effectiveEnableFairness = fairness && !isSticky
+	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
 	effectiveNewMatcher = newMatcher || fairness
 	if !autoEnable {
 		return
@@ -185,7 +184,7 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
 		effectiveNewMatcher = true
-		effectiveEnableFairness = !isSticky
+		effectiveEnableFairness = pm.partition.SupportsFairness()
 	default:
 		pm.logger.Error("unknown fairnessState in user data")
 	}
@@ -373,7 +372,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
+	if !pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
@@ -440,10 +439,25 @@ reredirectTask:
 		return "", false, err
 	}
 
+	behavior := directive.GetBehavior()
+	forwarded := params.forwardInfo != nil
+
+	var outcome syncMatchOutcome
 	if isActive {
-		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		syncMatched = outcome == syncMatchSuccess
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
-			pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
+			// on the child partition that originally received the task.
+			if !forwarded {
+				pm.processTaskAddHooks(ctx, targetVersion, outcome)
+			}
+
+			syncMatchResult := metrics.TaskAddResultSyncMatch
+			if err != nil {
+				syncMatchResult = taskAddErrResult(err)
+			}
+			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -460,6 +474,7 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
+		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -471,19 +486,45 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		pm.processTaskAddHooks(ctx, targetVersion, false)
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
+		pm.processTaskAddHooks(ctx, targetVersion, outcome)
+	} else {
+		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
 
 	return assignedBuildId, false, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool) {
+func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
+	switch outcome {
+	case syncMatchSuccess:
+		return hooks.SyncMatchOutcomeSuccess
+	case syncMatchRateLimited:
+		return hooks.SyncMatchOutcomeRateLimited
+	case syncMatchUnspecified:
+		return hooks.SyncMatchOutcomeUnspecified
+	default:
+		return hooks.SyncMatchOutcomeNotMatched
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
 	for _, l := range pm.taskHooks {
+		hookOutcome := syncMatchOutcomeToHook(outcome)
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
-			IsSyncMatch:       syncMatched,
+			IsSyncMatch:       hookOutcome == hooks.SyncMatchOutcomeSuccess,
+			SyncMatchOutcome:  hookOutcome,
 		})
 	}
+}
+
+func taskAddErrResult(err error) string {
+	var resourceExhausted *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhausted) {
+		return metrics.TaskAddResultThrottled
+	}
+	return metrics.TaskAddResultFailure
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
@@ -965,7 +1006,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
-	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
 		if err != nil {
 			return nil, err
@@ -1036,6 +1077,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 		if b == "" {
 			dbq := pm.defaultQueue()
 			if dbq == nil {
+				pm.versionedQueuesLock.RUnlock()
 				return nil, errDefaultQueueNotInit
 			}
 			versions[dbq.QueueKey().Version()] = true
@@ -1394,7 +1436,9 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
-	} else if !pm.defaultQueueFuture.Ready() {
+	}
+	dbq, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
 		return // not initialized yet
 	}
 
@@ -1424,7 +1468,6 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 		pqm.UpdateRemotePriorityBacklogs(updates[key])
 	}
 
-	dbq := pm.defaultQueue()
 	if dbq != nil {
 		update(PhysicalTaskQueueVersion{}, dbq)
 	}
@@ -1595,6 +1638,9 @@ func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 }
 
 func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	if !pm.partition.SupportsPartitions() {
+		return 1
+	}
 	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
 }
 
@@ -1702,8 +1748,8 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	deployment *deploymentpb.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
-	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, serviceerror.NewInternal("versioned queues can't be used in sticky partitions")
+	if !pm.partition.SupportsVersioning() {
+		return nil, serviceerror.NewInternal("versioned queues can't be used in partitions that don't support versioning")
 	}
 	if versionSet == "" && buildId == "" && deployment == nil {
 		return nil, serviceerror.NewInternal("deployment or build ID or version set should be given for a versioned queue")
@@ -1873,7 +1919,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
+			return dbq, dbq, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 		}
 
 		err = worker_versioning.ValidateDeployment(deployment)
@@ -1903,15 +1949,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if !isIndependentPinnedActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
-				return nil, nil, nil, 0, nil, err // TODO (Shivam): Please add the comment in the proto to explain that pinned tasks and sticky tasks get 0 for the rev number.
+				return nil, nil, nil, 0, nil, err
 			}
 			if forwardInfo == nil {
 				// Task is not forwarded, so it can be spooled if sync match fails.
 				// Spool queue and sync match queue is the same for pinned workflows.
-				return pinnedQueue, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
+				return pinnedQueue, pinnedQueue, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 			} else {
 				// Forwarded from child partition - only do sync match.
-				return nil, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
+				return nil, pinnedQueue, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 			}
 		}
 	}

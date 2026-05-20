@@ -145,7 +145,7 @@ func (g *GeneratorTaskHandler) Execute(
 }
 
 func (g *GeneratorTaskHandler) logSchedule(logger log.Logger, msg string, sched *Scheduler) {
-	logger.Debug(msg,
+	logger.Info(msg,
 		tag.Stringer("spec", jsonStringer{sched.Schedule.Spec}),
 		tag.Stringer("policies", jsonStringer{sched.Schedule.Policies}))
 }

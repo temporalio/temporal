@@ -215,42 +215,42 @@ func (mr *MockHasVersionMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockHasVersion)(nil).GetVersion))
 }
 
-// MockHasStateMachineTaskType is a mock of HasStateMachineTaskType interface.
-type MockHasStateMachineTaskType struct {
+// MockHasOutboundTaskGroup is a mock of HasOutboundTaskGroup interface.
+type MockHasOutboundTaskGroup struct {
 	ctrl     *gomock.Controller
-	recorder *MockHasStateMachineTaskTypeMockRecorder
+	recorder *MockHasOutboundTaskGroupMockRecorder
 	isgomock struct{}
 }
 
-// MockHasStateMachineTaskTypeMockRecorder is the mock recorder for MockHasStateMachineTaskType.
-type MockHasStateMachineTaskTypeMockRecorder struct {
-	mock *MockHasStateMachineTaskType
+// MockHasOutboundTaskGroupMockRecorder is the mock recorder for MockHasOutboundTaskGroup.
+type MockHasOutboundTaskGroupMockRecorder struct {
+	mock *MockHasOutboundTaskGroup
 }
 
-// NewMockHasStateMachineTaskType creates a new mock instance.
-func NewMockHasStateMachineTaskType(ctrl *gomock.Controller) *MockHasStateMachineTaskType {
-	mock := &MockHasStateMachineTaskType{ctrl: ctrl}
-	mock.recorder = &MockHasStateMachineTaskTypeMockRecorder{mock}
+// NewMockHasOutboundTaskGroup creates a new mock instance.
+func NewMockHasOutboundTaskGroup(ctrl *gomock.Controller) *MockHasOutboundTaskGroup {
+	mock := &MockHasOutboundTaskGroup{ctrl: ctrl}
+	mock.recorder = &MockHasOutboundTaskGroupMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHasStateMachineTaskType) EXPECT() *MockHasStateMachineTaskTypeMockRecorder {
+func (m *MockHasOutboundTaskGroup) EXPECT() *MockHasOutboundTaskGroupMockRecorder {
 	return m.recorder
 }
 
-// StateMachineTaskType mocks base method.
-func (m *MockHasStateMachineTaskType) StateMachineTaskType() string {
+// OutboundTaskGroup mocks base method.
+func (m *MockHasOutboundTaskGroup) OutboundTaskGroup() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StateMachineTaskType")
+	ret := m.ctrl.Call(m, "OutboundTaskGroup")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// StateMachineTaskType indicates an expected call of StateMachineTaskType.
-func (mr *MockHasStateMachineTaskTypeMockRecorder) StateMachineTaskType() *gomock.Call {
+// OutboundTaskGroup indicates an expected call of OutboundTaskGroup.
+func (mr *MockHasOutboundTaskGroupMockRecorder) OutboundTaskGroup() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineTaskType", reflect.TypeOf((*MockHasStateMachineTaskType)(nil).StateMachineTaskType))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OutboundTaskGroup", reflect.TypeOf((*MockHasOutboundTaskGroup)(nil).OutboundTaskGroup))
 }
 
 // MockHasDestination is a mock of HasDestination interface.

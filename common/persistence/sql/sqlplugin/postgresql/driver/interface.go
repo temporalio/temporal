@@ -18,6 +18,10 @@ const (
 
 type Driver interface {
 	CreateConnection(dsn string) (*sqlx.DB, error)
+	// CreateRefreshableConnection creates a connection pool that calls buildDSN
+	// before opening each new physical connection, enabling per-connection
+	// credential refresh for short-lived tokens (e.g. from passwordCommand).
+	CreateRefreshableConnection(buildDSN func() (string, error)) (*sqlx.DB, error)
 	IsDupEntryError(error) bool
 	IsDupDatabaseError(error) bool
 	IsConnNeedsRefreshError(error) bool

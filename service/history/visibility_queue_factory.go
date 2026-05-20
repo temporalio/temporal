@@ -168,5 +168,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

@@ -60,6 +60,17 @@ func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivitySt
 	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 }
 
+// ClearActivityStartedState resets the per-attempt "started" fields on an ActivityInfo.
+// Called when an activity leaves the started state (retry, pause, etc.) so that stale
+// values from the previous attempt don't leak into the next one.
+func ClearActivityStartedState(ai *persistencespb.ActivityInfo) {
+	ai.StartedEventId = common.EmptyEventID
+	ai.StartVersion = common.EmptyVersion
+	ai.RequestId = ""
+	ai.StartedTime = nil
+	ai.StartedClock = nil
+}
+
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -72,10 +83,7 @@ func UpdateActivityInfoForRetries(
 	ai.Attempt = attempt
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
-	ai.StartedEventId = common.EmptyEventID
-	ai.StartVersion = common.EmptyVersion
-	ai.RequestId = ""
-	ai.StartedTime = nil
+	ClearActivityStartedState(ai)
 	// Mark per-attempt timers for recreation.
 	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity

@@ -744,10 +744,10 @@ func (e *executableImpl) GetDestination() string {
 	return ""
 }
 
-// StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
-func (e *executableImpl) StateMachineTaskType() string {
-	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
-		return t.StateMachineTaskType()
+// OutboundTaskGroup returns the embedded task's outbound task group. Defaults to an empty string.
+func (e *executableImpl) OutboundTaskGroup() string {
+	if t, ok := e.Task.(tasks.HasOutboundTaskGroup); ok {
+		return t.OutboundTaskGroup()
 	}
 	return ""
 }

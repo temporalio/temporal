@@ -244,7 +244,7 @@ func (task *internalTask) isSyncMatchTask() bool {
 }
 
 func (task *internalTask) getCreateTime() *timestamppb.Timestamp {
-	if task.forwardInfo != nil && task.forwardInfo.GetCreateTime() != nil {
+	if task.forwardInfo.GetCreateTime() != nil {
 		return task.forwardInfo.GetCreateTime()
 	} else if task.event != nil {
 		return task.event.Data.GetCreateTime()
