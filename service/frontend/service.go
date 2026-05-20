@@ -228,7 +228,7 @@ type Config struct {
 
 	WorkerHeartbeatsEnabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCancelWorkerPollsOnShutdown       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableMatchingFanOutForPollCancellation  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableMatchingFanOutForPollCancellation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumTaskQueueReadPartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 	WorkerCommandsEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
