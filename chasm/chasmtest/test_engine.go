@@ -42,11 +42,12 @@ type (
 	}
 
 	execution struct {
-		key       chasm.ExecutionKey
-		node      *chasm.Node
-		backend   *chasm.MockNodeBackend
-		root      chasm.RootComponent
-		requestID string
+		key                 chasm.ExecutionKey
+		node                *chasm.Node
+		backend             *chasm.MockNodeBackend
+		root                chasm.RootComponent
+		requestID           string
+		bumpTransitionCount func() // call after each CloseTransaction to advance the counter
 	}
 
 	businessKey struct {
@@ -443,6 +444,7 @@ func (e *Engine) startNew(
 	if _, err = exec.node.CloseTransaction(); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
+	exec.bumpTransitionCount()
 
 	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
@@ -486,6 +488,7 @@ func (e *Engine) startAndUpdateNew(
 	if _, err = exec.node.CloseTransaction(); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
+	exec.bumpTransitionCount()
 
 	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
@@ -515,14 +518,26 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		}
 	)
 
+	// bumpTransitionCount advances the counter after each CloseTransaction. It must be
+	// called exactly once per successful CloseTransaction so that CurrentVersionedTransition
+	// reflects the just-committed state for the next transaction.
+	bumpTransitionCount := func() {
+		bsMu.Lock()
+		defer bsMu.Unlock()
+		transitionCount++
+	}
+
 	backend := &chasm.MockNodeBackend{
-		// NextTransitionCount increments on every CloseTransaction call, matching
-		// the real engine's per transition monotonic counter.
+		// NextTransitionCount returns a preview of what the next committed transition count
+		// will be, without incrementing. CloseTransaction calls this multiple times (once per
+		// serialized node and once for nextVersionedTransition), so all calls within a single
+		// transaction must return the same value to satisfy the LastUpdateVersionedTransition
+		// equality check in closeTransactionHandleNewTasks. The actual increment happens in
+		// bumpTransitionCount, called once after CloseTransaction completes.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
 			defer bsMu.Unlock()
-			transitionCount++
-			return transitionCount
+			return transitionCount + 1
 		},
 		// CurrentVersionedTransition reflects the latest committed transition count.
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
@@ -570,6 +585,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			e.logger,
 			e.metrics,
 		),
+		bumpTransitionCount: bumpTransitionCount,
 	}
 }
 
@@ -600,13 +616,16 @@ func (e *Engine) updateComponentInExecution(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
-	chasmCtx := chasm.NewContext(ctx, execution.node)
-	component, err := execution.node.Component(chasmCtx, ref)
+	// Use a MutableContext when retrieving the component so that the component's
+	// node is marked dirty. This matches the production engine (applyUpdateWithLease)
+	// and ensures that tasks added to newTasks[component] during the update are
+	// processed by closeTransactionHandleNewTasks.
+	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
+	component, err := execution.node.Component(mutableCtx, ref)
 	if err != nil {
 		return nil, err
 	}
 
-	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	if err := updateFn(mutableCtx, component); err != nil {
 		return nil, err
 	}
@@ -614,6 +633,7 @@ func (e *Engine) updateComponentInExecution(
 	if _, err = execution.node.CloseTransaction(); err != nil {
 		return nil, err
 	}
+	execution.bumpTransitionCount()
 
 	return mutableCtx.Ref(component)
 }
