@@ -159,49 +159,41 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	}
 }
 
-// idleSchedule returns a schedule configured with LimitedActions=true,
-// RemainingActions=0. This causes the generator to transition the scheduler
-// into idle state (scheduling an idle close timer instead of a next-run timer)
-// once all in-flight backfillers have completed.
-func idleSchedule() *schedulepb.Schedule {
-	s := defaultSchedule()
-	s.State.LimitedActions = true
-	s.State.RemainingActions = 0
-	return s
-}
-
-// newIdleScheduleEngine creates a chasmtest.Engine, starts an idle scheduler on it,
-// and returns the engine, a pre-wired engine context, a handler, and a ref for checking tasks.
-func newIdleScheduleEngine(t *testing.T) (*chasmtest.Engine, context.Context, *scheduler.Handler, chasm.ComponentRef) {
-	t.Helper()
-	ctrl := gomock.NewController(t)
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-
-	engine := chasmtest.NewEngine(t, registry)
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
-
-	result, err := chasm.StartExecution(
-		engineCtx,
-		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
-		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
-			return scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, idleSchedule(), nil)
-		},
-		struct{}{},
-	)
-	require.NoError(t, err)
-
-	ref, err := chasm.DeserializeComponentRef(result.ExecutionRef)
-	require.NoError(t, err)
-
-	return engine, engineCtx, scheduler.NewTestHandler(logger), ref
-}
-
 func TestPatch_IdleSchedule_RetainsTimerTask(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	h := scheduler.NewTestHandler(logger)
+
+	newEngine := func(t *testing.T) (*chasmtest.Engine, context.Context, chasm.ComponentRef) {
+		t.Helper()
+		ctrl := gomock.NewController(t)
+		registry := chasm.NewRegistry(logger)
+		require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+		require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
+
+		engine := chasmtest.NewEngine(t, registry)
+		engineCtx := chasm.NewEngineContext(context.Background(), engine)
+
+		sched := defaultSchedule()
+		sched.State.LimitedActions = true
+		sched.State.RemainingActions = 0
+		result, err := chasm.StartExecution(
+			engineCtx,
+			chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+			func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+				return scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, sched, nil)
+			},
+			struct{}{},
+		)
+		require.NoError(t, err)
+
+		ref, err := chasm.DeserializeComponentRef(result.ExecutionRef)
+		require.NoError(t, err)
+
+		return engine, engineCtx, ref
+	}
+
 	t.Run("TriggerImmediately", func(t *testing.T) {
-		engine, engineCtx, h, ref := newIdleScheduleEngine(t)
+		engine, engineCtx, ref := newEngine(t)
 
 		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
 			NamespaceId: namespaceID,
@@ -221,7 +213,7 @@ func TestPatch_IdleSchedule_RetainsTimerTask(t *testing.T) {
 	})
 
 	t.Run("BackfillRequest", func(t *testing.T) {
-		engine, engineCtx, h, ref := newIdleScheduleEngine(t)
+		engine, engineCtx, ref := newEngine(t)
 		now := engine.TimeSource().Now()
 
 		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
