@@ -75,7 +75,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				}
 			}
 			handlerErr, isHandlerError := errors.AsType[*nexus.HandlerError](err)
-			if !isHandlerError {
+			if isHandlerError {
 				// nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
@@ -97,7 +97,6 @@ func (ch *commandHandler) HandleScheduleCommand(
 					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
 				}
 			} else if _, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
-
 				return chasmworkflow.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
