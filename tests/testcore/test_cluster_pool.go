@@ -175,7 +175,8 @@ func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfi
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	var opts []TestClusterOption
+	// Keep the worker service off unless explicitly enabled via WithWorkerService.
+	opts := []TestClusterOption{withWorkerService(false)}
 	if shared {
 		opts = append(opts, WithSharedCluster())
 	}

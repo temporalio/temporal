@@ -124,6 +124,16 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 	}
 }
 
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
