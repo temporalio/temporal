@@ -10,12 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"go.temporal.io/api/serviceerror"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -41,6 +40,9 @@ var (
 	errNoBucketSpecified = errors.New("no bucket specified")
 	errBucketNotExists   = errors.New("requested bucket does not exist")
 	errEmptyAwsRegion    = errors.New("empty aws region")
+
+	// the retryer is used to check if the error is retryable
+	awsRetryer aws.Retryer = retry.NewStandard()
 )
 
 type (
@@ -48,7 +50,7 @@ type (
 		executionManager persistence.ExecutionManager
 		logger           log.Logger
 		metricsHandler   metrics.Handler
-		s3cli            s3iface.S3API
+		s3cli            S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
 	}
@@ -71,28 +73,25 @@ func NewHistoryArchiver(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *config.S3Archiver,
+	s3config *config.S3Archiver,
 ) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
+	return newHistoryArchiver(executionManager, logger, metricsHandler, s3config, nil)
 }
 
 func newHistoryArchiver(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *config.S3Archiver,
+	s3config *config.S3Archiver,
 	historyIterator archiver.HistoryIterator,
 ) (*historyArchiver, error) {
-	if len(config.Region) == 0 {
+	if len(s3config.Region) == 0 {
 		return nil, errEmptyAwsRegion
 	}
-	s3Config := &aws.Config{
-		Endpoint:         config.Endpoint,
-		Region:           aws.String(config.Region),
-		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
-	}
-	sess, err := session.NewSession(s3Config)
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithRegion(s3config.Region),
+		awsconfig.WithClientLogMode(aws.ClientLogMode(s3config.LogLevel)),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +100,14 @@ func newHistoryArchiver(
 		executionManager: executionManager,
 		logger:           logger,
 		metricsHandler:   metricsHandler,
-		s3cli:            s3.New(sess),
-		historyIterator:  historyIterator,
+		s3cli: s3.NewFromConfig(cfg, func(o *s3.Options) {
+			o.BaseEndpoint = s3config.Endpoint
+			o.UsePathStyle = s3config.S3ForcePathStyle
+		}),
+		historyIterator: historyIterator,
 	}, nil
 }
+
 func (h *historyArchiver) Archive(
 	ctx context.Context,
 	URI archiver.URI,
@@ -349,13 +352,13 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 	var prefix = constructHistoryKeyPrefix(URI.Path(), request.NamespaceID, request.WorkflowID, request.RunID) + "/"
-	results, err := h.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+	results, err := h.s3cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(URI.Hostname()),
 		Prefix:    aws.String(prefix),
 		Delimiter: aws.String("/"),
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
+		if _, ok := errors.AsType[*types.NoSuchBucket](err); ok {
 			return nil, serviceerror.NewInvalidArgument(errBucketNotExists.Error())
 		}
 		return nil, err
@@ -379,26 +382,5 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 }
 
 func isRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if aerr, ok := err.(awserr.Error); ok {
-		return isStatusCodeRetryable(aerr) || request.IsErrorRetryable(aerr) || request.IsErrorThrottle(aerr)
-	}
-	return false
-}
-
-func isStatusCodeRetryable(err error) bool {
-	if aerr, ok := err.(awserr.Error); ok {
-		if rerr, ok := err.(awserr.RequestFailure); ok {
-			if rerr.StatusCode() == 429 {
-				return true
-			}
-			if rerr.StatusCode() >= 500 && rerr.StatusCode() != 501 {
-				return true
-			}
-		}
-		return isStatusCodeRetryable(aerr.OrigErr())
-	}
-	return false
+	return awsRetryer.IsErrorRetryable(err)
 }

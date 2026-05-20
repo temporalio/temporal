@@ -34,6 +34,8 @@ func FromStatus(st *status.Status) error {
 			return newRetryReplication(st, errDetails)
 		case *errordetailsspb.SyncStateFailure:
 			return newSyncState(st, errDetails)
+		case *errordetailsspb.StalePartitionCountsFailure:
+			return newStalePartitionCounts(st)
 		}
 	case codes.Unavailable:
 		switch errDetails.(type) {

@@ -348,7 +348,7 @@ var File_temporal_server_api_archiver_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_archiver_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/archiver/v1/message.proto\x12\x1ftemporal.server.api.archiver.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\"\xfa\x02\n" +
+	"-temporal/server/api/archiver/v1/message.proto\x12\x1ftemporal.server.api.archiver.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/history/v1/message.proto\"\xfa\x02\n" +
 	"\x11HistoryBlobHeader\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +

@@ -47,7 +47,6 @@ const (
 
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
-	replicaPoints          = 100
 )
 
 const (
@@ -59,13 +58,14 @@ const (
 
 type (
 	serviceResolver struct {
-		service     primitives.ServiceName
-		port        int
-		rp          *ringpop.Ringpop
-		refreshChan chan struct{}
-		shutdownCh  chan struct{}
-		shutdownWG  sync.WaitGroup
-		logger      log.Logger
+		service       primitives.ServiceName
+		port          int
+		rp            *ringpop.Ringpop
+		replicaPoints int
+		refreshChan   chan struct{}
+		shutdownCh    chan struct{}
+		shutdownWG    sync.WaitGroup
+		logger        log.Logger
 
 		ringAndHosts atomic.Value // holds a ringAndHosts
 
@@ -96,12 +96,14 @@ func newServiceResolver(
 	service primitives.ServiceName,
 	port int,
 	rp *ringpop.Ringpop,
+	replicaPoints int,
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
 		service:             service,
 		port:                port,
 		rp:                  rp,
+		replicaPoints:       replicaPoints,
 		refreshChan:         make(chan struct{}),
 		shutdownCh:          make(chan struct{}),
 		logger:              log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
@@ -109,13 +111,13 @@ func newServiceResolver(
 		listeners:           make(map[string]chan<- *membership.ChangedEvent),
 	}
 	resolver.ringAndHosts.Store(ringAndHosts{
-		ring:  newHashRing(),
+		ring:  newHashRing(replicaPoints),
 		hosts: make(map[string]*hostInfo),
 	})
 	return resolver
 }
 
-func newHashRing() *hashring.HashRing {
+func newHashRing(replicaPoints int) *hashring.HashRing {
 	return hashring.New(farm.Fingerprint32, replicaPoints)
 }
 
@@ -136,7 +138,7 @@ func (r *serviceResolver) Stop() {
 	defer r.listenerLock.Unlock()
 	r.rp.RemoveListener(r)
 	r.ringAndHosts.Store(ringAndHosts{
-		ring:  newHashRing(),
+		ring:  newHashRing(r.replicaPoints),
 		hosts: nil,
 	})
 	r.listeners = make(map[string]chan<- *membership.ChangedEvent)
@@ -293,7 +295,7 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		return nil, nil
 	}
 
-	ring := newHashRing()
+	ring := newHashRing(r.replicaPoints)
 	ring.AddMembers(util.MapSlice(hosts, func(h *hostInfo) rpmembership.Member { return h })...)
 
 	r.lastRefreshTime = time.Now().UTC()

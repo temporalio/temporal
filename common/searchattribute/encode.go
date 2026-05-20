@@ -73,10 +73,15 @@ func Decode(
 					// Chasm search attributes are not in the standard type map;
 					// allow them through with UNSPECIFIED type.
 				} else if errors.Is(err, sadefs.ErrInvalidName) {
-					// Silently skip unknown search attributes. This can happen due to
-					// version mismatches where a newer server wrote a predefined SA
-					// that this server doesn't recognize.
-					continue
+					// SA not found in the type map. Fall through to DecodeValue with
+					// UNSPECIFIED type, which uses the payload's MetadataType as a
+					// fallback. This handles two cases:
+					//   1. Version mismatch: a newer server wrote a predefined SA that
+					//      this server's constants don't recognize.
+					//   2. Cache lag: a recently registered custom SA that hasn't yet
+					//      propagated to this server's SA manager cache.
+					// If MetadataType is also UNSPECIFIED (truly unknown payload),
+					// DecodeValue returns an error and the SA is excluded from the result.
 				} else {
 					lastErr = err
 				}

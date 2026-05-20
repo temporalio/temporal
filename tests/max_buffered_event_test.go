@@ -15,12 +15,20 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
+type MaxBufferedEventSuite struct {
+	parallelsuite.Suite[*MaxBufferedEventSuite]
+}
+
 func TestMaxBufferedEventSuite(t *testing.T) {
-	t.Parallel()
-	commonOpts := []testcore.TestOption{
+	parallelsuite.Run(t, &MaxBufferedEventSuite{})
+}
+
+func (s *MaxBufferedEventSuite) opts() []testcore.TestOption {
+	return []testcore.TestOption{
 		testcore.WithSdkWorker(),
 		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.
 		testcore.WithDynamicConfig(dynamicconfig.MaximumBufferedEventsSizeInBytes, 10*1024*1024), // 10MB
@@ -28,205 +36,205 @@ func TestMaxBufferedEventSuite(t *testing.T) {
 		// Set MutableStateSizeLimitError low so buffered events exhaust mutable state size.
 		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 410*1024), // 410KB
 	}
+}
 
-	t.Run("MaxBufferedEventsLimit", func(t *testing.T) {
-		s := testcore.NewEnv(t, commonOpts...)
+func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
+	env := testcore.NewEnv(s.T(), s.opts()...)
 
-		/*
-			This test starts a workflow, and block its workflow task, then sending
-			signals to it which will be buffered. The default max buffered event
-			count limit is 100. When the test sends 101 signal, the blocked workflow
-			task will be forced to close.
-		*/
-		closeStartChanOnce := sync.Once{}
-		waitStartChan := make(chan struct{})
-		waitSignalChan := make(chan struct{})
+	/*
+		This test starts a workflow, and block its workflow task, then sending
+		signals to it which will be buffered. The default max buffered event
+		count limit is 100. When the test sends 101 signal, the blocked workflow
+		task will be forced to close.
+	*/
+	closeStartChanOnce := sync.Once{}
+	waitStartChan := make(chan struct{})
+	waitSignalChan := make(chan struct{})
 
-		localActivityFn := func(ctx context.Context) error {
-			// notify that workflow task has started
-			closeStartChanOnce.Do(func() {
-				close(waitStartChan)
-			})
+	localActivityFn := func(ctx context.Context) error {
+		// notify that workflow task has started
+		closeStartChanOnce.Do(func() {
+			close(waitStartChan)
+		})
 
-			// block workflow task so all signals will be buffered.
-			<-waitSignalChan
-			return nil
+		// block workflow task so all signals will be buffered.
+		<-waitSignalChan
+		return nil
+	}
+
+	workflowFn := func(ctx workflow.Context) (int, error) {
+		ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+			StartToCloseTimeout: 20 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		})
+		f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
+		if err := f1.Get(ctx, nil); err != nil {
+			return 0, err
 		}
 
-		workflowFn := func(ctx workflow.Context) (int, error) {
-			ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
-				StartToCloseTimeout: 20 * time.Second,
-				RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
-			})
-			f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
-			if err := f1.Get(ctx, nil); err != nil {
-				return 0, err
-			}
+		sigCh := workflow.GetSignalChannel(ctx, "test-signal")
 
-			sigCh := workflow.GetSignalChannel(ctx, "test-signal")
-
-			sigCount := 0
-			for sigCh.ReceiveAsync(nil) {
-				sigCount++
-			}
-			return sigCount, nil
+		sigCount := 0
+		for sigCh.ReceiveAsync(nil) {
+			sigCount++
 		}
+		return sigCount, nil
+	}
 
-		s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-		testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-		defer cancel()
+	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
 
-		wid := "test-max-buffered-events-limit"
-		wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
-			ID:                  wid,
-			TaskQueue:           s.WorkerTaskQueue(),
-			WorkflowTaskTimeout: time.Second * 20,
-		}, workflowFn)
+	wid := "test-max-buffered-events-limit"
+	wf1, err1 := env.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+		ID:                  wid,
+		TaskQueue:           env.WorkerTaskQueue(),
+		WorkflowTaskTimeout: time.Second * 20,
+	}, workflowFn)
 
-		s.NoError(err1)
+	s.NoError(err1)
 
-		// block until workflow task started
-		<-waitStartChan
+	// block until workflow task started
+	<-waitStartChan
 
-		// now send 100 signals, all of them will be buffered
-		for i := range 100 {
-			err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
-			s.NoError(err)
-		}
-
-		// send 101 signal, this will fail the started workflow task
-		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", 100)
+	// now send 100 signals, all of them will be buffered
+	for i := range 100 {
+		err := env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
 		s.NoError(err)
+	}
 
-		// unblock goroutine that runs local activity
-		close(waitSignalChan)
+	// send 101 signal, this will fail the started workflow task
+	err := env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", 100)
+	s.NoError(err)
 
-		var sigCount int
-		err = wf1.Get(testCtx, &sigCount)
-		s.NoError(err)
-		s.Equal(101, sigCount)
+	// unblock goroutine that runs local activity
+	close(waitSignalChan)
 
-		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
-		// Not using historyrequire here because history is not deterministic.
-		var failedCause enumspb.WorkflowTaskFailedCause
-		var failedCount int
-		for _, evt := range historyEvents {
-			if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-				failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
-				failedCount++
-			}
+	var sigCount int
+	err = wf1.Get(testCtx, &sigCount)
+	s.NoError(err)
+	s.Equal(101, sigCount)
+
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	// Not using historyrequire here because history is not deterministic.
+	var failedCause enumspb.WorkflowTaskFailedCause
+	var failedCount int
+	for _, evt := range historyEvents {
+		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
+			failedCount++
 		}
-		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
-		s.Equal(1, failedCount)
-	})
+	}
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
+	s.Equal(1, failedCount)
+}
 
-	t.Run("BufferedEventsMutableStateSizeLimit", func(t *testing.T) {
-		s := testcore.NewEnv(t, commonOpts...)
+func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
+	env := testcore.NewEnv(s.T(), s.opts()...)
 
-		/*
-			This test starts a workflow, and blocks its workflow task, then sends
-			signals to it which will be buffered. The test is configured with
-			MaximumBufferedEventsSizeInBytes set to 10MB (high) and MutableStateSizeLimitError
-			set to 410KB (low). Each signal has a 100KB payload. The first three signals
-			succeed, and the fourth signal causes the mutable state size to exceed the limit,
-			resulting in workflow termination.
-		*/
-		closeStartChanOnce := sync.Once{}
-		waitStartChan := make(chan struct{})
-		waitSignalChan := make(chan struct{})
+	/*
+		This test starts a workflow, and blocks its workflow task, then sends
+		signals to it which will be buffered. The test is configured with
+		MaximumBufferedEventsSizeInBytes set to 10MB (high) and MutableStateSizeLimitError
+		set to 410KB (low). Each signal has a 100KB payload. The first three signals
+		succeed, and the fourth signal causes the mutable state size to exceed the limit,
+		resulting in workflow termination.
+	*/
+	closeStartChanOnce := sync.Once{}
+	waitStartChan := make(chan struct{})
+	waitSignalChan := make(chan struct{})
 
-		localActivityFn := func(ctx context.Context) error {
-			// notify that workflow task has started
-			closeStartChanOnce.Do(func() {
-				close(waitStartChan)
-			})
+	localActivityFn := func(ctx context.Context) error {
+		// notify that workflow task has started
+		closeStartChanOnce.Do(func() {
+			close(waitStartChan)
+		})
 
-			// block workflow task so all signals will be buffered.
-			<-waitSignalChan
-			return nil
-		}
+		// block workflow task so all signals will be buffered.
+		<-waitSignalChan
+		return nil
+	}
 
-		workflowFn := func(ctx workflow.Context) (int, error) {
-			ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
-				StartToCloseTimeout: 20 * time.Second,
-				RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
-			})
-			f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
-			if err := f1.Get(ctx, nil); err != nil {
-				return 0, err
-			}
-
-			sigCh := workflow.GetSignalChannel(ctx, "test-signal")
-
-			sigCount := 0
-			for sigCh.ReceiveAsync(nil) {
-				sigCount++
-			}
-			return sigCount, nil
+	workflowFn := func(ctx workflow.Context) (int, error) {
+		ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+			StartToCloseTimeout: 20 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		})
+		f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
+		if err := f1.Get(ctx, nil); err != nil {
+			return 0, err
 		}
 
-		s.SdkWorker().RegisterWorkflow(workflowFn)
+		sigCh := workflow.GetSignalChannel(ctx, "test-signal")
 
-		testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
-		defer cancel()
-
-		wid := "test-max-buffered-events-limit"
-		wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
-			ID:                  wid,
-			TaskQueue:           s.WorkerTaskQueue(),
-			WorkflowTaskTimeout: time.Second * 20,
-		}, workflowFn)
-
-		s.NoError(err1)
-
-		// block until workflow task started
-		<-waitStartChan
-
-		// now send signals with 100KB payload each, which will be buffered
-		buf := make([]byte, 100*1024) // 100KB
-		// fill the slice with random data to make sure the
-		// encoder does not zero out the data
-		_, err := rand.Read(buf)
-		s.NoError(err)
-		largePayload := payloads.EncodeBytes(buf)
-
-		// Send signals until mutable state size limit is exceeded.
-		// With 410KB limit and 100KB payloads, the first 3 signals succeed but the 4th exceeds the limit.
-		// First three signals should succeed.
-		for i := range 3 {
-			err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
-			s.NoError(err, "Signal %d should succeed", i+1)
+		sigCount := 0
+		for sigCh.ReceiveAsync(nil) {
+			sigCount++
 		}
+		return sigCount, nil
+	}
 
-		// Fourth signal should fail due to mutable state size limit
-		err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
-		s.Error(err, "Fourth signal should fail due to mutable state size limit")
-		s.Contains(err.Error(), "mutable state size exceeds limit", "Expected mutable state size limit error")
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-		// unblock goroutine that runs local activity
-		close(waitSignalChan)
+	testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
 
-		var sigCount int
-		err = wf1.Get(testCtx, &sigCount)
-		// The workflow should be terminated, so we expect an error
-		s.Error(err)
+	wid := "test-max-buffered-events-limit"
+	wf1, err1 := env.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+		ID:                  wid,
+		TaskQueue:           env.WorkerTaskQueue(),
+		WorkflowTaskTimeout: time.Second * 20,
+	}, workflowFn)
 
-		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	s.NoError(err1)
 
-		// Verify that the workflow was terminated due to mutable state size limit
-		var terminated bool
-		var terminationReason string
-		for _, evt := range historyEvents {
-			if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				terminated = true
-				attrs := evt.GetWorkflowExecutionTerminatedEventAttributes()
-				terminationReason = attrs.GetReason()
-				break
-			}
+	// block until workflow task started
+	<-waitStartChan
+
+	// now send signals with 100KB payload each, which will be buffered
+	buf := make([]byte, 100*1024) // 100KB
+	// fill the slice with random data to make sure the
+	// encoder does not zero out the data
+	_, err := rand.Read(buf)
+	s.NoError(err)
+	largePayload := payloads.EncodeBytes(buf)
+
+	// Send signals until mutable state size limit is exceeded.
+	// With 410KB limit and 100KB payloads, the first 3 signals succeed but the 4th exceeds the limit.
+	// First three signals should succeed.
+	for i := range 3 {
+		err = env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+		s.NoError(err, "Signal %d should succeed", i+1)
+	}
+
+	// Fourth signal should fail due to mutable state size limit
+	err = env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+	s.Error(err, "Fourth signal should fail due to mutable state size limit")
+	s.Contains(err.Error(), "mutable state size exceeds limit", "Expected mutable state size limit error")
+
+	// unblock goroutine that runs local activity
+	close(waitSignalChan)
+
+	var sigCount int
+	err = wf1.Get(testCtx, &sigCount)
+	// The workflow should be terminated, so we expect an error
+	s.Error(err)
+
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+
+	// Verify that the workflow was terminated due to mutable state size limit
+	var terminated bool
+	var terminationReason string
+	for _, evt := range historyEvents {
+		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
+			terminated = true
+			attrs := evt.GetWorkflowExecutionTerminatedEventAttributes()
+			terminationReason = attrs.GetReason()
+			break
 		}
-		s.True(terminated, "Expected workflow to be terminated")
-		s.Equal(common.FailureReasonMutableStateSizeExceedsLimit, terminationReason,
-			"Expected workflow to be terminated due to mutable state size limit")
-	})
+	}
+	s.True(terminated, "Expected workflow to be terminated")
+	s.Equal(common.FailureReasonMutableStateSizeExceedsLimit, terminationReason,
+		"Expected workflow to be terminated due to mutable state size limit")
 }

@@ -113,6 +113,8 @@ func GetActiveTimerTaskTypeTagValue(
 		return prefix + "." + getCHASMTaskTypeTagValue(t, chasmRegistry)
 	case *tasks.ChasmTaskPure:
 		return metrics.TaskTypeTimerActiveTaskChasmPureTask
+	case *tasks.TimeSkippingTimerTask:
+		return metrics.TaskTypeTimerActiveTaskTimeSkippingTimer
 	default:
 		return prefix + task.GetType().String()
 	}
@@ -144,6 +146,8 @@ func GetStandbyTimerTaskTypeTagValue(
 		return prefix + "." + getCHASMTaskTypeTagValue(t, chasmRegistry)
 	case *tasks.ChasmTaskPure:
 		return metrics.TaskTypeTimerStandbyTaskChasmPureTask
+	case *tasks.TimeSkippingTimerTask:
+		return metrics.TaskTypeTimerStandbyTaskTimeSkippingTimer
 	default:
 		return prefix + task.GetType().String()
 	}
@@ -193,9 +197,11 @@ func GetOutboundTaskTypeTagValue(
 
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
-		return prefix + "." + task.StateMachineTaskType()
+		return prefix + "." + task.OutboundTaskGroup()
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(task, chasmRegistry)
+	case *tasks.WorkerCommandsTask:
+		return prefix + ".WorkerCommands"
 	default:
 		return prefix + "Unknown"
 	}

@@ -14,6 +14,7 @@ permissions:
 jobs:
   build-and-push-docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     # Only push for main, cloud, release branches (not feature)
     if: |
       github.ref == 'refs/heads/main' ||

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -43,7 +44,9 @@ func (s *transactionMgrForNewWorkflowSuite) SetupTest() {
 	s.mockTransactionMgr = NewMockTransactionManager(s.controller)
 	s.mockShard = historyi.NewMockShardContext(s.controller)
 
-	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr, false)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil).AnyTimes()
+	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr, false, mockTaskRefresher)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TearDownTest() {
@@ -122,6 +125,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 		mutableState,
 		workflowSnapshot,
 		workflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, newWorkflow)
@@ -195,6 +199,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
@@ -264,6 +269,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
@@ -343,6 +349,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(nil)
 
@@ -413,6 +420,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
@@ -464,7 +472,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflowPolicy := historyi.TransactionPolicyActive
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
-	targetWorkflow.EXPECT().Revive().Return(nil)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),

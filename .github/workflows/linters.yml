@@ -99,7 +99,7 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: format golang import statements
+      - name: apply formatters
         run: |
           make fmt
 

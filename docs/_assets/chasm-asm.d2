@@ -1,0 +1,27 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+*.style.bold: true
+
+Registry
+
+ASM: {
+    Library
+    "Component Types"
+    Tasks
+    Fields
+    "Search Attributes"
+
+    Library -> "Component Types": "1:n"
+    Library -> Tasks: "1:n"
+    "Component Types" -> Fields: "1:n"
+    "Component Types" -> "Search Attributes": "0:n"
+}
+
+Registry -> ASM.Library: "1:n"

@@ -1,0 +1,24 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+shape: sequence_diagram
+
+Caller.style.bold: true
+Engine.style.bold: true
+Storage.style.bold: true
+fn.style.bold: true
+Context.style.bold: true
+
+Caller -> Engine: "ReadComponent"
+Engine -> Storage: "load"
+Storage -> Engine: "Execution"
+Engine -> fn: "fn(component, ctx)"
+fn -> Context: "read"
+fn -> Engine: "result"
+Engine -> Caller: "result"

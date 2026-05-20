@@ -255,18 +255,28 @@ func SetupNewWorkflowForRetryOrCron(
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 
-		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		prevEffectiveVersioningBehavior := GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo())
+		if prevEffectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 			startAttr.GetInheritedPinnedVersion() != nil {
 			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
-		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		} else if prevEffectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
 			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+				// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
+				// retry run also receives the same InitialVersioningBehavior. Per the API spec, this
+				// behavior is scoped to the initial task of this run and of any retries.
+				// Note: GetShouldUseRampingVersion() gates the policy on LastCompletedWorkflowTaskStartedEventId
+				// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
+				// field remains stored in VersioningInfo for the lifetime of that run.
+				sourceCaNInitialVersioningBehavior := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior()
+
 				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-					SourceDeploymentVersion:        sourceDeploymentVersion,
-					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+					SourceDeploymentVersion:                sourceDeploymentVersion,
+					SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+					ContinueAsNewInitialVersioningBehavior: sourceCaNInitialVersioningBehavior,
 				}
 			}
 		}
@@ -292,6 +302,10 @@ func SetupNewWorkflowForRetryOrCron(
 		Priority:                 startAttr.Priority,
 		VersioningOverride:       pinnedOverride,
 	}
+
+	// Retry and Cron inherit the TimeSkippingConfig snapshot from the previous
+	// run's WorkflowExecutionStarted event verbatim.
+	createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig()
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -326,6 +340,9 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 		// For retries, pass through the declined value from the started event directly.
 		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
+		// Retry and Cron inherit InitialSkippedDuration from the previous run's
+		// WorkflowExecutionStarted event verbatim — same semantics as TimeSkippingConfig above.
+		InitialSkippedDuration: startAttr.GetInitialSkippedDuration(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

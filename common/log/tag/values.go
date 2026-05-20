@@ -74,6 +74,9 @@ var (
 	WorkflowActionExternalWorkflowSignalRequested = workflowAction("add-externalworkflow-signal-requested-event")
 	WorkflowActionExternalWorkflowSignalFailed    = workflowAction("add-externalworkflow-signal-failed-event")
 
+	// time skipping
+	WorkflowActionWorkflowExecutionTimeSkippingTransitioned = workflowAction("add-workflow-execution-time-skipping-transitioned-event")
+
 	WorkflowActionUnknown = workflowAction("add-unknown-event")
 )
 

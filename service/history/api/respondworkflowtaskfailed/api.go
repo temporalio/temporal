@@ -99,14 +99,21 @@ func Invoke(
 
 				return api.UpdateWorkflowTerminate, nil
 			}
-
+			//nolint:staticcheck // SA1019
+			versioningStamp := request.GetWorkerVersion()
+			if versioningStamp.GetUseVersioning() && mutableState.GetAssignedBuildId() == "" {
+				// WV2 is not used. making sure the versioning stamp does not go through otherwise the
+				// workflow will start using WV2 which can cause issues.
+				// TODO: remove this block after deleting old wv [cleanup-old-wv]
+				versioningStamp = nil
+			}
 			if _, err := mutableState.AddWorkflowTaskFailedEvent(
 				workflowTask,
 				request.GetCause(),
 				request.GetFailure(),
 				request.GetIdentity(),
 				//nolint:staticcheck
-				request.GetWorkerVersion(),
+				versioningStamp,
 				//nolint:staticcheck
 				request.GetBinaryChecksum(),
 				"",

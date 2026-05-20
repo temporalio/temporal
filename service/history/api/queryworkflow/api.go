@@ -343,6 +343,8 @@ func queryDirectlyThroughMatching(
 		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
 		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
 		msResp.GetVersioningInfo().GetRevisionNumber(),
+		// False for query, because it is not an initial workflow task.
+		false,
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&

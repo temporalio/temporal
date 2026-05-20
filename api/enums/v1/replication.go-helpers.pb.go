@@ -20,6 +20,7 @@ var (
 		"BackfillHistoryTask":           10,
 		"VerifyVersionedTransitionTask": 11,
 		"SyncVersionedTransitionTask":   12,
+		"DeleteExecutionTask":           13,
 	}
 )
 

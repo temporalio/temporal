@@ -463,6 +463,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	targetRevisionNumber int64,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -499,6 +500,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		// in that case proto getters return zero values and we correctly fall through to signal.
 		effectiveDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(m.ms.GetEffectiveDeployment())
 
+		// Highest revision the workflow knows about from matching, whether from a
+		// notification on this run (LastNotifiedTargetVersion) or carried via CaN
+		// (DeclinedTargetVersionUpgrade). Used to suppress stale matching reports,
+		// including inline WFTs in RespondWorkflowTaskCompleted which don't consult
+		// matching and pass revision 0.
+		highestSeenRevNumber := max(
+			m.ms.executionInfo.GetLastNotifiedTargetVersion().GetRevisionNumber(),
+			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetRevisionNumber(),
+		)
+
 		switch {
 		// 1. Override active — operator controls version, don't signal. Clear any stale declined/notified state so that
 		// when/if the operator removes the override, we re-calculate the declined/notified state and appropriately fire the
@@ -509,21 +520,27 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		// 2. AutoUpgrade — will transition naturally, no CaN needed.
 		case m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 		// Rest of the checks are guaranteed to have the Workflow's Effective Versioning Behavior to be Pinned in nature.
-		// 3. Already on target — nothing changed. Clear any stale declined/notified state.
+		// 3. Already on target AND partition's view is at least as fresh as what we last knew.
+		// The revision check prevents a stale partition (coincidentally matching by buildId)
+		// from wiping legitimate declined/notified state.
 		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
-			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
-			// TODO (Shivam): Revision number mechanics to strengthen this check
+			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName() &&
+			targetRevisionNumber >= highestSeenRevNumber:
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 			m.ms.executionInfo.LastNotifiedTargetVersion = nil
-		// 4. Previously declined upgrade — target unchanged since the decline.
+		// 4. Previously declined upgrade — target revision is not newer than what was declined.
 		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			targetRevisionNumber <= m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetRevisionNumber():
 		default:
+			// Strict `<` (not `<=`) so legitimate same-revision re-firings (e.g., transient retries, repeated updates) still fire; inline path uses revision=-1 sentinel to be caught here.
+			if targetRevisionNumber < highestSeenRevNumber {
+				break
+			}
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
 			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
 				DeploymentVersion: targetDeploymentVersion,
+				RevisionNumber:    targetRevisionNumber,
 			}
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
@@ -774,6 +791,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		)
 
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		//nolint:staticcheck // SA1019
+		versioningStamp := request.GetWorkerVersionStamp()
+		if versioningStamp.GetUseVersioning() && m.ms.GetAssignedBuildId() == "" {
+			// WV2 is not used. making sure the versioning stamp does not go through otherwise the
+			// workflow will start using WV2 which can cause issues.
+			// TODO: remove this block after deleting old wv [cleanup-old-wv]
+			versioningStamp = nil
+		}
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
@@ -781,7 +806,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
-			request.WorkerVersionStamp,
+			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,

@@ -62,26 +62,21 @@ services:
 clusterMetadata:
   enableGlobalNamespace: true
   failoverVersionIncrement: 100
-  masterClusterName: "cluster-a"
+  masterClusterName: "cluster-c"
   currentClusterName: "cluster-c"
   clusterInformation:
-    cluster-a:
-      enabled: true
-      initialFailoverVersion: 1
-      rpcName: "frontend"
-      rpcAddress: "localhost:7233"
     cluster-c:
       enabled: true
       initialFailoverVersion: 3
       rpcName: "frontend"
       rpcAddress: "localhost:9233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:7233"
+# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:7233 --enable-connection --enable-replication"
 #    active:
 #      enabled: true
 #      initialFailoverVersion: 1
 #      rpcName: "frontend"
 #      rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:8233"
+# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:8233 --enable-connection --enable-replication"
 #    standby:
 #      enabled: true
 #      initialFailoverVersion: 2

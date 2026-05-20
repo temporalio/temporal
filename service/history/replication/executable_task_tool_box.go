@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -23,6 +24,8 @@ type (
 		ClusterMetadata           cluster.Metadata
 		ClientBean                client.Bean
 		ShardController           shard.Controller
+		ChasmEngine               chasm.Engine
+		ChasmRegistry             *chasm.Registry
 		NamespaceCache            namespace.Registry
 		EagerNamespaceRefresher   EagerNamespaceRefresher
 		ResendHandler             eventhandler.ResendHandler

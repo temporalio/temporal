@@ -2,40 +2,40 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;
 
+import "chasm/lib/activity/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
-import "chasm/lib/activity/proto/v1/request_response.proto";
-import "temporal/server/api/routing/v1/extension.proto";
-import "temporal/server/api/common/v1/api_category.proto";
-
 service ActivityService {
-    rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    rpc DescribeActivityExecution(DescribeActivityExecutionRequest) returns (DescribeActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc DescribeActivityExecution(DescribeActivityExecutionRequest) returns (DescribeActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-    }
+  rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 
-    rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    rpc DeleteActivityExecution(DeleteActivityExecutionRequest) returns (DeleteActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc DeleteActivityExecution(DeleteActivityExecutionRequest) returns (DeleteActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }

@@ -15,7 +15,7 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 		return nil, err
 	}
 
-	if err := registry.Register(chasmworkflow.NewLibrary()); err != nil {
+	if err := registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())); err != nil {
 		return nil, err
 	}
 

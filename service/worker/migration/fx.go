@@ -110,17 +110,17 @@ func workflowVerifierProvider() WorkflowVerifier {
 
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
-		historyShardCount:                wc.PersistenceConfig.NumHistoryShards,
+		HistoryShardCount:                wc.PersistenceConfig.NumHistoryShards,
 		executionManager:                 wc.ExecutionManager,
-		namespaceRegistry:                wc.NamespaceRegistry,
-		historyClient:                    wc.HistoryClient,
+		NamespaceRegistry:                wc.NamespaceRegistry,
+		HistoryClient:                    wc.HistoryClient,
 		frontendClient:                   wc.FrontendClient,
 		clientFactory:                    wc.ClientFactory,
 		clientBean:                       wc.ClientBean,
 		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
 		taskManager:                      wc.TaskManager,
-		logger:                           wc.Logger,
-		metricsHandler:                   wc.MetricsHandler,
+		Logger:                           wc.Logger,
+		MetricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),

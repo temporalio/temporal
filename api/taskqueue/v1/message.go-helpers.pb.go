@@ -227,6 +227,43 @@ func (this *TaskQueuePartition) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type WorkerCommandsPartitionId to the protobuf v3 wire format
+func (val *WorkerCommandsPartitionId) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkerCommandsPartitionId from the protobuf v3 wire format
+func (val *WorkerCommandsPartitionId) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkerCommandsPartitionId) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkerCommandsPartitionId values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkerCommandsPartitionId) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkerCommandsPartitionId
+	switch t := that.(type) {
+	case *WorkerCommandsPartitionId:
+		that1 = t
+	case WorkerCommandsPartitionId:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type BuildIdRedirectInfo to the protobuf v3 wire format
 func (val *BuildIdRedirectInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -367,6 +404,43 @@ func (this *VersionedEphemeralData) Equal(that interface{}) bool {
 	case *VersionedEphemeralData:
 		that1 = t
 	case VersionedEphemeralData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ClientPartitionCounts to the protobuf v3 wire format
+func (val *ClientPartitionCounts) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ClientPartitionCounts from the protobuf v3 wire format
+func (val *ClientPartitionCounts) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ClientPartitionCounts) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ClientPartitionCounts values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ClientPartitionCounts) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ClientPartitionCounts
+	switch t := that.(type) {
+	case *ClientPartitionCounts:
+		that1 = t
+	case ClientPartitionCounts:
 		that1 = &t
 	default:
 		return false

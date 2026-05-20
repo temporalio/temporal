@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -24,7 +25,8 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine chasm.Engine
+	chasmEngine                  chasm.Engine
+	workerCommandsTaskDispatcher *workerCommandsTaskDispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -35,17 +37,25 @@ func newOutboundQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
+	matchingClient resource.MatchingClient,
 ) *outboundQueueActiveTaskExecutor {
+	scopedMetricsHandler := metricsHandler.WithTags(
+		metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
+	)
 	return &outboundQueueActiveTaskExecutor{
 		stateMachineEnvironment: stateMachineEnvironment{
-			shardContext: shardCtx,
-			cache:        workflowCache,
-			logger:       logger,
-			metricsHandler: metricsHandler.WithTags(
-				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
-			),
+			shardContext:   shardCtx,
+			cache:          workflowCache,
+			logger:         logger,
+			metricsHandler: scopedMetricsHandler,
 		},
 		chasmEngine: chasmEngine,
+		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
+			matchingClient,
+			shardCtx.GetConfig(),
+			scopedMetricsHandler,
+			logger,
+		),
 	}
 }
 
@@ -57,6 +67,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	taskType := queues.GetOutboundTaskTypeTagValue(task, true, e.shardContext.ChasmRegistry())
 	respond := func(err error) queues.ExecuteResponse {
@@ -92,6 +103,8 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
+	case *tasks.WorkerCommandsTask:
+		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task, executable.Attempt()))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

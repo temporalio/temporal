@@ -378,4 +378,75 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 	}
 }
 
+// TestDeleteExecution_ReplicatedToStandby verifies that deleting a non-workflow Chasm execution
+// (PayloadStore) on the active cluster replicates the deletion to the standby cluster.
+func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, true)
+	}
+
+	nsName := s.createGlobalNamespace()
+
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := nsResp.NamespaceInfo.GetId()
+
+	tv := testvars.New(s.T())
+	storeID := tv.Any().String()
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	_, err = tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      namespace.ID(nsID),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
+	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	s.True(ok)
+
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		Archetype: archetype,
+	}
+
+	s.Eventually(func() bool {
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		return err == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: namespace.ID(nsID),
+			StoreID:     storeID,
+			Reason:      "xdc delete replication test",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Verify Chasm deletion on both clusters.
+	for _, cluster := range s.clusters {
+		s.Eventually(func() bool {
+			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			return errors.As(err, new(*serviceerror.NotFound))
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+}
+
 // TODO Add test for ActivityDispatchTask timer task queue spillover when we have SAA scheduling support.

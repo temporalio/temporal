@@ -39,6 +39,7 @@ const (
 	REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK            ReplicationTaskType = 10
 	REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK ReplicationTaskType = 11
 	REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK   ReplicationTaskType = 12
+	REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK            ReplicationTaskType = 13
 )
 
 // Enum value maps for ReplicationTaskType.
@@ -57,6 +58,7 @@ var (
 		10: "REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK",
 		11: "REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK",
 		12: "REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK",
+		13: "REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK",
 	}
 	ReplicationTaskType_value = map[string]int32{
 		"REPLICATION_TASK_TYPE_UNSPECIFIED":                      0,
@@ -72,6 +74,7 @@ var (
 		"REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK":            10,
 		"REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK": 11,
 		"REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK":   12,
+		"REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK":            13,
 	}
 )
 
@@ -111,11 +114,12 @@ func (x ReplicationTaskType) String() string {
 		return "VerifyVersionedTransitionTask"
 	case REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
 		return "SyncVersionedTransitionTask"
-	default:
-		return strconv.
+	case REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK:
 
-			// Enum value maps for NamespaceOperation.
-			Itoa(int(x))
+		// Enum value maps for NamespaceOperation.
+		return "DeleteExecutionTask"
+	default:
+		return strconv.Itoa(int(x))
 	}
 
 }
@@ -257,7 +261,7 @@ var File_temporal_server_api_enums_v1_replication_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/enums/v1/replication.proto\x12\x1ctemporal.server.api.enums.v1*\xfe\x04\n" +
+	".temporal/server/api/enums/v1/replication.proto\x12\x1ctemporal.server.api.enums.v1*\xaf\x05\n" +
 	"\x13ReplicationTaskType\x12%\n" +
 	"!REPLICATION_TASK_TYPE_UNSPECIFIED\x10\x00\x12(\n" +
 	"$REPLICATION_TASK_TYPE_NAMESPACE_TASK\x10\x01\x12&\n" +
@@ -272,7 +276,8 @@ const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
 	"+REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK\x10\n" +
 	"\x12:\n" +
 	"6REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK\x10\v\x128\n" +
-	"4REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK\x10\f*y\n" +
+	"4REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK\x10\f\x12/\n" +
+	"+REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK\x10\r*y\n" +
 	"\x12NamespaceOperation\x12#\n" +
 	"\x1fNAMESPACE_OPERATION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aNAMESPACE_OPERATION_CREATE\x10\x01\x12\x1e\n" +

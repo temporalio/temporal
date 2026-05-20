@@ -17,9 +17,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -156,10 +156,11 @@ func NewSentinel(
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
-	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+	now := ctx.Now(s)
+	s.Info.CreateTime = timestamppb.New(now)
 
 	ctx.AddTask(s, chasm.TaskAttributes{
-		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+		ScheduledTime: now.Add(SentinelIdleTime),
 	}, &schedulerpb.SchedulerIdleTask{
 		IdleTimeTotal: durationpb.New(SentinelIdleTime),
 	})
@@ -260,6 +261,10 @@ func CreateSchedulerFromMigration(
 	}
 	sched.setNullableFields()
 
+	// These components won't start with any tasks, as stale running workflow entries
+	// can cause immediate computation after migration to drop actions due to overlap
+	// policy. Instead, SchedulerCallbacksTask fires both tasks after ensuring cached
+	// running workflow state is up-to-date.
 	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
 	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
 
@@ -286,6 +291,20 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
+	md := make(map[string]string, 2)
+	if wfType := s.Schedule.GetAction().GetStartWorkflow().GetWorkflowType().GetName(); wfType != "" {
+		md[contextutil.MetadataKeyWorkflowType] = wfType
+	}
+	if tq := s.Schedule.GetAction().GetStartWorkflow().GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyWorkflowTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // Terminate implements the chasm.RootComponent interface.
@@ -608,6 +627,9 @@ func (s *Scheduler) Describe(
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
 	info.FutureActionTimes = generator.GetFutureActionTimes()
+	// BufferedStarts holds waiting, running, and recently-completed entries; only the
+	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
@@ -695,6 +717,9 @@ func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
@@ -754,9 +779,6 @@ func (s *Scheduler) Update(
 	}
 
 	// Update custom search attributes.
-	//
-	// TODO - we could also easily support allowing the customer to update their
-	// memo here.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
 		// of search attributes, dropping any that aren't a part of the update's
@@ -776,6 +798,12 @@ func (s *Scheduler) Update(
 	// not silently lost during the migration window.
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
+	}
+
+	// Update custom memo.
+	if req.FrontendRequest.GetMemo() != nil {
+		visibility := s.Visibility.Get(ctx)
+		visibility.ReplaceCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
@@ -817,6 +845,7 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+		s.Generator.Get(ctx).Generate(ctx)
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
@@ -908,15 +937,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}

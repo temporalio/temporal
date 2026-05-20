@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -33,10 +34,13 @@ type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentVersionWorkflowArgs
-		a                                 *VersionActivities
-		logger                            sdklog.Logger
-		metrics                           sdkclient.MetricsHandler
-		lock                              workflow.Mutex
+		a       *VersionActivities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
+		lock    workflow.Mutex
+		// Compute config is independent of version status and routing info so it has its own lock.
+		// Lock ordering: always acquire `lock` before `computeConfigLock`.
+		computeConfigLock                 workflow.Mutex
 		unsafeWorkflowVersionGetter       func() DeploymentWorkflowVersion
 		unsafeRefreshIntervalGetter       func() time.Duration
 		unsafeVisibilityGracePeriodGetter func() time.Duration
@@ -82,6 +86,7 @@ func VersionWorkflow(
 		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
 		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
 		lock:                              workflow.NewMutex(ctx),
+		computeConfigLock:                 workflow.NewMutex(ctx),
 		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
 		unsafeVisibilityGracePeriodGetter: unsafeVisibilityGracePeriodGetter,
@@ -191,6 +196,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if d.VersionState.GetCreateTime() == nil {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
+	// TODO: remove this after next release because now the status should always be set at start.
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
@@ -245,6 +251,17 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		d.handleUpdateVersionMetadata,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateUpdateVersionMetadata,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		UpdateVersionComputeConfig,
+		d.handleUpdateVersionComputeConfig,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateUpdateVersionComputeConfig,
 		},
 	); err != nil {
 		return err
@@ -339,6 +356,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
+
 	// although the handler might have not changed the metadata at all, still
 	// it's better to CaN because some history events are built now.
 	d.setStateChanged()
@@ -346,6 +365,50 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	return &deploymentspb.UpdateVersionMetadataResponse{
 		Metadata: d.VersionState.Metadata,
 	}, nil
+}
+
+func (d *VersionWorkflowRunner) validateUpdateVersionComputeConfig(args *deploymentspb.UpdateComputeConfigArgs) error {
+	return d.ensureNotDeleted()
+}
+
+func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Context, args *deploymentspb.UpdateComputeConfigArgs) (*deploymentspb.UpdateComputeConfigResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
+	if err := d.computeConfigLock.Lock(ctx); err != nil {
+		d.logger.Error("Could not acquire compute config lock in version workflow", "error", err)
+		return nil, err
+	}
+	defer d.computeConfigLock.Unlock()
+
+	// Update or delete the Worker Controller Instance based on the new config.
+	apiVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: d.VersionState.Version.DeploymentName,
+		BuildId:        d.VersionState.Version.BuildId,
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var computeConfigSummary *computepb.ComputeConfigSummary
+	err := workflow.ExecuteActivity(activityCtx, d.a.UpdateWorkerControllerInstance, &deploymentspb.UpdateWorkerControllerInstanceInput{
+		Version:             apiVersion,
+		Identity:            args.GetIdentity(),
+		UpsertScalingGroups: args.GetUpsertScalingGroups(),
+		RemoveScalingGroups: args.GetRemoveScalingGroups(),
+	}).Get(ctx, &computeConfigSummary)
+	if err != nil {
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+			return nil, appErr
+		}
+		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
+	}
+
+	d.VersionState.ComputeConfig = computeConfigSummary
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
+	d.setStateChanged()
+	d.syncSummary(ctx)
+
+	return &deploymentspb.UpdateComputeConfigResponse{}, nil
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
@@ -385,13 +448,20 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire workflow lock")
-		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+		d.logger.Error("Could not acquire workflow lock in version workflow", "error", err)
+		return err
+	}
+	// also lock compute config lock to ensure that the compute config is not updated while the version is being deleted.
+	err = d.computeConfigLock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire compute config lock in version workflow", "error", err)
+		return err
 	}
 	defer func() {
 		// although the handler might have not changed the state and had returned an error, still
 		// it's better to CaN because some history events are built now.
 		d.setStateChanged()
+		d.computeConfigLock.Unlock()
 		d.lock.Unlock()
 	}()
 
@@ -434,6 +504,20 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	if err != nil {
 		// some other error allowing activity retries
 		return err
+	}
+
+	if workflow.GetVersion(ctx, "delete-wci", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		apiVersion := &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: d.VersionState.Version.DeploymentName,
+			BuildId:        d.VersionState.Version.BuildId,
+		}
+		err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerControllerInstance, &deploymentspb.DeleteWorkerControllerInstanceInput{
+			Version:  apiVersion,
+			Identity: args.GetIdentity(),
+		}).Get(ctx, nil)
+		if err != nil {
+			return serviceerror.NewInternalf("delete worker controller instance: %v", err)
+		}
 	}
 
 	if args.AsyncPropagation {
@@ -629,6 +713,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
+	// Transition from CREATED to INACTIVE once a poller registers a task queue.
+	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+		// deployment workflow updates the status in version summary to INACTIVE
+	}
+
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
 		// Still need to check RoutingConfig not being nil because of edge cases during enabling dynamic config.
 		// i.e. the deployment workflow might run old version and not send the routing config.
@@ -641,8 +731,13 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
 	// Resetting state to get rid of the info from the past life.
-	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, workflow.Now(ctx), d.VersionState.SyncBatchSize)
-	state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName,
+		d.VersionState.Version.BuildId,
+		workflow.Now(ctx),
+		"",
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		nil,
+		d.VersionState.SyncBatchSize)
 	d.VersionState = state
 	d.deleteVersion = false
 }
@@ -916,6 +1011,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
+		ComputeConfig:        s.ComputeConfig,
 	}
 }
 

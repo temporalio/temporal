@@ -1,11 +1,14 @@
 package workerdeployment
 
 import (
+	"context"
 	"time"
 
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -40,12 +43,13 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler         metrics.Handler
-		Logger                 log.Logger
-		ClientFactory          sdk.ClientFactory
-		MatchingClient         resource.MatchingClient
-		HistoryClient          resource.HistoryClient
-		WorkerDeploymentClient Client
+		MetricsHandler                 metrics.Handler
+		Logger                         log.Logger
+		ClientFactory                  sdk.ClientFactory
+		MatchingClient                 resource.MatchingClient
+		HistoryClient                  resource.HistoryClient
+		WorkerDeploymentClient         Client
+		WorkerControllerInstanceClient wciclient.Client
 	}
 
 	fxResult struct {
@@ -54,31 +58,47 @@ type (
 	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
+var ClientModule = fx.Options(
+	wciclient.Module,
 	fx.Provide(ClientProvider),
 )
 
+var Module = fx.Options(
+	ClientModule,
+	fx.Provide(NewResult),
+)
+
 func ClientProvider(
+	lc fx.Lifecycle,
 	logger log.Logger,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
+	workerControllerInstanceClient wciclient.Client,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
 ) Client {
+	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			highestRevSignaledToVersionWf.Stop()
+			return nil
+		},
+	})
 	return &ClientImpl{
 		logger:                           logger,
 		historyClient:                    historyClient,
 		visibilityManager:                visibilityManager,
 		matchingClient:                   matchingClient,
+		workerControllerInstanceClient:   workerControllerInstanceClient,
 		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
 		metricsHandler:                   metricsHandler,
+		highestRevSignaledToVersionWf:    highestRevSignaledToVersionWf,
 	}
 }
 

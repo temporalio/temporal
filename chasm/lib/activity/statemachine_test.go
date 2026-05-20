@@ -595,9 +595,10 @@ func TestTransitionTerminated(t *testing.T) {
 	counterTerminate.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
 
+	identity := "terminator"
 	req := chasm.TerminateComponentRequest{
 		Reason:    "Test Termination",
-		Identity:  "terminator",
+		Identity:  identity,
 		RequestID: "test-request-id",
 	}
 
@@ -613,8 +614,12 @@ func TestTransitionTerminated(t *testing.T) {
 	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{
-		Message:     "Test Termination",
-		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+		Message: "Test Termination",
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+			TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+				Identity: identity,
+			},
+		},
 	}
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
 }
@@ -656,6 +661,7 @@ func TestTransitionCanceled(t *testing.T) {
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	outcome := &activitypb.ActivityOutcome{}
+	identity := "canceler"
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
@@ -666,6 +672,9 @@ func TestTransitionCanceled(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			CancelState: &activitypb.ActivityCancelState{
+				Identity: identity,
+			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
@@ -699,7 +708,8 @@ func TestTransitionCanceled(t *testing.T) {
 		Message: "Activity canceled",
 		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-				Details: payloads.EncodeString("Details"),
+				Details:  payloads.EncodeString("Details"),
+				Identity: identity,
 			},
 		},
 	}

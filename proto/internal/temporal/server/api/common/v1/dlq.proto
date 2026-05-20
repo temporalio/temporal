@@ -1,9 +1,10 @@
 syntax = "proto3";
 
 package temporal.server.api.common.v1;
-option go_package = "go.temporal.io/server/api/common/v1;commonspb";
 
 import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/common/v1;commonspb";
 
 message HistoryTask {
   // shard_id is included to avoid having to deserialize the task blob.
@@ -37,4 +38,3 @@ message HistoryDLQKey {
   string source_cluster = 2;
   string target_cluster = 3;
 }
-

@@ -2,106 +2,106 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.scheduler.proto.v1;
 
+import "chasm/lib/scheduler/proto/v1/message.proto";
+import "temporal/api/workflowservice/v1/request_response.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
-import "temporal/api/workflowservice/v1/request_response.proto";
-import "chasm/lib/scheduler/proto/v1/message.proto";
-
 message CreateScheduleRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.CreateScheduleRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.CreateScheduleRequest frontend_request = 2;
 }
 
 message CreateScheduleResponse {
-    temporal.api.workflowservice.v1.CreateScheduleResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.CreateScheduleResponse frontend_response = 1;
 }
 
 message UpdateScheduleRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UpdateScheduleRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.UpdateScheduleRequest frontend_request = 2;
 }
 
 message UpdateScheduleResponse {
-    temporal.api.workflowservice.v1.UpdateScheduleResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.UpdateScheduleResponse frontend_response = 1;
 }
 
 message PatchScheduleRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.PatchScheduleRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.PatchScheduleRequest frontend_request = 2;
 }
 
 message PatchScheduleResponse {
-    temporal.api.workflowservice.v1.PatchScheduleResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.PatchScheduleResponse frontend_response = 1;
 }
 
 message DeleteScheduleRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.DeleteScheduleRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.DeleteScheduleRequest frontend_request = 2;
 }
 
 message DeleteScheduleResponse {
-    temporal.api.workflowservice.v1.DeleteScheduleResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.DeleteScheduleResponse frontend_response = 1;
 }
 
 message DescribeScheduleRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.DescribeScheduleRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.DescribeScheduleRequest frontend_request = 2;
 }
 
 message DescribeScheduleResponse {
-    temporal.api.workflowservice.v1.DescribeScheduleResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.DescribeScheduleResponse frontend_response = 1;
 }
 
 message ListScheduleMatchingTimesRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequest frontend_request = 2;
 }
 
 message ListScheduleMatchingTimesResponse {
-    temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse frontend_response = 1;
+  temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse frontend_response = 1;
 }
 
 message CreateFromMigrationStateRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    SchedulerMigrationState state = 2;
+  SchedulerMigrationState state = 2;
 }
 
 message CreateFromMigrationStateResponse {}
 
 message CreateSentinelRequest {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
 
-    string namespace = 2;
+  string namespace = 2;
 
-    string schedule_id = 3;
+  string schedule_id = 3;
 }
 
 message CreateSentinelResponse {}
 
 message MigrateToWorkflowRequest {
-    // The namespace ID of the schedule to migrate.
-    string namespace_id = 1;
-    // The schedule ID to migrate from CHASM to workflow-backed.
-    string schedule_id = 2;
-    // The identity of the caller initiating the migration.
-    string identity = 3;
-    // A unique request ID for idempotency.
-    string request_id = 4;
+  // The namespace ID of the schedule to migrate.
+  string namespace_id = 1;
+  // The schedule ID to migrate from CHASM to workflow-backed.
+  string schedule_id = 2;
+  // The identity of the caller initiating the migration.
+  string identity = 3;
+  // A unique request ID for idempotency.
+  string request_id = 4;
 }
 
 message MigrateToWorkflowResponse {}

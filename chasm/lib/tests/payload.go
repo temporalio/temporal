@@ -87,12 +87,18 @@ func assertContextValue(chasmContext chasm.Context) error {
 func (s *PayloadStore) Describe(
 	chasmContext chasm.Context,
 	_ DescribePayloadStoreRequest,
-) (*testspb.TestPayloadStore, error) {
+) (DescribePayloadStoreResponse, error) {
 	if err := assertContextValue(chasmContext); err != nil {
-		return nil, err
+		return DescribePayloadStoreResponse{}, err
 	}
 
-	return common.CloneProto(s.State), nil
+	state := common.CloneProto(s.State)
+	executionInfo := chasmContext.ExecutionInfo()
+
+	return DescribePayloadStoreResponse{
+		State:                state,
+		ApproximateStateSize: executionInfo.ApproximateStateSize,
+	}, nil
 }
 
 func (s *PayloadStore) Close(
@@ -113,6 +119,12 @@ func (s *PayloadStore) Cancel(
 ) (CancelPayloadStoreResponse, error) {
 	s.State.Canceled = true
 	return CancelPayloadStoreResponse{}, nil
+}
+
+func (s *PayloadStore) ContextMetadata(_ chasm.Context) map[string]string {
+	return map[string]string{
+		string(componentCtxKey): componentCtxVal,
+	}
 }
 
 func (s *PayloadStore) AddPayload(
@@ -150,7 +162,7 @@ func (s *PayloadStore) AddPayload(
 		)
 	}
 
-	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
+	return common.CloneProto(s.State), nil
 }
 
 func (s *PayloadStore) GetPayload(
@@ -186,7 +198,7 @@ func (s *PayloadStore) RemovePayload(
 	delete(s.Payloads, key)
 	delete(s.State.ExpirationTimes, key)
 
-	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
+	return common.CloneProto(s.State), nil
 }
 
 func (s *PayloadStore) LifecycleState(

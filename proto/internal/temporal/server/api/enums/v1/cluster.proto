@@ -5,21 +5,21 @@ package temporal.server.api.enums.v1;
 option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
 enum ClusterMemberRole {
-    CLUSTER_MEMBER_ROLE_UNSPECIFIED = 0;
-    CLUSTER_MEMBER_ROLE_FRONTEND = 1;
-    CLUSTER_MEMBER_ROLE_HISTORY = 2;
-    CLUSTER_MEMBER_ROLE_MATCHING = 3;
-    CLUSTER_MEMBER_ROLE_WORKER = 4;
+  CLUSTER_MEMBER_ROLE_UNSPECIFIED = 0;
+  CLUSTER_MEMBER_ROLE_FRONTEND = 1;
+  CLUSTER_MEMBER_ROLE_HISTORY = 2;
+  CLUSTER_MEMBER_ROLE_MATCHING = 3;
+  CLUSTER_MEMBER_ROLE_WORKER = 4;
 }
 
 enum HealthState {
-    HEALTH_STATE_UNSPECIFIED = 0;
-    // The host is in a healthy state.
-    HEALTH_STATE_SERVING = 1;
-    // The host is unhealthy through external observation.
-    HEALTH_STATE_NOT_SERVING = 2;
-    // The host has marked itself as not ready to serve traffic.
-    HEALTH_STATE_DECLINED_SERVING = 3;
-    // An internal error occurred while checking health (e.g. resolver failure).
-    HEALTH_STATE_INTERNAL_ERROR = 4;
+  HEALTH_STATE_UNSPECIFIED = 0;
+  // The host is in a healthy state.
+  HEALTH_STATE_SERVING = 1;
+  // The host is unhealthy through external observation.
+  HEALTH_STATE_NOT_SERVING = 2;
+  // The host has marked itself as not ready to serve traffic.
+  HEALTH_STATE_DECLINED_SERVING = 3;
+  // An internal error occurred while checking health (e.g. resolver failure).
+  HEALTH_STATE_INTERNAL_ERROR = 4;
 }

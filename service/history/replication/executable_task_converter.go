@@ -147,6 +147,15 @@ func (e *executableTaskConverterImpl) convertOne(
 			sourceShardKey,
 			replicationTask,
 		)
+	case enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK:
+		return NewExecutableDeleteExecutionTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			sourceClusterName,
+			sourceShardKey,
+			replicationTask,
+		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(

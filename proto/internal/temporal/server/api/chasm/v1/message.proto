@@ -1,22 +1,22 @@
 syntax = "proto3";
 
 package temporal.server.api.chasm.v1;
-option go_package = "go.temporal.io/server/api/chasm/v1;chasm";
 
 import "google/protobuf/timestamp.proto";
-
 import "temporal/api/common/v1/message.proto";
 
+option go_package = "go.temporal.io/server/api/chasm/v1;chasm";
+
 message VisibilityExecutionInfo {
-    string business_id = 1;
-    string run_id = 2;
-    google.protobuf.Timestamp start_time = 3;
-    google.protobuf.Timestamp close_time = 4;
-    int64 history_length = 5;
-    int64 history_size_bytes = 6;
-    int64 state_transition_count = 7;
-    temporal.api.common.v1.SearchAttributes chasm_search_attributes = 8;
-    temporal.api.common.v1.SearchAttributes custom_search_attributes = 9;
-    temporal.api.common.v1.Memo memo = 10;
-    temporal.api.common.v1.Payload chasm_memo = 11;
+  string business_id = 1;
+  string run_id = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp close_time = 4;
+  int64 history_length = 5;
+  int64 history_size_bytes = 6;
+  int64 state_transition_count = 7;
+  temporal.api.common.v1.SearchAttributes chasm_search_attributes = 8;
+  temporal.api.common.v1.SearchAttributes custom_search_attributes = 9;
+  temporal.api.common.v1.Memo memo = 10;
+  temporal.api.common.v1.Payload chasm_memo = 11;
 }

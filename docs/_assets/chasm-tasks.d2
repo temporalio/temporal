@@ -1,0 +1,54 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+*.style.bold: true
+
+Rows: {
+    label: ""
+    style.stroke-width: 0
+    style.fill: transparent
+    grid-columns: 2
+    horizontal-gap: 32
+    vertical-gap: 32
+
+    "In Transaction": {
+        grid-rows: 2
+        horizontal-gap: 32
+        vertical-gap: 64
+        "Pure Task": {
+            style.bold: true
+            grid-rows: 2
+            horizontal-gap: 32
+            vertical-gap: 48
+
+            Validator
+            Executor
+        }
+        "Component State"
+    }
+
+    "After Commit": {
+        grid-rows: 2
+        horizontal-gap: 32
+        vertical-gap: 64
+        "Side Effect Task": {
+            style.bold: true
+            grid-rows: 2
+            horizontal-gap: 32
+            vertical-gap: 48
+
+            Validator
+            Executor
+        }
+        "Engine \nor\n External Service"
+    }
+}
+
+Rows."In Transaction"."Pure Task" -> Rows."In Transaction"."Component State": "read/write"
+Rows."After Commit"."Side Effect Task" -> Rows."After Commit"."Engine \nor\n External Service": "invoke"
