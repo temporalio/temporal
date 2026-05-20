@@ -2348,7 +2348,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		ID:                 workflowID4,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
-	}, "force-replication", migration.ForceReplicationParams{
+	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
 		Namespace:          namespace,
 		OverallRps:         10,
 		EnableVerification: true,
@@ -2494,7 +2494,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		ID:                 forceReplicationWorkflowID,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
-	}, "force-replication", migration.ForceReplicationParams{
+	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
 		Namespace:          namespace,
 		OverallRps:         10,
 		EnableVerification: true,
@@ -2614,7 +2614,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		ID:                 forceReplicationWorkflowID,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
-	}, "force-replication", migration.ForceReplicationParams{
+	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
 		Namespace:          namespace,
 		OverallRps:         10,
 		EnableVerification: true,

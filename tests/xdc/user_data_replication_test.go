@@ -448,7 +448,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		ID:                 "force-replication-wf",
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
-	}, "force-replication", migration.ForceReplicationParams{
+	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
 		Namespace:  namespace,
 		OverallRps: 10,
 	})
