@@ -230,18 +230,26 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		}, nil
 	})
 
+	// V3 declares its own retry policy so it doesn't share the V1/V2 global
+	// `forceReplicationActivityRetryPolicy`. The SDK's
+	// applyRetryPolicyDefaults mutates the pointed-to policy on first use,
+	// which races when V1 and V3 workflows run concurrently in the same
+	// process (e.g. the test suites both with t.Parallel). One fresh
+	// policy per workflow execution eliminates the shared mutable state.
+	retryPolicy := &temporal.RetryPolicy{
+		InitialInterval: time.Second,
+		MaximumInterval: time.Second * 10,
+	}
+
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, ForceReplicationParams{
-			Namespace: params.Namespace,
-			Query:     params.Query,
-		})
+		wfCount, err := v3CountWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
 		if err != nil {
 			return err
 		}
 		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
-	metadataResp, err := getClusterMetadata(ctx, ForceReplicationParams{Namespace: params.Namespace})
+	metadataResp, err := v3GetClusterMetadata(ctx, params.Namespace, retryPolicy)
 	if err != nil {
 		return err
 	}
@@ -252,7 +260,7 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		}
 	}
 
-	state = newAdaptiveWorkflowState(ctx, &params, metadataResp.NamespaceID)
+	state = newAdaptiveWorkflowState(ctx, &params, metadataResp.NamespaceID, retryPolicy)
 	if err := state.runOnePagedCycle(ctx); err != nil {
 		return err
 	}
@@ -410,12 +418,54 @@ func kickoffTaskQueueUserDataReplication(ctx workflow.Context, params *AdaptiveF
 	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
 }
 
+// v3CountWorkflowForReplication mirrors V1's countWorkflowForReplication
+// but takes a workflow-local retry policy instead of reading the
+// V1/V2 global. See the comment in ForceReplicationWorkflowV3 about the
+// SDK in-place defaulting race.
+func v3CountWorkflowForReplication(ctx workflow.Context, namespace, query string, retryPolicy *temporal.RetryPolicy) (int64, error) {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy:         retryPolicy,
+	}
+	var a *activities
+	var output countWorkflowResponse
+	if err := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, ao),
+		a.CountWorkflow,
+		&workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: namespace,
+			Query:     query,
+		}).Get(ctx, &output); err != nil {
+		return 0, err
+	}
+	return output.WorkflowCount, nil
+}
+
+// v3GetClusterMetadata mirrors V1's getClusterMetadata; same rationale as
+// v3CountWorkflowForReplication.
+func v3GetClusterMetadata(ctx workflow.Context, namespace string, retryPolicy *temporal.RetryPolicy) (MetadataResponse, error) {
+	lao := workflow.LocalActivityOptions{
+		StartToCloseTimeout: time.Second * 10,
+		RetryPolicy:         retryPolicy,
+	}
+	actx := workflow.WithLocalActivityOptions(ctx, lao)
+	var a *activities
+	var metadataResp MetadataResponse
+	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest{Namespace: namespace}).Get(ctx, &metadataResp)
+	return metadataResp, err
+}
+
 // adaptiveWorkflowState bundles the mutable state the workflow coroutines
 // touch. Workflow coroutines are cooperatively scheduled (yield only at SDK
 // calls), so plain maps and slices are safe without mutexes.
 type adaptiveWorkflowState struct {
 	params      *AdaptiveForceReplicationParams
 	namespaceID string
+
+	// retryPolicy is workflow-scoped (not the V1/V2 global) so concurrent
+	// workflow executions don't race on the SDK's in-place policy
+	// defaulting.
+	retryPolicy *temporal.RetryPolicy
 
 	fastSem workflow.Channel
 	slowSem workflow.Channel
@@ -448,10 +498,11 @@ type adaptiveWorkflowState struct {
 	lastActivityErr error
 }
 
-func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplicationParams, namespaceID string) *adaptiveWorkflowState {
+func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplicationParams, namespaceID string, retryPolicy *temporal.RetryPolicy) *adaptiveWorkflowState {
 	s := &adaptiveWorkflowState{
 		params:           params,
 		namespaceID:      namespaceID,
+		retryPolicy:      retryPolicy,
 		wfIDPending:      cloneStringIntMap(params.WFIDPendingCounts),
 		shardPending:     cloneInt32IntMap(params.ShardPendingCounts),
 		quarantinedWF:    sliceToStringSet(params.QuarantinedWFIDs),
@@ -505,7 +556,7 @@ func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 30,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         s.retryPolicy,
 	}
 	listCtx := workflow.WithActivityOptions(ctx, ao)
 
@@ -651,7 +702,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Hour,
 			HeartbeatTimeout:    time.Second * 60,
-			RetryPolicy:         forceReplicationActivityRetryPolicy,
+			RetryPolicy:         s.retryPolicy,
 		}
 		actx := workflow.WithActivityOptions(ctx, ao)
 		var a *activities
@@ -726,7 +777,7 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Hour,
 			HeartbeatTimeout:    time.Second * 60,
-			RetryPolicy:         forceReplicationActivityRetryPolicy,
+			RetryPolicy:         s.retryPolicy,
 		}
 		actx := workflow.WithActivityOptions(ctx, ao)
 		var a *activities
