@@ -815,6 +815,10 @@ func marshalDeterministic(m proto.Message) ([]byte, error) {
 	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
 }
 
+// serializeComponentNode serializes the component node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeComponentNode() error {
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -1180,6 +1184,10 @@ func (n *Node) deleteChildren(
 	return nil
 }
 
+// serializeDataNode serializes the data node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeDataNode() error {
 	protoValue, ok := n.value.(proto.Message)
 	if !ok {
@@ -1201,6 +1209,10 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+// serializeCollectionNode serializes the collection node.
+// If this method is updated to modify serialized fields beyond
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
@@ -1756,7 +1768,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
 		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
-			node.setValueState(valueStateSynced)
 			continue
 		}
 
