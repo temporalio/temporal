@@ -117,11 +117,7 @@ func evictAfterDelay(
 	addr string,
 	delay time.Duration,
 ) {
-	select {
-	case <-time.After(delay):
-	case <-ctx.Done():
-		return
-	}
+if util.InterruptibleSleep(ctx, delay) != nil { return }
 	for _, m := range resolver.Members() {
 		if m.GetAddress() == addr {
 			return
