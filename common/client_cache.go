@@ -16,7 +16,7 @@ type (
 		GetAllClients() ([]any, error)
 		// Evict removes the cached entry for the given key and runs its
 		// release fn.
-		Evict(key string)
+		Evict(clientKey string)
 	}
 
 	keyResolver interface {
