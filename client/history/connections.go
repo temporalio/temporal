@@ -62,28 +62,32 @@ func NewConnectionPool[C any](
 
 	// Close cached conns whose host leaves the membership ring. The listener
 	// goroutine lives for the lifetime of the pool (process).
-	go func() {
-		listenerName := fmt.Sprintf("historyConnectionPool-%s", uuid.New().String())
-		ch := make(chan *membership.ChangedEvent, 1)
-		if err := historyServiceResolver.AddListener(listenerName, ch); err != nil {
-			logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+	go c.watchMembershipForClose(connectionCloseDelay)
+	return c
+}
+
+func (c *connectionPoolImpl[C]) watchMembershipForClose(connectionCloseDelay dynamicconfig.DurationPropertyFn) {
+	listenerName := fmt.Sprintf("historyConnectionPool-%s", uuid.New().String())
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := c.historyServiceResolver.AddListener(listenerName, ch); err != nil {
+		c.logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+		return
+	}
+	for event := range ch {
+		for _, h := range event.HostsRemoved {
+			go c.closeConnAfterDelay(h.GetAddress(), connectionCloseDelay())
+		}
+	}
+}
+
+func (c *connectionPoolImpl[C]) closeConnAfterDelay(addr string, delay time.Duration) {
+	time.Sleep(delay)
+	for _, m := range c.historyServiceResolver.Members() {
+		if m.GetAddress() == addr {
 			return
 		}
-		for event := range ch {
-			for _, h := range event.HostsRemoved {
-				go func() {
-					time.Sleep(connectionCloseDelay())
-					for _, m := range historyServiceResolver.Members() {
-						if m.GetAddress() == h.GetAddress() {
-							return
-						}
-					}
-					c.closeConn(rpcAddress(h.GetAddress()))
-				}()
-			}
-		}
-	}()
-	return c
+	}
+	c.closeConn(rpcAddress(addr))
 }
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {

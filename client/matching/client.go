@@ -74,45 +74,60 @@ func NewClient(
 
 	// Evict cached clients whose host leaves the membership ring.
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		defer cancel()
-		listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
-		ch := make(chan *membership.ChangedEvent, 1)
-		if err := resolver.AddListener(listenerName, ch); err != nil {
-			logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
-			return
-		}
-		defer func() {
-			if err := resolver.RemoveListener(listenerName); err != nil {
-				logger.Warn("Error removing membership listener", tag.Error(err))
-			}
-		}()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case event := <-ch:
-				for _, h := range event.HostsRemoved {
-					go func() {
-						select {
-						case <-time.After(connectionCloseDelay()):
-						case <-ctx.Done():
-							return
-						}
-						for _, m := range resolver.Members() {
-							if m.GetAddress() == h.GetAddress() {
-								return
-							}
-						}
-						clients.Evict(h.GetAddress())
-					}()
-				}
-			}
-		}
-	}()
+	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
 	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 
 	return c
+}
+
+func watchMembershipForEviction(
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	clients common.ClientCache,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
+	logger log.Logger,
+) {
+	listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := resolver.AddListener(listenerName, ch); err != nil {
+		logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
+		return
+	}
+	defer func() {
+		if err := resolver.RemoveListener(listenerName); err != nil {
+			logger.Warn("Error removing membership listener", tag.Error(err))
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-ch:
+			for _, h := range event.HostsRemoved {
+				go evictAfterDelay(ctx, resolver, clients, h.GetAddress(), connectionCloseDelay())
+			}
+		}
+	}
+}
+
+func evictAfterDelay(
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	clients common.ClientCache,
+	addr string,
+	delay time.Duration,
+) {
+	select {
+	case <-time.After(delay):
+	case <-ctx.Done():
+		return
+	}
+	for _, m := range resolver.Members() {
+		if m.GetAddress() == addr {
+			return
+		}
+	}
+	clients.Evict(addr)
 }
 
 func (c *clientImpl) AddActivityTask(
