@@ -6124,6 +6124,75 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(3), resp.CancelledCount)
 	})
 
+	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
+		// Verifies that poller history is cleaned up for each partition, not just
+		// the routing partition.
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+		numPartitions := 3
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+		mockHostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+		mockHostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("self-host")).AnyTimes()
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+
+		tqFamily := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue")
+		partitionsMap := map[tqid.PartitionKey]taskQueuePartitionManager{}
+		mockPMs := make([]*MocktaskQueuePartitionManager, numPartitions)
+
+		for i := range numPartitions {
+			partition := tqFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(i)
+			mockPM := NewMocktaskQueuePartitionManager(ctrl)
+			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+			if i == 0 {
+				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition.TaskQueue(), config, nsName))
+			}
+			// Each partition must get RemovePoller called exactly once with the worker identity.
+			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)
+			mockPMs[i] = mockPM
+			partitionsMap[partition.Key()] = mockPM
+		}
+
+		rawClient := &routingMatchingClient{
+			MockMatchingServiceClient: mockMatchingClient,
+			routeFn: func(p tqid.Partition) (string, error) {
+				return "self-host", nil
+			},
+		}
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     rawClient,
+			hostInfoProvider:      mockHostInfoProvider,
+			logger:                log.NewNoopLogger(),
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            partitionsMap,
+		}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// gomock verifies RemovePoller was called exactly once per partition.
+	})
+
 	t.Run("partition API: empty partitions returns gracefully", func(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
