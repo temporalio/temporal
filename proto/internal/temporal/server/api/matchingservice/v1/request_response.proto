@@ -259,29 +259,29 @@ message CancelOutstandingWorkerPollsResponse {
 // on the specified partitions. Sent by the matching root to each matching host during
 // fan-out.
 message CancelOutstandingWorkerPollsPartitionRequest {
-    message WorkerEntry {
-        string worker_instance_key = 1;
+  message WorkerEntry {
+    string worker_instance_key = 1;
 
-        string worker_identity = 2;
-    }
+    string worker_identity = 2;
+  }
 
-    string namespace_id = 1;
+  string namespace_id = 1;
 
-    // Used for RPC routing only. Set to any partition on the target host.
-    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+  // Used for RPC routing only. Set to any partition on the target host.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
 
-    // Partitions to process on this host.
-    repeated temporal.server.api.taskqueue.v1.TaskQueuePartition partitions = 3;
+  // Partitions to process on this host.
+  repeated temporal.server.api.taskqueue.v1.TaskQueuePartition partitions = 3;
 
-    // Workers to cancel polls for.
-    repeated WorkerEntry workers = 4;
+  // Workers to cancel polls for.
+  repeated WorkerEntry workers = 4;
 }
 
 message CancelOutstandingWorkerPollsPartitionResponse {
-    int32 cancelled_count = 1;
+  int32 cancelled_count = 1;
 
-    // Number of partitions that failed during fan-out.
-    int32 failed_partitions = 2;
+  // Number of partitions that failed during fan-out.
+  int32 failed_partitions = 2;
 }
 
 message DescribeTaskQueueRequest {
