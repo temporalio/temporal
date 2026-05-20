@@ -142,7 +142,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(cf.dynConfig),
 		resolver,
-		dynamicconfig.MatchingClientEvictDelay.Get(cf.dynConfig),
+		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {

@@ -42,7 +42,6 @@ type (
 		getOrCreateClientConn(addr rpcAddress) clientConnection[C]
 		getAllClientConns() []clientConnection[C]
 		resetConnectBackoff(clientConnection[C])
-		closeConn(addr rpcAddress)
 	}
 )
 
@@ -51,7 +50,7 @@ func NewConnectionPool[C any](
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
 	logger log.Logger,
-	evictDelay dynamicconfig.DurationPropertyFn,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) *connectionPoolImpl[C] {
 	c := &connectionPoolImpl[C]{
 		historyServiceResolver: historyServiceResolver,
@@ -73,7 +72,7 @@ func NewConnectionPool[C any](
 		for event := range ch {
 			for _, h := range event.HostsRemoved {
 				go func() {
-					time.Sleep(evictDelay())
+					time.Sleep(connectionCloseDelay())
 					for _, m := range historyServiceResolver.Members() {
 						if m.GetAddress() == h.GetAddress() {
 							return

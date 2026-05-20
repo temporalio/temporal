@@ -40,7 +40,7 @@ func NewTestServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient, logger, dynamicconfig.HistoryClientEvictDelay.Get(dc))
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[TestServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(

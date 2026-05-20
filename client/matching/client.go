@@ -54,7 +54,7 @@ func NewClient(
 	lb LoadBalancer,
 	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
 	resolver membership.ServiceResolver,
-	evictDelay dynamicconfig.DurationPropertyFn,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) matchingservice.MatchingServiceClient {
 	c := &clientImpl{
 		timeout:         timeout,
@@ -95,7 +95,7 @@ func NewClient(
 				for _, h := range event.HostsRemoved {
 					go func() {
 						select {
-						case <-time.After(evictDelay()):
+						case <-time.After(connectionCloseDelay()):
 						case <-ctx.Done():
 							return
 						}
