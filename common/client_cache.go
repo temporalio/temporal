@@ -112,11 +112,11 @@ func (c *clientCacheImpl) GetAllClients() ([]any, error) {
 	return result, nil
 }
 
-func (c *clientCacheImpl) Evict(key string) {
+func (c *clientCacheImpl) Evict(clientKey string) {
 	c.cacheLock.Lock()
-	entry, ok := c.clients[key]
+	entry, ok := c.clients[clientKey]
 	if ok {
-		delete(c.clients, key)
+		delete(c.clients, clientKey)
 	}
 	c.cacheLock.Unlock()
 
