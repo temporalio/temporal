@@ -31,8 +31,6 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	workerdeployment.Module,
-	// scheduler.Module,
-	// callback.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
