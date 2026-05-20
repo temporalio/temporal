@@ -1220,9 +1220,6 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	if request.WorkerInstanceKey != "" {
-		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
-	}
 	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
@@ -1237,6 +1234,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
+	if request.WorkerInstanceKey != "" {
+		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
@@ -1335,7 +1335,13 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 			Workers:            workers,
 		}
 		if target == self {
-			resp, _ := e.CancelOutstandingWorkerPollsPartition(ctx, req)
+			resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				failedPartitions.Add(int32(len(partitions)))
+				e.logger.Warn("Failed to cancel outstanding worker polls for local partitions",
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+			}
 			totalCancelled.Add(resp.GetCancelledCount())
 			continue
 		}
@@ -1344,6 +1350,7 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 			if err != nil {
 				failedPartitions.Add(int32(len(partitions)))
 				e.logger.Warn("Failed to cancel outstanding worker polls for remote host",
+					tag.NewStringTag("target-host", target),
 					tag.NewInt("partition-count", len(partitions)),
 					tag.Error(err))
 				return
@@ -1371,6 +1378,8 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	}
 
 	e.logger.Debug("Cancelling worker polls",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(request.GetTaskQueuePartition().GetTaskQueue()),
 		tag.NewInt("worker-count", len(request.GetWorkers())),
 		tag.NewInt("partition-count", len(request.GetPartitions())),
 	)
