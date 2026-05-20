@@ -54,21 +54,20 @@ func ExecutePureTask[C chasm.Component, T any](
 	return taskDropped, err
 }
 
-// ExecuteSideEffectTask validates and executes a side effect task.
-// Validation runs via [Engine.ReadComponent] in read only mode, and if valid,
-// [chasm.SideEffectTaskHandler.Execute] is called with an engine context so that
-// [chasm.UpdateComponent] and [chasm.ReadComponent] inside the handler route through
-// the test engine.
+// ExecuteChasmSideEffectTask simulates a production executeChasmSideEffectTask
+// delivery: it validates then executes a side-effect task, matching the
+// behaviour of executeChasmSideEffectTask in chasm_task_util.go.
+// Validation runs via [Engine.ReadComponent] in read-only mode; if valid,
+// [chasm.SideEffectTaskHandler.Execute] is called with an engine context so
+// that [chasm.UpdateComponent] and [chasm.ReadComponent] inside the handler
+// route through the test engine.
 //
-// It returns taskDropped set to true if [chasm.SideEffectTaskHandler.Validate] returns (false, nil),
-// indicating the task is no longer relevant and was not executed.
+// It returns taskDropped set to true if [chasm.SideEffectTaskHandler.Validate]
+// returns (false, nil), indicating the task is no longer relevant.
 //
-// The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
-// obtain a ref is needed. Pass the component pointer directly.
-//
-// Use [chasm.MockMutableContext] directly when you need to inspect typed task payloads added
-// during execution, since the real engine serializes them into history layer tasks.
-func ExecuteSideEffectTask[C chasm.Component, T any](
+// The component ref is resolved automatically — no separate
+// [Engine.ReadComponent] call is needed. Pass the component pointer directly.
+func ExecuteChasmSideEffectTask[C chasm.Component, T any](
 	ctx context.Context,
 	e *Engine,
 	component C,

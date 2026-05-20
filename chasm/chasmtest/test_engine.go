@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -42,11 +44,12 @@ type (
 	}
 
 	execution struct {
-		key       chasm.ExecutionKey
-		node      *chasm.Node
-		backend   *chasm.MockNodeBackend
-		root      chasm.RootComponent
-		requestID string
+		key                  chasm.ExecutionKey
+		node                 *chasm.Node
+		backend              *chasm.MockNodeBackend
+		root                 chasm.RootComponent
+		requestID            string
+		advanceTransitionCount func()
 	}
 
 	businessKey struct {
@@ -106,6 +109,19 @@ func NewEngine(
 	return e
 }
 
+// IsExecutionCompleted reports whether the execution identified by ref has
+// reached the COMPLETED lifecycle state (i.e. the root component's
+// LifecycleState returned LifecycleStateCompleted and CloseTransaction
+// transitioned the backend to WORKFLOW_EXECUTION_STATE_COMPLETED).
+func (e *Engine) IsExecutionCompleted(ref chasm.ComponentRef) (bool, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return false, err
+	}
+	state := exec.backend.GetExecutionState()
+	return state.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
+}
+
 // Tasks returns all physical tasks scheduled for the execution identified by ref, grouped by category.
 // Logical tasks accumulate across every [Engine.UpdateComponent], [Engine.StartExecution], and
 // [Engine.UpdateWithStartExecution] call on the execution, and convert to physical tasks on CloseTransaction,
@@ -121,6 +137,178 @@ func (e *Engine) Tasks(ref chasm.ComponentRef) (map[tasks.Category][]tasks.Task,
 		result[cat] = ts
 	}
 	return result, nil
+}
+
+// TasksDue returns all physical tasks whose visibility time is at or before t,
+// grouped by category. This is useful for driving tests by advancing the time
+// source and then checking which tasks are ready to fire.
+func (e *Engine) TasksDue(ref chasm.ComponentRef, t time.Time) (map[tasks.Category][]tasks.Task, error) {
+	all, err := e.Tasks(ref)
+	if err != nil {
+		return nil, err
+	}
+	due := make(map[tasks.Category][]tasks.Task)
+	for cat, ts := range all {
+		for _, task := range ts {
+			if !task.GetVisibilityTime().After(t) {
+				due[cat] = append(due[cat], task)
+			}
+		}
+	}
+	return due, nil
+}
+
+// ExecuteChasmPureTimers simulates a production ChasmTaskPure timer delivery:
+// it fires all pure tasks whose scheduled time is at or before t via
+// [chasm.Node.EachPureTask], then issues a single CloseTransaction — matching
+// the behaviour of executeChasmPureTimers in timer_queue_task_executor_base.go.
+//
+// Each task is validated before execution. If a task fails validation it is
+// considered stale and skipped — this is normal when time has advanced past
+// multiple task boundaries and only the latest is still relevant. If you want
+// to assert that no tasks are unexpectedly dropped, check
+// [PendingPureTaskTypeNames] before and after.
+func (e *Engine) ExecuteChasmPureTimers(ctx context.Context, ref chasm.ComponentRef, t time.Time) error {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return err
+	}
+	if err := exec.node.EachPureTask(t, func(
+		handler chasm.NodePureTask,
+		attrs chasm.TaskAttributes,
+		taskInstance any,
+	) (bool, error) {
+		valid, err := handler.ValidatePureTask(ctx, attrs, taskInstance)
+		if err != nil {
+			return false, err
+		}
+		if !valid {
+			return false, nil
+		}
+		return handler.ExecutePureTask(ctx, attrs, taskInstance)
+	}); err != nil {
+		return err
+	}
+	if _, err := exec.node.CloseTransaction(); err != nil {
+		return err
+	}
+	exec.advanceTransitionCount()
+	return nil
+}
+
+// ValidateDuePureTasks runs Validate (without Execute) on every pure task whose
+// scheduled time is at or before t. It returns two slices: the type names of
+// tasks that passed validation and those that failed. Tasks that fail validation
+// would be silently dropped by [ExecuteChasmPureTimers] — calling this before
+// executing makes the drop explicit and testable.
+func (e *Engine) ValidateDuePureTasks(ctx context.Context, ref chasm.ComponentRef, t time.Time) (valid, invalid []string, err error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := exec.node.EachPureTask(t, func(
+		handler chasm.NodePureTask,
+		attrs chasm.TaskAttributes,
+		taskInstance any,
+	) (bool, error) {
+		typeName := reflect.TypeOf(taskInstance).String()
+		ok, err := handler.ValidatePureTask(ctx, attrs, taskInstance)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			valid = append(valid, typeName)
+		} else {
+			invalid = append(invalid, typeName)
+		}
+		return false, nil // validate only, do not execute
+	}); err != nil {
+		return nil, nil, err
+	}
+	return valid, invalid, nil
+}
+
+// ValidateAllPendingTasks runs Validate on every pending pure task in the
+// execution, regardless of scheduled time. This mirrors the behaviour of
+// closeTransactionCleanupInvalidTasks, which runs on every CloseTransaction
+// when component state is dirty and silently drops tasks whose Validate
+// returns false — without executing them and without scheduling replacements.
+//
+// Use this to observe which tasks would be (or were) dropped by a state
+// mutation, independently of whether those tasks are currently due.
+func (e *Engine) ValidateAllPendingTasks(ctx context.Context, ref chasm.ComponentRef) (valid, invalid []string, err error) {
+	// Pass a far-future reference time so EachPureTask visits all pending tasks.
+	return e.ValidateDuePureTasks(ctx, ref, time.Unix(1<<40, 0))
+}
+
+// PureTaskTypeName returns the Go type name of the pure task scheduled at
+// exactly the given visibility time, or an empty string if no such task exists.
+// This lets tests assert on task kind (e.g. "v1.GeneratorTask" vs
+// "v1.SchedulerIdleTask") without hard-coding visibility timestamps.
+func (e *Engine) PureTaskTypeName(ref chasm.ComponentRef, visibilityTime time.Time) (string, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return "", err
+	}
+	var typeName string
+	// EachPureTask deserializes tasks and passes the typed instance to the callback.
+	// Returning (false, nil) from the callback leaves the task in place (not executed).
+	if err := exec.node.EachPureTask(visibilityTime, func(
+		_ chasm.NodePureTask,
+		attrs chasm.TaskAttributes,
+		taskInstance any,
+	) (bool, error) {
+		if attrs.ScheduledTime.Equal(visibilityTime) {
+			typeName = reflect.TypeOf(taskInstance).String()
+		}
+		return false, nil
+	}); err != nil {
+		return "", err
+	}
+	return typeName, nil
+}
+
+// PendingPureTaskTypeNames returns the Go type names of all pure tasks that are
+// still pending (not yet executed) in the execution identified by ref, sorted
+// by scheduled time. Tasks that have already been fired are not included.
+//
+// This is the right primitive for asserting task types after execution steps,
+// since [Tasks] accumulates all physical tasks ever scheduled (including fired
+// ones) while this method reflects the current unfired state of the tree.
+func (e *Engine) PendingPureTaskTypeNames(ref chasm.ComponentRef) ([]string, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	type taskWithTime struct {
+		scheduledTime time.Time
+		typeName      string
+	}
+	var pending []taskWithTime
+	// Use a far-future reference time so all pending tasks are included.
+	farFuture := time.Unix(1<<40, 0)
+	if err := exec.node.EachPureTask(farFuture, func(
+		_ chasm.NodePureTask,
+		attrs chasm.TaskAttributes,
+		taskInstance any,
+	) (bool, error) {
+		pending = append(pending, taskWithTime{
+			scheduledTime: attrs.ScheduledTime,
+			typeName:      reflect.TypeOf(taskInstance).String(),
+		})
+		return false, nil // observe only, do not execute
+	}); err != nil {
+		return nil, err
+	}
+	// Sort by scheduled time so the result is deterministic.
+	sort.Slice(pending, func(i, j int) bool {
+		return pending[i].scheduledTime.Before(pending[j].scheduledTime)
+	})
+	names := make([]string, len(pending))
+	for i, p := range pending {
+		names[i] = p.typeName
+	}
+	return names, nil
 }
 
 func (e *Engine) StartExecution(
@@ -443,6 +631,7 @@ func (e *Engine) startNew(
 	if _, err = exec.node.CloseTransaction(); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
+	exec.advanceTransitionCount()
 
 	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
@@ -486,6 +675,7 @@ func (e *Engine) startAndUpdateNew(
 	if _, err = exec.node.CloseTransaction(); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
+	exec.advanceTransitionCount()
 
 	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
@@ -516,13 +706,14 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
-		// NextTransitionCount increments on every CloseTransaction call, matching
-		// the real engine's per transition monotonic counter.
+		// NextTransitionCount returns currentTC+1, matching production MutableStateImpl
+		// semantics: idempotent within a transaction, advances only after commit.
+		// The engine calls advanceTransitionCount() after each successful CloseTransaction
+		// to move the committed TC forward.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
 			defer bsMu.Unlock()
-			transitionCount++
-			return transitionCount
+			return transitionCount + 1
 		},
 		// CurrentVersionedTransition reflects the latest committed transition count.
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
@@ -559,9 +750,16 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			return changed, nil
 		},
 	}
+	advanceTransitionCount := func() {
+		bsMu.Lock()
+		defer bsMu.Unlock()
+		transitionCount++
+	}
+
 	return &execution{
-		key:     key,
-		backend: backend,
+		key:                    key,
+		backend:                backend,
+		advanceTransitionCount: advanceTransitionCount,
 		node: chasm.NewEmptyTree(
 			e.registry,
 			e.timeSource,
@@ -614,6 +812,7 @@ func (e *Engine) updateComponentInExecution(
 	if _, err = execution.node.CloseTransaction(); err != nil {
 		return nil, err
 	}
+	execution.advanceTransitionCount()
 
 	return mutableCtx.Ref(component)
 }

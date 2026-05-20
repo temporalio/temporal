@@ -48,6 +48,21 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	return nil
 }
 
+// Validate checks whether this idle task is still the authoritative one:
+//
+//  1. The schedule is still idle (no new actions are pending). If the schedule
+//     has been updated or patched since this task was created, getIdleExpiration
+//     returns isIdle=false and the task is dropped.
+//
+//  2. The idle expiration matches the task's scheduled time. getIdleExpiration
+//     recomputes the expiration as getLastEventTime()+idleTimeTotal. If any
+//     event (e.g. a workflow start recorded by InvokerExecuteTask) has shifted
+//     getLastEventTime() since this task was scheduled, the expiration will no
+//     longer match taskAttrs.ScheduledTime and the task is dropped — without
+//     scheduling a replacement. This is the root cause of the idle-task
+//     invalidation bug for single-action schedules.
+//
+//  3. The scheduler is not already closed (idempotency guard).
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,

@@ -19,12 +19,19 @@ func MinTime(a, b time.Time) time.Time {
 	return b
 }
 
-// MaxTime returns the later of two given time.Time
-func MaxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
+// MaxTime returns the latest of the given time.Time values.
+// Returns the zero value if no arguments are provided.
+func MaxTime(times ...time.Time) time.Time {
+	if len(times) == 0 {
+		return time.Time{}
 	}
-	return b
+	latest := times[0]
+	for _, t := range times[1:] {
+		if t.After(latest) {
+			latest = t
+		}
+	}
+	return latest
 }
 
 // NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple

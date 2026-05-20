@@ -447,15 +447,17 @@ func (s *Scheduler) updateConflictToken() {
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
-	var lastEvent time.Time
 	invoker := s.Invoker.Get(ctx)
 	recentActions := invoker.recentActions()
-	if len(recentActions) > 0 {
-		lastEvent = recentActions[len(recentActions)-1].GetActualTime().AsTime()
+
+	times := []time.Time{
+		s.Info.GetCreateTime().AsTime(),
+		s.Info.GetUpdateTime().AsTime(),
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
-	return lastEvent
+	if len(recentActions) > 0 {
+		times = append(times, recentActions[len(recentActions)-1].GetActualTime().AsTime())
+	}
+	return util.MaxTime(times...)
 }
 
 // getIdleExpiration returns an idle close time and the boolean value of 'true'
@@ -581,6 +583,13 @@ func (s *Scheduler) HandleNexusCompletion(
 		CloseTime: info.CloseTime,
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
+
+	// Re-kick the generator so it can reschedule the idle task using the
+	// correct getLastEventTime() — which now reflects start.StartTime set by
+	// InvokerExecuteTask. Without this, the idle task scheduled before the
+	// workflow started would have been dropped by closeTransactionCleanupInvalidTasks
+	// when InvokerExecuteTask committed, leaving the schedule stuck open.
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return nil
 }
