@@ -229,7 +229,7 @@ func TestSingleActionSchedule(t *testing.T) {
 		FrontendClient: mockFrontend,
 	})
 
-	dropped, err := chasmtest.ExecuteChasmSideEffectTask(
+	dropped, err := chasmtest.ExecuteSideEffectTask(
 		t.Context(),
 		testEngine,
 		invoker,
@@ -443,7 +443,7 @@ func TestTwoActionSchedule(t *testing.T) {
 			return s.Invoker.Get(ctx), nil
 		}, struct{}{})
 	require.NoError(t, err)
-	dropped, err := chasmtest.ExecuteChasmSideEffectTask(t.Context(), testEngine, invoker,
+	dropped, err := chasmtest.ExecuteSideEffectTask(t.Context(), testEngine, invoker,
 		invokerExecuteHandler, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.False(t, dropped)
@@ -505,7 +505,7 @@ func TestTwoActionSchedule(t *testing.T) {
 			return s.Invoker.Get(ctx), nil
 		}, struct{}{})
 	require.NoError(t, err)
-	dropped, err = chasmtest.ExecuteChasmSideEffectTask(t.Context(), testEngine, invoker,
+	dropped, err = chasmtest.ExecuteSideEffectTask(t.Context(), testEngine, invoker,
 		invokerExecuteHandler, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.False(t, dropped)
