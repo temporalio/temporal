@@ -1204,7 +1204,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.NoError(err)
 			s.NoError(pollErr)
 			s.NotNil(result)
-			s.Positive(len(result.TaskToken))
+			s.NotEmpty(result.TaskToken)
 		}
 
 		s.Equal(activityID, result.ActivityId)
@@ -1226,8 +1226,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equal(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
-		assert.Equal(collect, 0, s.taskManager.getTaskCount(dbq))
+		assert.EqualValues(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
+		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_build_id=,worker_deployment_name=,worker_version=__unversioned__"]
@@ -1583,11 +1583,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.Equal(activityID, result.ActivityId)
-				s.Equal(activityType, result.ActivityType)
-				s.Equal(activityInput, result.Input)
-				s.Equal(activityHeader, result.Header)
-				s.Equal(workflowExecution, result.WorkflowExecution)
+				s.EqualValues(activityID, result.ActivityId)
+				s.EqualValues(activityType, result.ActivityType)
+				s.EqualValues(activityInput, result.Input)
+				s.EqualValues(activityHeader, result.Header)
+				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:          1,
 					NamespaceId:      namespaceID,
@@ -1709,10 +1709,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.Equal(workflowExecution, result.WorkflowExecution)
-				s.Equal(workflowType, result.WorkflowType)
-				s.Equal(startedEventID, result.StartedEventId)
-				s.Equal(workflowExecution, result.WorkflowExecution)
+				s.EqualValues(workflowExecution, result.WorkflowExecution)
+				s.EqualValues(workflowType, result.WorkflowType)
+				s.EqualValues(startedEventID, result.StartedEventId)
+				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:          1,
 					NamespaceId:      namespaceID,
@@ -3114,7 +3114,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		partitionType: prtn.Kind(),
 		versioned:     "unversioned",
 	}
-	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3157,7 +3157,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "versionSet",
 	}
-	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3198,7 +3198,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "buildId",
 	}
-	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
