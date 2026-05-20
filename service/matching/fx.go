@@ -2,6 +2,8 @@ package matching
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -31,8 +33,8 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	workerdeployment.Module,
-	// scheduler.Module,
-	// callback.Module,
+	scheduler.Module,
+	callback.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
