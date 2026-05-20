@@ -2950,11 +2950,9 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	}
 	wg.Wait()
 
-	if totalCancelled.Load() > 0 {
-		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
-			tag.String("worker-instance-key", workerInstanceKey),
-			tag.NewInt32("cancelled-count", totalCancelled.Load()))
-	}
+	wh.logger.Debug("Cancelled outstanding polls for worker shutdown.",
+		tag.String("worker-instance-key", workerInstanceKey),
+		tag.NewInt32("cancelled-count", totalCancelled.Load()))
 }
 
 // cancelOutstandingWorkerPollsFrontendFanout fans out poll cancellation to all partitions of the task queue.
@@ -3027,12 +3025,10 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 	}
 	waitGroup.Wait()
 
-	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
-		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
-			tag.String("worker-instance-key", workerInstanceKey),
-			tag.NewInt32("cancelled-count", totalCancelled.Load()),
-			tag.NewInt32("failed-partitions", failedPartitions.Load()))
-	}
+	wh.logger.Debug("Cancelled outstanding polls for worker shutdown.",
+		tag.String("worker-instance-key", workerInstanceKey),
+		tag.NewInt32("cancelled-count", totalCancelled.Load()),
+		tag.NewInt32("failed-partitions", failedPartitions.Load()))
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
