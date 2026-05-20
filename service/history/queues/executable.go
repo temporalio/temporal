@@ -277,12 +277,11 @@ func (e *executableImpl) Execute() (retErr error) {
 			ctx,
 			fmt.Sprintf("queue.Execute/%v", taskLabel),
 			trace.WithSpanKind(trace.SpanKindConsumer),
-		)
-		span.SetAttributes(
-			attribute.Key(idKey).String(entityID),
-			attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
-			attribute.Key("queue.task.type").String(e.GetType().String()),
-			attribute.Key("queue.task.id").Int64(e.GetTaskID()))
+			trace.WithAttributes(
+				attribute.Key(idKey).String(entityID),
+				attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
+				attribute.Key("queue.task.type").String(e.GetType().String()),
+				attribute.Key("queue.task.id").Int64(e.GetTaskID())))
 
 		if telemetry.DebugMode() {
 			if taskPayload, err := json.Marshal(e.GetTask()); err != nil {
