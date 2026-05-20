@@ -1776,6 +1776,12 @@ to this require a restart to take effect.`,
 		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
 for cached shard ownership entries after a membership update.`,
 	)
+	HistoryClientEvictDelay = NewGlobalDurationSetting(
+		"history.clientEvictDelay",
+		30*time.Second,
+		`HistoryClientEvictDelay delays closing a cached history connection after its host leaves
+the membership ring, giving in-flight RPCs time to drain before the connection is closed.`,
+	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
 		1,

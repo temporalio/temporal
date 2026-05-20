@@ -1,8 +1,12 @@
 package history
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -47,6 +51,7 @@ func NewConnectionPool[C any](
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
 	logger log.Logger,
+	evictDelay dynamicconfig.DurationPropertyFn,
 ) *connectionPoolImpl[C] {
 	c := &connectionPoolImpl[C]{
 		historyServiceResolver: historyServiceResolver,
@@ -55,6 +60,30 @@ func NewConnectionPool[C any](
 		logger:                 logger,
 	}
 	c.mu.conns = make(map[rpcAddress]clientConnection[C])
+
+	// Close cached conns whose host leaves the membership ring. The listener
+	// goroutine lives for the lifetime of the pool (process).
+	go func() {
+		listenerName := fmt.Sprintf("historyConnectionPool-%s", uuid.New().String())
+		ch := make(chan *membership.ChangedEvent, 1)
+		if err := historyServiceResolver.AddListener(listenerName, ch); err != nil {
+			logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+			return
+		}
+		for event := range ch {
+			for _, h := range event.HostsRemoved {
+				go func() {
+					time.Sleep(evictDelay())
+					for _, m := range historyServiceResolver.Members() {
+						if m.GetAddress() == h.GetAddress() {
+							return
+						}
+					}
+					c.closeConn(rpcAddress(h.GetAddress()))
+				}()
+			}
+		}
+	}()
 	return c
 }
 
