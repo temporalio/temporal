@@ -2972,6 +2972,12 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 instead of the previous HSM backed implementation.`,
 	)
 
+	EnableSignalWithStartFromWorkflow = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartFromWorkflow",
+		false,
+		`Controls whether signal with start from workflow is enabled.`,
+	)
+
 	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(
 		"history.enableCHASMSignalBacklinks",
 		false,
