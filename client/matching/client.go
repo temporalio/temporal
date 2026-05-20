@@ -54,6 +54,7 @@ func NewClient(
 	lb LoadBalancer,
 	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
 	resolver membership.ServiceResolver,
+	evictDelay dynamicconfig.DurationPropertyFn,
 ) matchingservice.MatchingServiceClient {
 	c := &clientImpl{
 		timeout:         timeout,
@@ -92,7 +93,19 @@ func NewClient(
 				return
 			case event := <-ch:
 				for _, h := range event.HostsRemoved {
-					clients.Evict(h.GetAddress())
+					go func() {
+						select {
+						case <-time.After(evictDelay()):
+						case <-ctx.Done():
+							return
+						}
+						for _, m := range resolver.Members() {
+							if m.GetAddress() == h.GetAddress() {
+								return
+							}
+						}
+						clients.Evict(h.GetAddress())
+					}()
 				}
 			}
 		}

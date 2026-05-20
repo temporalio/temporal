@@ -1531,6 +1531,12 @@ to remove expired entries. Should be shorter than EntryTTL for timely cleanup. L
 Don't change this on a live cluster without using the gradual change mechanism.
 `,
 	)
+	MatchingClientEvictDelay = NewGlobalDurationSetting(
+		"matching.clientEvictDelay",
+		30*time.Second,
+		`MatchingClientEvictDelay delays evicting a cached matching client connection after its host leaves
+the membership ring, giving in-flight long-polls time to drain before the connection is closed.`,
+	)
 
 	// keys for history
 
