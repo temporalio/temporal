@@ -1242,8 +1242,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
-// cancelOutstandingWorkerPollsForAllPartitions initiates tree-based fan-out from the root partition.
-// Root cancels its own polls and propagates to direct children, which in turn propagate to theirs.
+// cancelOutstandingWorkerPollsForAllPartitions performs flat fan-out from the root partition.
+// It computes all partitions, groups them by destination matching host, processes local
+// partitions directly, and sends one CancelOutstandingWorkerPollsPartition RPC per remote host.
 func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
@@ -1266,43 +1267,101 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	}
 	cfg := rootPM.GetConfig()
 	numPartitions := max(1, cfg.NumReadPartitions())
-	degree := max(1, cfg.ForwarderMaxChildrenPerNode())
 
-	e.logger.Debug("Initiating tree fan-out for worker poll cancellation",
+	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
 		tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
 		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
 		tag.NewInt32("partition-count", int32(numPartitions)),
-		tag.NewInt32("degree", int32(degree)),
 	)
 
-	rootPartitionProto := &taskqueuespb.TaskQueuePartition{
-		TaskQueue:     rootPartition.TaskQueue().Name(),
-		TaskQueueType: request.GetTaskQueueType(),
-		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	// Build partition protos for all partitions.
+	tqName := rootPartition.TaskQueue().Name()
+	tqType := request.GetTaskQueueType()
+	allPartitions := make([]*taskqueuespb.TaskQueuePartition, numPartitions)
+	for i := range numPartitions {
+		allPartitions[i] = &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     tqName,
+			TaskQueueType: tqType,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+		}
 	}
-	// TODO: batch multiple concurrent ShutdownWorker calls for the same task queue into a single
-	// request with multiple workers.
-	resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-		NamespaceId:        request.GetNamespaceId(),
-		TaskQueuePartition: rootPartitionProto,
-		Partitions:         []*taskqueuespb.TaskQueuePartition{rootPartitionProto},
-		Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
-			WorkerInstanceKey: request.GetWorkerInstanceKey(),
-			WorkerIdentity:    request.GetWorkerIdentity(),
-		}},
-		PartitionCount: int32(numPartitions),
-		Degree:         int32(degree),
-	})
-	if err != nil {
-		return nil, err
+
+	workers := []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+		WorkerInstanceKey: request.GetWorkerInstanceKey(),
+		WorkerIdentity:    request.GetWorkerIdentity(),
+	}}
+
+	// Group partitions by target. Keys are host identities from Route(). When Route()
+	// is unavailable or fails, each unroutable partition gets a synthetic key so it's
+	// sent as an individual RPC.
+	routingClient, ok := e.matchingRawClient.(matching.RoutingClient)
+	if !ok {
+		routingClient = nil
 	}
-	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: resp.GetCancelledCount()}, nil
+	self := e.hostInfoProvider.HostInfo().Identity()
+	partitionsByTarget := map[string][]*taskqueuespb.TaskQueuePartition{}
+
+	for _, partitionProto := range allPartitions {
+		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
+		target := ""
+		if routingClient != nil {
+			h, err := routingClient.Route(partition)
+			if err != nil {
+				e.logger.Warn("Failed to resolve matching host for poll cancellation, sending individual RPC",
+					tag.NewInt32("partition-id", partitionProto.GetNormalPartitionId()),
+					tag.Error(err))
+			} else {
+				target = h
+			}
+		}
+		if target == "" {
+			target = fmt.Sprintf("_unroutable_%d", partitionProto.GetNormalPartitionId())
+		}
+		partitionsByTarget[target] = append(partitionsByTarget[target], partitionProto)
+	}
+
+	// Process each target: local via direct call, remote via RPC.
+	var totalCancelled atomic.Int32
+	var failedPartitions atomic.Int32
+	var wg sync.WaitGroup
+
+	for target, partitions := range partitionsByTarget {
+		req := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+			NamespaceId:        request.GetNamespaceId(),
+			TaskQueuePartition: partitions[0], // routing key
+			Partitions:         partitions,
+			Workers:            workers,
+		}
+		if target == self {
+			resp, _ := e.CancelOutstandingWorkerPollsPartition(ctx, req)
+			totalCancelled.Add(resp.GetCancelledCount())
+			continue
+		}
+		wg.Go(func() {
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				failedPartitions.Add(int32(len(partitions)))
+				e.logger.Warn("Failed to cancel outstanding worker polls for remote host",
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+				return
+			}
+			totalCancelled.Add(resp.GetCancelledCount())
+			failedPartitions.Add(resp.GetFailedPartitions())
+		})
+	}
+
+	wg.Wait()
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{
+		CancelledCount: totalCancelled.Load(),
+	}, nil
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on partitions
-// and propagates to child partitions in the partition tree.
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the
+// specified partitions. This is a leaf handler — no fan-out. Called by the matching root
+// during flat fan-out to process partitions on a remote host.
 func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
@@ -1333,103 +1392,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 		}
 	}
 
-	// Fan out to child partitions in the tree.
-	childCancelled, childFailed := e.fanOutPollCancellationToChildren(ctx, request)
-
 	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
-		CancelledCount:   cancelledCount + childCancelled,
-		FailedPartitions: childFailed,
+		CancelledCount: cancelledCount,
 	}, nil
-}
-
-// fanOutPollCancellationToChildren computes child partitions in the tree (children of P
-// are [P*D+1, ..., P*D+D]), groups them by destination matching host, and sends one RPC
-// per host carrying all co-located partitions. When Route() is unavailable or fails,
-// each partition falls back to an individual RPC.
-func (e *matchingEngineImpl) fanOutPollCancellationToChildren(
-	ctx context.Context,
-	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
-) (cancelledCount int32, failedPartitions int32) {
-	numPartitions := int(request.GetPartitionCount())
-	degree := int(request.GetDegree())
-	if degree <= 0 || numPartitions <= 0 {
-		return 0, 0
-	}
-
-	routingClient, ok := e.matchingRawClient.(matching.RoutingClient)
-	if !ok {
-		routingClient = nil
-	}
-	childrenByHost := map[string][]*taskqueuespb.TaskQueuePartition{}
-	ungroupedCounter := 0
-	for _, partitionProto := range request.GetPartitions() {
-		partitionID := int(partitionProto.GetNormalPartitionId())
-		firstChild := partitionID*degree + 1
-		for childID := firstChild; childID < firstChild+degree && childID < numPartitions; childID++ {
-			childPartitionProto := &taskqueuespb.TaskQueuePartition{
-				TaskQueue:     partitionProto.GetTaskQueue(),
-				TaskQueueType: partitionProto.GetTaskQueueType(),
-				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(childID)},
-			}
-			host := e.resolveHostForPartition(routingClient, childPartitionProto, request.GetNamespaceId(), childID, &ungroupedCounter)
-			childrenByHost[host] = append(childrenByHost[host], childPartitionProto)
-		}
-	}
-
-	var totalChildCancelled atomic.Int32
-	var totalFailedPartitions atomic.Int32
-	var wg sync.WaitGroup
-
-	for _, children := range childrenByHost {
-		wg.Go(func() {
-			childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-				NamespaceId:        request.GetNamespaceId(),
-				TaskQueuePartition: children[0], // routing key
-				Partitions:         children,
-				Workers:            request.GetWorkers(),
-				PartitionCount:     request.GetPartitionCount(),
-				Degree:             request.GetDegree(),
-			}
-			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
-			if err != nil {
-				totalFailedPartitions.Add(int32(len(children)))
-				e.logger.Warn("Failed to cancel outstanding worker polls for child partitions",
-					tag.NewInt("partition-count", len(children)),
-					tag.Error(err))
-				return
-			}
-			totalChildCancelled.Add(resp.GetCancelledCount())
-			totalFailedPartitions.Add(resp.GetFailedPartitions())
-		})
-	}
-
-	wg.Wait()
-	return totalChildCancelled.Load(), totalFailedPartitions.Load()
-}
-
-// resolveHostForPartition returns the matching host for a child partition via Route().
-// If routing is unavailable or fails, returns a unique key so the partition gets its own RPC.
-func (e *matchingEngineImpl) resolveHostForPartition(
-	routingClient matching.RoutingClient,
-	partitionProto *taskqueuespb.TaskQueuePartition,
-	namespaceID string,
-	childID int,
-	ungroupedCounter *int,
-) string {
-	if routingClient != nil {
-		childPartition := tqid.PartitionFromPartitionProto(partitionProto, namespaceID)
-		host, err := routingClient.Route(childPartition)
-		if err == nil {
-			return host
-		}
-		e.logger.Warn("Failed to resolve matching host for poll cancellation grouping, sending individual RPC",
-			tag.NewInt32("partition-id", int32(childID)),
-			tag.Error(err))
-	}
-	// Use unique key so this partition gets its own RPC.
-	host := fmt.Sprintf("_ungrouped_%d", *ungroupedCounter)
-	*ungroupedCounter++
-	return host
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so

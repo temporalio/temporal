@@ -1654,33 +1654,18 @@ func (x *CancelOutstandingWorkerPollsResponse) GetCancelledCount() int32 {
 	return 0
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on partitions,
-// propagates to child partitions in the partition tree, and waits for all children to complete
-// before returning.
+// CancelOutstandingWorkerPollsPartitionRequest cancels outstanding polls for the given workers
+// on the specified partitions. Sent by the matching root to each matching host during
+// fan-out.
 type CancelOutstandingWorkerPollsPartitionRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Used for RPC routing. Must be set to partitions[0].
+	// Used for RPC routing only. Set to any partition on the target host.
 	TaskQueuePartition *v18.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	// Partitions to cancel polls on and propagate to child partitions.
+	// Partitions to process on this host.
 	Partitions []*v18.TaskQueuePartition `protobuf:"bytes,3,rep,name=partitions,proto3" json:"partitions,omitempty"`
-	// Workers to cancel. All workers must be on the same task queue.
-	Workers []*CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry `protobuf:"bytes,4,rep,name=workers,proto3" json:"workers,omitempty"`
-	// Tree fan-out parameters, set by root and passed down so each node can compute
-	// its children without loading config.
-	// Children of partition P are [P*degree+1, ..., P*degree+degree], capped at partition_count.
-	// Example with partition_count=7, degree=2:
-	//
-	//	    0
-	//	   / \
-	//	  1   2
-	//	 / \ / \
-	//	3  4 5  6
-	//
-	// Root sends RPCs to {1, 2}. Node 1 propagates to {3, 4}. Node 2 propagates to {5, 6}.
-	PartitionCount int32 `protobuf:"varint,5,opt,name=partition_count,json=partitionCount,proto3" json:"partition_count,omitempty"`
-	// Maximum number of children per node in the partition tree.
-	Degree        int32 `protobuf:"varint,6,opt,name=degree,proto3" json:"degree,omitempty"`
+	// Workers to cancel polls for.
+	Workers       []*CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry `protobuf:"bytes,4,rep,name=workers,proto3" json:"workers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1743,24 +1728,10 @@ func (x *CancelOutstandingWorkerPollsPartitionRequest) GetWorkers() []*CancelOut
 	return nil
 }
 
-func (x *CancelOutstandingWorkerPollsPartitionRequest) GetPartitionCount() int32 {
-	if x != nil {
-		return x.PartitionCount
-	}
-	return 0
-}
-
-func (x *CancelOutstandingWorkerPollsPartitionRequest) GetDegree() int32 {
-	if x != nil {
-		return x.Degree
-	}
-	return 0
-}
-
 type CancelOutstandingWorkerPollsPartitionResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	CancelledCount int32                  `protobuf:"varint,1,opt,name=cancelled_count,json=cancelledCount,proto3" json:"cancelled_count,omitempty"`
-	// Number of child partitions that failed during tree fan-out.
+	// Number of partitions that failed during fan-out.
 	FailedPartitions int32 `protobuf:"varint,2,opt,name=failed_partitions,json=failedPartitions,proto3" json:"failed_partitions,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -6111,16 +6082,14 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x13worker_instance_key\x18\x04 \x01(\tR\x11workerInstanceKey\x12'\n" +
 	"\x0fworker_identity\x18\x05 \x01(\tR\x0eworkerIdentity\"O\n" +
 	"$CancelOutstandingWorkerPollsResponse\x12'\n" +
-	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\"\xb4\x04\n" +
+	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\"\xf3\x03\n" +
 	",CancelOutstandingWorkerPollsPartitionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12f\n" +
 	"\x14task_queue_partition\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.TaskQueuePartitionR\x12taskQueuePartition\x12T\n" +
 	"\n" +
 	"partitions\x18\x03 \x03(\v24.temporal.server.api.taskqueue.v1.TaskQueuePartitionR\n" +
 	"partitions\x12z\n" +
-	"\aworkers\x18\x04 \x03(\v2`.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionRequest.WorkerEntryR\aworkers\x12'\n" +
-	"\x0fpartition_count\x18\x05 \x01(\x05R\x0epartitionCount\x12\x16\n" +
-	"\x06degree\x18\x06 \x01(\x05R\x06degree\x1af\n" +
+	"\aworkers\x18\x04 \x03(\v2`.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionRequest.WorkerEntryR\aworkers\x1af\n" +
 	"\vWorkerEntry\x12.\n" +
 	"\x13worker_instance_key\x18\x01 \x01(\tR\x11workerInstanceKey\x12'\n" +
 	"\x0fworker_identity\x18\x02 \x01(\tR\x0eworkerIdentity\"\x85\x01\n" +

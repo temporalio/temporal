@@ -259,9 +259,9 @@ message CancelOutstandingWorkerPollsResponse {
     int32 cancelled_count = 1;
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on partitions,
-// propagates to child partitions in the partition tree, and waits for all children to complete
-// before returning.
+// CancelOutstandingWorkerPollsPartitionRequest cancels outstanding polls for the given workers
+// on the specified partitions. Sent by the matching root to each matching host during
+// fan-out.
 message CancelOutstandingWorkerPollsPartitionRequest {
     message WorkerEntry {
         string worker_instance_key = 1;
@@ -271,35 +271,20 @@ message CancelOutstandingWorkerPollsPartitionRequest {
 
     string namespace_id = 1;
 
-    // Used for RPC routing. Must be set to partitions[0].
+    // Used for RPC routing only. Set to any partition on the target host.
     temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
 
-    // Partitions to cancel polls on and propagate to child partitions.
+    // Partitions to process on this host.
     repeated temporal.server.api.taskqueue.v1.TaskQueuePartition partitions = 3;
 
-    // Workers to cancel. All workers must be on the same task queue.
+    // Workers to cancel polls for.
     repeated WorkerEntry workers = 4;
-
-    // Tree fan-out parameters, set by root and passed down so each node can compute
-    // its children without loading config.
-    // Children of partition P are [P*degree+1, ..., P*degree+degree], capped at partition_count.
-    // Example with partition_count=7, degree=2:
-    //         0
-    //        / \
-    //       1   2
-    //      / \ / \
-    //     3  4 5  6
-    // Root sends RPCs to {1, 2}. Node 1 propagates to {3, 4}. Node 2 propagates to {5, 6}.
-    int32 partition_count = 5;
-
-    // Maximum number of children per node in the partition tree.
-    int32 degree = 6;
 }
 
 message CancelOutstandingWorkerPollsPartitionResponse {
     int32 cancelled_count = 1;
 
-    // Number of child partitions that failed during tree fan-out.
+    // Number of partitions that failed during fan-out.
     int32 failed_partitions = 2;
 }
 
