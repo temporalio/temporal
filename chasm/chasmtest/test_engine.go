@@ -44,11 +44,11 @@ type (
 	}
 
 	execution struct {
-		key                  chasm.ExecutionKey
-		node                 *chasm.Node
-		backend              *chasm.MockNodeBackend
-		root                 chasm.RootComponent
-		requestID            string
+		key                    chasm.ExecutionKey
+		node                   *chasm.Node
+		backend                *chasm.MockNodeBackend
+		root                   chasm.RootComponent
+		requestID              string
 		advanceTransitionCount func()
 	}
 

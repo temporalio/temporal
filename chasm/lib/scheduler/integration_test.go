@@ -10,7 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
@@ -126,8 +126,8 @@ func TestSingleActionSchedule(t *testing.T) {
 		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "test-run-id"}, nil)
 	ts := clock.NewEventTimeSource()
 	t0 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) // schedule created
-	t1 := t0.Add(time.Hour)                            // calendar spec fires; workflow starts
-	t2 := t1.Add(time.Minute)                          // workflow completes
+	t1 := t0.Add(time.Hour)                           // calendar spec fires; workflow starts
+	t2 := t1.Add(time.Minute)                         // workflow completes
 	idleTime := scheduler.DefaultTweakables.IdleTime
 	ts.Update(t0)
 
@@ -384,10 +384,10 @@ func TestTwoActionSchedule(t *testing.T) {
 
 	ts := clock.NewEventTimeSource()
 	t0 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	t1 := t0.Add(defaultInterval)        // first spec boundary
-	t2 := t1.Add(time.Second)            // workflow 1 completes (before second boundary)
-	t3 := t1.Add(defaultInterval)        // second spec boundary
-	t4 := t3.Add(time.Second)            // workflow 2 completes
+	t1 := t0.Add(defaultInterval) // first spec boundary
+	t2 := t1.Add(time.Second)     // workflow 1 completes (before second boundary)
+	t3 := t1.Add(defaultInterval) // second spec boundary
+	t4 := t3.Add(time.Second)     // workflow 2 completes
 	ts.Update(t0)
 
 	specProcessor := newRealSpecProcessor(ctrl, logger)

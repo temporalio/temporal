@@ -237,6 +237,38 @@ func (s *specSuite) TestSpecIntervalPhase() {
 	)
 }
 
+// TestSpecIntervalPhaseSubSecond verifies that sub-second precision in an interval
+// phase (offset) is silently truncated to seconds during canonicalization.
+// This matches the 1-second granularity of interval schedules (github.com/temporalio/temporal#10312).
+func (s *specSuite) TestSpecIntervalPhaseSubSecond() {
+	// Canonicalization must truncate sub-second phase to whole seconds.
+	canonical, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(2 * time.Minute),
+			Phase:    durationpb.New(63*time.Second + 123*time.Microsecond),
+		}},
+	})
+	s.NoError(err)
+	s.Require().Len(canonical.Interval, 1)
+	// Phase must be exactly 63 seconds with no sub-second component.
+	s.Equal(durationpb.New(63*time.Second), canonical.Interval[0].Phase)
+
+	// Schedule must produce the correct repeated fire times when compiled from
+	// a spec whose phase originally had microseconds.
+	s.checkSequenceRaw(
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(2 * time.Minute),
+				Phase:    durationpb.New(63*time.Second + 123*time.Microsecond),
+			}},
+		},
+		time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 12, 1, 3, 0, time.UTC),
+		time.Date(2022, 3, 23, 12, 3, 3, 0, time.UTC),
+		time.Date(2022, 3, 23, 12, 5, 3, 0, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecIntervalMultiple() {
 	s.checkSequenceRaw(
 		&schedulepb.ScheduleSpec{
