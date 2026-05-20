@@ -13,6 +13,9 @@ import (
 
 // Export unexported methods for testing.
 
+// Handler is the exported type alias for the unexported handler, used in tests.
+type Handler = handler
+
 func NewTestHandler(logger log.Logger) *handler {
 	return newHandler(logger, legacyscheduler.NewSpecBuilder())
 }

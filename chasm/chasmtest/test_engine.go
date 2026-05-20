@@ -107,6 +107,11 @@ func NewEngine(
 	return e
 }
 
+// TimeSource returns the engine's time source, useful for obtaining the current time in tests.
+func (e *Engine) TimeSource() clock.TimeSource {
+	return e.timeSource
+}
+
 // Tasks returns all physical tasks scheduled for the execution identified by ref, grouped by category.
 // Logical tasks accumulate across every [Engine.UpdateComponent], [Engine.StartExecution], and
 // [Engine.UpdateWithStartExecution] call on the execution, and convert to physical tasks on CloseTransaction,

@@ -170,9 +170,9 @@ func idleSchedule() *schedulepb.Schedule {
 	return s
 }
 
-// newIdleScheduleEngine creates a chasmtest.Engine and starts an idle scheduler
-// on it, returning the engine and the serialized ExecutionRef.
-func newIdleScheduleEngine(t *testing.T) (*chasmtest.Engine, []byte) {
+// newIdleScheduleEngine creates a chasmtest.Engine, starts an idle scheduler on it,
+// and returns the engine, a pre-wired engine context, a handler, and a ref for checking tasks.
+func newIdleScheduleEngine(t *testing.T) (*chasmtest.Engine, context.Context, *scheduler.Handler, chasm.ComponentRef) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
@@ -192,71 +192,59 @@ func newIdleScheduleEngine(t *testing.T) (*chasmtest.Engine, []byte) {
 		struct{}{},
 	)
 	require.NoError(t, err)
-	return engine, result.ExecutionRef
+
+	ref, err := chasm.DeserializeComponentRef(result.ExecutionRef)
+	require.NoError(t, err)
+
+	return engine, engineCtx, scheduler.NewTestHandler(logger), ref
 }
 
-func TestPatchTriggerImmediately_IdleSchedule_LosesAllTasks(t *testing.T) {
-	engine, execRef := newIdleScheduleEngine(t)
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+func TestPatch_IdleSchedule_RetainsTimerTask(t *testing.T) {
+	t.Run("TriggerImmediately", func(t *testing.T) {
+		engine, engineCtx, h, ref := newIdleScheduleEngine(t)
 
-	_, _, err := chasm.UpdateComponent[*scheduler.Scheduler](
-		engineCtx,
-		execRef,
-		func(sched *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
-			_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
-				FrontendRequest: &workflowservice.PatchScheduleRequest{
-					Patch: &schedulepb.SchedulePatch{
-						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-					},
+		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.PatchScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Patch: &schedulepb.SchedulePatch{
+					TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 				},
-			})
-			return struct{}{}, err
-		},
-		struct{}{},
-	)
-	require.NoError(t, err)
+			},
+		})
+		require.NoError(t, err)
 
-	ref, err := chasm.DeserializeComponentRef(execRef)
-	require.NoError(t, err)
-	allTasks, err := engine.Tasks(ref)
-	require.NoError(t, err)
-	require.NotEmpty(t, allTasks[tasks.CategoryTimer],
-		"idle schedule should retain a timer task after TriggerImmediately patch")
-}
+		allTasks, err := engine.Tasks(ref)
+		require.NoError(t, err)
+		require.NotEmpty(t, allTasks[tasks.CategoryTimer])
+	})
 
-func TestPatchBackfillRequest_IdleSchedule_LosesAllTasks(t *testing.T) {
-	engine, execRef := newIdleScheduleEngine(t)
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	t.Run("BackfillRequest", func(t *testing.T) {
+		engine, engineCtx, h, ref := newIdleScheduleEngine(t)
+		now := engine.TimeSource().Now()
 
-	_, _, err := chasm.UpdateComponent[*scheduler.Scheduler](
-		engineCtx,
-		execRef,
-		func(sched *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
-			now := ctx.Now(sched)
-			_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
-				FrontendRequest: &workflowservice.PatchScheduleRequest{
-					Patch: &schedulepb.SchedulePatch{
-						BackfillRequest: []*schedulepb.BackfillRequest{
-							{
-								StartTime: timestamppb.New(now.Add(-2 * defaultInterval)),
-								EndTime:   timestamppb.New(now.Add(-defaultInterval)),
-							},
+		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.PatchScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Patch: &schedulepb.SchedulePatch{
+					BackfillRequest: []*schedulepb.BackfillRequest{
+						{
+							StartTime: timestamppb.New(now.Add(-2 * defaultInterval)),
+							EndTime:   timestamppb.New(now.Add(-defaultInterval)),
 						},
 					},
 				},
-			})
-			return struct{}{}, err
-		},
-		struct{}{},
-	)
-	require.NoError(t, err)
+			},
+		})
+		require.NoError(t, err)
 
-	ref, err := chasm.DeserializeComponentRef(execRef)
-	require.NoError(t, err)
-	allTasks, err := engine.Tasks(ref)
-	require.NoError(t, err)
-	require.NotEmpty(t, allTasks[tasks.CategoryTimer],
-		"idle schedule should retain a timer task after BackfillRequest patch")
+		allTasks, err := engine.Tasks(ref)
+		require.NoError(t, err)
+		require.NotEmpty(t, allTasks[tasks.CategoryTimer])
+	})
 }
 
 func TestUnpause_ResumesProcessing(t *testing.T) {

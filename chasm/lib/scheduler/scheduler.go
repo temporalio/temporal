@@ -835,21 +835,19 @@ func (s *Scheduler) Patch(
 	if s.Closed {
 		return nil, ErrClosed
 	}
-	patch := req.FrontendRequest.Patch
-
-	if patch.Pause != "" {
+	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = patch.Pause
+		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
 	}
-	if patch.Unpause != "" {
+	if req.FrontendRequest.Patch.Unpause != "" {
 		if s.WorkflowMigration != nil {
 			return nil, ErrMigrationPending
 		}
 		s.Schedule.State.Paused = false
-		s.Schedule.State.Notes = patch.Unpause
+		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 	}
 
-	if err := s.handlePatch(ctx, patch); err != nil {
+	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err
 	}
 
