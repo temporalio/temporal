@@ -32,15 +32,15 @@ func TestCallbacksMigrationSuite(t *testing.T) {
 }
 
 func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	return testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false),
 	)
-	// Start with CHASM disabled by default for migration tests
-	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
-	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
-	return env
 }
 
 func (s *CallbacksMigrationSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
