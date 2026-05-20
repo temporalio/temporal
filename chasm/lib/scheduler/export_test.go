@@ -38,10 +38,6 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
 
-func (s *Scheduler) LogEvent(ctx chasm.MutableContext, msg string) {
-	s.logEvent(ctx, msg)
-}
-
 const (
 	MaxEventLogEntries    = maxEventLogEntries
 	MaxEventLogMessageLen = maxEventLogMessageLen

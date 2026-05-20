@@ -18,6 +18,8 @@ type Generator struct {
 	*schedulerpb.GeneratorState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 // NewGenerator returns an initialized Generator component, which should
@@ -34,6 +36,7 @@ func NewGenerator(ctx chasm.MutableContext) *Generator {
 func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.GeneratorState) *Generator {
 	generator := &Generator{
 		GeneratorState: state,
+		EventLog:       chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	return generator
 }
