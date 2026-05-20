@@ -265,6 +265,8 @@ func newMatchingEngine(
 		timeSource:          clock.NewRealTimeSource(),
 		visibilityManager:   mockVisibilityManager,
 		nexusEndpointClient: newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	return e
@@ -276,6 +278,86 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_CompletedByWorkerShutdown() {
+	namespaceID := uuid.NewString()
+	tl := "shutdown-test-tq"
+	workerKey := "test-worker-instance"
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Minute)
+
+	// Shut down the worker so subsequent polls are rejected.
+	_, err := s.matchingEngine.CancelOutstandingWorkerPolls(context.Background(),
+		&matchingservice.CancelOutstandingWorkerPollsRequest{
+			WorkerInstanceKey: workerKey,
+		})
+	s.NoError(err)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:          "test-identity",
+			WorkerInstanceKey: workerKey,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.True(resp.GetCompletedByWorkerShutdown(), "response should have CompletedByWorkerShutdown set")
+	s.Empty(resp.GetTaskToken(), "response should have no task token")
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueue_CompletedByWorkerShutdown() {
+	namespaceID := uuid.NewString()
+	tl := "shutdown-test-tq"
+	workerKey := "test-worker-instance"
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Minute)
+
+	// Shut down the worker so subsequent polls are rejected.
+	_, err := s.matchingEngine.CancelOutstandingWorkerPolls(context.Background(),
+		&matchingservice.CancelOutstandingWorkerPollsRequest{
+			WorkerInstanceKey: workerKey,
+		})
+	s.NoError(err)
+
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceID,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:          "test-identity",
+			WorkerInstanceKey: workerKey,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.True(resp.GetCompletedByWorkerShutdown(), "response should have CompletedByWorkerShutdown set")
+	s.Empty(resp.GetTaskToken(), "response should have no task token")
+}
+
+func (s *matchingEngineSuite) TestPollNexusTaskQueue_CompletedByWorkerShutdown() {
+	namespaceID := uuid.NewString()
+	tl := "shutdown-test-tq"
+	workerKey := "test-worker-instance"
+
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Minute)
+
+	// Shut down the worker so subsequent polls are rejected.
+	_, err := s.matchingEngine.CancelOutstandingWorkerPolls(context.Background(),
+		&matchingservice.CancelOutstandingWorkerPollsRequest{
+			WorkerInstanceKey: workerKey,
+		})
+	s.NoError(err)
+
+	resp, err := s.matchingEngine.PollNexusTaskQueue(context.Background(), &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.PollNexusTaskQueueRequest{
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:          "test-identity",
+			WorkerInstanceKey: workerKey,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.True(resp.GetCompletedByWorkerShutdown(), "response should have CompletedByWorkerShutdown set")
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
@@ -328,6 +410,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			}, metrics.NoopMetricsHandler)
 			s.NoError(err)
 			s.Equal(emptyPollActivityTaskQueueResponse, pollResp)
+			s.False(pollResp.GetCompletedByWorkerShutdown())
 
 			taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 		} else {
@@ -340,6 +423,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			}, metrics.NoopMetricsHandler)
 			s.NoError(err)
 			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+			s.False(resp.GetCompletedByWorkerShutdown())
 
 			taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 		}
@@ -545,6 +629,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	}, metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+	s.False(resp.GetCompletedByWorkerShutdown())
 
 	// add task to sticky queue again, this time it should pass
 	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
@@ -585,6 +670,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
+	s.False(resp.GetCompletedByWorkerShutdown())
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
@@ -1776,6 +1862,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
+	s.False(resp.GetCompletedByWorkerShutdown())
 }
 
 func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
@@ -2154,14 +2241,16 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 
-	task1, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
+	result1, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
+	task1 := result1.task
 
 	task1.finish(serviceerror.NewInternal("test error"), true)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 
-	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
+	result2, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
+	task2 := result2.task
 	protoassert.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
 	s.NotEqual(task1.event.GetTaskId(), task2.event.GetTaskId(), "IDs should not match")
 
@@ -2800,16 +2889,16 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 
 	go func() {
 		prtn := newRootPartition(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
+		result, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "unknown",
 				UseVersioning: true,
 			},
 		})
 		s.NoError(err)
-		s.Equal("wf", task.event.Data.WorkflowId)
-		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(nil, true)
+		s.Equal("wf", result.task.event.Data.WorkflowId)
+		s.Equal(int64(123), result.task.event.Data.ScheduledEventId)
+		result.task.finish(nil, true)
 		wg.Done()
 	}()
 
@@ -2909,16 +2998,16 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.NoError(err)
 
 	// now poll for the task
-	task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
+	result, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       build1,
 			UseVersioning: true,
 		},
 	})
 	s.Require().NoError(err)
-	s.Equal("wf", task.event.Data.WorkflowId)
-	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(nil, true)
+	s.Equal("wf", result.task.event.Data.WorkflowId)
+	s.Equal(int64(123), result.task.event.Data.ScheduledEventId)
+	result.task.finish(nil, true)
 }
 
 type mockRoutingMatchingClient struct {
@@ -6108,3 +6197,4 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 		}
 	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
 }
+
