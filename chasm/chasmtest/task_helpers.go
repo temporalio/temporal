@@ -65,6 +65,9 @@ func ExecutePureTask[C chasm.Component, T any](
 //
 // The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
 // obtain a ref is needed. Pass the component pointer directly.
+//
+// Use [chasm.MockMutableContext] directly when you need to inspect typed task payloads added
+// during execution, since the real engine serializes them into history layer tasks.
 func ExecuteSideEffectTask[C chasm.Component, T any](
 	ctx context.Context,
 	e *Engine,

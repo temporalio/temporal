@@ -48,20 +48,13 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	return nil
 }
 
-// Validate checks whether this idle task is still the authoritative one:
-//
-//  1. The schedule is still idle (no new actions are pending). If the schedule
-//     has been updated or patched since this task was created, getIdleExpiration
-//     returns isIdle=false and the task is dropped.
-//
-//  2. The idle expiration matches the task's scheduled time. getIdleExpiration
-//     recomputes the expiration as getLastEventTime()+idleTimeTotal. If any
-//     event (e.g. a workflow start recorded by InvokerExecuteTask) has shifted
-//     getLastEventTime() since this task was scheduled, the expiration will no
-//     longer match taskAttrs.ScheduledTime and the task is dropped — without
-//     scheduling a replacement. This is the root cause of the idle-task
-//     invalidation bug for single-action schedules.
-//
+// Validate returns true when all three conditions hold:
+//  1. The schedule is still idle — no new actions have been queued since this
+//     task was created (getIdleExpiration returns isIdle=true).
+//  2. The idle expiration has not shifted — getIdleExpiration recomputes
+//     getLastEventTime()+idleTimeTotal and it must equal the task's scheduled
+//     time. If a workflow start has advanced getLastEventTime() since the task
+//     was written, the expiration no longer matches and the task is dropped.
 //  3. The scheduler is not already closed (idempotency guard).
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,

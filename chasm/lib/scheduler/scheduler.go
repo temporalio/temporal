@@ -450,14 +450,14 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	invoker := s.Invoker.Get(ctx)
 	recentActions := invoker.recentActions()
 
-	times := []time.Time{
+	latest := util.MaxTime(
 		s.Info.GetCreateTime().AsTime(),
 		s.Info.GetUpdateTime().AsTime(),
-	}
+	)
 	if len(recentActions) > 0 {
-		times = append(times, recentActions[len(recentActions)-1].GetActualTime().AsTime())
+		latest = util.MaxTime(latest, recentActions[len(recentActions)-1].GetActualTime().AsTime())
 	}
-	return util.MaxTime(times...)
+	return latest
 }
 
 // getIdleExpiration returns an idle close time and the boolean value of 'true'

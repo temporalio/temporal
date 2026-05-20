@@ -20,13 +20,9 @@ func MinTime(a, b time.Time) time.Time {
 }
 
 // MaxTime returns the latest of the given time.Time values.
-// Returns the zero value if no arguments are provided.
-func MaxTime(times ...time.Time) time.Time {
-	if len(times) == 0 {
-		return time.Time{}
-	}
-	latest := times[0]
-	for _, t := range times[1:] {
+func MaxTime(first time.Time, rest ...time.Time) time.Time {
+	latest := first
+	for _, t := range rest {
 		if t.After(latest) {
 			latest = t
 		}
