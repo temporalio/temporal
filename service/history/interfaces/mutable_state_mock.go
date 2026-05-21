@@ -1986,6 +1986,18 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
+// FlushPendingActivityEventsForCompletion mocks base method.
+func (m *MockMutableState) FlushPendingActivityEventsForCompletion() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FlushPendingActivityEventsForCompletion")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FlushPendingActivityEventsForCompletion indicates an expected call of FlushPendingActivityEventsForCompletion.
+func (mr *MockMutableStateMockRecorder) FlushPendingActivityEventsForCompletion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushPendingActivityEventsForCompletion", reflect.TypeOf((*MockMutableState)(nil).FlushPendingActivityEventsForCompletion))
 // GenerateEventLoadToken mocks base method.
 func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
 	m.ctrl.T.Helper()
