@@ -72,12 +72,14 @@ const (
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
 
-	// Maximum jitter subtracted from the long poll timeout for non-forwarded polls.
+	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
+	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
 	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
-	forwardedPollJitterMax = 10 * time.Second
-	// Minimum long poll interval required to apply jitter. Ensures the timeout remains
-	// meaningful even after the maximum jitter is subtracted.
-	forwardedPollMinInterval = 50 * time.Second
+	forwardedPollJitterRatio = 1.0 / 6
+	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
+	// the interval never drops below this value; if the interval is already at or below
+	// this floor, no jitter is applied.
+	forwardedPollMinInterval = 20 * time.Second
 
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
@@ -2852,11 +2854,18 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, errNoTasks
 	}
 
-	// For non-forwarded polls with a long enough interval, subtract a random jitter to spread
-	// expiration times across pollers and prevent thundering herd reconnects.
+	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
+	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
+	// interval never falls below forwardedPollMinInterval.
 	longPollInterval := pm.LongPollExpirationInterval()
-	if pollMetadata.forwardedFrom == "" && longPollInterval >= forwardedPollMinInterval {
-		longPollInterval -= backoff.FullJitter(forwardedPollJitterMax)
+	if pollMetadata.forwardedFrom == "" {
+		jitterMax := time.Duration(float64(longPollInterval) * forwardedPollJitterRatio)
+		if longPollInterval-jitterMax < forwardedPollMinInterval {
+			jitterMax = longPollInterval - forwardedPollMinInterval
+		}
+		if jitterMax > 0 {
+			longPollInterval -= backoff.FullJitter(jitterMax)
+		}
 	}
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()

@@ -333,7 +333,7 @@ func (s *matchingEngineSuite) TestNonForwardedPollsHaveSpreadExpirations() {
 
 	spread := deadlineSpread(deadlines)
 	s.Greater(spread, 5*time.Second, "non-forwarded polls must have varied expirations to prevent thundering herd")
-	s.LessOrEqual(spread, forwardedPollJitterMax)
+	s.LessOrEqual(spread, time.Duration(float64(60*time.Second)*forwardedPollJitterRatio))
 }
 
 // TestForwardedPollsHaveConsistentExpirations verifies that forwarded polls all receive the same
