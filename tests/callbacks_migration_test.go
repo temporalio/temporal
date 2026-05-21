@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -43,10 +42,10 @@ func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {
 	)
 }
 
-func (s *CallbacksMigrationSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
+func (s *CallbacksMigrationSuite) runNexusCompletionHTTPServer(h *completionHandler) string {
 	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
-	t.Cleanup(func() {
+	s.T().Cleanup(func() {
 		srv.Close()
 	})
 	return srv.URL
@@ -77,7 +76,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+	callbackAddress := s.runNexusCompletionHTTPServer(ch)
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -190,7 +189,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+	callbackAddress := s.runNexusCompletionHTTPServer(ch)
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -303,8 +302,8 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		close(ch2.requestCompleteCh)
 	}()
 
-	callbackAddress1 := s.runNexusCompletionHTTPServer(s.T(), ch1)
-	callbackAddress2 := s.runNexusCompletionHTTPServer(s.T(), ch2)
+	callbackAddress1 := s.runNexusCompletionHTTPServer(ch1)
+	callbackAddress2 := s.runNexusCompletionHTTPServer(ch2)
 
 	// Register workflow that blocks until it receives a signal
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
@@ -444,17 +443,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.Equal(2, callbacksReceived)
 
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
-	await.Require(s.Context(), s.T(), func(t *await.T) {
+	s.Await(func(s *CallbacksMigrationSuite) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		require.NoError(t, err)
-		require.Len(t, description.Callbacks, 2, "should still have 2 callbacks")
+		require.NoError(s.T(), err)
+		require.Len(s.T(), description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
-			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			require.Equal(t, int32(1), callbackInfo.Attempt)
-			require.Nil(t, callbackInfo.LastAttemptFailure)
-			require.NotNil(t, callbackInfo.LastAttemptCompleteTime)
+			require.Equal(s.T(), enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			require.Equal(s.T(), int32(1), callbackInfo.Attempt)
+			require.Nil(s.T(), callbackInfo.LastAttemptFailure)
+			require.NotNil(s.T(), callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }
