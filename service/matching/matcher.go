@@ -423,7 +423,7 @@ func (tm *TaskMatcher) poll(
 			// Only recording for original polls
 			var pollResult string
 			if err == nil {
-				pollResult = "dispatch"
+				pollResult = "success"
 			} else if errors.Is(err, errNoTasks) {
 				pollResult = "timeout"
 			} else {

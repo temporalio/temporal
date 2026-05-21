@@ -461,11 +461,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
-	c.currentPolls.Add(1)
-	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(1)))
 	defer func() {
-		c.currentPolls.Add(-1)
-		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(-1)))
 	}()
 
 	namespaceId := namespace.ID(c.queue.NamespaceId())

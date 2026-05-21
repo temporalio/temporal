@@ -28,7 +28,7 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
-	pollResultTagName       = "result"
+	pollResultTagName       = "poll_result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
