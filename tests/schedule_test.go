@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -80,6 +81,12 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { testCreateScheduleAlreadyExists(t, newContext) })
 	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { testCreateScheduleDuplicateSdkError(t, true) })
 	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { testPatchRejectsExcessBackfillers(t, newContext) })
+	t.Run("TestPatchTriggerImmediatelyRetainsGenerator", func(t *testing.T) {
+		testCHASMPatchTriggerImmediatelyRetainsGenerator(t, newContext)
+	})
+	t.Run("TestPatchBackfillRetainsGenerator", func(t *testing.T) {
+		testCHASMPatchBackfillRetainsGenerator(t, newContext)
+	})
 	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, false) })
 	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, true) })
 	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, false) })
@@ -1454,11 +1461,11 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s.EventuallyWithT(func(c *assert.CollectT) {
+			await.Require(s.Context(), t, func(t *await.T) {
 				ids := listScheduleIDs(tc.query)
-				require.Len(c, ids, len(tc.wantIDs))
+				require.Len(t, ids, len(tc.wantIDs))
 				for _, want := range tc.wantIDs {
-					require.Contains(c, ids, want)
+					require.Contains(t, ids, want)
 				}
 			}, 15*time.Second, 1*time.Second)
 		})
@@ -3502,4 +3509,150 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		})
 		return err != nil
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
+}
+
+// testCHASMPatchTriggerImmediatelyRetainsGenerator verifies that issuing a
+// TriggerImmediately patch on an idle schedule does not lose the generator
+// timer task. Without the fix, Patch updates Info.UpdateTime which shifts the
+// idle expiration and causes the pending timer to self-invalidate with no
+// replacement, leaving the schedule permanently stuck.
+func testCHASMPatchTriggerImmediatelyRetainsGenerator(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	sid := "sched-test-trigger-retains-gen"
+	wt := "sched-test-trigger-retains-gen-wt"
+
+	var runs int32
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+				atomic.AddInt32(&runs, 1)
+				return 0
+			})
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(2 * time.Second)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   sid + "-wf",
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for first auto-fire; schedule is now idle between ticks.
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) >= 1 }, 15*time.Second, 500*time.Millisecond)
+
+	// Trigger immediately while the schedule is idle between ticks.
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{}},
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Without the fix, TriggerImmediately invalidates the idle timer task without
+	// scheduling a replacement, so the schedule stops auto-firing. With the fix,
+	// Generate is called after the patch and the timer task is re-established.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs) >= 3 },
+		20*time.Second,
+		500*time.Millisecond,
+		"schedule should continue auto-firing after TriggerImmediately patch",
+	)
+}
+
+// testCHASMPatchBackfillRetainsGenerator verifies that issuing a BackfillRequest
+// patch on an idle schedule does not lose the generator timer task. After the
+// backfiller workflow finishes, the schedule should resume normal auto-firing.
+func testCHASMPatchBackfillRetainsGenerator(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	sid := "sched-test-backfill-retains-gen"
+	wt := "sched-test-backfill-retains-gen-wt"
+
+	var runs int32
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+				atomic.AddInt32(&runs, 1)
+				return 0
+			})
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	ctx := newContext(s.Context())
+	now := time.Now()
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(2 * time.Second)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   sid + "-wf",
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for first auto-fire; schedule is now idle between ticks.
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) >= 1 }, 15*time.Second, 500*time.Millisecond)
+
+	// Issue a backfill while the schedule is idle between ticks.
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			BackfillRequest: []*schedulepb.BackfillRequest{{
+				StartTime:     timestamppb.New(now.Add(-6 * time.Second)),
+				EndTime:       timestamppb.New(now.Add(-2 * time.Second)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			}},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Without the fix, BackfillRequest invalidates the idle timer task and after
+	// the backfiller finishes the schedule is stuck with no tasks. With the fix,
+	// Generate is called after the patch and the timer task is re-established.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs) >= 3 },
+		20*time.Second,
+		500*time.Millisecond,
+		"schedule should continue auto-firing after BackfillRequest patch",
+	)
 }

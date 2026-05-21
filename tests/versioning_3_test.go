@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3509,7 +3510,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	defer cancel()
 
 	var unexpectedErr error
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(ctx, s.T(), func(t *await.T) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),

@@ -1,7 +1,6 @@
 package scheduler_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -10,11 +9,9 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/testlogger"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
@@ -157,86 +154,6 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	for _, futureTime := range generator.FutureActionTimes {
 		require.True(t, futureTime.AsTime().After(updateTime))
 	}
-}
-
-func TestPatch_IdleSchedule_RetainsTimerTask(t *testing.T) {
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	h := scheduler.NewTestHandler(logger)
-
-	newEngine := func(t *testing.T) (*chasmtest.Engine, context.Context, chasm.ComponentRef) {
-		t.Helper()
-		ctrl := gomock.NewController(t)
-		registry := chasm.NewRegistry(logger)
-		require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-		require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-
-		engine := chasmtest.NewEngine(t, registry)
-		engineCtx := chasm.NewEngineContext(context.Background(), engine)
-
-		sched := defaultSchedule()
-		sched.State.LimitedActions = true
-		sched.State.RemainingActions = 0
-		result, err := chasm.StartExecution(
-			engineCtx,
-			chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
-			func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
-				return scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, sched, nil)
-			},
-			struct{}{},
-		)
-		require.NoError(t, err)
-
-		ref, err := chasm.DeserializeComponentRef(result.ExecutionRef)
-		require.NoError(t, err)
-
-		return engine, engineCtx, ref
-	}
-
-	t.Run("TriggerImmediately", func(t *testing.T) {
-		engine, engineCtx, ref := newEngine(t)
-
-		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
-			NamespaceId: namespaceID,
-			FrontendRequest: &workflowservice.PatchScheduleRequest{
-				Namespace:  namespace,
-				ScheduleId: scheduleID,
-				Patch: &schedulepb.SchedulePatch{
-					TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		allTasks, err := engine.Tasks(ref)
-		require.NoError(t, err)
-		require.NotEmpty(t, allTasks[tasks.CategoryTimer])
-	})
-
-	t.Run("BackfillRequest", func(t *testing.T) {
-		engine, engineCtx, ref := newEngine(t)
-		now := engine.TimeSource().Now()
-
-		_, err := h.PatchSchedule(engineCtx, &schedulerpb.PatchScheduleRequest{
-			NamespaceId: namespaceID,
-			FrontendRequest: &workflowservice.PatchScheduleRequest{
-				Namespace:  namespace,
-				ScheduleId: scheduleID,
-				Patch: &schedulepb.SchedulePatch{
-					BackfillRequest: []*schedulepb.BackfillRequest{
-						{
-							StartTime: timestamppb.New(now.Add(-2 * defaultInterval)),
-							EndTime:   timestamppb.New(now.Add(-defaultInterval)),
-						},
-					},
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		allTasks, err := engine.Tasks(ref)
-		require.NoError(t, err)
-		require.NotEmpty(t, allTasks[tasks.CategoryTimer])
-	})
 }
 
 func TestUnpause_ResumesProcessing(t *testing.T) {
