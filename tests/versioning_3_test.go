@@ -4541,7 +4541,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
 				a.True(ok)
-				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 				a.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
@@ -4556,7 +4556,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
 				a.True(ok)
-				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 				a.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {
