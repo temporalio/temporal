@@ -8912,7 +8912,6 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// todo@time-skipping: impacts of paused workflow to be considered
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
@@ -10073,6 +10072,7 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 }
 
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
+	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
 	}
@@ -10121,6 +10121,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 		noSkippingReason = "workflow is not running"
 		return false, nil
 	}
+	if ms.IsWorkflowExecutionStatusPaused() {
+		noSkippingReason = "workflow is paused"
+		return false, nil
+	}
 	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
 		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
 		return false, nil
@@ -10154,6 +10158,14 @@ func (d timeSkippingTransition) isValid() bool {
 	return !d.targetTime.IsZero() || d.disabledAfterBound
 }
 
+// calculateTimeSkippingTransition calculates the transition state which includes two fields:
+// 1. targetTime: the time to skip to
+// 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
+// right now the time points considered for target time are:
+// 1. the first expiry time of the pending user timers
+// 2. the start delay of the workflow execution
+// 3. the current elapsed duration bound of the time skipping config
+// 4. the remaining time to skip to the max skipped duration bound
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {

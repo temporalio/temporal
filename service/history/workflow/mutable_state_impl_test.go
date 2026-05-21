@@ -6631,6 +6631,7 @@ func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
 		s.True(hasPendingWork)
 		s.Equal("has pending request cancel external", reason)
 	})
+
 }
 
 func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
@@ -6748,6 +6749,15 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.True(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPaused", func() {
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 }
 
