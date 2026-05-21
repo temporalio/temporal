@@ -3459,10 +3459,10 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 			Action: &schedulepb.ScheduleAction{
 				Action: &schedulepb.ScheduleAction_StartWorkflow{
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-						WorkflowId:               wid,
-						WorkflowType:             &commonpb.WorkflowType{Name: wfType2},
-						TaskQueue:                &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+						WorkflowId:            wid,
+						WorkflowType:          &commonpb.WorkflowType{Name: wfType2},
+						TaskQueue:             &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 					},
 				},
 			},
