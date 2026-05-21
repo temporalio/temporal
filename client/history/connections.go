@@ -1,7 +1,9 @@
 package history
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 )
 
@@ -22,11 +25,8 @@ type (
 	rpcAddress string
 
 	connectionPoolImpl[C any] struct {
-		mu struct {
-			sync.RWMutex
-			conns map[rpcAddress]clientConnection[C]
-		}
-
+		mu                     *sync.RWMutex
+		conns                  map[rpcAddress]clientConnection[C]
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             RPCFactory
 		clientCtor             func(grpc.ClientConnInterface) C
@@ -52,47 +52,92 @@ func NewConnectionPool[C any](
 	logger log.Logger,
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) *connectionPoolImpl[C] {
+	mu := &sync.RWMutex{}
+	conns := make(map[rpcAddress]clientConnection[C])
+
 	c := &connectionPoolImpl[C]{
+		mu:                     mu,
+		conns:                  conns,
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
 		clientCtor:             clientCtor,
 		logger:                 logger,
 	}
-	c.mu.conns = make(map[rpcAddress]clientConnection[C])
 
-	// Close cached conns whose host leaves the membership ring. The listener
-	// goroutine lives for the lifetime of the pool (process).
-	go c.watchMembershipForClose(connectionCloseDelay)
+	// Close cached conns whose host leaves the membership ring. The goroutine
+	// captures only locals (resolver, logger, mu, conns, delay) — not c — so
+	// dropping c lets runtime.AddCleanup fire and shut it down.
+	ctx, cancel := context.WithCancel(context.Background())
+	go watchMembershipForClose(ctx, historyServiceResolver, logger, mu, conns, connectionCloseDelay)
+	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 	return c
 }
 
-func (c *connectionPoolImpl[C]) watchMembershipForClose(connectionCloseDelay dynamicconfig.DurationPropertyFn) {
+func watchMembershipForClose[C any](
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	logger log.Logger,
+	mu *sync.RWMutex,
+	conns map[rpcAddress]clientConnection[C],
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
+) {
 	listenerName := fmt.Sprintf("historyConnectionPool-%s", uuid.New().String())
 	ch := make(chan *membership.ChangedEvent, 1)
-	if err := c.historyServiceResolver.AddListener(listenerName, ch); err != nil {
-		c.logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+	if err := resolver.AddListener(listenerName, ch); err != nil {
+		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
 		return
 	}
-	for event := range ch {
-		for _, h := range event.HostsRemoved {
-			go c.closeConnAfterDelay(h.GetAddress(), connectionCloseDelay())
+	defer func() {
+		if err := resolver.RemoveListener(listenerName); err != nil {
+			logger.Warn("Error removing membership listener", tag.Error(err))
+		}
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-ch:
+			for _, h := range event.HostsRemoved {
+				addr := rpcAddress(h.GetAddress())
+				go closeConnAfterDelay(ctx, resolver, logger, mu, conns, addr, connectionCloseDelay())
+			}
 		}
 	}
 }
 
-func (c *connectionPoolImpl[C]) closeConnAfterDelay(addr string, delay time.Duration) {
-	time.Sleep(delay)
-	for _, m := range c.historyServiceResolver.Members() {
-		if m.GetAddress() == addr {
+func closeConnAfterDelay[C any](
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	logger log.Logger,
+	mu *sync.RWMutex,
+	conns map[rpcAddress]clientConnection[C],
+	addr rpcAddress,
+	delay time.Duration,
+) {
+	if util.InterruptibleSleep(ctx, delay) != nil {
+		return
+	}
+	for _, m := range resolver.Members() {
+		if rpcAddress(m.GetAddress()) == addr {
 			return
 		}
 	}
-	c.closeConn(rpcAddress(addr))
+	mu.Lock()
+	cc, ok := conns[addr]
+	if ok {
+		delete(conns, addr)
+	}
+	mu.Unlock()
+	if ok {
+		if err := cc.grpcConn.Close(); err != nil {
+			logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
+		}
+	}
 }
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
 	c.mu.RLock()
-	cc, ok := c.mu.conns[addr]
+	cc, ok := c.conns[addr]
 	c.mu.RUnlock()
 	if ok {
 		return cc
@@ -101,7 +146,7 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if cc, ok = c.mu.conns[addr]; ok {
+	if cc, ok = c.conns[addr]; ok {
 		return cc
 	}
 	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
@@ -110,7 +155,7 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 		grpcConn:   grpcConn,
 	}
 
-	c.mu.conns[addr] = cc
+	c.conns[addr] = cc
 	return cc
 }
 
@@ -128,19 +173,4 @@ func (c *connectionPoolImpl[C]) getAllClientConns() []clientConnection[C] {
 
 func (c *connectionPoolImpl[C]) resetConnectBackoff(cc clientConnection[C]) {
 	cc.grpcConn.ResetConnectBackoff()
-}
-
-// closeConn removes the conn for addr from the pool and closes it.
-func (c *connectionPoolImpl[C]) closeConn(addr rpcAddress) {
-	c.mu.Lock()
-	cc, ok := c.mu.conns[addr]
-	if ok {
-		delete(c.mu.conns, addr)
-	}
-	c.mu.Unlock()
-	if ok {
-		if err := cc.grpcConn.Close(); err != nil {
-			c.logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
-		}
-	}
 }

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 )
 
@@ -117,7 +118,9 @@ func evictAfterDelay(
 	addr string,
 	delay time.Duration,
 ) {
-if util.InterruptibleSleep(ctx, delay) != nil { return }
+	if util.InterruptibleSleep(ctx, delay) != nil {
+		return
+	}
 	for _, m := range resolver.Members() {
 		if m.GetAddress() == addr {
 			return
