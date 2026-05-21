@@ -6180,6 +6180,50 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(2), resp.CancelledCount)
 	})
 
+	t.Run("fan-out: unimplemented error from old host is handled gracefully", func(t *testing.T) {
+		// Simulates a mixed-version deployment where some matching nodes don't have
+		// the CancelOutstandingWorkerPollsPartition RPC. The error should be treated
+		// like any other RPC failure: logged, counted as failed, no crash or cycle.
+		// 3 partitions: 0 -> self-host, 1 -> old-host (Unimplemented), 2 -> new-host (succeeds).
+		t.Parallel()
+		routeFn := func(p tqid.Partition) (string, error) {
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/1") {
+				return "old-host", nil
+			}
+			if strings.Contains(rpcName, "/2") {
+				return "new-host", nil
+			}
+			return "self-host", nil
+		}
+		engine, mockMatchingClient := setupFanOutTest(t, 3, routeFn)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
+				if partitionID == 1 {
+					return nil, serviceerror.NewUnimplemented("method not implemented")
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(2) // old-host + new-host
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// Local cancels 1 + old-host fails (0) + new-host returns 1 = 2
+		require.Equal(t, int32(2), resp.CancelledCount)
+	})
+
 	t.Run("fan-out: no routing client falls back to individual RPCs", func(t *testing.T) {
 		// 3 partitions, no routing client. Each remote partition gets its own RPC.
 		t.Parallel()
