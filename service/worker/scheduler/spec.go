@@ -182,12 +182,6 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 
 	// validate intervals
 	for _, interval := range spec.Interval {
-		// Truncate sub-second precision from Phase: interval schedules operate at
-		// 1-second granularity, and nextIntervalTime already truncates Phase to seconds.
-		// Normalizing here ensures the canonical form matches how fire times are computed.
-		if interval.Phase != nil {
-			interval.Phase = timestamp.DurationPtr(timestamp.DurationValue(interval.Phase).Truncate(time.Second))
-		}
 		if err := validateInterval(interval); err != nil {
 			return nil, err
 		}
