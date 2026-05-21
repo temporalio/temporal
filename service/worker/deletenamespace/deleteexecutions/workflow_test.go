@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
@@ -94,8 +93,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: nil,
-		logger:         nil,
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          nil,
+		logger:                  nil,
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -318,8 +318,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -395,19 +396,17 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 	}, nil).Times(2)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
 		NamespaceId: "namespace-id",
+		Execution:   execution1,
 		ArchetypeId: uint32(archetypeID1),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: execution1,
-		},
+		Reason:      "Namespace delete",
 	}).Return(nil, nil).Times(1)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
 		NamespaceId: "namespace-id",
+		Execution:   execution2,
 		ArchetypeId: uint32(archetypeID2),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: execution2,
-		},
+		Reason:      "Namespace delete",
 	}).Return(nil, nil).Times(1)
 
 	a := &Activities{
@@ -416,8 +415,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return true },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -515,8 +515,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,

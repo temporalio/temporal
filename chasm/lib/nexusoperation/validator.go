@@ -145,6 +145,21 @@ func validateAndNormalizeStartRequest(
 			inputSize, config.PayloadSizeLimit(ns))
 	}
 
+	if summary := req.GetUserMetadata().GetSummary(); summary != nil && summary.Size() > config.MaxUserMetadataSummarySize(ns) {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.summary exceeds size limit. Length=%d Limit=%d",
+			summary.Size(),
+			config.MaxUserMetadataSummarySize(ns),
+		)
+	}
+	if details := req.GetUserMetadata().GetDetails(); details != nil && details.Size() > config.MaxUserMetadataDetailsSize(ns) {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.details exceeds size limit. Length=%d Limit=%d",
+			details.Size(),
+			config.MaxUserMetadataDetailsSize(ns),
+		)
+	}
+
 	loweredHeaders, err := ValidateAndLowercaseNexusHeaders(req.GetNexusHeader(), config.DisallowedOperationHeaders(), config.MaxOperationHeaderSize(ns))
 	if err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
