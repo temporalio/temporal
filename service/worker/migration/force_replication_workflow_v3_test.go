@@ -287,6 +287,89 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 	s.Equal(0, status.QuarantinedWFIDCount)
 }
 
+func TestPendingListMarshalUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty roundtrips to {}", func(t *testing.T) {
+		var pl pendingList
+		b, err := json.Marshal(pl)
+		require.NoError(t, err)
+		require.Equal(t, "{}", string(b))
+
+		var out pendingList
+		require.NoError(t, json.Unmarshal(b, &out))
+		require.Empty(t, out)
+	})
+
+	t.Run("groups by BusinessID with array tuples", func(t *testing.T) {
+		pl := pendingList{
+			{BusinessID: "wf-a", RunID: "r1", ArchetypeID: 7},
+			{BusinessID: "wf-a", RunID: "r2", ArchetypeID: 7},
+			{BusinessID: "wf-b", RunID: "r3", ArchetypeID: 9},
+		}
+		b, err := json.Marshal(pl)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"wf-a":[["r1",7],["r2",7]],"wf-b":[["r3",9]]}`, string(b))
+	})
+
+	t.Run("roundtrip preserves all fields", func(t *testing.T) {
+		pl := pendingList{
+			{BusinessID: "wf-a", RunID: "r1", ArchetypeID: 7},
+			{BusinessID: "wf-b", RunID: "r2", ArchetypeID: 0},
+			{BusinessID: "wf-a", RunID: "r3", ArchetypeID: 7},
+		}
+		b, err := json.Marshal(pl)
+		require.NoError(t, err)
+
+		var out pendingList
+		require.NoError(t, json.Unmarshal(b, &out))
+		require.Len(t, out, 3)
+
+		seen := make(map[string]ExecutionInfo, 3)
+		for _, e := range out {
+			seen[e.BusinessID+"/"+e.RunID] = *e
+		}
+		require.Equal(t, ExecutionInfo{BusinessID: "wf-a", RunID: "r1", ArchetypeID: 7}, seen["wf-a/r1"])
+		require.Equal(t, ExecutionInfo{BusinessID: "wf-a", RunID: "r3", ArchetypeID: 7}, seen["wf-a/r3"])
+		require.Equal(t, ExecutionInfo{BusinessID: "wf-b", RunID: "r2", ArchetypeID: 0}, seen["wf-b/r2"])
+	})
+
+	t.Run("unmarshal order is deterministic", func(t *testing.T) {
+		// Same encoded bytes must produce the same slice order every
+		// time, even though map iteration during marshal is random —
+		// encoding/json sorts keys lexically, and UnmarshalJSON sorts
+		// before flattening. Without that, workflow replay would
+		// dispatch retries in a different order.
+		encoded := `{"wf-c":[["r3",1]],"wf-a":[["r1",1],["r2",1]],"wf-b":[["r4",1]]}`
+		var first pendingList
+		require.NoError(t, json.Unmarshal([]byte(encoded), &first))
+
+		for i := 0; i < 20; i++ {
+			var again pendingList
+			require.NoError(t, json.Unmarshal([]byte(encoded), &again))
+			require.Equal(t, len(first), len(again))
+			for j := range first {
+				require.Equal(t, *first[j], *again[j], "ordering must be stable across unmarshals")
+			}
+		}
+		// Expected order: sorted BIDs (wf-a, wf-b, wf-c), runs in JSON
+		// array order within each.
+		require.Equal(t, "wf-a", first[0].BusinessID)
+		require.Equal(t, "r1", first[0].RunID)
+		require.Equal(t, "wf-a", first[1].BusinessID)
+		require.Equal(t, "r2", first[1].RunID)
+		require.Equal(t, "wf-b", first[2].BusinessID)
+		require.Equal(t, "wf-c", first[3].BusinessID)
+	})
+
+	t.Run("malformed tuple errors", func(t *testing.T) {
+		var pl pendingList
+		err := json.Unmarshal([]byte(`{"wf-a":[["r1"]]}`), &pl)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "2-element")
+	})
+}
+
 // continueAsNewParams extracts the CAN input from the workflow's error or
 // fails the test. Mirrors V1/V2's pattern in
 // testRunForceReplicationForContinueAsNew.
@@ -377,13 +460,11 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 100000}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
-	// Page size chosen so one fully-pending batch crosses the threshold
-	// (2001 > earlyCANPendingThreshold = 2000). With
-	// ConcurrentActivityCount = 1 the second iteration's sem.Receive
-	// blocks until page 0's goroutine completed (and updated
-	// fastPending), so the early-break check on iter 1 sees a fresh
-	// count.
-	pageSize := earlyCANPendingThreshold + 1
+	// Page size sized so a handful of batches trip the early-CAN
+	// threshold and the post-break overshoot stays under the hard cap
+	// (otherwise drainRetries fires and the workflow doesn't take the
+	// CAN path the test is exercising).
+	pageSize := earlyCANPendingThreshold / 3
 	pageCount := 0
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		pageCount++
@@ -420,11 +501,11 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
 		HistoryShardCount:        4,
-		// Quarantine thresholds high enough that single-observation
-		// pending doesn't move execs into the slow lane — we want to
-		// observe accumulation in fastPending specifically.
-		WFIDQuarantineThreshold:  999,
-		ShardQuarantineThreshold: 999,
+		// Quarantine thresholds far above any per-shard / per-WF
+		// pending count we'll accumulate — keeps everything in the
+		// fast lane so we can observe early-CAN there specifically.
+		WFIDQuarantineThreshold:  1_000_000,
+		ShardQuarantineThreshold: 1_000_000,
 		NoProgressTimeoutSeconds: 3600,
 	})
 

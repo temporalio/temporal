@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -114,9 +115,10 @@ type (
 
 		// FastPending and SlowPending carry unverified executions across
 		// CAN. Without them the page cursor advances past pending
-		// entries and they're never reprocessed.
-		FastPending []*ExecutionInfo
-		SlowPending []*ExecutionInfo
+		// entries and they're never reprocessed. See pendingList for
+		// the on-wire form.
+		FastPending pendingList
+		SlowPending pendingList
 
 		// HistoryShardCount is the source cluster's shard count. The
 		// workflow uses it to map WF-ID → shard for the shard-pending
@@ -194,12 +196,13 @@ const (
 	defaultAdaptiveAIMDMinRPSFactor   = 0.10
 	defaultAdaptiveAIMDMaxRPSFactor   = 2.0
 
-	// Caps on cross-CAN pending carry. At ~150 bytes per ExecutionInfo
-	// serialized, 2000 entries is ~300KB (under the 512KB blob warn
-	// threshold) and 5000 entries is ~750KB (under the 2MB error
-	// threshold with margin for the rest of the params struct).
-	earlyCANPendingThreshold = 2000
-	maxPendingCarryAcrossCAN = 5000
+	// Caps on cross-CAN pending carry. With pendingList's grouped JSON
+	// form (~60 bytes per entry worst case — unique BusinessIDs, full
+	// UUID RunIDs), 3000 entries is ~180KB and 6000 is ~360KB. Both
+	// stay under the 512KB blob warn threshold even after the rest of
+	// the params struct (quarantine maps, etc.) is added.
+	earlyCANPendingThreshold = 3000
+	maxPendingCarryAcrossCAN = 6000
 
 	// Metric names for AIMD RPS adjustments. Counter per direction so a
 	// dashboard can render a heatmap of "this workload is bouncing
@@ -207,6 +210,61 @@ const (
 	adaptiveForceRepRPSIncreasedMetric = "adaptive_force_replication_rps_increased_count"
 	adaptiveForceRepRPSDecreasedMetric = "adaptive_force_replication_rps_decreased_count"
 )
+
+// pendingList carries unverified executions across CAN with a compact
+// JSON form. The wire format groups by BusinessID:
+//
+//	{"<bid>": [["<rid>", <aid>], ["<rid>", <aid>]], ...}
+//
+// vs the per-entry struct form this saves field-name overhead and
+// amortizes the BusinessID across runs — common in the WF-ID-reuse
+// case the pending list is sized for. Slice order after unmarshal is
+// deterministic (sorted by BusinessID, then preserved within each
+// group from the JSON array), so workflow replay produces the same
+// activity-dispatch order as the original execution.
+type pendingList []*ExecutionInfo
+
+func (pl pendingList) MarshalJSON() ([]byte, error) {
+	if len(pl) == 0 {
+		return []byte("{}"), nil
+	}
+	grouped := make(map[string][][]any, len(pl))
+	for _, e := range pl {
+		grouped[e.BusinessID] = append(grouped[e.BusinessID], []any{e.RunID, e.ArchetypeID})
+	}
+	return json.Marshal(grouped)
+}
+
+func (pl *pendingList) UnmarshalJSON(b []byte) error {
+	var grouped map[string][][]json.RawMessage
+	if err := json.Unmarshal(b, &grouped); err != nil {
+		return err
+	}
+	bids := make([]string, 0, len(grouped))
+	for bid := range grouped {
+		bids = append(bids, bid)
+	}
+	slices.Sort(bids)
+	out := make(pendingList, 0)
+	for _, bid := range bids {
+		for _, tup := range grouped[bid] {
+			if len(tup) != 2 {
+				return fmt.Errorf("pendingList: expected 2-element [rid, aid] tuple for %q, got %d", bid, len(tup))
+			}
+			var rid string
+			if err := json.Unmarshal(tup[0], &rid); err != nil {
+				return fmt.Errorf("pendingList: decode RunID for %q: %w", bid, err)
+			}
+			var aid uint32
+			if err := json.Unmarshal(tup[1], &aid); err != nil {
+				return fmt.Errorf("pendingList: decode ArchetypeID for %q: %w", bid, err)
+			}
+			out = append(out, &ExecutionInfo{BusinessID: bid, RunID: rid, ArchetypeID: aid})
+		}
+	}
+	*pl = out
+	return nil
+}
 
 // ForceReplicationWorkflowV3 is the adaptive variant. See package doc above
 // for the design rationale.
@@ -317,8 +375,8 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 	params.QuarantinedShards = state.snapshotQuarantinedShards()
 	params.WFIDPendingCounts = state.wfIDPending
 	params.ShardPendingCounts = state.shardPending
-	params.FastPending = state.fastPending
-	params.SlowPending = state.slowPending
+	params.FastPending = pendingList(state.fastPending)
+	params.SlowPending = pendingList(state.slowPending)
 	params.ReplicatedWorkflowCount = state.totalVerified
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV3, params)
 }
