@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -445,15 +444,15 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
 	s.Await(func(s *CallbacksMigrationSuite) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		require.NoError(s.T(), err)
-		require.Len(s.T(), description.Callbacks, 2, "should still have 2 callbacks")
+		s.Require().NoError(err)
+		s.Require().Len(description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
-			require.Equal(s.T(), enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			require.Equal(s.T(), int32(1), callbackInfo.Attempt)
-			require.Nil(s.T(), callbackInfo.LastAttemptFailure)
-			require.NotNil(s.T(), callbackInfo.LastAttemptCompleteTime)
+			s.Require().Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			s.Require().Equal(int32(1), callbackInfo.Attempt)
+			s.Require().Nil(callbackInfo.LastAttemptFailure)
+			s.Require().NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }
