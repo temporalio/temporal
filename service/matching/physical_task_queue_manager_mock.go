@@ -284,15 +284,15 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 }
 
 // RecordTaskAdd mocks base method.
-func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior enums.VersioningBehavior) {
+func (m *MockphysicalTaskQueueManager) RecordTaskAdd(outcome syncMatchOutcome, forwarded bool, behavior enums.VersioningBehavior) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordTaskAdd", result, forwarded, behavior)
+	m.ctrl.Call(m, "RecordTaskAdd", outcome, forwarded, behavior)
 }
 
 // RecordTaskAdd indicates an expected call of RecordTaskAdd.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordTaskAdd(result, forwarded, behavior any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordTaskAdd(outcome, forwarded, behavior any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTaskAdd", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordTaskAdd), result, forwarded, behavior)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTaskAdd", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordTaskAdd), outcome, forwarded, behavior)
 }
 
 // RemovePoller mocks base method.

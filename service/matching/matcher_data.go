@@ -3,10 +3,12 @@ package matching
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -29,7 +31,8 @@ const (
 	priorityBacklogPollForwarder
 )
 
-// syncMatchOutcome describes the outcome of a sync match attempt.
+// syncMatchOutcome describes the outcome of a task-add operation, covering both sync match
+// attempts and the final disposition (backlog, throttled, failure).
 type syncMatchOutcome int
 
 const (
@@ -43,7 +46,37 @@ const (
 	syncMatchNoPoller
 	// A poller was available but rate limiting blocked the match.
 	syncMatchRateLimited
+	// The task was spooled to the backlog.
+	syncMatchBacklog
+	// The task-add was throttled (ResourceExhausted error).
+	syncMatchThrottled
+	// The task-add failed with an unexpected error.
+	syncMatchFailure
 )
+
+var syncMatchOutcomeTagMap = map[syncMatchOutcome]string{
+	syncMatchUnspecified:    "backlog",
+	syncMatchSuccess:        "sync_match",
+	syncMatchBacklogPresent: "backlog",
+	syncMatchNoPoller:       "backlog",
+	syncMatchRateLimited:    "throttled",
+	syncMatchBacklog:        "backlog",
+	syncMatchThrottled:      "throttled",
+	syncMatchFailure:        "failure",
+}
+
+func syncMatchOutcomeToTag(outcome syncMatchOutcome) string {
+	return syncMatchOutcomeTagMap[outcome]
+}
+
+// syncMatchOutcomeFromErr derives an outcome from a non-nil error.
+func syncMatchOutcomeFromErr(err error) syncMatchOutcome {
+	var resourceExhausted *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhausted) {
+		return syncMatchThrottled
+	}
+	return syncMatchFailure
+}
 
 type taskForwarderType int32
 

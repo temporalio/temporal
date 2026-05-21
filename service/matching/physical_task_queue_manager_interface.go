@@ -66,8 +66,10 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
-		// RecordTaskAdd records the outcome of a task add to this physical queue using
-		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
-		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
+		// RecordTaskAdd records the outcome of a task add to this physical queue using the
+		// queue's tagged metrics handler. When a task is backlogged the child partition records
+		// (spoolQueue is always set on the child). When a forwarded task is sync-matched on the
+		// parent, the parent records with forwarded=true; the child also records with forwarded=false.
+		RecordTaskAdd(outcome syncMatchOutcome, forwarded bool, behavior enumspb.VersioningBehavior)
 	}
 )
