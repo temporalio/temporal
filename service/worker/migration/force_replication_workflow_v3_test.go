@@ -71,7 +71,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHappyPath() {
 		PageCountPerExecution:   10,
 		EnableVerification:      true,
 		TargetClusterEndpoint:   "test-target",
-		HistoryShardCount:       4,
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -130,7 +129,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestInjectOnlyMode() {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   10,
 		EnableVerification:      false,
-		HistoryShardCount:       4,
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -177,7 +175,9 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestQuarantineAfterRepeatedPending
 	// keeps coming back as pending until it eventually clears. Three
 	// pending observations (calls 1-3) trip the
 	// WFIDQuarantineThreshold of 3; the fourth call verifies cleanly.
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
+	// Times(1) asserts retry rounds re-verify without re-injecting: the
+	// initial dispatch injects once, then drainRetries calls VerifyBatch only.
+	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	verifyCalls := 0
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, _ *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		verifyCalls++
@@ -198,7 +198,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestQuarantineAfterRepeatedPending
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  3,
 		NoProgressTimeoutSeconds: 3600,
 	})
@@ -269,7 +268,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        1,
 		ShardQuarantineThreshold: 4,
 		WFIDQuarantineThreshold:  999,
 		NoProgressTimeoutSeconds: 3600,
@@ -431,7 +429,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestPendingCarriesAcrossCAN() {
 		PageCountPerExecution:    1,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
@@ -499,7 +496,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 		PageCountPerExecution:   pageCountCap,
 		EnableVerification:      true,
 		TargetClusterEndpoint:   "test-target",
-		HistoryShardCount:       4,
 		// Quarantine thresholds far above any per-shard / per-WF
 		// pending count we'll accumulate — keeps everything in the
 		// fast lane so we can observe early-CAN there specifically.
@@ -570,7 +566,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHardCAPDrainsBeforeCAN() {
 		PageCountPerExecution:    100,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
@@ -631,7 +626,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestDrainOnlySkipsListing() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
@@ -702,7 +696,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDIncreasesOnClean() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
@@ -765,7 +758,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
@@ -820,7 +812,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestNoProgressTimeoutFires() {
 		PageCountPerExecution:    1,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
 		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 1,
