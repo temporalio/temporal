@@ -1,7 +1,9 @@
 package testlogger_test
 
 import (
+	"bytes"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -145,4 +147,104 @@ func TestTestLogger_Uncaught(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestTestLogger_Failed_StickyOnAnyUnexpected verifies that Failed() captures
+// the first failure-worthy log in FailOnAnyUnexpectedError mode and that
+// subsequent failures do not overwrite it (first-failure-wins via CAS).
+func TestTestLogger_Failed_StickyOnAnyUnexpected(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
+	require.Nil(t, tl.Failed())
+
+	tl.Error("first")
+	first := tl.Failed()
+	require.NotNil(t, first)
+	require.Equal(t, testlogger.Error, first.Level)
+	require.Equal(t, "first", first.Msg)
+	require.NotEmpty(t, first.Stack)
+
+	tl.Error("second")
+	require.Same(t, first, tl.Failed(), "first failure should win")
+}
+
+// TestTestLogger_Failed_OnExpectedMatch is the soft-assert path: in
+// FailOnExpectedErrorOnly mode, an Error matching a registered expectation
+// (e.g. tag.FailedAssertion) should mark Failed().
+func TestTestLogger_Failed_OnExpectedMatch(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
+	tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+	require.Nil(t, tl.Failed())
+
+	tl.Error("failed assertion: bad", tag.FailedAssertion)
+
+	f := tl.Failed()
+	require.NotNil(t, f)
+	require.Equal(t, "failed assertion: bad", f.Msg)
+}
+
+// TestTestLogger_Failed_NoMatch verifies that FailOnExpectedErrorOnly remains an
+// escape hatch: an Error with no matching expectation does not flip Failed().
+func TestTestLogger_Failed_NoMatch(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
+	require.Nil(t, tl.Failed())
+
+	tl.Error("ignored")
+	require.Nil(t, tl.Failed())
+}
+
+// syncBuf is a thread-safe zapcore.WriteSyncer backed by a bytes.Buffer.
+type syncBuf struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuf) Sync() error { return nil }
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+// TestTestLogger_WithWriter verifies that WithWriter routes log output to the
+// supplied WriteSyncer instead of zaptest's TestingWriter.
+func TestTestLogger_WithWriter(t *testing.T) {
+	var w syncBuf
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly,
+		testlogger.WithWriter(&w))
+
+	tl.Info("hello-with-writer")
+
+	require.Contains(t, w.String(), "hello-with-writer")
+}
+
+// TestTestLogger_DontCloseOnCleanup verifies that with DontCloseOnCleanup set,
+// the logger continues to deliver logs after the original T's test (and its
+// Cleanup chain) has completed. Without the option the default Cleanup(tl.Close)
+// would flip state.closed and the post-cleanup Info call would be dropped.
+func TestTestLogger_DontCloseOnCleanup(t *testing.T) {
+	var w syncBuf
+
+	var tl *testlogger.TestLogger
+	t.Run("inner", func(inner *testing.T) {
+		tl = testlogger.NewTestLogger(inner, testlogger.FailOnExpectedErrorOnly,
+			testlogger.WithWriter(&w),
+			testlogger.WithoutCloseOnCleanup())
+		tl.Info("during-inner")
+	})
+	// inner's Cleanup has run by here. Without DontCloseOnCleanup tl would be closed.
+	tl.Info("after-inner")
+
+	out := w.String()
+	require.Contains(t, out, "during-inner")
+	require.Contains(t, out, "after-inner")
 }

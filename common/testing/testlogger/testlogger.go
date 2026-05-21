@@ -139,17 +139,25 @@ type sharedTestLoggerState struct {
 	logExpectations bool
 	logCaller       bool
 	level           zapcore.Level
+	failed          atomic.Pointer[Failure]
+}
+
+// Failure describes a log call that shouldFailTest considered a test-failing log.
+type Failure struct {
+	Level Level
+	Msg   string
+	Tags  []tag.Tag
+	Stack string
 }
 
 // TestLogger is a log.Logger implementation that logs to the test's logger
 // _but_ will fail the test if log levels _above_ Warn are present
 type TestLogger struct {
-	wrapped log.Logger
-	state   *sharedTestLoggerState
-	tags    []tag.Tag
-	// If false the caller will not be logged by Zap. This is used when we process the
-	// logs from a subprocesses' STDOUT as we don't care about where in the main process
-	// the call came from, just where it was logged by the child.
+	wrapped            log.Logger
+	state              *sharedTestLoggerState
+	tags               []tag.Tag
+	userWriter         zapcore.WriteSyncer
+	dontCloseOnCleanup bool
 }
 
 type LoggerOption func(*TestLogger)
@@ -194,6 +202,22 @@ func LogLevel(level zapcore.Level) LoggerOption {
 func WithoutCaller() LoggerOption {
 	return func(t *TestLogger) {
 		t.state.logCaller = false
+	}
+}
+
+// WithWriter replaces the default zaptest.NewTestingWriter with a caller-supplied
+// WriteSyncer. Used when the logger may outlive any single *testing.T.
+func WithWriter(w zapcore.WriteSyncer) LoggerOption {
+	return func(t *TestLogger) {
+		t.userWriter = w
+	}
+}
+
+// WithoutCloseOnCleanup skips the automatic Cleanup(tl.Close) registration.
+// Required for loggers whose lifetime exceeds any single test.
+func WithoutCloseOnCleanup() LoggerOption {
+	return func(t *TestLogger) {
+		t.dontCloseOnCleanup = true
 	}
 }
 
@@ -272,7 +296,13 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		opt(tl)
 	}
 	if tl.wrapped == nil {
-		writer := zaptest.NewTestingWriter(t)
+		writer := tl.userWriter
+		errorOutput := tl.userWriter
+		if writer == nil {
+			tw := zaptest.NewTestingWriter(t)
+			writer = tw
+			errorOutput = tw.WithMarkFailed(true)
+		}
 
 		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
 		var consoleEnc zapcore.Encoder
@@ -294,9 +324,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			getGlobalFileCore())
 
 		zapOptions := []zap.Option{
-			// Send zap errors to the same writer and mark the test as failed if
-			// that happens.
-			zap.ErrorOutput(writer.WithMarkFailed(true)),
+			zap.ErrorOutput(errorOutput),
 			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
 			zap.WithCaller(tl.state.logCaller),
 		}
@@ -306,7 +334,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	}
 
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
-	if ct, ok := t.(CleanupCapableT); ok {
+	if ct, ok := t.(CleanupCapableT); ok && !tl.dontCloseOnCleanup {
 		// NOTE(tim): We don't care about anything logged after the test completes. Sure, this is racy,
 		// but it reduces the likelihood that we see stupid errors due to testing.T.Logf race conditions...
 		ct.Cleanup(tl.Close)
@@ -385,6 +413,30 @@ func (tl *TestLogger) FailOnFatal(b bool) bool {
 	return tl.state.failOnFatal.Swap(b)
 }
 
+// Failed returns the first Failure that shouldFailTest considered a test-failing
+// log, or nil if no such log has been observed. Sticky: first failure wins.
+func (tl *TestLogger) Failed() *Failure {
+	return tl.state.failed.Load()
+}
+
+// recordFailure stores the first observed failure (first-failure-wins via CAS).
+// Tags are copied so the recorded value is independent of the caller's slice.
+func (tl *TestLogger) recordFailure(level Level, msg string, tags []tag.Tag) {
+	if tl.state.failed.Load() != nil {
+		// fast-path: already recorded; avoid the copy and the stack capture.
+		return
+	}
+	tagsCopy := make([]tag.Tag, len(tags))
+	copy(tagsCopy, tags)
+	f := &Failure{
+		Level: level,
+		Msg:   msg,
+		Tags:  tagsCopy,
+		Stack: captureStack(3), // skip captureStack, recordFailure, and the log.Logger method that called it
+	}
+	tl.state.failed.CompareAndSwap(nil, f)
+}
+
 func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
 	if len(tl.tags) == 0 {
 		return tags
@@ -418,6 +470,7 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
 	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(DPanic, msg, tags) {
+		tl.recordFailure(DPanic, msg, tags)
 		tl.state.t.Helper()
 		tl.failTest(DPanic, msg, tags...)
 	}
@@ -449,6 +502,7 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	tl.state.mu.RUnlock()
 
 	if tl.state.failOnError.Load() {
+		tl.recordFailure(Error, msg, tags)
 		tl.state.t.Helper()
 		tl.wrapped.Error(msg, tags...)
 		tl.failTest(Error, msg, tags...)
@@ -468,6 +522,7 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 	tags = tl.mergeWithLoggerTags(tags)
 	tl.state.t.Helper()
 	if tl.state.failOnFatal.Load() && tl.shouldFailTest(Fatal, msg, tags) {
+		tl.recordFailure(Fatal, msg, tags)
 		tl.failTest(Fatal, msg, tags...)
 	}
 	// Panic to emulate a fatal in a way we can catch.
@@ -501,6 +556,7 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 	tl.state.t.Helper()
 	// Forcibly fail the test when required as otherwise panics can be caught.
 	if tl.shouldFailTest(Panic, msg, tags) {
+		tl.recordFailure(Panic, msg, tags)
 		tl.state.t.Helper()
 		tl.failTest(Panic, msg, tags...)
 	}
@@ -521,24 +577,29 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 // the failure arose.
 func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
 	tl.state.t.Helper()
-	skip := 2                   // skip the invocation of failTest and the log.Logger function that called it
-	pcs := make([]uintptr, 128) // 128 is likely larger that we'll ever need.
+	// skip captureStack, failTest, and the log.Logger function that called failTest
+	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), captureStack(3))
+}
+
+// captureStack returns a formatted stack trace, skipping the first `skip` frames
+// (including the captureStack frame itself).
+func captureStack(skip int) string {
+	pcs := make([]uintptr, 128) // 128 is likely larger than we'll ever need.
 	frameCount := runtime.Callers(skip, pcs)
 
 	// runtime.Callers truncates the recorded stacktrace to fit the provided slice.
 	// Just keep doubling in size until we have enough space.
 	for frameCount == len(pcs) {
 		pcs = make([]uintptr, len(pcs)*2)
-		frameCount = runtime.Callers(skip+2, pcs)
+		frameCount = runtime.Callers(skip, pcs)
 	}
 
-	stackFrames := runtime.CallersFrames(pcs)
+	stackFrames := runtime.CallersFrames(pcs[:frameCount])
 	var stackTrace strings.Builder
 	for frame, more := stackFrames.Next(); more; frame, more = stackFrames.Next() {
 		fmt.Fprintf(&stackTrace, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
 	}
-
-	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), stackTrace.String())
+	return stackTrace.String()
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags

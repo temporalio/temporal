@@ -118,7 +118,25 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	})
 
 	cluster := p.clusters[idx]
+
+	// Recreate the cluster if a previous test poisoned it.
+	if cluster.Poisoned() {
+		p.clusterMu[idx].Lock()
+		if p.clusters[idx].Poisoned() {
+			if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
+				t.Logf("Failed to tear down poisoned cluster %d: %v", idx, err)
+			}
+			p.clusters[idx] = createCluster()
+			if p.maxUsage > 0 {
+				p.usageCounts[idx].Store(1)
+			}
+		}
+		cluster = p.clusters[idx]
+		p.clusterMu[idx].Unlock()
+	}
+
 	cluster.SetT(t)
+	cluster.AcquireForTest(t)
 	return cluster
 }
 
@@ -206,6 +224,7 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.acquireSlot(t)
 		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
+		cluster.AcquireForTest(t)
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {

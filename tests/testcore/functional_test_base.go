@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,9 @@ type (
 
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
+
+		mu          sync.Mutex
+		activeTests []testlogger.TestingT // tests currently using this cluster
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -297,12 +301,14 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
-		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
-		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
-		// after each test completed. This is better since otherwise is would fail inside
-		// the server and not the test, creating a lot of noise and possibly stuck tests.
-		testlogger.DontFailOnError(tl)
-		// Fail test when an assertion fails (see `softassert` package).
+		// The writer routes log lines to the currently-registered test (see AcquireForTest)
+		// and falls back to stderr when there is no single active test.
+		// WithoutCloseOnCleanup keeps the logger alive across tests for shared clusters.
+		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly,
+			testlogger.WithWriter(&clusterLogWriter{s: s}),
+			testlogger.WithoutCloseOnCleanup(),
+		)
+		// Fail tests when a soft assertion fires (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 		s.Logger = tl
 	}
@@ -741,4 +747,44 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	})
 
 	return err
+}
+
+// AcquireForTest registers t as currently using this cluster and fails t at
+// cleanup time if the cluster's logger has flipped Failed() during t's window.
+func (s *FunctionalTestBase) AcquireForTest(t testlogger.CleanupCapableT) {
+	s.mu.Lock()
+	s.activeTests = append(s.activeTests, t)
+	s.mu.Unlock()
+
+	t.Cleanup(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+			if f := tl.Failed(); f != nil {
+				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
+			}
+		}
+		for i, x := range s.activeTests {
+			if x == t {
+				s.activeTests = append(s.activeTests[:i], s.activeTests[i+1:]...)
+				break
+			}
+		}
+	})
+}
+
+// Poisoned reports whether the cluster's logger has recorded a failing log.
+func (s *FunctionalTestBase) Poisoned() bool {
+	tl, ok := s.Logger.(*testlogger.TestLogger)
+	return ok && tl.Failed() != nil
+}
+
+// currentT returns the sole registered test, or nil if zero or many.
+func (s *FunctionalTestBase) currentT() testlogger.TestingT {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.activeTests) == 1 {
+		return s.activeTests[0]
+	}
+	return nil
 }
