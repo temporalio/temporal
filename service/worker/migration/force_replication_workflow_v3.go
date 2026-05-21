@@ -72,6 +72,15 @@ type (
 
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 
+		// NamespaceID and HistoryShardCount are cached from a GetMetadata
+		// call on the first cycle and carried across CAN. A caller may set
+		// HistoryShardCount explicitly to override the source cluster's
+		// shard count (e.g. when the target side has a different shard
+		// count); leaving either zero on the initial call falls back to
+		// the source cluster's value.
+		NamespaceID       string
+		HistoryShardCount int32
+
 		// Adaptive-specific knobs.
 
 		// BatchDeadlineSeconds is the wall-budget each fast-lane batch gets
@@ -309,9 +318,17 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
-	metadataResp, err := v3GetClusterMetadata(ctx, params.Namespace, retryPolicy)
-	if err != nil {
-		return err
+	if params.NamespaceID == "" || params.HistoryShardCount == 0 {
+		metadataResp, err := v3GetClusterMetadata(ctx, params.Namespace, retryPolicy)
+		if err != nil {
+			return err
+		}
+		if params.NamespaceID == "" {
+			params.NamespaceID = metadataResp.NamespaceID
+		}
+		if params.HistoryShardCount == 0 {
+			params.HistoryShardCount = metadataResp.ShardCount
+		}
 	}
 
 	if !params.TaskQueueUserDataReplicationStatus.Done {
@@ -320,7 +337,7 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		}
 	}
 
-	state = newAdaptiveWorkflowState(ctx, &params, metadataResp.NamespaceID, metadataResp.ShardCount, retryPolicy)
+	state = newAdaptiveWorkflowState(ctx, &params, retryPolicy)
 	if err := state.runOnePagedCycle(ctx); err != nil {
 		return err
 	}
@@ -514,9 +531,7 @@ func v3GetClusterMetadata(ctx workflow.Context, namespace string, retryPolicy *t
 // touch. Workflow coroutines are cooperatively scheduled (yield only at SDK
 // calls), so plain maps and slices are safe without mutexes.
 type adaptiveWorkflowState struct {
-	params            *AdaptiveForceReplicationParams
-	namespaceID       string
-	historyShardCount int32
+	params *AdaptiveForceReplicationParams
 
 	retryPolicy *temporal.RetryPolicy
 
@@ -551,12 +566,10 @@ type adaptiveWorkflowState struct {
 	lastActivityErr error
 }
 
-func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplicationParams, namespaceID string, historyShardCount int32, retryPolicy *temporal.RetryPolicy) *adaptiveWorkflowState {
+func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplicationParams, retryPolicy *temporal.RetryPolicy) *adaptiveWorkflowState {
 	s := &adaptiveWorkflowState{
-		params:            params,
-		namespaceID:       namespaceID,
-		historyShardCount: historyShardCount,
-		retryPolicy:       retryPolicy,
+		params:           params,
+		retryPolicy:      retryPolicy,
 		wfIDPending:      cloneStringIntMap(params.WFIDPendingCounts),
 		shardPending:     cloneInt32IntMap(params.ShardPendingCounts),
 		quarantinedWF:    sliceToStringSet(params.QuarantinedWFIDs),
@@ -828,7 +841,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 
 		injReq := &adaptiveInjectBatchRequest{
 			Namespace:        s.params.Namespace,
-			NamespaceID:      s.namespaceID,
+			NamespaceID:      s.params.NamespaceID,
 			TargetClusters:   targetClusters,
 			Executions:       execs,
 			RPS:              rps,
@@ -849,7 +862,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		}
 		verReq := &adaptiveVerifyBatchRequest{
 			Namespace:             s.params.Namespace,
-			NamespaceID:           s.namespaceID,
+			NamespaceID:           s.params.NamespaceID,
 			TargetClusterEndpoint: s.params.TargetClusterEndpoint,
 			TargetClusterName:     s.params.TargetClusterName,
 			Executions:            execs,
@@ -893,7 +906,7 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		var a *activities
 		req := &adaptiveVerifyBatchRequest{
 			Namespace:             s.params.Namespace,
-			NamespaceID:           s.namespaceID,
+			NamespaceID:           s.params.NamespaceID,
 			TargetClusterEndpoint: s.params.TargetClusterEndpoint,
 			TargetClusterName:     s.params.TargetClusterName,
 			Executions:            execs,
@@ -1024,7 +1037,7 @@ func (s *adaptiveWorkflowState) isQuarantined(wfID string) bool {
 // Matching that mapping is the whole point: shard-quarantine decisions then
 // land on the same shard whose apply queue is actually backed up.
 func (s *adaptiveWorkflowState) shardOf(wfID string) int32 {
-	return common.WorkflowIDToHistoryShard(s.namespaceID, wfID, s.historyShardCount)
+	return common.WorkflowIDToHistoryShard(s.params.NamespaceID, wfID, s.params.HistoryShardCount)
 }
 
 // emitTransition is the single call point for "something changed quarantine
