@@ -2856,7 +2856,7 @@ func (e *matchingEngineImpl) pollTask(
 	// expiration times across pollers and prevent thundering herd reconnects.
 	longPollInterval := pm.LongPollExpirationInterval()
 	if pollMetadata.forwardedFrom == "" && longPollInterval >= forwardedPollMinInterval {
-		longPollInterval -= time.Duration(rand.Int63n(int64(forwardedPollJitterMax)))
+		longPollInterval -= backoff.FullJitter(forwardedPollJitterMax)
 	}
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()

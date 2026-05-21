@@ -286,8 +286,7 @@ func (s *matchingEngineSuite) captureNPollDeadlines(
 	meta *pollMetadata,
 	n int,
 ) []time.Time {
-	ctrl := gomock.NewController(s.T())
-	mockPM := NewMocktaskQueuePartitionManager(ctrl)
+	mockPM := NewMocktaskQueuePartitionManager(s.controller)
 	mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).Times(n)
 	mockPM.EXPECT().LongPollExpirationInterval().Return(longPollInterval).Times(n)
 	mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
@@ -333,7 +332,7 @@ func (s *matchingEngineSuite) TestNonForwardedPollsHaveSpreadExpirations() {
 	deadlines := s.captureNPollDeadlines(partition, 60*time.Second, &pollMetadata{}, n)
 
 	spread := deadlineSpread(deadlines)
-	s.Greater(spread, time.Duration(0), "non-forwarded polls must have varied expirations to prevent thundering herd")
+	s.Greater(spread, 5*time.Second, "non-forwarded polls must have varied expirations to prevent thundering herd")
 	s.LessOrEqual(spread, forwardedPollJitterMax)
 }
 
