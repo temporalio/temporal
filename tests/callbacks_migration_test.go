@@ -442,17 +442,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.Equal(2, callbacksReceived)
 
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
-	s.Await(func(s *CallbacksMigrationSuite) {
+	s.Await(func(suite *CallbacksMigrationSuite) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		s.Require().NoError(err)
-		s.Require().Len(description.Callbacks, 2, "should still have 2 callbacks")
+		suite.NoError(err)
+		suite.Len(description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
-			s.Require().Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			s.Require().Equal(int32(1), callbackInfo.Attempt)
-			s.Require().Nil(callbackInfo.LastAttemptFailure)
-			s.Require().NotNil(callbackInfo.LastAttemptCompleteTime)
+			suite.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			suite.Equal(int32(1), callbackInfo.Attempt)
+			suite.Nil(callbackInfo.LastAttemptFailure)
+			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }
