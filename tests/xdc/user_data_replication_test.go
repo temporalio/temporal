@@ -447,7 +447,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 "force-replication-wf",
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
-		WorkflowRunTimeout: time.Second * 30,
+		WorkflowRunTimeout: time.Second * 60,
 	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
 		Namespace:  namespace,
 		OverallRps: 10,

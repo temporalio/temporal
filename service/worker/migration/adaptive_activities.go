@@ -176,7 +176,7 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 	}
 
 	verified := make([]bool, len(request.Executions))
-	var verifiedCount, notFoundCount, busyCount int64
+	var verifiedCount int64
 
 	deadlineAt := time.Now().Add(deadline)
 	for time.Now().Before(deadlineAt) {
@@ -197,21 +197,18 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 			if verified[i] {
 				continue
 			}
+			// Heartbeat per exec so a worker crash is detected within
+			// HeartbeatTimeout rather than StartToCloseTimeout. The SDK
+			// batches the actual network calls, so the cost is bounded
+			// even with large batches.
+			activity.RecordHeartbeat(ctx, nil)
 			outcome, err := a.skipAheadVerifySingle(ctx, singleReq, remoteAdminClient, nsEntry, we)
 			if err != nil {
 				return nil, err
 			}
-			switch outcome {
-			case verifyOutcomeVerified:
+			if outcome == verifyOutcomeVerified {
 				verified[i] = true
 				verifiedCount++
-			case verifyOutcomeBusy:
-				busyCount++
-			case verifyOutcomeMissing:
-				notFoundCount++
-			default:
-				// skipAheadVerifySingle only returns the three constants above;
-				// the default is unreachable but the linter wants it explicit.
 			}
 		}
 		if int(verifiedCount) >= len(request.Executions) {
