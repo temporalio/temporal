@@ -3,6 +3,7 @@ package migration
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -58,6 +59,12 @@ type (
 		// activity runs after InjectBatch. When false (inject-only mode),
 		// inject success is the progress signal — quarantine and slow lane
 		// stay idle and AIMD ramps up monotonically.
+		//
+		// Caveat: in inject-only mode, ReplicatedWorkflowCount in the
+		// status query reflects *injected* executions, not confirmed
+		// replicated. Without VerifyBatch the workflow has no way to
+		// observe arrival on the target. Use only when the caller
+		// independently verifies replication some other way.
 		EnableVerification      bool
 		TargetClusterEndpoint   string
 		TargetClusterName       string
@@ -69,6 +76,14 @@ type (
 		TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
 		ReplicatedWorkflowCount            int64
 		TotalForceReplicateWorkflowCount   int64
+
+		// LastProgressAt is the workflow timestamp at which totalVerified
+		// last advanced. Carried across CAN so the no-progress detector
+		// spans cycles: a workflow that CANs every few minutes without
+		// progress still trips the detector once cumulative idle time
+		// exceeds NoProgressTimeoutSeconds. Zero on the first cycle —
+		// the constructor falls back to workflow.Now in that case.
+		LastProgressAt time.Time
 
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 
@@ -126,11 +141,11 @@ type (
 		// listing and resumes draining the carried pending.
 		DrainOnly bool
 
-		// AIMDEnabled gates the per-batch additive-increase /
-		// multiplicative-decrease RPS controller. *bool so an explicit
-		// false from a caller is distinguishable from unset (defaults to
-		// true).
-		AIMDEnabled *bool
+		// AIMDDisabled turns off the per-batch additive-increase /
+		// multiplicative-decrease RPS controller. Inverted so the zero
+		// value (false) leaves AIMD on — the production default — and
+		// callers explicitly opt out with true.
+		AIMDDisabled bool
 
 		// AIMDIncreaseStep is the additive bump per clean batch, as a
 		// fraction of the lane's INITIAL per-batch RPS so the curve is
@@ -166,16 +181,21 @@ type (
 )
 
 const (
-	forceReplicationWorkflowV3Name = "force-replication-v3"
-
+	// Workflow identifiers.
+	forceReplicationWorkflowV3Name          = "force-replication-v3"
 	adaptiveForceReplicationStatusQueryType = "adaptive-force-replication-status"
 
-	// Quarantine transition counters, tagged with the namespace. Operators
-	// alert on a spike of quarantines or absence of recoveries.
+	// Metric names. Quarantine counters tagged with namespace; AIMD
+	// counters also tagged with lane. Operators alert on quarantine
+	// spikes / missing recoveries, and chart ramp-up vs. back-off.
 	forceRepWFQuarantinedMetric    = "force_replication_wf_quarantined_count"
 	forceRepShardQuarantinedMetric = "force_replication_shard_quarantined_count"
 	forceRepShardRecoveredMetric   = "force_replication_shard_recovered_count"
+	forceRepRPSIncreasedMetric     = "force_replication_rps_increased_count"
+	forceRepRPSDecreasedMetric     = "force_replication_rps_decreased_count"
 
+	// Defaults applied in validateAndSetAdaptiveParams when a caller
+	// leaves the corresponding param at its zero value.
 	defaultAdaptiveBatchDeadlineSeconds       = 60
 	defaultAdaptiveNoProgressTimeoutSeconds   = 30 * 60 // matches V1/V2's defaultNoProgressNotRetryableTimeout
 	defaultAdaptiveSlowLaneConcurrency        = 1
@@ -184,26 +204,20 @@ const (
 	defaultAdaptiveSlowLaneDeadlineMultiplier = 3
 	defaultAdaptiveSlowLaneIntervalMultiplier = 3
 	defaultAdaptiveSlowLaneRPSDivisor         = 10
+	defaultAdaptiveAIMDIncreaseStep           = 0.10
+	defaultAdaptiveAIMDDecreaseFactor         = 0.5
+	defaultAdaptiveAIMDMinRPSFactor           = 0.10
+	defaultAdaptiveAIMDMaxRPSFactor           = 2.0
 
-	defaultAdaptiveAIMDIncreaseStep   = 0.10
-	defaultAdaptiveAIMDDecreaseFactor = 0.5
-	defaultAdaptiveAIMDMinRPSFactor   = 0.10
-	defaultAdaptiveAIMDMaxRPSFactor   = 2.0
-
-	// Caps on cross-CAN payload growth. Two axes (count and bytes), checked
-	// at two sites: the early-CAN thresholds break out of the page loop;
-	// the hard caps drain inline before snapshotting. Either tripping wins.
-	// Bytes cap keeps us under the SDK's 512KB blob warn after the rest of
-	// the params struct is accounted for.
+	// Caps on cross-CAN payload growth. Two axes (count and bytes),
+	// checked at two sites: the early-CAN thresholds break out of the
+	// page loop; the hard caps drain inline before snapshotting. Either
+	// tripping wins. Bytes cap keeps us under the SDK's 512KB blob warn
+	// after the rest of the params struct is accounted for.
 	earlyCANPendingThreshold = 3000
 	maxPendingCarryAcrossCAN = 6000
 	earlyCANCarryBytes       = 256 * 1024
 	maxCANCarryBytes         = 450 * 1024
-
-	// AIMD adjustment counters, tagged with namespace and lane. Counter
-	// per direction so dashboards can render ramp-up vs. back-off.
-	forceRepRPSIncreasedMetric = "force_replication_rps_increased_count"
-	forceRepRPSDecreasedMetric = "force_replication_rps_decreased_count"
 )
 
 // pendingList carries unverified executions across CAN with a compact
@@ -302,16 +316,10 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		}, nil
 	})
 
-	// Workflow-scoped retry policy: the SDK's applyRetryPolicyDefaults
-	// mutates the pointed-to policy in place, which races when concurrent
-	// workflows share a global.
-	retryPolicy := &temporal.RetryPolicy{
-		InitialInterval: time.Second,
-		MaximumInterval: time.Second * 10,
-	}
+	retryPolicy := newForceReplicationRetryPolicy()
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := v3CountWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
+		wfCount, err := countWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
 		if err != nil {
 			return err
 		}
@@ -319,7 +327,7 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 	}
 
 	if params.NamespaceID == "" || params.HistoryShardCount == 0 {
-		metadataResp, err := v3GetClusterMetadata(ctx, params.Namespace, retryPolicy)
+		metadataResp, err := getClusterMetadata(ctx, params.Namespace, retryPolicy)
 		if err != nil {
 			return err
 		}
@@ -382,6 +390,7 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 	params.FastPending = pendingList(state.fastPending)
 	params.SlowPending = pendingList(state.slowPending)
 	params.ReplicatedWorkflowCount = state.totalVerified
+	params.LastProgressAt = state.lastProgressAt
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV3, params)
 }
 
@@ -448,10 +457,6 @@ func validateAndSetAdaptiveParams(params *AdaptiveForceReplicationParams) error 
 // +10% per clean batch, halve on pending, floor 10% / ceiling 200% of
 // initial per-batch RPS.
 func applyAdaptiveAIMDDefaults(params *AdaptiveForceReplicationParams) {
-	if params.AIMDEnabled == nil {
-		t := true
-		params.AIMDEnabled = &t
-	}
 	if params.AIMDIncreaseStep <= 0 {
 		params.AIMDIncreaseStep = defaultAdaptiveAIMDIncreaseStep
 	}
@@ -494,37 +499,6 @@ func kickoffTaskQueueUserDataReplication(ctx workflow.Context, params *AdaptiveF
 	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)
 	var childExecution workflow.Execution
 	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
-}
-
-func v3CountWorkflowForReplication(ctx workflow.Context, namespace, query string, retryPolicy *temporal.RetryPolicy) (int64, error) {
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
-		RetryPolicy:         retryPolicy,
-	}
-	var a *activities
-	var output countWorkflowResponse
-	if err := workflow.ExecuteActivity(
-		workflow.WithActivityOptions(ctx, ao),
-		a.CountWorkflow,
-		&workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: namespace,
-			Query:     query,
-		}).Get(ctx, &output); err != nil {
-		return 0, err
-	}
-	return output.WorkflowCount, nil
-}
-
-func v3GetClusterMetadata(ctx workflow.Context, namespace string, retryPolicy *temporal.RetryPolicy) (MetadataResponse, error) {
-	lao := workflow.LocalActivityOptions{
-		StartToCloseTimeout: time.Second * 10,
-		RetryPolicy:         retryPolicy,
-	}
-	actx := workflow.WithLocalActivityOptions(ctx, lao)
-	var a *activities
-	var metadataResp MetadataResponse
-	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest{Namespace: namespace}).Get(ctx, &metadataResp)
-	return metadataResp, err
 }
 
 // adaptiveWorkflowState bundles the mutable state the workflow coroutines
@@ -576,11 +550,16 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 		quarantinedShard: sliceToInt32Set(params.QuarantinedShards),
 		// Copy the carry-over rather than alias so the next CAN's
 		// snapshot doesn't observe lists mutated by this cycle.
-		fastPending:    append([]*ExecutionInfo(nil), params.FastPending...),
-		slowPending:    append([]*ExecutionInfo(nil), params.SlowPending...),
-		totalVerified:  params.ReplicatedWorkflowCount,
-		lastVerified:   params.ReplicatedWorkflowCount,
-		lastProgressAt: workflow.Now(ctx),
+		fastPending:   append([]*ExecutionInfo(nil), params.FastPending...),
+		slowPending:   append([]*ExecutionInfo(nil), params.SlowPending...),
+		totalVerified: params.ReplicatedWorkflowCount,
+		lastVerified:  params.ReplicatedWorkflowCount,
+		// Carry lastProgressAt across CAN so the no-progress detector
+		// spans cycles. Zero means first cycle — use now.
+		lastProgressAt: params.LastProgressAt,
+	}
+	if s.lastProgressAt.IsZero() {
+		s.lastProgressAt = workflow.Now(ctx)
 	}
 	// state now owns the live pending lists; params will be repopulated
 	// from state before continue-as-new.
@@ -715,13 +694,6 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested
 		// budget is already approaching the warn threshold.
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
 			return true, nil
-		}
-		// Yield between rounds so workflow time advances even if verify
-		// returns immediately.
-		if round > 0 {
-			if err := workflow.Sleep(ctx, time.Second); err != nil {
-				return false, err
-			}
 		}
 
 		reFast, reSlow := s.reclassifyPendingForRetry()
@@ -1056,7 +1028,7 @@ func (s *adaptiveWorkflowState) emitTransition(ctx workflow.Context, metricName,
 // additively raise, pending multiplicatively cuts. Clamped to min/max
 // factors; only genuine transitions emit metrics.
 func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, slow bool, hadPending bool) {
-	if s.params.AIMDEnabled == nil || !*s.params.AIMDEnabled {
+	if s.params.AIMDDisabled {
 		return
 	}
 	current := &s.currentFastRPS
@@ -1136,23 +1108,43 @@ func (s *adaptiveWorkflowState) refillSemaphores(ctx workflow.Context) {
 	}
 }
 
-// estimateCANPayloadBytes returns the marshalled size of the input-growing
-// CAN fields (pending lists + user-keyed quarantine state). Shard-keyed
-// state is bounded by shard count and excluded.
+// estimateCANPayloadBytes returns a conservative upper bound on the
+// marshalled size of the input-growing CAN fields (pending lists +
+// user-keyed quarantine state). Shard-keyed state is bounded by shard
+// count and excluded.
+//
+// Conservative because it doesn't dedupe BusinessIDs shared across runs
+// of the same WF — the pendingList wire form groups by BID so the real
+// encoded size is smaller, but for capping CAN input we'd rather
+// over-estimate (and CAN slightly sooner) than miss the SDK's 512KB
+// warn threshold. Sum over map iteration is commutative so the result
+// stays deterministic across replay.
 func (s *adaptiveWorkflowState) estimateCANPayloadBytes() int {
-	//workflowcheck:ignore (json.Marshal sorts map keys; pendingList wire form is deterministic; result used only for len())
-	b, _ := json.Marshal(struct {
-		Fast              pendingList
-		Slow              pendingList
-		QuarantinedWFIDs  []string
-		WFIDPendingCounts map[string]int
-	}{
-		Fast:              pendingList(s.fastPending),
-		Slow:              pendingList(s.slowPending),
-		QuarantinedWFIDs:  s.snapshotQuarantinedWFIDs(),
-		WFIDPendingCounts: s.wfIDPending,
-	})
-	return len(b)
+	// Per-pending-entry overhead in the wire form: tuple brackets,
+	// quotes, comma, archetypeID digits, plus the BID grouping key
+	// (over-counted for repeated BIDs, intentionally).
+	const pendingEntryOverhead = 20
+	// Per QuarantinedWFIDs slice entry: surrounding quotes + comma.
+	const quarantineEntryOverhead = 4
+	// Per WFIDPendingCounts map entry: quotes, colon, count digits, comma.
+	const pendingCountEntryOverhead = 12
+
+	bytes := 0
+	for _, e := range s.fastPending {
+		bytes += len(e.BusinessID) + len(e.RunID) + pendingEntryOverhead
+	}
+	for _, e := range s.slowPending {
+		bytes += len(e.BusinessID) + len(e.RunID) + pendingEntryOverhead
+	}
+	//workflowcheck:ignore (summation is commutative; result independent of iteration order)
+	for k := range s.quarantinedWF {
+		bytes += len(k) + quarantineEntryOverhead
+	}
+	//workflowcheck:ignore (summation is commutative; result independent of iteration order)
+	for k := range s.wfIDPending {
+		bytes += len(k) + pendingCountEntryOverhead
+	}
+	return bytes
 }
 
 // snapshotQuarantinedWFIDs returns the quarantined WF-ID set as a sorted
@@ -1177,20 +1169,21 @@ func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
 	return out
 }
 
+// cloneStringIntMap returns a non-nil copy of m. Non-nil because callers
+// write into the result (e.g. wfIDPending[bid]++), which panics on a nil
+// map.
 func cloneStringIntMap(m map[string]int) map[string]int {
-	out := make(map[string]int, len(m))
-	//workflowcheck:ignore (cloning into a new map of the same contents; iteration order does not affect history)
-	for k, v := range m {
-		out[k] = v
+	out := maps.Clone(m)
+	if out == nil {
+		out = make(map[string]int)
 	}
 	return out
 }
 
 func cloneInt32IntMap(m map[int32]int) map[int32]int {
-	out := make(map[int32]int, len(m))
-	//workflowcheck:ignore (cloning into a new map of the same contents; iteration order does not affect history)
-	for k, v := range m {
-		out[k] = v
+	out := maps.Clone(m)
+	if out == nil {
+		out = make(map[int32]int)
 	}
 	return out
 }

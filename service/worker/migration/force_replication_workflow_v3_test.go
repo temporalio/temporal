@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -177,6 +178,9 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestQuarantineAfterRepeatedPending
 	// WFIDQuarantineThreshold of 3; the fourth call verifies cleanly.
 	// Times(1) asserts retry rounds re-verify without re-injecting: the
 	// initial dispatch injects once, then drainRetries calls VerifyBatch only.
+	// Times(4) on VerifyBatch asserts the precise retry round count:
+	// initial verify + three drainRetries rounds (round 2 trips quarantine
+	// → slow lane → final clean verify).
 	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	verifyCalls := 0
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, _ *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
@@ -185,7 +189,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestQuarantineAfterRepeatedPending
 			return &adaptiveVerifyBatchResponse{Verified: 0, Pending: []*ExecutionInfo{hotExec}}, nil
 		}
 		return &adaptiveVerifyBatchResponse{Verified: 1, Pending: nil}, nil
-	})
+	}).Times(4)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -243,11 +247,13 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 		}, nil
 	})
 
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
+	// InjectBatch is called once — initial dispatch. Retry rounds use
+	// dispatchVerifyOnly, never re-injecting.
+	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	// Verify outcomes by call:
 	//   1: both pending (initial batch) → shardPending = 2
-	//   2: both pending (retry) → shardPending = 4 → shard quarantined
-	//   3+: both clean → shardPending decays → quarantine releases
+	//   2: both pending (drainRetries round 0, fast lane) → shardPending = 4 → shard quarantined
+	//   3: both clean (drainRetries round 1, slow lane) → shardPending decays → quarantine releases
 	verifyCalls := 0
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		verifyCalls++
@@ -255,7 +261,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 			return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
 		}
 		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
-	})
+	}).Times(3)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -410,13 +416,15 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestPendingCarriesAcrossCAN() {
 		}, nil
 	}).Once()
 
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
+	// One page → one InjectBatch + one VerifyBatch → CAN. Times(1)
+	// guards against accidental re-dispatch.
+	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	// Both execs come back pending — they should land in params.FastPending
 	// (neither WF-ID nor shard quarantine fires since it's a single
 	// observation and thresholds are well above 1).
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
-	})
+	}).Times(1)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -439,6 +447,9 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestPendingCarriesAcrossCAN() {
 	s.Len(canParams.FastPending, 2, "both pending execs should carry across CAN")
 	s.Empty(canParams.SlowPending, "neither exec is quarantined so nothing in slow")
 	s.Equal(int64(0), canParams.ReplicatedWorkflowCount)
+	// lastProgressAt must persist across CAN so the no-progress detector
+	// spans cycles. Zero here would reset the detector on every CAN.
+	s.False(canParams.LastProgressAt.IsZero(), "lastProgressAt should be snapshotted into CAN params")
 }
 
 // TestEarlyCANOnPendingPressure verifies that runOnePagedCycle breaks
@@ -606,9 +617,13 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestDrainOnlySkipsListing() {
 	// and the workflow fails — making this a strict "ListWorkflows is
 	// never called" assertion.
 
+	// DrainOnly path → one drainRetries round → one VerifyBatch with all
+	// carry execs. InjectBatch must never be called (drain re-verifies
+	// already-injected work); the missing mock means an unexpected call
+	// would fail the test.
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
-	})
+	}).Times(1)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -682,10 +697,13 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDIncreasesOnClean() {
 		}, nil
 	}).Times(3)
 
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
+	// Three pages → three inject + three verify pairs. Times(3) on both
+	// asserts no retry rounds (final cycle drainRetries returns
+	// immediately with empty pending).
+	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(3)
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
-	})
+	}).Times(3)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
@@ -737,7 +755,8 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 		NextPageToken: nil,
 	}, nil).Once()
 
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
+	// One InjectBatch on initial dispatch; drainRetries verify-only after.
+	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	verifyCalls := 0
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		verifyCalls++
@@ -747,7 +766,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 			return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
 		}
 		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
-	})
+	}).Times(3)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
@@ -777,44 +796,30 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 	s.Less(status.CurrentFastRPS, 10.0, "RPS must end below initial after pending")
 }
 
-// TestNoProgressTimeoutFires verifies that the workflow-level
-// no-progress detector trips when totalVerified stops advancing for
-// longer than NoProgressTimeoutSeconds. Each drainRetries round sleeps
-// 1s of simulated time before reissuing verify, so with
-// NoProgressTimeoutSeconds=1 the detector fires after the second round.
-func (s *ForceReplicationWorkflowV3TestSuite) TestNoProgressTimeoutFires() {
+// TestCheckProgressFiresWhenStale exercises the no-progress detector
+// directly. checkProgress trips when workflow time has advanced past
+// NoProgressTimeoutSeconds since lastProgressAt with no growth in
+// totalVerified.
+//
+// We drive it via a thin test workflow that constructs an
+// adaptiveWorkflowState with a stale lastProgressAt (set to two seconds
+// before workflow.Now), then calls checkProgress. In production the
+// same condition arises naturally when long-running VerifyBatch
+// activities return without verifying anything — activity wall-time
+// advances workflow time, lastProgressAt stays put, the detector fires.
+func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressFiresWhenStale() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 
-	namespaceID := uuid.NewString()
-	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 1}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
-
-	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
-		Executions:    []*ExecutionInfo{{BusinessID: "stuck-wf", RunID: "run-1"}},
-		NextPageToken: nil,
-	}, nil).Once()
-
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil)
-	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
-		return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
-	})
-
-	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
-
-	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
-		Namespace:                "test-ns",
-		ConcurrentActivityCount:  1,
-		OverallRps:               10,
-		ListWorkflowsPageSize:    1,
-		PageCountPerExecution:    1,
-		EnableVerification:       true,
-		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
-		ShardQuarantineThreshold: 999,
-		NoProgressTimeoutSeconds: 1,
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		state := &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				Namespace:                "test-ns",
+				NoProgressTimeoutSeconds: 1,
+			},
+			lastProgressAt: workflow.Now(ctx).Add(-2 * time.Second),
+		}
+		return state.checkProgress(ctx)
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -824,4 +829,29 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestNoProgressTimeoutFires() {
 	s.Require().ErrorAs(err, &appErr)
 	s.Equal("AdaptiveForceReplicationNoProgress", appErr.Type())
 	s.True(appErr.NonRetryable(), "no-progress timeout should be non-retryable")
+}
+
+// TestCheckProgressResetsOnProgress verifies the inverse: when
+// totalVerified has advanced past lastVerified, checkProgress updates
+// lastProgressAt and returns nil even if wall-time has elapsed past
+// the threshold.
+func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressResetsOnProgress() {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		state := &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				Namespace:                "test-ns",
+				NoProgressTimeoutSeconds: 1,
+			},
+			lastProgressAt: workflow.Now(ctx).Add(-2 * time.Second),
+			totalVerified:  5,
+			lastVerified:   0,
+		}
+		return state.checkProgress(ctx)
+	})
+
+	s.True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
 }

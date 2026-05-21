@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -109,6 +110,11 @@ func (a *activities) InjectBatch(ctx context.Context, request *adaptiveInjectBat
 			if !common.IsNotFoundError(err) {
 				return fmt.Errorf("generate replication task for %s/%s: %w", we.BusinessID, we.RunID, err)
 			}
+			a.Logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
+				tag.WorkflowNamespaceID(request.NamespaceID),
+				tag.WorkflowID(we.BusinessID),
+				tag.WorkflowRunID(we.RunID),
+				tag.Error(err))
 		}
 		activity.RecordHeartbeat(ctx, i)
 	}
@@ -231,7 +237,7 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 type verifyOutcome int
 
 const (
-	verifyOutcomeBusy verifyOutcome = iota
+	verifyOutcomeUnknown verifyOutcome = iota
 	verifyOutcomeMissing
 	verifyOutcomeVerified
 )
@@ -249,7 +255,7 @@ func (a *activities) skipAheadVerifySingle(
 	s := time.Now()
 	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
 	if err != nil {
-		return verifyOutcomeBusy, err
+		return verifyOutcomeUnknown, err
 	}
 	mu, err := remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
@@ -267,10 +273,16 @@ func (a *activities) skipAheadVerifySingle(
 	case nil:
 		result, verr := a.workflowVerifier(ctx, request, remoteAdminClient, a.adminClient, ns, execution, mu)
 		if verr != nil {
-			return verifyOutcomeBusy, verr
+			return verifyOutcomeUnknown, verr
+		}
+		// Match V1/V2 metric semantics: only `verified` increments the
+		// success counter. `skipped` (zombie / past-retention) still
+		// terminates verification but is not counted as a confirmed
+		// replication.
+		if result.status == verified {
+			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
 		if result.status == verified || result.status == skipped {
-			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 			return verifyOutcomeVerified, nil
 		}
 		return verifyOutcomeMissing, nil
@@ -283,7 +295,7 @@ func (a *activities) skipAheadVerifySingle(
 		// pending.
 		result, serr := a.checkSkipWorkflowExecution(ctx, request, execution, ns)
 		if serr != nil {
-			return verifyOutcomeBusy, serr
+			return verifyOutcomeUnknown, serr
 		}
 		if result.status == verified || result.status == skipped {
 			return verifyOutcomeVerified, nil
@@ -291,19 +303,19 @@ func (a *activities) skipAheadVerifySingle(
 		return verifyOutcomeMissing, nil
 
 	case *serviceerror.NamespaceNotFound:
-		return verifyOutcomeBusy, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
+		return verifyOutcomeUnknown, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
 
 	case *serviceerror.ResourceExhausted:
 		if e.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 			// Apply is mid-flight on the passive — a small sign of progress
 			// but not yet verified. Pending until the next scan.
-			return verifyOutcomeBusy, nil
+			return verifyOutcomeUnknown, nil
 		}
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
-		return verifyOutcomeBusy, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
+		return verifyOutcomeUnknown, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 
 	default:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
-		return verifyOutcomeBusy, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
+		return verifyOutcomeUnknown, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 	}
 }

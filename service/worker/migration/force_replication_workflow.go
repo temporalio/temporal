@@ -91,14 +91,22 @@ type (
 )
 
 var (
-	forceReplicationActivityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval: time.Second,
-		MaximumInterval: time.Second * 10,
-	}
-
 	NamespaceTagName           = "namespace"
 	ForceReplicationRpsTagName = "force_replication_rps"
 )
+
+// newForceReplicationRetryPolicy returns a fresh retry policy. Callers
+// must not share an instance across workflow runs: the SDK's
+// applyRetryPolicyDefaults mutates the pointed-to policy in place, so a
+// shared global races between concurrent workflows. Within a single
+// workflow run, coroutines are cooperatively scheduled and sharing one
+// instance across helpers is safe.
+func newForceReplicationRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval: time.Second,
+		MaximumInterval: time.Second * 10,
+	}
+}
 
 const (
 	forceReplicationWorkflowName               = "force-replication"
@@ -138,15 +146,17 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return err
 	}
 
+	retryPolicy := newForceReplicationRetryPolicy()
+
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, params)
+		wfCount, err := countWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
 		if err != nil {
 			return err
 		}
 		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
-	metadataResp, err := getClusterMetadata(ctx, params)
+	metadataResp, err := getClusterMetadata(ctx, params.Namespace, retryPolicy)
 	if err != nil {
 		return err
 	}
@@ -164,14 +174,14 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	executionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
 	var listExecutions error
 	workflow.Go(ctx, func(ctx workflow.Context) {
-		listExecutions = listExecutionsForReplication(ctx, executionsCh, &params)
+		listExecutions = listExecutionsForReplication(ctx, executionsCh, &params, retryPolicy)
 
 		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
 		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
 		executionsCh.Close()
 	})
 
-	if err := enqueueReplicationTasks(ctx, executionsCh, metadataResp.NamespaceID, &params); err != nil {
+	if err := enqueueReplicationTasks(ctx, executionsCh, metadataResp.NamespaceID, &params, retryPolicy); err != nil {
 		return err
 	}
 
@@ -221,15 +231,17 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 		return err
 	}
 
+	retryPolicy := newForceReplicationRetryPolicy()
+
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, params)
+		wfCount, err := countWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
 		if err != nil {
 			return err
 		}
 		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
-	metadataResp, err := getClusterMetadata(ctx, params)
+	metadataResp, err := getClusterMetadata(ctx, params.Namespace, retryPolicy)
 	if err != nil {
 		return err
 	}
@@ -247,14 +259,14 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
 	var listWorkflowsErr error
 	workflow.Go(ctx, func(ctx workflow.Context) {
-		listWorkflowsErr = listExecutionsForReplication(ctx, workflowExecutionsCh, &params)
+		listWorkflowsErr = listExecutionsForReplication(ctx, workflowExecutionsCh, &params, retryPolicy)
 
 		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
 		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
 		workflowExecutionsCh.Close()
 	})
 
-	if err := enqueueReplicationTasksLocal(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
+	if err := enqueueReplicationTasksLocal(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params, retryPolicy); err != nil {
 		return err
 	}
 
@@ -389,27 +401,26 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 	return nil
 }
 
-func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (MetadataResponse, error) {
+func getClusterMetadata(ctx workflow.Context, namespace string, retryPolicy *temporal.RetryPolicy) (MetadataResponse, error) {
 	// Get cluster metadata, we need namespace ID for history API call.
 	// TODO: remove this step.
 	lao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: time.Second * 10,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         retryPolicy,
 	}
 
 	actx := workflow.WithLocalActivityOptions(ctx, lao)
 	var metadataResp MetadataResponse
-	MetadataRequest := MetadataRequest{Namespace: params.Namespace}
 	var a *activities
-	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest).Get(ctx, &metadataResp)
+	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest{Namespace: namespace}).Get(ctx, &metadataResp)
 	return metadataResp, err
 }
 
-func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Channel, params *ForceReplicationParams) error {
+func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Channel, params *ForceReplicationParams, retryPolicy *temporal.RetryPolicy) error {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 30,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         retryPolicy,
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
@@ -444,10 +455,10 @@ func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Ch
 	return nil
 }
 
-func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationParams) (int64, error) {
+func countWorkflowForReplication(ctx workflow.Context, namespace, query string, retryPolicy *temporal.RetryPolicy) (int64, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         retryPolicy,
 	}
 
 	var a *activities
@@ -456,8 +467,8 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 		workflow.WithActivityOptions(ctx, ao),
 		a.CountWorkflow,
 		&workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: params.Namespace,
-			Query:     params.Query,
+			Namespace: namespace,
+			Query:     query,
 		}).Get(ctx, &output); err != nil {
 		return 0, err
 	}
@@ -465,7 +476,7 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 	return output.WorkflowCount, nil
 }
 
-func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
+func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams, retryPolicy *temporal.RetryPolicy) error {
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
 	pendingVerifyTasks := 0
@@ -473,7 +484,7 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 60,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         retryPolicy,
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
@@ -566,6 +577,7 @@ func enqueueReplicationTasksLocal(
 	executionsCh workflow.Channel,
 	namespaceID string,
 	params *ForceReplicationParams,
+	retryPolicy *temporal.RetryPolicy,
 ) error {
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
@@ -573,7 +585,7 @@ func enqueueReplicationTasksLocal(
 
 	lao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: time.Hour,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
+		RetryPolicy:         retryPolicy,
 	}
 
 	lactx := workflow.WithLocalActivityOptions(ctx, lao)

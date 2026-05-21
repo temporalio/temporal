@@ -2347,12 +2347,17 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	run4, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID4,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
-		WorkflowRunTimeout: time.Second * 60,
+		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
-		Namespace:          namespace,
-		OverallRps:         10,
-		EnableVerification: true,
-		TargetClusterName:  s.clusters[1].ClusterName(),
+		Namespace: namespace,
+		// Verify polls every 1s instead of the 5s default so a small
+		// integration workload verifies fast enough to fit the 30s
+		// budget. The verify loop sleeps before its first probe, so
+		// the default would burn 5s per batch on mandatory waits alone.
+		VerifyIntervalInSeconds: 1,
+		OverallRps:              10,
+		EnableVerification:      true,
+		TargetClusterName:       s.clusters[1].ClusterName(),
 	})
 
 	s.NoError(err)
@@ -2493,12 +2498,13 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
-		WorkflowRunTimeout: time.Second * 60,
+		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
-		Namespace:          namespace,
-		OverallRps:         10,
-		EnableVerification: true,
-		TargetClusterName:  s.clusters[1].ClusterName(),
+		Namespace:               namespace,
+		VerifyIntervalInSeconds: 1,
+		OverallRps:              10,
+		EnableVerification:      true,
+		TargetClusterName:       s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
@@ -2613,12 +2619,13 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
-		WorkflowRunTimeout: time.Second * 60,
+		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication-v3", migration.AdaptiveForceReplicationParams{
-		Namespace:          namespace,
-		OverallRps:         10,
-		EnableVerification: true,
-		TargetClusterName:  s.clusters[1].ClusterName(),
+		Namespace:               namespace,
+		VerifyIntervalInSeconds: 1,
+		OverallRps:              10,
+		EnableVerification:      true,
+		TargetClusterName:       s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
