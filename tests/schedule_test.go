@@ -3383,16 +3383,34 @@ func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
 
 	// Wait for the workflow to fire and complete.
 	require.Eventually(t, func() bool { return ran.Load() },
-		15*time.Second, 500*time.Millisecond, "workflow should have fired")
+		10*time.Second, 200*time.Millisecond, "workflow should have fired")
 
-	// After the workflow completes, the schedule goes idle and closes after IdleTime.
+	// Poll until DescribeSchedule reflects the completed action and no future times.
+	var preCloseDesc *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil || len(resp.Info.RecentActions) == 0 {
+			return false
+		}
+		preCloseDesc = resp
+		return len(resp.Info.FutureActionTimes) == 0
+	}, 10*time.Second, 200*time.Millisecond, "schedule should have one completed action and no future times")
+
+	require.Len(t, preCloseDesc.Info.RecentActions, 1)
+	require.NotNil(t, preCloseDesc.Info.RecentActions[0].StartWorkflowResult)
+	require.Empty(t, preCloseDesc.Info.FutureActionTimes)
+
+	// Schedule goes idle and closes after IdleTime (3s).
 	require.Eventually(t, func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
 		return err != nil
-	}, 30*time.Second, 500*time.Millisecond, "schedule should have closed")
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
 }
 
 // testMultiDateScheduleCloses verifies that a CHASM schedule configured with
@@ -3454,14 +3472,34 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 
 	// Wait for both workflows to fire and complete.
 	require.Eventually(t, func() bool { return runs.Load() >= 2 },
-		20*time.Second, 500*time.Millisecond, "both workflows should have fired")
+		15*time.Second, 200*time.Millisecond, "both workflows should have fired")
 
-	// After both complete, the schedule goes idle and closes after IdleTime.
+	// Poll until DescribeSchedule reflects both completed actions and no future times.
+	var preCloseDesc *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil || len(resp.Info.RecentActions) < 2 {
+			return false
+		}
+		preCloseDesc = resp
+		return len(resp.Info.FutureActionTimes) == 0
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have two completed actions and no future times")
+
+	require.Len(t, preCloseDesc.Info.RecentActions, 2)
+	for _, action := range preCloseDesc.Info.RecentActions {
+		require.NotNil(t, action.StartWorkflowResult)
+	}
+	require.Empty(t, preCloseDesc.Info.FutureActionTimes)
+
+	// Schedule goes idle and closes after IdleTime (3s).
 	require.Eventually(t, func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
 		return err != nil
-	}, 30*time.Second, 500*time.Millisecond, "schedule should have closed")
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
 }
