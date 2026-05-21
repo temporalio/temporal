@@ -1,7 +1,6 @@
 package scheduler_test
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -25,28 +24,30 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// singleDateSchedule returns a schedule that fires exactly once at triggerTime.
-// The calendar spec is constrained to the exact year/month/day/hour/minute/second
-// so the generator sees nextWakeupTime=zero after firing and goes idle immediately,
-// without needing LimitedActions.
-func singleDateSchedule(triggerTime time.Time) *schedulepb.Schedule {
-	t := triggerTime.UTC()
+// calendarSchedule returns a schedule that fires exactly once at each of the
+// provided times. Each time is expressed as a StructuredCalendarSpec pinned to
+// the exact year/month/day/hour/minute/second, so the generator sees
+// nextWakeupTime=zero after the last firing and goes idle without needing
+// LimitedActions.
+//
+// Note: DayOfWeek must cover all days — makeBitMatcher(nil) produces bits=0
+// which silently blocks every time.
+func calendarSchedule(times ...time.Time) *schedulepb.Schedule {
+	var entries []*schedulepb.StructuredCalendarSpec
+	for _, ts := range times {
+		t := ts.UTC()
+		entries = append(entries, &schedulepb.StructuredCalendarSpec{
+			Second:     []*schedulepb.Range{{Start: int32(t.Second()), End: int32(t.Second()), Step: 1}},
+			Minute:     []*schedulepb.Range{{Start: int32(t.Minute()), End: int32(t.Minute()), Step: 1}},
+			Hour:       []*schedulepb.Range{{Start: int32(t.Hour()), End: int32(t.Hour()), Step: 1}},
+			DayOfMonth: []*schedulepb.Range{{Start: int32(t.Day()), End: int32(t.Day()), Step: 1}},
+			Month:      []*schedulepb.Range{{Start: int32(t.Month()), End: int32(t.Month()), Step: 1}},
+			Year:       []*schedulepb.Range{{Start: int32(t.Year()), End: int32(t.Year()), Step: 1}},
+			DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+		})
+	}
 	return &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: int32(t.Second()), End: int32(t.Second()), Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: int32(t.Minute()), End: int32(t.Minute()), Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: int32(t.Hour()), End: int32(t.Hour()), Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: int32(t.Day()), End: int32(t.Day()), Step: 1}},
-					Month:      []*schedulepb.Range{{Start: int32(t.Month()), End: int32(t.Month()), Step: 1}},
-					Year:       []*schedulepb.Range{{Start: int32(t.Year()), End: int32(t.Year()), Step: 1}},
-					// DayOfWeek must cover all days: makeBitMatcher(nil) produces bits=0
-					// which matches nothing, so an empty DayOfWeek silently blocks all times.
-					DayOfWeek: []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
-			},
-		},
+		Spec: &schedulepb.ScheduleSpec{StructuredCalendar: entries},
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
@@ -79,44 +80,8 @@ func requirePendingTypes(
 	}
 }
 
-// TestSingleActionSchedule tests the full lifecycle of a schedule configured
-// with a calendar spec that fires exactly once at a specific date and time.
-// Because the spec has no future occurrences after the trigger, the generator
-// goes idle immediately after processing the action (nextWakeupTime=zero).
-//
-// Timeline:
-//
-//	t0 = createTime           (2025-01-01 00:00:00 UTC) — schedule created
-//	t1 = triggerTime          (2025-01-01 01:00:00 UTC) — calendar spec fires; workflow starts
-//	t2 = t1 + workflowRuntime (2025-01-01 02:00:00 UTC) — workflow completes
-//	     start.StartTime = time.Now() at RPC completion (wall clock, not t1)
-//	     idle task = start.StartTime + idleTime (read from engine after Txn 4)
-//
-// Each step is one transaction (one CloseTransaction). Time advances between
-// transactions where noted.
-//
-// Lifecycle:
-//
-//	Txn 1 [t=t0] StartExecution (CreateSchedule)
-//	              inline GeneratorTask fires → schedules gen timer at t1
-//	-- time: t0 → t1 --
-//	Txn 2 [t=t1] executeChasmPureTimers (GeneratorTask)
-//	              buffers action, schedules SchedulerIdleTask at t0+idleTime
-//	              (getLastEventTime()=t0, no workflow started yet);
-//	              CloseTransaction fires InvokerProcessBufferTask inline →
-//	              marks start ready, schedules InvokerExecuteTask
-//	Txn 3 [t=t1] executeChasmSideEffectTask (InvokerExecuteTask)
-//	              StartWorkflowExecution → start.StartTime=t1;
-//	              closeTransactionCleanupInvalidTasks drops the idle task at
-//	              t0+idleTime (idleExpiration shifted to t3≠t0+idleTime)
-//	-- time: t1 → t2 --
-//	Txn 4 [t=t2] CompleteNexusOperationChasm (workflow completion callback)
-//	              HandleNexusCompletion → start.Completed set;
-//	              generator.Generate() fires inline → getLastEventTime()=t1
-//	              → schedules SchedulerIdleTask at t3=t1+idleTime
-//	-- time: t2 → t3 --
-//	Txn 5 [t=t3] executeChasmPureTimers (SchedulerIdleTask at t3)
-//	              Validate passes → Closed=true
+// TestSingleActionSchedule verifies that a single-date calendar schedule closes
+// after its one workflow completes. Each step is one transaction.
 func TestSingleActionSchedule(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	logger := log.NewTestLogger()
@@ -155,7 +120,7 @@ func TestSingleActionSchedule(t *testing.T) {
 			NamespaceId: namespaceID,
 			FrontendRequest: &workflowservice.CreateScheduleRequest{
 				ScheduleId: scheduleID,
-				Schedule:   singleDateSchedule(t1),
+				Schedule:   calendarSchedule(t1),
 			},
 		},
 	)
@@ -352,25 +317,8 @@ func TestSingleActionSchedule(t *testing.T) {
 	require.True(t, completed, "execution should be in COMPLETED state")
 }
 
-// TestTwoActionSchedule tests the full lifecycle of a LimitedActions=2
-// interval schedule and asserts it closes after both actions complete.
-//
-// Timeline:
-//
-//	t0 = 2025-01-01 00:00:00 UTC — schedule created
-//	t1 = t0 + interval           — first action fires; workflow 1 starts
-//	t2 = t1 + 1s                 — workflow 1 completes
-//	t3 = t1 + interval           — second action fires; workflow 2 starts
-//	t4 = t3 + 1s                 — workflow 2 completes
-//
-// Note on duplicate generator tasks: HandleNexusCompletion calls
-// generator.Generate() unconditionally. After workflow 1 completes (Txn 4)
-// the inline generator is not idle (remaining=1, nextWakeup=t3), so it
-// schedules an extra timer at t3 alongside the existing gen2. Both are
-// timer tasks at t3, not immediate tasks. Duplicate generator timers are
-// an acceptable risk: the second one fires, finds no unprocessed range,
-// and the extra idle task it schedules has the same expiration as the one
-// from HandleNexusCompletion — both are cleaned up by Validate.
+// TestTwoActionSchedule verifies that a two-date calendar schedule closes
+// after both workflows complete. Each step is one transaction.
 func TestTwoActionSchedule(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	logger := log.NewTestLogger()
@@ -397,8 +345,7 @@ func TestTwoActionSchedule(t *testing.T) {
 	testEngine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(ts))
 	engineCtx := chasm.NewEngineContext(t.Context(), testEngine)
 
-	schedule := singleActionSchedule()
-	schedule.State.RemainingActions = 2
+	schedule := calendarSchedule(t1, t3)
 
 	executionKey := chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID}
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](executionKey)
@@ -484,22 +431,26 @@ func TestTwoActionSchedule(t *testing.T) {
 	}
 
 	// -- time: t2 → t3 --
-	// Txn 5 [t=t3]: executeChasmPureTimers (gen2 + duplicate, both at t3).
-	// Both generators fire; the first buffers action2 and schedules gen3.
-	// The second finds an empty range and also schedules a gen at t3+interval.
-	// InvokerProcessBufferTask fires inline: remaining 1→0, schedules InvokerExecuteTask.
+	// Txn 5 [t=t3]: executeChasmPureTimers (gen2 + any duplicate, both at t3).
+	// gen2 processes [t1, t3], finds action2. nextWakeupTime=zero (no more calendar
+	// entries) → isIdle=true → schedules SchedulerIdleTask.
+	// InvokerProcessBufferTask fires inline, schedules InvokerExecuteTask.
+	// The duplicate gen (from Txn 4) also fires and also goes idle — acceptable.
 	ts.Update(t3)
 	err = testEngine.ExecuteChasmPureTimers(t.Context(), rootRef, ts.Now())
 	require.NoError(t, err)
-	// At least one GeneratorTask pending (gen3); duplicates are acceptable.
+	// Only SchedulerIdleTask(s) pending; no more generator tasks.
 	pendingAfterGen2, err := testEngine.PendingPureTaskTypeNames(rootRef)
 	require.NoError(t, err)
 	require.NotEmpty(t, pendingAfterGen2)
 	for _, name := range pendingAfterGen2 {
-		require.Contains(t, name, "GeneratorTask")
+		require.Contains(t, name, "SchedulerIdleTask")
 	}
 
 	// Txn 6 [t=t3]: executeChasmSideEffectTask (InvokerExecuteTask for action2).
+	// Sets start2.StartTime=time.Now(); closeTransactionCleanupInvalidTasks drops
+	// the idle task(s) scheduled at start1+idleTime (idleExpiration shifted to
+	// start2+idleTime ≠ start1+idleTime).
 	invoker, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (*scheduler.Invoker, error) {
 			return s.Invoker.Get(ctx), nil
@@ -525,8 +476,8 @@ func TestTwoActionSchedule(t *testing.T) {
 
 	// -- time: t3 → t4 --
 	// Txn 7 [t=t4]: CompleteNexusOperationChasm (workflow 2 completes).
-	// remaining=0 → generator.Generate() fires inline and goes idle →
-	// schedules SchedulerIdleTask at start2.StartTime+idleTime (wall clock).
+	// generator.Generate() fires inline: nextWakeupTime=zero → isIdle=true →
+	// reschedules SchedulerIdleTask at start2.StartTime+idleTime (wall clock).
 	ts.Update(t4)
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (chasm.NoValue, error) {
@@ -537,47 +488,15 @@ func TestTwoActionSchedule(t *testing.T) {
 			})
 		}, struct{}{})
 	require.NoError(t, err)
-	// A gen3 timer may still be pending alongside the idle task (acceptable).
-	// Assert that a SchedulerIdleTask is now pending.
-	pendingAfterAction2, err := testEngine.PendingPureTaskTypeNames(rootRef)
-	require.NoError(t, err)
-	require.True(t, func() bool {
-		for _, name := range pendingAfterAction2 {
-			if strings.Contains(name, "SchedulerIdleTask") {
-				return true
-			}
-		}
-		return false
-	}(), "SchedulerIdleTask must be pending after action2 completes; got: %v", pendingAfterAction2)
+	requirePendingTypes(t, testEngine, rootRef, "SchedulerIdleTask")
 
-	// The physical timer points to the EARLIEST pending task across all components.
-	// gen3 (at t3+interval, controlled clock) is earlier than the idle task
-	// (at time.Now()+idleTime, wall clock), so the physical timer fires gen3 first.
-	// Fire gen3 first, then read the updated physical timer for the idle task.
-
-	// -- time: t4 → t3+interval --
-	// Txn 8: executeChasmPureTimers (gen3 fires).
-	// gen3 processes [t3, t3+interval], finds no unprocessed eligible actions
-	// (remaining=0 discards them), and reschedules the idle task.
-	ts.Update(t3.Add(defaultInterval))
-	err = testEngine.ExecuteChasmPureTimers(t.Context(), rootRef, ts.Now())
+	// Read the idle task's physical timer — anchored to wall-clock start2.StartTime.
+	allTasksAfterAction2, err := testEngine.Tasks(rootRef)
 	require.NoError(t, err)
-	// Only idle tasks remain pending (no more generator tasks); gen3 may have
-	// scheduled a duplicate idle task alongside the original — acceptable.
-	pendingAfterGen3, err := testEngine.PendingPureTaskTypeNames(rootRef)
-	require.NoError(t, err)
-	require.NotEmpty(t, pendingAfterGen3)
-	for _, name := range pendingAfterGen3 {
-		require.Contains(t, name, "SchedulerIdleTask")
-	}
+	idleVisibility := allTasksAfterAction2[historytasks.CategoryTimer][len(allTasksAfterAction2[historytasks.CategoryTimer])-1].GetVisibilityTime()
 
-	// Read the idle task's physical timer time now that gen3 is consumed.
-	allTasksAfterGen3, err := testEngine.Tasks(rootRef)
-	require.NoError(t, err)
-	idleVisibility := allTasksAfterGen3[historytasks.CategoryTimer][len(allTasksAfterGen3[historytasks.CategoryTimer])-1].GetVisibilityTime()
-
-	// -- time: t3+interval → idleVisibility --
-	// Txn 9: executeChasmPureTimers (SchedulerIdleTask fires).
+	// -- time: t4 → idleVisibility --
+	// Txn 8: executeChasmPureTimers (SchedulerIdleTask fires).
 	ts.Update(idleVisibility)
 	err = testEngine.ExecuteChasmPureTimers(t.Context(), rootRef, ts.Now())
 	require.NoError(t, err)

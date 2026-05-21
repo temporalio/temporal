@@ -584,11 +584,9 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
-	// Re-kick the generator so it can reschedule the idle task using the
-	// correct getLastEventTime() — which now reflects start.StartTime set by
-	// InvokerExecuteTask. Without this, the idle task scheduled before the
-	// workflow started would have been dropped by closeTransactionCleanupInvalidTasks
-	// when InvokerExecuteTask committed, leaving the schedule stuck open.
+	// Generate immediately after recording completions, so that an idle task
+	// can be scheduled if no more actions are remaining. Necessary as
+	// additional events invalidate in-flight idle tasks.
 	s.Generator.Get(ctx).Generate(ctx)
 
 	return nil
