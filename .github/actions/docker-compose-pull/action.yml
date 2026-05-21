@@ -10,7 +10,7 @@ inputs:
     required: true
   attempts:
     description: Number of pull attempts.
-    default: "3"
+    default: "5"
   delay-seconds:
     description: Delay between failed attempts.
     default: "5"
