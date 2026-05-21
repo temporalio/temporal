@@ -725,57 +725,12 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) error {
 			}
 		}
 
-		toRetryFast := s.fastPending
-		toRetrySlow := s.slowPending
-		s.fastPending = nil
-		s.slowPending = nil
-
-		// Re-classify fast retries — a WF ID may have crossed the
-		// quarantine threshold since its original batch ran.
-		var reFast, reSlow []*ExecutionInfo
-		for _, ex := range toRetryFast {
-			if s.isQuarantined(ex.BusinessID) {
-				reSlow = append(reSlow, ex)
-			} else {
-				reFast = append(reFast, ex)
-			}
-		}
-		reSlow = append(reSlow, toRetrySlow...)
-
+		reFast, reSlow := s.reclassifyPendingForRetry()
 		s.refillSemaphores(ctx)
 
-		// Scale per-batch deadline by round on both lanes so the tail gets
-		// progressively more time to drain. Cap so we don't end up with
-		// hour-long deadlines on round 50 of a pathological run.
-		const maxDeadlineMultiplier = 10
-		mult := round + 2
-		if mult > maxDeadlineMultiplier {
-			mult = maxDeadlineMultiplier
-		}
-		fastDeadlineMs := int64(s.params.BatchDeadlineSeconds) * 1000 * int64(mult)
-		slowDeadlineMs := int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000 * int64(mult)
-
-		// Fast-lane retry batches use the standard page size.
-		for i := 0; i < len(reFast); i += s.params.ListWorkflowsPageSize {
-			end := i + s.params.ListWorkflowsPageSize
-			if end > len(reFast) {
-				end = len(reFast)
-			}
-			s.dispatchVerifyOnly(ctx, reFast[i:end], false, fastDeadlineMs)
-		}
-		// Slow-lane batches are smaller so concurrency=1 doesn't pin a
-		// single huge batch and starve the lane.
-		slowBatchSize := s.params.ListWorkflowsPageSize / 4
-		if slowBatchSize < 25 {
-			slowBatchSize = 25
-		}
-		for i := 0; i < len(reSlow); i += slowBatchSize {
-			end := i + slowBatchSize
-			if end > len(reSlow) {
-				end = len(reSlow)
-			}
-			s.dispatchVerifyOnly(ctx, reSlow[i:end], true, slowDeadlineMs)
-		}
+		fastDeadlineMs, slowDeadlineMs := s.retryDeadlinesForRound(round)
+		s.dispatchRetryChunks(ctx, reFast, false, s.params.ListWorkflowsPageSize, fastDeadlineMs)
+		s.dispatchRetryChunks(ctx, reSlow, true, slowLaneRetryBatchSize(s.params.ListWorkflowsPageSize), slowDeadlineMs)
 
 		s.drainSemaphores(ctx)
 		if err := s.checkProgress(ctx); err != nil {
@@ -786,6 +741,63 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) error {
 		}
 	}
 	return nil
+}
+
+// reclassifyPendingForRetry consumes the current pending lists, then
+// re-routes fast-lane entries onto the slow lane if their WF-ID has
+// crossed the quarantine threshold since the original batch ran.
+func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*ExecutionInfo) {
+	toRetryFast := s.fastPending
+	toRetrySlow := s.slowPending
+	s.fastPending = nil
+	s.slowPending = nil
+
+	for _, ex := range toRetryFast {
+		if s.isQuarantined(ex.BusinessID) {
+			reSlow = append(reSlow, ex)
+		} else {
+			reFast = append(reFast, ex)
+		}
+	}
+	reSlow = append(reSlow, toRetrySlow...)
+	return
+}
+
+// retryDeadlinesForRound scales the per-batch deadline by round number
+// so the tail gets progressively more time to drain. Capped so a
+// pathological run doesn't end up with hour-long deadlines.
+func (s *adaptiveWorkflowState) retryDeadlinesForRound(round int) (fastMs, slowMs int64) {
+	const maxDeadlineMultiplier = 10
+	mult := round + 2
+	if mult > maxDeadlineMultiplier {
+		mult = maxDeadlineMultiplier
+	}
+	fastMs = int64(s.params.BatchDeadlineSeconds) * 1000 * int64(mult)
+	slowMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000 * int64(mult)
+	return
+}
+
+// dispatchRetryChunks dispatches verify-only batches over execs in
+// chunks of batchSize.
+func (s *adaptiveWorkflowState) dispatchRetryChunks(ctx workflow.Context, execs []*ExecutionInfo, slow bool, batchSize int, deadlineMs int64) {
+	for i := 0; i < len(execs); i += batchSize {
+		end := i + batchSize
+		if end > len(execs) {
+			end = len(execs)
+		}
+		s.dispatchVerifyOnly(ctx, execs[i:end], slow, deadlineMs)
+	}
+}
+
+// slowLaneRetryBatchSize keeps slow-lane retry batches smaller than
+// fast-lane so concurrency=1 doesn't pin a single huge batch and
+// starve the lane.
+func slowLaneRetryBatchSize(fastPageSize int) int {
+	size := fastPageSize / 4
+	if size < 25 {
+		size = 25
+	}
+	return size
 }
 
 // dispatchInjectThenVerify chains InjectBatch + VerifyBatch on the

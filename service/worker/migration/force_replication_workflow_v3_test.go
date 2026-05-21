@@ -3,7 +3,6 @@ package migration
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -347,7 +346,7 @@ func TestPendingListMarshalUnmarshal(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			var again pendingList
 			require.NoError(t, json.Unmarshal([]byte(encoded), &again))
-			require.Equal(t, len(first), len(again))
+			require.Len(t, again, len(first))
 			for j := range first {
 				require.Equal(t, *first[j], *again[j], "ordering must be stable across unmarshals")
 			}
@@ -376,7 +375,7 @@ func TestPendingListMarshalUnmarshal(t *testing.T) {
 func continueAsNewParams(t require.TestingT, err error) AdaptiveForceReplicationParams {
 	require.Error(t, err)
 	var canErr *workflow.ContinueAsNewError
-	require.True(t, errors.As(err, &canErr))
+	require.ErrorAs(t, err, &canErr)
 	payloads := canErr.Input.GetPayloads()
 	require.Len(t, payloads, 1)
 	var params AdaptiveForceReplicationParams
@@ -492,15 +491,15 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 
 	const pageCountCap = 100
 	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
-		Namespace:                "test-ns",
-		Query:                    "",
-		ConcurrentActivityCount:  1,
-		OverallRps:               10,
-		ListWorkflowsPageSize:    pageSize,
-		PageCountPerExecution:    pageCountCap,
-		EnableVerification:       true,
-		TargetClusterEndpoint:    "test-target",
-		HistoryShardCount:        4,
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 1,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   pageSize,
+		PageCountPerExecution:   pageCountCap,
+		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
+		HistoryShardCount:       4,
 		// Quarantine thresholds far above any per-shard / per-WF
 		// pending count we'll accumulate — keeps everything in the
 		// fast lane so we can observe early-CAN there specifically.
@@ -563,19 +562,19 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHardCAPDrainsBeforeCAN() {
 	}
 
 	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
-		Namespace:                        "test-ns",
-		Query:                            "",
-		ConcurrentActivityCount:          1,
-		OverallRps:                       10,
-		ListWorkflowsPageSize:            1000,
-		PageCountPerExecution:            100,
-		EnableVerification:               true,
-		TargetClusterEndpoint:            "test-target",
-		HistoryShardCount:                4,
-		WFIDQuarantineThreshold:          999,
-		ShardQuarantineThreshold:         999,
-		NoProgressTimeoutSeconds:         3600,
-		FastPending:                      carry,
+		Namespace:                "test-ns",
+		Query:                    "",
+		ConcurrentActivityCount:  1,
+		OverallRps:               10,
+		ListWorkflowsPageSize:    1000,
+		PageCountPerExecution:    100,
+		EnableVerification:       true,
+		TargetClusterEndpoint:    "test-target",
+		HistoryShardCount:        4,
+		WFIDQuarantineThreshold:  999,
+		ShardQuarantineThreshold: 999,
+		NoProgressTimeoutSeconds: 3600,
+		FastPending:              carry,
 		// Pretend a prior cycle counted this many already so the
 		// no-progress detector sees progress when drainRetries clears
 		// the carry-over.
@@ -769,7 +768,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestNoProgressTimeoutFires() {
 	err := env.GetWorkflowError()
 	s.Require().Error(err)
 	var appErr *temporal.ApplicationError
-	s.Require().True(errors.As(err, &appErr))
+	s.Require().ErrorAs(err, &appErr)
 	s.Equal("AdaptiveForceReplicationNoProgress", appErr.Type())
 	s.True(appErr.NonRetryable(), "no-progress timeout should be non-retryable")
 }
