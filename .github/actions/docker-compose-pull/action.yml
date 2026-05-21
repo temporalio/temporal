@@ -14,6 +14,9 @@ inputs:
   delay-seconds:
     description: Delay between failed attempts.
     default: "15"
+  timeout-minutes:
+    description: Timeout for each pull attempt.
+    default: "1"
   down-flags:
     description: Additional options to pass to docker compose down.
     default: ""
@@ -29,6 +32,7 @@ runs:
       with:
         max_attempts: ${{ inputs.attempts }}
         retry_wait_seconds: ${{ inputs['delay-seconds'] }}
+        timeout_minutes: ${{ inputs['timeout-minutes'] }}
         shell: bash
         command: |
           if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
