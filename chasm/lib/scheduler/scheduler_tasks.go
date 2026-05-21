@@ -48,6 +48,14 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	return nil
 }
 
+// Validate returns true when all three conditions hold:
+//  1. The schedule is still idle — no new actions have been queued since this
+//     task was created (getIdleExpiration returns isIdle=true).
+//  2. The idle expiration has not shifted — getIdleExpiration recomputes
+//     getLastEventTime()+idleTimeTotal and it must equal the task's scheduled
+//     time. If a workflow start has advanced getLastEventTime() since the task
+//     was written, the expiration no longer matches and the task is dropped.
+//  3. The scheduler is not already closed (idempotency guard).
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
