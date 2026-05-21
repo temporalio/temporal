@@ -2945,6 +2945,17 @@ Requires service restart to take effect.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerCreationRolloutPercent",
+		100,
+		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage [0-100] of new schedules that will be
+created on the CHASM (V2) implementation when EnableCHASMSchedulerCreation is true. Schedules are bucketed by
+a stable hash of (namespace, schedule ID), so dialing the percent up is monotonic: schedules already in the
+rollout stay in. The default of 100 preserves the prior behavior where every schedule is created on CHASM
+whenever the binary flag is on. This setting is only consulted when EnableCHASMSchedulerCreation is true and
+is re-evaluated on every CreateSchedule RPC.`,
+	)
+
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
 		true,
@@ -2957,6 +2968,17 @@ first (with fallback to V1), excluding CreateSchedule.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	CHASMSchedulerMigrationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerMigrationRolloutPercent",
+		100,
+		`CHASMSchedulerMigrationRolloutPercent is the per-namespace percentage [0-100] of V1 schedules that will be
+migrated to the CHASM (V2) implementation when EnableCHASMSchedulerMigration is true. Schedules are bucketed
+by a stable hash of (namespace, schedule ID), matching the creation rollout. The default of 100 preserves the
+prior behavior where every V1 schedule is eligible to migrate. This setting is only consulted when
+EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a scheduler workflow starts or
+continues-as-new — a schedule already mid-tick will not migrate until its next continue-as-new.`,
 	)
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(

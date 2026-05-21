@@ -73,7 +73,7 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(headers.ExperimentHeaderName, ChasmSchedulerExperiment))
 			}
 
-			require.Equal(t, tc.expectCreation, wh.chasmSchedulerCreationEnabled(ctx, "test-namespace"))
+			require.Equal(t, tc.expectCreation, wh.chasmSchedulerCreationEnabled(ctx, "test-namespace", "test-schedule"))
 			require.Equal(t, tc.expectRouting, wh.chasmSchedulerEnabled(ctx, "test-namespace"))
 		})
 	}
