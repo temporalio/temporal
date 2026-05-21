@@ -64,29 +64,6 @@ func defaultSchedule() *schedulepb.Schedule {
 	}
 }
 
-func singleActionSchedule() *schedulepb.Schedule {
-	return &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(defaultInterval)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   "scheduled-wf",
-					WorkflowType: &commonpb.WorkflowType{Name: "scheduled-wf-type"},
-				},
-			},
-		},
-		Policies: &schedulepb.SchedulePolicies{},
-		State: &schedulepb.ScheduleState{
-			LimitedActions:   true,
-			RemainingActions: 1,
-		},
-	}
-}
-
 func defaultConfig() *scheduler.Config {
 	return &scheduler.Config{
 		Tweakables: func(_ string) scheduler.Tweakables {
