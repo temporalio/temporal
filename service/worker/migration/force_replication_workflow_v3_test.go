@@ -343,7 +343,7 @@ func TestPendingListMarshalUnmarshal(t *testing.T) {
 		var first pendingList
 		require.NoError(t, json.Unmarshal([]byte(encoded), &first))
 
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			var again pendingList
 			require.NoError(t, json.Unmarshal([]byte(encoded), &again))
 			require.Len(t, again, len(first))
