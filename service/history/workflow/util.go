@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func failWorkflowTask(
@@ -348,4 +349,8 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 		}
 	}
 	return res, nil
+}
+
+func timeNotSet(ts *timestamppb.Timestamp) bool {
+	return ts == nil || ts.AsTime().IsZero()
 }

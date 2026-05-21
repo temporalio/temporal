@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
@@ -1698,18 +1697,6 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		},
 
 		{
-			name: "success special ScheduleID",
-			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(sadefs.ScheduleID),
-			},
-			out: NewSAColumn(
-				sadefs.ScheduleID,
-				sadefs.WorkflowID,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-		},
-
-		{
 			name: "success backticks",
 			in: &sqlparser.ColName{
 				Name: sqlparser.NewColIdent("`AliasForKeyword01`"),
@@ -1954,15 +1941,6 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
-		},
-
-		{
-			name:   "success special ScheduleID",
-			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  sadefs.ScheduleID,
-			field:  sadefs.WorkflowID,
-			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
 		},
 
 		{

@@ -102,8 +102,13 @@ func (c *Cancellation) loadArgs(
 		if err != nil {
 			return cancelArgs{}, err
 		}
+	} else {
+		requestData := op.RequestData.Get(ctx)
+		invocationData = InvocationData{
+			Input:  requestData.GetInput(),
+			Header: requestData.GetNexusHeader(),
+		}
 	}
-	// TODO: For standalone operations, load invocation data from the operation state.
 
 	return cancelArgs{
 		service:                op.GetService(),
@@ -149,7 +154,6 @@ func (c *Cancellation) saveResult(
 }
 
 func CancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.NexusOperationCancellationState {
-	// TODO(samm): deduplicate against standalone nexus operations
 	switch status {
 	case nexusoperationpb.CANCELLATION_STATUS_SCHEDULED:
 		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED

@@ -19,11 +19,12 @@ import (
 
 type PostgreSQLSuite struct {
 	suite.Suite
-	pluginName string
+	pluginName   string
+	connectAttrs map[string]string
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLShardStoreSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	shardStore, err := testData.Factory.NewShardStore()
@@ -41,7 +42,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLShardStoreSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	shardStore, err := testData.Factory.NewShardStore()
@@ -64,7 +65,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateStoreSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateTaskStoreSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	shardStore, err := testData.Factory.NewShardStore()
@@ -87,7 +88,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLExecutionMutableStateTaskStoreSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryStoreSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	store, err := testData.Factory.NewExecutionStore()
@@ -100,7 +101,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryStoreSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	taskQueueStore, err := testData.Factory.NewTaskStore()
@@ -113,7 +114,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLFairTaskQueueSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	taskQueueStore, err := testData.Factory.NewFairTaskStore()
@@ -126,7 +127,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLFairTaskQueueSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	taskQueueStore, err := testData.Factory.NewTaskStore()
@@ -139,7 +140,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueFairTaskSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	taskQueueStore, err := testData.Factory.NewFairTaskStore()
@@ -152,7 +153,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueFairTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueUserDataSuite() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	taskQueueStore, err := testData.Factory.NewTaskStore()
@@ -204,7 +205,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
 // SQL store tests
 
 func (p *PostgreSQLSuite) TestPostgreSQLNamespaceSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -221,7 +222,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLNamespaceSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLQueueMessageSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -238,7 +239,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLQueueMessageSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLQueueMetadataSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -255,7 +256,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLQueueMetadataSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -272,7 +273,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskV2Suite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -289,7 +290,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskV2Suite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskQueueSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -306,7 +307,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskQueueSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMatchingFairTaskQueueSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -323,7 +324,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingFairTaskQueueSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryShardSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -340,7 +341,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryShardSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryNodeSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -357,7 +358,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryNodeSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTreeSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -374,7 +375,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTreeSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentExecutionSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -391,7 +392,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentExecutionSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentChasmExecutionSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -408,7 +409,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentChasmExecutionSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -425,7 +426,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTransferTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -442,7 +443,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTransferTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTimerTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -459,7 +460,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTimerTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -476,7 +477,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryVisibilityTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -493,7 +494,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryVisibilityTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationDLQTaskSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -510,7 +511,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationDLQTaskSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionBufferSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -527,7 +528,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionBufferSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionActivitySuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -544,7 +545,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionActivitySuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionChildWorkflowSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -561,7 +562,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionChildWorkflowSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionTimerSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -578,7 +579,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionTimerSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgresHistoryExecutionChasmSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 
@@ -596,7 +597,7 @@ func (p *PostgreSQLSuite) TestPostgresHistoryExecutionChasmSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionRequestCancelSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -613,7 +614,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionRequestCancelSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -630,7 +631,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalRequestSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -647,7 +648,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalRequestSuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLVisibilitySuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -664,7 +665,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilitySuite() {
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLClosedConnectionError() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	defer tearDown()
 
 	s := newConnectionSuite(p.T(), testData.Factory)
@@ -672,13 +673,13 @@ func (p *PostgreSQLSuite) TestPostgreSQLClosedConnectionError() {
 }
 
 func (p *PostgreSQLSuite) TestPGQueueV2() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	p.T().Cleanup(tearDown)
 	RunQueueV2TestSuiteForSQL(p.T(), testData.Factory)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLNexusEndpointPersistence() {
-	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName, p.connectAttrs)
 	p.T().Cleanup(tearDown)
 	RunNexusEndpointTestSuiteForSQL(p.T(), testData.Factory)
 }
@@ -692,5 +693,21 @@ func TestPQ(t *testing.T) {
 func TestPGX(t *testing.T) {
 	t.Parallel()
 	s := &PostgreSQLSuite{pluginName: "postgres12_pgx"}
+	suite.Run(t, s)
+}
+
+// TestPGXSP exercises the pgx plugin in simple-protocol mode, the
+// configuration users land on when fronting Postgres with PgBouncer in
+// transaction pooling. In that mode pgx text-encodes parameters client-side
+// without OID hints, which previously caused proto enum fields (e.g.
+// CurrentExecutionsRow.State) to be serialized via fmt.Stringer, producing
+// values like "Created" instead of integers and breaking inserts into
+// integer columns. See temporalio/temporal#9804.
+func TestPGXSP(t *testing.T) {
+	t.Parallel()
+	s := &PostgreSQLSuite{
+		pluginName:   "postgres12_pgx",
+		connectAttrs: map[string]string{"default_query_exec_mode": "simple_protocol"},
+	}
 	suite.Run(t, s)
 }

@@ -405,6 +405,12 @@ func (b *EventStore) wireEventIDs(
 			if attributes.GetAttachedRequestId() != "" {
 				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
 			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			attributes := event.GetWorkflowExecutionSignaledEventAttributes()
+			if attributes.GetRequestId() != "" {
+				b.requestIDToEventID[attributes.RequestId] = event.GetEventId()
+			}
 		}
 	}
 }

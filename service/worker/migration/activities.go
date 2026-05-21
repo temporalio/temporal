@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -873,7 +874,7 @@ func (a *activities) verifySingleReplicationTask(
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
-	switch err.(type) {
+	switch e := err.(type) {
 	case nil:
 		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, execution, mu)
 		if err == nil && result.status == verified {
@@ -891,6 +892,18 @@ func (a *activities) verifySingleReplicationTask(
 		return verifyResult{
 			status: notVerified,
 		}, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
+
+	case *serviceerror.ResourceExhausted:
+		if e.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			// The passive cluster holds the workflow cache lock while applying history
+			// during SyncWorkflowStateTask. This is actually a small sign of progress.
+			return verifyResult{status: notVerified}, nil
+		}
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
+		return verifyResult{
+			status: notVerified,
+		}, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 
 	default:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).

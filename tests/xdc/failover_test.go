@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -2742,11 +2741,7 @@ func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
 
 func (s *FunctionalClustersWithRedirectionTestSuite) SetupSuite() {
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
-			}),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}),
 	)
 }
 

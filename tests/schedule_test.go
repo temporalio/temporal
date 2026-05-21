@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -34,7 +35,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -58,12 +58,17 @@ var (
 	}
 )
 
-func scheduleCommonOpts() []testcore.TestOption {
-	return []testcore.TestOption{
-		testcore.WithSdkWorker(),
+func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
+	opts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	}
+	if strings.HasPrefix(t.Name(), "TestScheduleV1") {
+		// only v1 needs the worker service
+		opts = append(opts, testcore.WithWorkerService("V1 scheduler"))
+	}
+	return opts
 }
 
 func TestScheduleCHASM(t *testing.T) {
@@ -80,6 +85,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, true) })
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { testMigrationCallbackAttach(t, newContext) })
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
+	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
 }
@@ -96,6 +102,7 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestRateLimit", func(t *testing.T) { testRateLimit(t, newContext) })
 	t.Run("TestNextTimeCache", func(t *testing.T) { testNextTimeCache(t, newContext) })
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { testCreatesCHASMSentinel(t, newContext) })
+	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { testSkipsCHASMSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { testUpdateScheduleMemoRejected(t, newContext) })
 }
 
@@ -115,10 +122,78 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { testUpdateScheduleBlobSizeLimit(t, newContext) })
 	t.Run("TestListSchedulesPagination", func(t *testing.T) { testListSchedulesPagination(t, newContext) })
 	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
+	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { testListSchedulesFilterByScheduleID(t, newContext) })
+	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { testBufferSizeReportedWhenBuffered(t, newContext) })
+}
+
+// testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
+// populated by both the V1 and V2 (CHASM) schedulers when at least one fire is
+// queued behind a still-running workflow. A schedule with a 1s interval and
+// BUFFER_ONE keeps exactly one start in the buffer while the first workflow
+// is still running.
+func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-buffer-size")
+	wid := testcore.RandomizeStr("sched-buffer-size-wf")
+	wt := testcore.RandomizeStr("sched-buffer-size-wt")
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			return workflow.Sleep(ctx, time.Hour)
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	var lastDescribe *workflowservice.DescribeScheduleResponse
+	s.Eventually(func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		lastDescribe = desc
+		return desc.GetInfo().GetBufferSize() >= 1 && len(desc.GetInfo().GetRunningWorkflows()) >= 1
+	}, 30*time.Second, 500*time.Millisecond, "DescribeSchedule should report BufferSize >= 1 with a running workflow blocking the buffer")
+
+	s.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
+	s.GreaterOrEqual(len(lastDescribe.GetInfo().GetRunningWorkflows()), 1, "expected the buffered fire to be queued behind a running workflow")
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-deleted-ops"
 	wid := "sched-test-deleted-ops-wf"
@@ -174,7 +249,7 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 }
 
 func testBasics(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
@@ -604,7 +679,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 }
 
 func testInput(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"
@@ -668,7 +743,7 @@ func testInput(t *testing.T, newContext contextFactory) {
 }
 
 func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
@@ -743,7 +818,7 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 }
 
 func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-running"
 	wid := "sched-test-list-running-wf"
@@ -838,7 +913,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 }
 
 func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-interval"
 	wid := "sched-test-update-interval-wf"
@@ -903,7 +978,7 @@ func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 }
 
 func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-matching-times"
 
@@ -952,7 +1027,7 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 }
 
 func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
 
@@ -1023,7 +1098,7 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 }
 
 func testCountSchedules(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	// Create multiple schedules with different paused states
 	sidPrefix := "sched-test-count-"
@@ -1093,7 +1168,7 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 }
 
 func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	const numSchedules = 4
 	sidPrefix := "sched-test-pagination-"
@@ -1164,7 +1239,7 @@ func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
 }
 
 func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-fields"
 	wt := "sched-test-list-fields-wt"
@@ -1256,8 +1331,139 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	}, 15*time.Second, 1*time.Second)
 }
 
+func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid1 := "sched-filter-by-id-alpha"
+	sid2 := "sched-filter-by-id-beta"
+
+	schedule := func(sid string) *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "wf-" + sid,
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			State: &schedulepb.ScheduleState{Paused: true},
+		}
+	}
+
+	ctx := newContext(s.Context())
+
+	// Create two schedules.
+	for _, sid := range []string{sid1, sid2} {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule(sid),
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	// Wait for both schedules to appear in visibility.
+	getScheduleEntryFromVisibility(s, sid1, newContext, nil)
+	getScheduleEntryFromVisibility(s, sid2, newContext, nil)
+
+	listScheduleIDs := func(query string) []string {
+		t.Helper()
+		listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 10,
+			Query:           query,
+		})
+		require.NoError(t, err)
+		var ids []string
+		for _, e := range listResp.Schedules {
+			ids = append(ids, e.ScheduleId)
+		}
+		return ids
+	}
+
+	// wantIDs is the exact set of schedule IDs expected in the result.
+	// IsNegativeScheduleIDOperator drives whether an operator excludes or includes:
+	// negative operators (!=, NOT IN, NOT STARTS_WITH) produce AND in the rewriter so both
+	// V1 and V2 forms are excluded; positive operators produce OR so both forms are included.
+	tests := []struct {
+		name    string
+		query   string
+		wantIDs []string
+	}{
+		{
+			name:    "Equal",
+			query:   fmt.Sprintf("ScheduleId = '%s'", sid1),
+			wantIDs: []string{sid1},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("!=") == true
+			name:    "NotEqual",
+			query:   fmt.Sprintf("ScheduleId != '%s'", sid1),
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "StartsWith",
+			query:   "ScheduleId STARTS_WITH 'sched-filter-by-id-'",
+			wantIDs: []string{sid1, sid2},
+		},
+		{
+			name:    "StartsWithSpecific",
+			query:   "ScheduleId STARTS_WITH 'sched-filter-by-id-a'",
+			wantIDs: []string{sid1},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("not starts_with") == true
+			name:    "NotStartsWith",
+			query:   "ScheduleId NOT STARTS_WITH 'sched-filter-by-id-a'",
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "In",
+			query:   fmt.Sprintf("ScheduleId IN ('%s', '%s')", sid1, sid2),
+			wantIDs: []string{sid1, sid2},
+		},
+		{
+			name:    "InSingle",
+			query:   fmt.Sprintf("ScheduleId IN ('%s')", sid2),
+			wantIDs: []string{sid2},
+		},
+		{
+			// scheduler.IsNegativeScheduleIDOperator("not in") == true
+			name:    "NotIn",
+			query:   fmt.Sprintf("ScheduleId NOT IN ('%s')", sid1),
+			wantIDs: []string{sid2},
+		},
+		{
+			name:    "IsNotNull",
+			query:   "ScheduleId IS NOT NULL",
+			wantIDs: []string{sid1, sid2},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s.EventuallyWithT(func(c *assert.CollectT) {
+				ids := listScheduleIDs(tc.query)
+				require.Len(c, ids, len(tc.wantIDs))
+				for _, want := range tc.wantIDs {
+					require.Contains(c, ids, want)
+				}
+			}, 15*time.Second, 1*time.Second)
+		})
+	}
+}
+
 func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test CreateSchedule with internal task queue
@@ -1349,7 +1555,7 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 }
 
 func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 
 	sid := "sched-test-double-reset"
@@ -1506,10 +1712,10 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 }
 
 func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
@@ -1689,7 +1895,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 // testCreatesWorkflowSentinel tests that creating a CHASM schedule also starts a
 // dummy workflow to reserve the schedule ID in the V1 workflow ID-space.
 func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
 	wid := testcore.RandomizeStr("wid")
@@ -1754,7 +1960,7 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 // testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
 func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
 	wid := testcore.RandomizeStr("wid")
@@ -1836,8 +2042,113 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
+// testSkipsWorkflowSentinelWhenDisabled asserts that a CHASM CreateSchedule
+// does not start the dummy V1 workflow when EnableCHASMSchedulerSentinels is off.
+func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
+	)...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	s.NoError(err)
+
+	// The dummy V1 workflow that reserves the schedule ID is gated on the
+	// sentinel flag, so it must not exist.
+	sentinelWfID := scheduler.WorkflowIDPrefix + sid
+	_, descErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: sentinelWfID},
+	})
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(descErr, &notFoundErr, "no dummy sentinel workflow should be created when sentinels are disabled")
+}
+
+// testSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
+// create a CHASM sentinel when EnableCHASMSchedulerSentinels is off.
+func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
+	)...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	s.NoError(err)
+
+	// With no CHASM sentinel reserving the ID, a CHASM CreateSchedule for the
+	// same ID must not be blocked by the NotFound (sentinel) signal.
+	nsID := s.NamespaceID().String()
+	_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+				RequestId:  testcore.RandomizeStr("test-no-sentinel"),
+				Schedule:   schedule,
+			},
+		},
+	)
+	s.NoError(createErr, "no CHASM sentinel should block CreateSchedule when sentinels are disabled, got: %v", createErr)
+}
+
 func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-already-exists"
 
@@ -1884,7 +2195,7 @@ func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
 // temporal.ErrScheduleAlreadyRunning. This tests the SDK's behavior E2E against
 // the handler. A similar test exists in the features repository.
 func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
-	opts := scheduleCommonOpts()
+	opts := scheduleCommonOpts(t)
 	if useCHASM {
 		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true))
 	}
@@ -1912,7 +2223,7 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 }
 
 func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 	sid := "sched-test-too-many-backfillers"
 	wt := "sched-test-too-many-backfillers-wt"
 
@@ -1990,7 +2301,7 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 }
 
 func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
 	wid := testcore.RandomizeStr("wid")
@@ -2120,7 +2431,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 // testCHASMCanListV1Schedules tests that a schedule created in the V1 stack
 // will also be visible in the V2 stack.
 func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "schedule-created-on-v1"
 	schedule := &schedulepb.Schedule{
@@ -2191,7 +2502,7 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 
 // testRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
 func testRefresh(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-refresh"
 	wid := "sched-test-refresh-wf"
@@ -2297,7 +2608,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 // testListBeforeRun only applies to V1, as V2 scheduler does not involve the
 // per-NS worker or workflow.
 func testListBeforeRun(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, append(scheduleCommonOpts(),
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0),
 	)...)
 
@@ -2345,7 +2656,7 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 
 // testRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
 func testRateLimit(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, append(scheduleCommonOpts(),
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0),
 	)...)
 
@@ -2400,7 +2711,7 @@ func testRateLimit(t *testing.T, newContext contextFactory) {
 
 // testNextTimeCache only applies to V1.
 func testNextTimeCache(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
@@ -2557,7 +2868,7 @@ func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.Sc
 	}
 }
 func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo"
 	wid := "sched-test-update-memo-wf"
@@ -2681,7 +2992,7 @@ func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
 }
 
 func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo-rejected"
 	wid := "sched-test-update-memo-rejected-wf"
@@ -2745,7 +3056,7 @@ func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
 	// the schedule when the field is nil, similar to how memo and search_attributes are handled.
 	t.Skip("memo-only updates not yet supported: omitting the schedule field unsets the schedule")
 
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo-only"
 	wid := "sched-test-update-memo-only-wf"
@@ -2814,7 +3125,7 @@ func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
 }
 
 func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-unpause-resumes"
 	wid := "sched-test-unpause-resumes-wf"
@@ -2903,7 +3214,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	)
 }
 func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-reqid-too-long"
 	wid := "sched-test-update-reqid-too-long-wf"
@@ -2956,7 +3267,7 @@ func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory)
 
 func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t,
-		append(scheduleCommonOpts(),
+		append(scheduleCommonOpts(t),
 			testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
 			testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 500),
 		)...,

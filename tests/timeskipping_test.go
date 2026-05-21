@@ -13,6 +13,9 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/workflow"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -75,16 +78,15 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true, DisablePropagation: false, Bound: inputBound},
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true, Bound: inputBound},
 	})
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
 	s.True(proto.Equal(&workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: false,
-		Bound:              inputBound,
+		Enabled: true,
+		Bound:   inputBound,
 	}, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -109,18 +111,16 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		SignalName:          tv.SignalName(),
 		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-			Enabled:            true,
-			DisablePropagation: true,
-			Bound:              inputBound,
+			Enabled: true,
+			Bound:   inputBound,
 		},
 	})
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(proto.Equal(&workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              inputBound,
+		Enabled: true,
+		Bound:   inputBound,
 	}, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -134,8 +134,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 	maxSkippedDuration := time.Hour
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
+		Enabled: true,
 		Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 			MaxSkippedDuration: durationpb.New(maxSkippedDuration),
 		},
@@ -248,9 +247,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// Second update: change bound type, add DisablePropagation.
 	config2 := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 	}
 	updateOptions(config2)
 
@@ -314,9 +312,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
 	}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
@@ -499,6 +496,182 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := env.Context()
+
+	// Target workflow B. No worker polls B; the SignalExternal RPC will land a
+	// WorkflowExecutionSignaled event in B's history directly. Distinct task
+	// queue so B's idle first WT can't interfere with the SDK worker.
+	tvB := tv.WithWorkflowIDNumber(2).WithTaskQueueNumber(2)
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tvB.WorkflowID(),
+		WorkflowType:        tvB.WorkflowType(),
+		TaskQueue:           tvB.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.NoError(err)
+
+	// CoordinatorWorkflow: emits the 1h timer and the SignalExternal command in
+	// the same WFT response, then waits for whichever future resolves first.
+	coordinatorWorkflow := func(wfCtx workflow.Context, targetWorkflowID string) error {
+		timerFuture := workflow.NewTimer(wfCtx, time.Hour)
+		signalFuture := workflow.SignalExternalWorkflow(
+			wfCtx, targetWorkflowID, "", "test-pending-signal", nil)
+
+		workflow.NewSelector(wfCtx).
+			AddFuture(timerFuture, func(_ workflow.Future) {}).
+			AddFuture(signalFuture, func(_ workflow.Future) {}).
+			Select(wfCtx)
+		return nil
+	}
+	const coordinatorTypeName = "CoordinatorWorkflow"
+	env.SdkWorker().RegisterWorkflowWithOptions(coordinatorWorkflow, workflow.RegisterOptions{
+		Name: coordinatorTypeName,
+	})
+
+	// SDK's StartWorkflowOptions doesn't expose TimeSkippingConfig (as of SDK
+	// v1.41), so start workflow A directly through the frontend. Use the SDK
+	// worker's task queue so the registered coordinator picks up the WT.
+	input, err := converter.GetDefaultDataConverter().ToPayloads(tvB.WorkflowID())
+	s.NoError(err)
+
+	tvA := tv.WithWorkflowIDNumber(1)
+	wallStart := time.Now()
+	aResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tvA.WorkflowID(),
+		WorkflowType:        &commonpb.WorkflowType{Name: coordinatorTypeName},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               input,
+		WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+
+	// Wait for A to finish through the SDK.
+	err = env.SdkClient().GetWorkflow(ctx, tvA.WorkflowID(), aResp.RunId).Get(ctx, nil)
+	s.NoError(err)
+	wallElapsed := time.Since(wallStart)
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tvA.WorkflowID(),
+		RunId:      aResp.RunId,
+	})
+
+	// The signal future resolved (its completion event landed in A's history).
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED),
+		"ExternalWorkflowExecutionSignaled event must appear in A's history")
+
+	// The timer never fired — the signal won the Selector. If the new branch in
+	// hasInflightWorkToPreventTimeSkipping were missing, skip could fire at WT1
+	// close, shift the timer to near-now, and race the signal — making this
+	// assertion flaky.
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED),
+		"TimerFired must NOT appear — the signal future must resolve before the 1h timer fires")
+
+	// Workflow A closed via the signal branch.
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED),
+		"workflow A must complete")
+
+	// Wall elapsed must be well under the 1h timer — the workflow should
+	// finish as soon as the signal completes (sub-second on a healthy cluster).
+	s.Less(wallElapsed, 5*time.Minute,
+		"test wall elapsed = %v; the workflow should complete promptly after the signal succeeds, well before the 1h timer would fire",
+		wallElapsed)
+}
+
+// TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no
+// bound shifts a WorkflowStartDelay backoff into the near-now wall-clock window:
+// the first WT becomes available immediately instead of waiting wallStart + 1h.
+//
+// Sequence:
+//
+//	Start workflow with WorkflowStartDelay = 1h, TimeSkippingConfig{Enabled: true},
+//	no bound. On the close transaction of WorkflowExecutionStarted,
+//	calculateTimeSkippingTransition picks the backoff (only candidate;
+//	!HadOrHasWorkflowTask && ExecutionTime > StartTime), skips by 1h,
+//	accumulated = 1h. RegenerateTimerTasksForTimeSkipping step (4) re-emits the
+//	WorkflowBackoffTimerTask with VisibilityTimestamp ≈ wallStart
+//	(= virtual_executionTime − accumulated = (wallStart + 1h) − 1h).
+//	WT1 → complete workflow.
+//
+// Assertions:
+//
+//  1. WT1 polled in < 5min wall (would block 1h without skip, exceeding long-poll).
+//  2. At least two WorkflowBackoffTimerTask writes (initial + regenerated).
+//  3. All backoff tasks are typed WORKFLOW_BACKOFF_TYPE_DELAY_START
+//     (no cron, attempt == 1).
+//  4. The latest task's VisibilityTimestamp is ≈ wallStart, not wallStart + 1h.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	const (
+		startDelay = time.Hour
+		shiftTol   = 5 * time.Second
+	)
+	wallStart := time.Now()
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		WorkflowStartDelay:  durationpb.New(startDelay),
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	elapsed := time.Since(wallStart)
+	s.Less(elapsed, shiftTol, "skip should have shifted the 1h start delay into near-now wall-clock; took %v", elapsed)
+
+	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	s.NotNil(recorder)
+	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  tv.WorkflowID(),
+		RunID:       runID,
+	})
+	var backoffTasks []*historytasks.WorkflowBackoffTimerTask
+	for _, rec := range recorded {
+		if t, ok := rec.Task.(*historytasks.WorkflowBackoffTimerTask); ok {
+			backoffTasks = append(backoffTasks, t)
+		}
+	}
+	s.GreaterOrEqual(len(backoffTasks), 2, "expected initial + regenerated WorkflowBackoffTimerTask (two writes)")
+	for _, t := range backoffTasks {
+		s.Equal(enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START, t.WorkflowBackoffType,
+			"all backoff tasks for start-with-delay must have type DELAY_START")
+	}
+	if len(backoffTasks) >= 1 {
+		latest := backoffTasks[len(backoffTasks)-1]
+		s.Less(latest.VisibilityTimestamp.Sub(wallStart), shiftTol,
+			"regenerated backoff task VisibilityTime must be ≈ wallStart (= virtual exec − accum), got %v vs wallStart %v",
+			latest.VisibilityTimestamp, wallStart)
+	}
 }
 
 // TestWorkflowLifecycle_VirtualTimeContract is an end-to-end regression test

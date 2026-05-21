@@ -475,6 +475,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -485,6 +486,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		workflowUpdateOptions,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -752,6 +754,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionSignaledEvent(
@@ -760,6 +763,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 		identity,
 		header,
 		externalWorkflowExecution,
+		requestID,
 		links,
 	)
 	event, _ = b.EventStore.add(event)
@@ -770,11 +774,15 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	initialSkippedDuration *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
+		timeSkippingConfig,
+		initialSkippedDuration,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

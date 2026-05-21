@@ -1350,7 +1350,7 @@ type capturingTaskMatchHook struct {
 type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
-	IsSyncMatch       bool
+	SyncMatchOutcome  hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1370,9 +1370,9 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName: h.taskQueueName,
-		TaskQueueType: h.taskQueueType,
-		IsSyncMatch:   event.IsSyncMatch,
+		TaskQueueName:    h.taskQueueName,
+		TaskQueueType:    h.taskQueueType,
+		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1610,7 +1610,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.True(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeSuccess, calls[0].SyncMatchOutcome)
 	s.Nil(calls[0].DeploymentVersion)
 }
 
@@ -1634,7 +1634,161 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.False(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
+	if !s.newMatcher {
+		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
+	}
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// Set rate limit to zero RPS — this blocks all sync matches due to rate limiting.
+	pm.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	pm.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Set up a waiting poller so sync match would succeed if not rate-limited.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	// AddTask should fall through to spool because rate limiting blocked sync match.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeRateLimited, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// No rate limiting configured — task should spool normally without rate limit flag.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNotInvoked() {
+	// When a task is forwarded from a child partition and sync-matched on the parent,
+	// hooks should not fire on the parent because the child already fired them.
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	type pollResult struct {
+		task *internalTask
+		err  error
+	}
+	pollDone := make(chan pollResult, 1)
+
+	// Start a poller in a background goroutine so there's someone to sync-match with.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, err := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		pollDone <- pollResult{task: task, err: err}
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+
+	// Wait until the poller is actually blocked in the matcher, ready to receive a task.
+	// This guarantees the subsequent AddTask will sync-match rather than spool.
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	// Add a forwarded task (simulating a child partition forwarding to this parent).
+	// With a poller waiting, this should sync-match successfully.
+	// forwardInfo being set is what marks this task as forwarded from another partition.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	// Drain the poller goroutine and verify it received the task.
+	var pr pollResult
+	select {
+	case pr = <-pollDone:
+	case <-time.After(5 * time.Second):
+		s.Require().Fail("timed out waiting for poll result")
+	}
+	s.Require().NoError(pr.err)
+	s.Require().NotNil(pr.task)
+
+	// Hooks should NOT have been called on the parent — the child partition that
+	// originated the forwarded task is responsible for firing hooks.
+	s.Require().Empty(hook.getCalls())
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksNotInvoked() {
+	// When a forwarded task fails to sync-match (no poller available), hooks should
+	// not fire on the parent. The errRemoteSyncMatchFailed return path already skips
+	// hooks since it exits AddTask before reaching processTaskAddHooks.
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// Add a forwarded task with no poller waiting — sync-match will fail.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+	})
+	s.Require().Equal(errRemoteSyncMatchFailed, err)
+	s.Require().False(syncMatched)
+
+	// Hooks should NOT have been called on the parent partition.
+	s.Require().Empty(hook.getCalls())
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
@@ -1654,8 +1808,8 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 
 	s.Len(hook1.getCalls(), 1)
 	s.Len(hook2.getCalls(), 1)
-	s.False(hook1.getCalls()[0].IsSyncMatch)
-	s.False(hook2.getCalls()[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook1.getCalls()[0].SyncMatchOutcome)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
 type mockUserDataManager struct {
