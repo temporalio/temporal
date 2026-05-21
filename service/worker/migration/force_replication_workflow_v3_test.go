@@ -575,11 +575,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHardCAPDrainsBeforeCAN() {
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 		FastPending:              carry,
-		// Pretend a prior cycle counted this many already so the
-		// no-progress detector sees progress when drainRetries clears
-		// the carry-over.
-		TotalForceReplicateWorkflowCount: int64(carryCount * 2),
-		ContinuedAsNewCount:              1,
+		ContinuedAsNewCount:      1,
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -591,6 +587,72 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHardCAPDrainsBeforeCAN() {
 	// The carry-over executions verify cleanly during the drain, so
 	// totalVerified picks them all up.
 	s.Equal(int64(carryCount), canParams.ReplicatedWorkflowCount)
+}
+
+// TestDrainOnlySkipsListing verifies that a workflow started with
+// DrainOnly=true skips ListWorkflows entirely and goes straight to
+// draining the carried pending list. This is the recovery path after
+// a prior cycle's drainRetries bailed on GetContinueAsNewSuggested:
+// the workflow CAN'd with DrainOnly=true and the carried pending, and
+// the resumed cycle should pick up the drain without re-listing
+// already-processed pages.
+func (s *ForceReplicationWorkflowV3TestSuite) TestDrainOnlySkipsListing() {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
+
+	namespaceID := uuid.NewString()
+	var a *activities
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 100}, nil).Maybe()
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	// Intentionally do not mock ListWorkflows. If the DrainOnly guard in
+	// runOnePagedCycle doesn't fire, the unmocked activity errors out
+	// and the workflow fails — making this a strict "ListWorkflows is
+	// never called" assertion.
+
+	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
+		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
+	})
+
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	carry := []*ExecutionInfo{
+		{BusinessID: "wf-1", RunID: "r1"},
+		{BusinessID: "wf-2", RunID: "r2"},
+		{BusinessID: "wf-3", RunID: "r3"},
+	}
+
+	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
+		Namespace:                "test-ns",
+		ConcurrentActivityCount:  1,
+		OverallRps:               10,
+		ListWorkflowsPageSize:    1000,
+		PageCountPerExecution:    10,
+		EnableVerification:       true,
+		TargetClusterEndpoint:    "test-target",
+		HistoryShardCount:        4,
+		WFIDQuarantineThreshold:  999,
+		ShardQuarantineThreshold: 999,
+		NoProgressTimeoutSeconds: 3600,
+		DrainOnly:                true,
+		FastPending:              carry,
+		ContinuedAsNewCount:      1,
+		// Mark TQ user-data replication done so the post-drain Await
+		// returns immediately; otherwise the workflow blocks waiting
+		// for a signal the test never sends.
+		TaskQueueUserDataReplicationStatus: TaskQueueUserDataReplicationStatus{Done: true},
+		TotalForceReplicateWorkflowCount:   100,
+	})
+
+	s.True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+
+	envValue, err := env.QueryWorkflow(adaptiveForceReplicationStatusQueryType)
+	s.NoError(err)
+	var status AdaptiveForceReplicationStatus
+	s.NoError(envValue.Get(&status))
+	s.Equal(int64(len(carry)), status.ReplicatedWorkflowCount)
 }
 
 // TestAIMDIncreasesOnClean drives the workflow through several clean

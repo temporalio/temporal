@@ -46,7 +46,7 @@ type (
 	AdaptiveForceReplicationParams struct {
 		// Shared with V1/V2.
 		Namespace               string `validate:"required"`
-		Query                   string `validate:"required"`
+		Query                   string
 		ConcurrentActivityCount int
 		OverallRps              float64
 		GetParentInfoRPS        float64
@@ -120,6 +120,16 @@ type (
 		FastPending pendingList
 		SlowPending pendingList
 
+		// DrainOnly is set by the workflow on CAN when listing has
+		// already exhausted (NextPageToken became nil on a prior cycle)
+		// but drainRetries had to bail mid-drain because
+		// GetContinueAsNewSuggested fired — i.e. the SDK signalled
+		// we're approaching the per-execution history budget. The next
+		// cycle skips listing entirely and resumes draining the carried
+		// pending. Sticky: once set, stays set until pending clears,
+		// because nothing adds to pending after listing is exhausted.
+		DrainOnly bool
+
 		// HistoryShardCount is the source cluster's shard count. The
 		// workflow uses it to map WF-ID → shard for the shard-pending
 		// counter and shard quarantine.
@@ -177,10 +187,15 @@ const (
 	// Metric names for quarantine state transitions. All three are counters
 	// tagged with the namespace; operators alert on a sudden spike of
 	// quarantines (workload going off the rails) or the absence of
-	// recoveries (shard stays hot for the whole run).
-	adaptiveForceRepWFQuarantinedMetric    = "adaptive_force_replication_wf_quarantined_count"
-	adaptiveForceRepShardQuarantinedMetric = "adaptive_force_replication_shard_quarantined_count"
-	adaptiveForceRepShardRecoveredMetric   = "adaptive_force_replication_shard_recovered_count"
+	// recoveries (shard stays hot for the whole run). Named without an
+	// adaptive_ prefix so they sit alongside the existing
+	// force_replication_* / verify_replication_* metric families —
+	// V1/V2 don't emit these specific counters (the concepts are
+	// V3-only), but the shared prefix keeps the dashboard taxonomy
+	// consistent.
+	forceRepWFQuarantinedMetric    = "force_replication_wf_quarantined_count"
+	forceRepShardQuarantinedMetric = "force_replication_shard_quarantined_count"
+	forceRepShardRecoveredMetric   = "force_replication_shard_recovered_count"
 
 	defaultAdaptiveBatchDeadlineSeconds       = 60
 	defaultAdaptiveNoProgressTimeoutSeconds   = 30 * 60 // matches V1/V2's defaultNoProgressNotRetryableTimeout
@@ -196,19 +211,31 @@ const (
 	defaultAdaptiveAIMDMinRPSFactor   = 0.10
 	defaultAdaptiveAIMDMaxRPSFactor   = 2.0
 
-	// Caps on cross-CAN pending carry. With pendingList's grouped JSON
-	// form (~60 bytes per entry worst case — unique BusinessIDs, full
-	// UUID RunIDs), 3000 entries is ~180KB and 6000 is ~360KB. Both
-	// stay under the 512KB blob warn threshold even after the rest of
-	// the params struct (quarantine maps, etc.) is added.
+	// Caps on cross-CAN payload growth. Two axes, checked at both sites
+	// (early CAN inside the page loop, hard cap before the CAN snapshot);
+	// either tripping wins.
+	//
+	//   - Count: "too many stuck workflows, slow down and drain", independent
+	//     of payload size. earlyCANPendingThreshold trips inside the page
+	//     loop (break out and CAN soon); maxPendingCarryAcrossCAN trips
+	//     after the loop (drain inline before snapshotting).
+	//   - Bytes: hard backstop on CAN input size, keeping us under the SDK's
+	//     512KB blob warn even after the rest of the params struct.
+	//     Measured across the four growing-with-input fields via
+	//     estimateCANPayloadBytes: fastPending, slowPending,
+	//     QuarantinedWFIDs, and WFIDPendingCounts. The shard-keyed fields
+	//     are bounded by HistoryShardCount and excluded.
 	earlyCANPendingThreshold = 3000
 	maxPendingCarryAcrossCAN = 6000
+	earlyCANCarryBytes       = 256 * 1024
+	maxCANCarryBytes         = 450 * 1024
 
 	// Metric names for AIMD RPS adjustments. Counter per direction so a
 	// dashboard can render a heatmap of "this workload is bouncing
 	// between ramp-up and back-off". Tagged with namespace + lane.
-	adaptiveForceRepRPSIncreasedMetric = "adaptive_force_replication_rps_increased_count"
-	adaptiveForceRepRPSDecreasedMetric = "adaptive_force_replication_rps_decreased_count"
+	// Same naming-prefix rationale as the quarantine metrics above.
+	forceRepRPSIncreasedMetric = "force_replication_rps_increased_count"
+	forceRepRPSDecreasedMetric = "force_replication_rps_decreased_count"
 )
 
 // pendingList carries unverified executions across CAN with a compact
@@ -344,26 +371,37 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		return err
 	}
 
-	if params.NextPageToken == nil {
-		// Final cycle: drain retries and wait for the TQ-user-data child.
-		if err := state.drainRetries(ctx); err != nil {
+	if params.DrainOnly || params.NextPageToken == nil {
+		// Final-cycle / drain-only path: try to drain, but bail if the
+		// SDK signals we're approaching the history budget so we CAN
+		// and resume draining next cycle.
+		canSuggested, err := state.drainRetries(ctx)
+		if err != nil {
 			return err
 		}
-		if err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done }); err != nil {
-			return err
+		if !canSuggested {
+			// Pending fully drained — wait for the TQ-user-data child
+			// and complete.
+			if err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done }); err != nil {
+				return err
+			}
+			if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+				return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+			}
+			return nil
 		}
-		if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
-			return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
-		}
-		return nil
-	}
-
-	// Last-resort cap on CAN input size: if drainSemaphores' overshoot
-	// past the early-CAN trigger pushed combined pending over the hard
-	// cap, drain inline before snapshotting. drainRetries either clears
-	// pending entirely or returns the no-progress error.
-	if len(state.fastPending)+len(state.slowPending) > maxPendingCarryAcrossCAN {
-		if err := state.drainRetries(ctx); err != nil {
+		// History budget tripped mid-drain. Set DrainOnly so the next
+		// cycle skips listing and resumes draining; fall through to the
+		// CAN snapshot below.
+		params.DrainOnly = true
+	} else if len(state.fastPending)+len(state.slowPending) > maxPendingCarryAcrossCAN ||
+		state.estimateCANPayloadBytes() > maxCANCarryBytes {
+		// Last-resort cap on CAN input size: if drainSemaphores' overshoot
+		// past the early-CAN trigger pushed combined pending over either
+		// the count or bytes hard cap, drain inline before snapshotting.
+		// Ignore canSuggested — we're CAN'ing regardless, so an early
+		// bail just means more pending carries.
+		if _, err := state.drainRetries(ctx); err != nil {
 			return err
 		}
 	}
@@ -483,7 +521,10 @@ func kickoffTaskQueueUserDataReplication(ctx workflow.Context, params *AdaptiveF
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		doneCh := workflow.GetSignalChannel(ctx, taskQueueUserDataReplicationDoneSignalType)
 		var errStr string
-		// We don't care if there's more data to receive.
+		// Ignore the bool return: false means the channel was closed
+		// before a signal arrived (parent context cancelled), in which
+		// case errStr is "" and Done flips to true below — that's fine,
+		// we treat parent-cancelled as "no failure to report".
 		_ = doneCh.Receive(ctx, &errStr)
 		params.TaskQueueUserDataReplicationStatus.FailureMessage = errStr
 		params.TaskQueueUserDataReplicationStatus.Done = true
@@ -606,6 +647,13 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 		lastVerified:   params.ReplicatedWorkflowCount,
 		lastProgressAt: workflow.Now(ctx),
 	}
+	// Clear params' copy now that state owns the live one. Avoids any
+	// future debug-dump / future-query-handler from showing two pending
+	// lists side-by-side and reasoning about which is current; the CAN
+	// snapshot below repopulates params.FastPending/SlowPending from
+	// state before continue-as-new.
+	params.FastPending = nil
+	params.SlowPending = nil
 	s.fastSem = workflow.NewBufferedChannel(ctx, params.ConcurrentActivityCount)
 	for range params.ConcurrentActivityCount {
 		s.fastSem.Send(ctx, true)
@@ -650,6 +698,16 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 // drainRetries on the final cycle, or via the CAN snapshot to the next
 // cycle.
 func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
+	if s.params.DrainOnly {
+		// Listing exhausted on a prior cycle; nothing to do here. The
+		// caller invokes drainRetries which is the only meaningful work
+		// while DrainOnly is in effect. Drain the semaphores
+		// newAdaptiveWorkflowState pre-filled — drainRetries assumes
+		// they start empty and refills them itself.
+		s.drainSemaphores(ctx)
+		return nil
+	}
+
 	// ListWorkflows doesn't heartbeat, so no HeartbeatTimeout.
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
@@ -690,8 +748,11 @@ func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 		// bounded. The slot semaphore ensures recordBatchOutcome has
 		// run for completed batches before we read pending here;
 		// in-flight batches can still overshoot during drainSemaphores
-		// below — the workflow-level hard cap catches that.
-		if len(s.fastPending)+len(s.slowPending) > earlyCANPendingThreshold {
+		// below — the workflow-level hard cap catches that. Two axes:
+		// count (too many stuck workflows) and bytes (CAN payload too
+		// large); either trips the early CAN.
+		if len(s.fastPending)+len(s.slowPending) > earlyCANPendingThreshold ||
+			s.estimateCANPayloadBytes() > earlyCANCarryBytes {
 			break
 		}
 
@@ -710,18 +771,31 @@ func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 	return nil
 }
 
-// drainRetries runs retry rounds until both pending lists are empty or the
-// no-progress detector fires. Each round increases the per-batch deadline so
-// the tail has progressively more time to drain on the passive.
-func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) error {
+// drainRetries runs retry rounds until both pending lists are empty, the
+// no-progress detector fires, or the SDK signals that the workflow's
+// history budget is close to exhausted. Each round increases the
+// per-batch deadline so the tail has progressively more time to drain
+// on the passive.
+//
+// Returns canSuggested=true when GetContinueAsNewSuggested fires mid-drain;
+// the caller is expected to CAN with DrainOnly=true so the next cycle
+// picks up where this one left off.
+func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested bool, err error) {
 	for round := 0; len(s.fastPending) > 0 || len(s.slowPending) > 0; round++ {
+		// Check before sleeping/working so we don't burn a sleep when
+		// we're already over the budget. SDK-derived signal — true when
+		// the worker has computed that history size/event count is
+		// approaching the warn threshold.
+		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			return true, nil
+		}
 		// Yield between rounds so the workflow clock advances when
 		// verify returns immediately (everything already on the
 		// target). The verify activity's own scan interval dominates
 		// in real runs, so this is effectively a no-op there.
 		if round > 0 {
 			if err := workflow.Sleep(ctx, time.Second); err != nil {
-				return err
+				return false, err
 			}
 		}
 
@@ -734,13 +808,13 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) error {
 
 		s.drainSemaphores(ctx)
 		if err := s.checkProgress(ctx); err != nil {
-			return err
+			return false, err
 		}
 		if s.lastActivityErr != nil {
-			return s.lastActivityErr
+			return false, s.lastActivityErr
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // reclassifyPendingForRetry consumes the current pending lists, then
@@ -819,10 +893,6 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		deadlineMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
 	}
-	lane := "fast"
-	if slow {
-		lane = "slow"
-	}
 	var slot bool
 	sem.Receive(ctx, &slot)
 	workflow.Go(ctx, func(ctx workflow.Context) {
@@ -858,7 +928,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		if err := workflow.ExecuteActivity(injectCtx, a.InjectBatch, injReq).Get(ctx, nil); err != nil {
 			s.lastActivityErr = err
 			s.routePending(execs)
-			s.adjustRPS(ctx, lane, true)
+			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		if !s.params.EnableVerification {
@@ -870,7 +940,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 			// because there's no pending list to drive it — the slow
 			// lane stays empty and the fast lane handles everything.
 			s.totalVerified += int64(len(execs))
-			s.adjustRPS(ctx, lane, false)
+			s.adjustRPS(ctx, slow, false)
 			return
 		}
 		verReq := &adaptiveVerifyBatchRequest{
@@ -886,12 +956,12 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		if err := workflow.ExecuteActivity(verifyCtx, a.VerifyBatch, verReq).Get(ctx, &resp); err != nil {
 			s.lastActivityErr = err
 			s.routePending(execs)
-			s.adjustRPS(ctx, lane, true)
+			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		s.totalVerified += resp.Verified
 		s.recordBatchOutcome(ctx, execs, resp.Pending)
-		s.adjustRPS(ctx, lane, len(resp.Pending) > 0)
+		s.adjustRPS(ctx, slow, len(resp.Pending) > 0)
 	})
 }
 
@@ -905,10 +975,6 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 	if slow {
 		sem = s.slowSem
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
-	}
-	lane := "fast"
-	if slow {
-		lane = "slow"
 	}
 	var slot bool
 	sem.Receive(ctx, &slot)
@@ -936,7 +1002,7 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		if err := workflow.ExecuteActivity(actx, a.VerifyBatch, req).Get(ctx, &resp); err != nil {
 			s.lastActivityErr = err
 			s.routePending(execs)
-			s.adjustRPS(ctx, lane, true)
+			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		s.totalVerified += resp.Verified
@@ -945,7 +1011,7 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		// evidence apply has drained and the lane can support more
 		// throughput; a still-pending retry is the strongest signal to
 		// back off.
-		s.adjustRPS(ctx, lane, len(resp.Pending) > 0)
+		s.adjustRPS(ctx, slow, len(resp.Pending) > 0)
 	})
 }
 
@@ -969,9 +1035,10 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 //     misroute traffic indefinitely. WF-ID quarantine stays sticky
 //     because temporal-locality argues a hot WF-ID stays hot.
 func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatched, pending []*ExecutionInfo) {
-	pendingSet := make(map[string]struct{}, len(pending))
+	type execKey struct{ bid, rid string }
+	pendingSet := make(map[execKey]struct{}, len(pending))
 	for _, ex := range pending {
-		pendingSet[ex.BusinessID+"/"+ex.RunID] = struct{}{}
+		pendingSet[execKey{ex.BusinessID, ex.RunID}] = struct{}{}
 	}
 
 	for _, ex := range pending {
@@ -983,7 +1050,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		s.wfIDPending[ex.BusinessID]++
 		if !wasQuarantinedWF && s.wfIDPending[ex.BusinessID] >= s.params.WFIDQuarantineThreshold {
 			s.quarantinedWF[ex.BusinessID] = struct{}{}
-			s.emitTransition(ctx, adaptiveForceRepWFQuarantinedMetric,
+			s.emitTransition(ctx, forceRepWFQuarantinedMetric,
 				"adaptive: quarantined WF-ID",
 				"wfId", ex.BusinessID,
 				"pendingCount", s.wfIDPending[ex.BusinessID])
@@ -999,7 +1066,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		s.shardPending[sh]++
 		if _, already := s.quarantinedShard[sh]; !already && s.shardPending[sh] >= s.params.ShardQuarantineThreshold {
 			s.quarantinedShard[sh] = struct{}{}
-			s.emitTransition(ctx, adaptiveForceRepShardQuarantinedMetric,
+			s.emitTransition(ctx, forceRepShardQuarantinedMetric,
 				"adaptive: quarantined shard",
 				"shard", sh,
 				"pendingCount", s.shardPending[sh])
@@ -1011,7 +1078,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		releaseAt = 1
 	}
 	for _, ex := range dispatched {
-		if _, isPending := pendingSet[ex.BusinessID+"/"+ex.RunID]; isPending {
+		if _, isPending := pendingSet[execKey{ex.BusinessID, ex.RunID}]; isPending {
 			continue
 		}
 		sh := s.shardOf(ex.BusinessID)
@@ -1020,7 +1087,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		}
 		if _, ok := s.quarantinedShard[sh]; ok && s.shardPending[sh] <= releaseAt {
 			delete(s.quarantinedShard, sh)
-			s.emitTransition(ctx, adaptiveForceRepShardRecoveredMetric,
+			s.emitTransition(ctx, forceRepShardRecoveredMetric,
 				"adaptive: released shard quarantine",
 				"shard", sh,
 				"pendingCount", s.shardPending[sh])
@@ -1093,19 +1160,17 @@ func (s *adaptiveWorkflowState) emitTransition(ctx workflow.Context, metricName,
 // ceiling factors keep the controller bounded. Adjustment is a no-op
 // when AIMD is disabled or when the clamp prevents a change — only
 // genuine transitions emit metrics and logs.
-func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, lane string, hadPending bool) {
+func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, slow bool, hadPending bool) {
 	if s.params.AIMDEnabled == nil || !*s.params.AIMDEnabled {
 		return
 	}
-	var current *float64
-	var minRPS, maxRPS, step float64
-	switch lane {
-	case "slow":
+	current := &s.currentFastRPS
+	minRPS, maxRPS, step := s.fastMinRPS, s.fastMaxRPS, s.fastStep
+	lane := "fast"
+	if slow {
 		current = &s.currentSlowRPS
 		minRPS, maxRPS, step = s.slowMinRPS, s.slowMaxRPS, s.slowStep
-	default:
-		current = &s.currentFastRPS
-		minRPS, maxRPS, step = s.fastMinRPS, s.fastMaxRPS, s.fastStep
+		lane = "slow"
 	}
 	prev := *current
 	if hadPending {
@@ -1122,9 +1187,9 @@ func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, lane string, had
 	if *current == prev {
 		return
 	}
-	metricName := adaptiveForceRepRPSIncreasedMetric
+	metricName := forceRepRPSIncreasedMetric
 	if hadPending {
-		metricName = adaptiveForceRepRPSDecreasedMetric
+		metricName = forceRepRPSDecreasedMetric
 	}
 	workflow.GetLogger(ctx).Info("adaptive: AIMD adjusted RPS",
 		"lane", lane,
@@ -1176,12 +1241,35 @@ func (s *adaptiveWorkflowState) refillSemaphores(ctx workflow.Context) {
 	}
 }
 
+// estimateCANPayloadBytes returns the marshalled-size sum of the params
+// fields that grow with workload input and therefore drive CAN payload
+// growth: the two pending lists plus the user-keyed quarantine state.
+// Shard-keyed state is bounded by HistoryShardCount and excluded. The
+// returned size is exact (not approximated) — same encoder the SDK uses
+// for the CAN payload, so the budget reflects what actually ships.
+func (s *adaptiveWorkflowState) estimateCANPayloadBytes() int {
+	//workflowcheck:ignore (json.Marshal sorts map keys; pendingList wire form is deterministic; result used only for len())
+	b, _ := json.Marshal(struct {
+		Fast              pendingList
+		Slow              pendingList
+		QuarantinedWFIDs  []string
+		WFIDPendingCounts map[string]int
+	}{
+		Fast:              pendingList(s.fastPending),
+		Slow:              pendingList(s.slowPending),
+		QuarantinedWFIDs:  s.snapshotQuarantinedWFIDs(),
+		WFIDPendingCounts: s.wfIDPending,
+	})
+	return len(b)
+}
+
 // snapshotQuarantinedWFIDs returns the quarantined WF-ID set as a sorted
 // slice so the CAN input is deterministic across workflow replays. Map
 // iteration order varies between original execution and replay, which
 // would otherwise produce different ContinueAsNew payloads.
 func (s *adaptiveWorkflowState) snapshotQuarantinedWFIDs() []string {
 	out := make([]string, 0, len(s.quarantinedWF))
+	//workflowcheck:ignore (output is sorted below, so map iteration order does not affect history)
 	for k := range s.quarantinedWF {
 		out = append(out, k)
 	}
@@ -1194,6 +1282,7 @@ func (s *adaptiveWorkflowState) snapshotQuarantinedWFIDs() []string {
 // reason.
 func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
 	out := make([]int32, 0, len(s.quarantinedShard))
+	//workflowcheck:ignore (output is sorted below, so map iteration order does not affect history)
 	for k := range s.quarantinedShard {
 		out = append(out, k)
 	}
@@ -1203,6 +1292,7 @@ func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
 
 func cloneStringIntMap(m map[string]int) map[string]int {
 	out := make(map[string]int, len(m))
+	//workflowcheck:ignore (cloning into a new map of the same contents; iteration order does not affect history)
 	for k, v := range m {
 		out[k] = v
 	}
@@ -1211,6 +1301,7 @@ func cloneStringIntMap(m map[string]int) map[string]int {
 
 func cloneInt32IntMap(m map[int32]int) map[int32]int {
 	out := make(map[int32]int, len(m))
+	//workflowcheck:ignore (cloning into a new map of the same contents; iteration order does not affect history)
 	for k, v := range m {
 		out[k] = v
 	}
