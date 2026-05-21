@@ -451,6 +451,15 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
+func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior) {
+	c.metricsHandler.Counter(metrics.TasksAddedCounter.Name()).Record(
+		1,
+		metrics.TaskAddResultTag(result),
+		metrics.ForwardedTag(forwarded),
+		metrics.VersioningBehaviorTag(behavior),
+	)
+}
+
 // PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
@@ -680,13 +689,13 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return false, nil
+			return syncMatchNoPoller, nil
 		}
 	}
 
@@ -697,7 +706,11 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	return c.oldMatcher.Offer(childCtx, task)
+	matched, err := c.oldMatcher.Offer(childCtx, task)
+	if matched {
+		return syncMatchSuccess, err
+	}
+	return syncMatchNoPoller, err
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

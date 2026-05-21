@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/client"
@@ -53,6 +54,7 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/grpcinject"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -107,6 +109,7 @@ type (
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		dcRedirectionPolicy              config.DCRedirectionPolicy
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -169,6 +172,7 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		DCRedirectionPolicy              config.DCRedirectionPolicy
 		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -184,11 +188,6 @@ type (
 )
 
 const NamespaceCacheRefreshInterval = time.Second
-
-var chasmFxOptions = fx.Options(
-	temporal.ChasmLibraryOptions,
-	chasmtests.Module,
-)
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
@@ -214,6 +213,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		dcRedirectionPolicy:              params.DCRedirectionPolicy,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -233,13 +233,15 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
 	for k, v := range defaultDynamicConfigOverrides {
-		impl.dcClient.PartialOverrideValue(k, v)
+		impl.overrideDynamicConfigForClusterLifetime(k, v)
 	}
+	// Override Nexus callback URL. This is parameterized on the frontend's HTTP address,
+	// so it can't be overriden in the loop above.
+	impl.setNexusCallbackURL()
 	// Per-test overrides: cleaned up when the creating test finishes.
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
-
 	return impl
 }
 
@@ -374,7 +376,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
@@ -425,7 +427,8 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &schedulerClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -471,7 +474,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -522,7 +525,8 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
 			fx.Populate(&c.chasmVisibilityMgr),
@@ -582,7 +586,8 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -622,7 +627,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -649,7 +654,8 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -744,6 +750,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 				},
 			},
 		},
+		DCRedirectionPolicy: c.dcRedirectionPolicy,
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -757,6 +764,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 				RPC: config.RPC{},
 			},
 		},
+		DCRedirectionPolicy: c.dcRedirectionPolicy,
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -825,7 +833,7 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
-		map[primitives.ServiceName][]grpc.DialOption{},
+		resource.PerServiceDialOptionsProvider(logger),
 		monitor,
 	), nil
 }
@@ -966,6 +974,22 @@ func sdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+}
+
+func (c *TemporalImpl) setNexusCallbackURL() {
+	// Set Nexus callback URL with the cluster's HTTP address. This is a sensible default to avoid
+	// users to need to manually set this.
+	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests
+	nexusCallbackTemplate := fmt.Sprintf(
+		"http://%s/namespaces/{{.NamespaceName}}/nexus/callback",
+		c.FrontendHTTPAddress(),
+	)
+	c.overrideDynamicConfigForClusterLifetime(nexusoperations.CallbackURLTemplate.Key(), nexusCallbackTemplate)
+	c.overrideDynamicConfigForClusterLifetime(chasmnexus.CallbackURLTemplate.Key(), nexusCallbackTemplate)
+}
+
+func (c *TemporalImpl) overrideDynamicConfigForClusterLifetime(name dynamicconfig.Key, value any) {
+	c.dcClient.PartialOverrideValue(name, value)
 }
 
 // overrideDynamicConfigForTest overrides a dynamic config value for the duration of the test.

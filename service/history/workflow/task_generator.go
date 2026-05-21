@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -1042,16 +1041,11 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		return nil
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	if accumulatedSkippedDuration == 0 {
+	if accumulatedSkippedDuration <= 0 {
 		return nil
 	}
 
-	// timertasks that are not stale should be regenerated when time skipping transition happens:
-	// since time skipping transition only happens when there is no in-flight work,
-	// the only timers that are not stale can only be the following types:
-	// (1) next user timer
-	// (2) execution and run timeout timers
-
+	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
 	// (1) user timers — regenerate one task per pending user timer. User timers
 	// are only one of the task types that may need regeneration, so continue to
 	// the timeout timers below even when none are pending.
@@ -1090,9 +1084,51 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			Version:             startVersion,
 		})
 	}
-	return nil
-}
 
-func timeNotSet(ts *timestamppb.Timestamp) bool {
-	return ts == nil || ts.AsTime().IsZero()
+	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
+	// VisibilityTimestamp tracks the new accumulated skip.
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetConfig().GetEnabled() {
+		boundInfo := tsi.GetCurrentElapsedDurationBound()
+		if boundInfo != nil && !boundInfo.GetHasReached() {
+			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
+				EventID:             boundInfo.GetSourceEventId(),
+			})
+		}
+	}
+
+	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
+	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
+	// no backoff has no real timer to regenerate.
+	if !r.mutableState.HadOrHasWorkflowTask() {
+		ei := r.mutableState.GetExecutionInfo()
+		executionTime := ei.GetExecutionTime().AsTime()
+		startTime := ei.GetStartTime().AsTime()
+		if executionTime.After(startTime) {
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			var backOffType enumsspb.WorkflowBackoffType
+			if ei.CronSchedule != "" {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
+			} else if ei.Attempt > 1 {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
+			} else {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: executionTime,
+				Version:             startVersion,
+				WorkflowBackoffType: backOffType,
+			})
+		}
+	}
+	return nil
 }

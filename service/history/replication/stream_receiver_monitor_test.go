@@ -14,6 +14,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -356,6 +357,81 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 	}]
 	s.True(ok)
 	s.Equal(streamSenderValid, stream)
+}
+
+func (s *streamReceiverMonitorSuite) TestStop_StopsInboundStreams() {
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSender.EXPECT().Stop()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
+
+	s.streamReceiverMonitor.Lock()
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
+	s.streamReceiverMonitor.Unlock()
+
+	// Transition to started state so Stop() proceeds past the CAS check.
+	s.streamReceiverMonitor.status = common.DaemonStatusStarted
+	s.streamReceiverMonitor.Stop()
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Empty(s.streamReceiverMonitor.inboundStreams)
+}
+
+func (s *streamReceiverMonitorSuite) TestStop_SkipsInboundStreamsWhenFlagDisabled() {
+	col := dynamicconfig.NewCollection(
+		dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
+			dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Key(): false,
+		}),
+		log.NewNoopLogger(),
+	)
+	monitor := NewStreamReceiverMonitor(
+		ProcessToolBox{
+			Config:          configs.NewConfig(col, 1),
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			MetricsHandler:  metrics.NoopMetricsHandler,
+			Logger:          log.NewNoopLogger(),
+			DLQWriter:       NoopDLQWriter{},
+		},
+		NewExecutableTaskConverter(ProcessToolBox{
+			Config:          configs.NewConfig(col, 1),
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			MetricsHandler:  metrics.NoopMetricsHandler,
+			Logger:          log.NewNoopLogger(),
+			DLQWriter:       NoopDLQWriter{},
+		}),
+		true,
+	)
+
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	// Stop should NOT be called on inbound streams when the flag is disabled.
+	monitor.RegisterInboundStream(streamSender)
+
+	monitor.Lock()
+	s.Len(monitor.inboundStreams, 1)
+	monitor.Unlock()
+
+	monitor.status = common.DaemonStatusStarted
+	monitor.Stop()
+
+	monitor.Lock()
+	defer monitor.Unlock()
+	s.Len(monitor.inboundStreams, 1, "inbound streams should not be closed when flag is disabled")
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {

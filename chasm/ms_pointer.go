@@ -38,6 +38,10 @@ func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool
 	return m.backend.HasAnyBufferedEvent(filter)
 }
 
+func (m MSPointer) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	return m.backend.GenerateEventLoadToken(event)
+}
+
 // LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
 func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
 	return m.backend.LoadHistoryEvent(ctx.goContext(), token)
@@ -46,4 +50,14 @@ func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.Histo
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
+}
+
+// GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.
+func (m MSPointer) GetWorkflowTypeName() string {
+	return m.backend.GetExecutionInfo().GetWorkflowTypeName()
+}
+
+// GetNexusUpdateCompletion retrieves the Nexus operation completion data for the given update ID and request ID from the underlying mutable state.
+func (m MSPointer) GetNexusUpdateCompletion(ctx Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error) {
+	return m.backend.GetNexusUpdateCompletion(ctx.goContext(), updateID, requestID)
 }
