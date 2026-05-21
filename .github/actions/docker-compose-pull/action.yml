@@ -13,7 +13,7 @@ inputs:
     default: "3"
   delay-seconds:
     description: Delay between failed attempts.
-    default: "15"
+    default: "5"
   timeout-minutes:
     description: Timeout for each pull attempt.
     default: "1"
