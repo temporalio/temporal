@@ -134,8 +134,9 @@ type (
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
-		FairnessCounter            dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
-		PartitionScaleAllowedDrift dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleAllowedDrift]
+		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
+		PartitionScaleAllowedDrift    dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleAllowedDrift]
+		PartitionScaleManagerSettings dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleManagerSettings]
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -223,8 +224,9 @@ type (
 		PollerScalingWaitTime           func() time.Duration
 		PollerScalingDecisionsPerSecond func() float64
 
-		FairnessCounter            func() counter.CounterParams
-		PartitionScaleAllowedDrift func() dynamicconfig.PartitionScaleAllowedDrift
+		FairnessCounter               func() counter.CounterParams
+		PartitionScaleAllowedDrift    func() dynamicconfig.PartitionScaleAllowedDrift
+		PartitionScaleManagerSettings func() dynamicconfig.PartitionScaleManagerSettings
 
 		loadCause loadCause
 	}
@@ -371,8 +373,9 @@ func NewConfig(
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 
-		FairnessCounter:            dynamicconfig.MatchingFairnessCounter.Get(dc),
-		PartitionScaleAllowedDrift: dynamicconfig.MatchingPartitionScaleAllowedDrift.Get(dc),
+		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
+		PartitionScaleAllowedDrift:    dynamicconfig.MatchingPartitionScaleAllowedDrift.Get(dc),
+		PartitionScaleManagerSettings: dynamicconfig.MatchingPartitionScaleManager.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}

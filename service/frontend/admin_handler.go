@@ -1793,6 +1793,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+		ScaleInfo:            resp.ScaleInfo,
 	}, nil
 }
 

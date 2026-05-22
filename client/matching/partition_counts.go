@@ -29,10 +29,11 @@ func (pc PartitionCounts) Valid() bool {
 }
 
 func (pc PartitionCounts) encode() (string, error) {
-	b, err := proto.Marshal(&taskqueuespb.ClientPartitionCounts{
+	cpc := taskqueuespb.ClientPartitionCounts{
 		Read:  pc.Read,
 		Write: pc.Write,
-	})
+	}
+	b, err := proto.Marshal(&cpc)
 	if err != nil {
 		return "", err
 	}
@@ -53,6 +54,10 @@ func (pc PartitionCounts) SetTrailer(ctx context.Context) error {
 		return err
 	}
 	return grpc.SetTrailer(ctx, metadata.Pairs(partitionCountsTrailerName, v))
+}
+
+func (pc PartitionCounts) Equal(other PartitionCounts) bool {
+	return pc.Read == other.Read && pc.Write == other.Write
 }
 
 func parsePartitionCounts(hdr string) (PartitionCounts, error) {
@@ -120,7 +125,7 @@ func invokeWithPartitionCounts[Req, Res any](
 			logger.Info("partition count trailer parse error", tag.Error(parseErr))
 			// continue with zero value for newPc
 		}
-		if newPc != pc {
+		if !newPc.Equal(pc) {
 			cache.put(pkey, newPc)
 			pc = newPc
 		}
