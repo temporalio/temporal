@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
@@ -1117,15 +1118,17 @@ func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter() {
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
@@ -1134,14 +1137,15 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-500 * time.Microsecond)))
-	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-500*time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
@@ -1151,13 +1155,14 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 	// one version-set poller
 	bid := "bid"
 	s.pollWithIdentity("v", bid, true, false)
-	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, true)
-	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
