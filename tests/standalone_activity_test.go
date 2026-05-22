@@ -3501,6 +3501,15 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			require.NoError(t, err)
 			require.EqualValues(t, 1, pollResp1.Attempt)
 
+			// Sanity-check that attempt 1's Go SDK identity is set before the retry overwrites it.
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(t, err)
+			require.Equal(t, headers.ClientNameGoSDK, describeResp.GetInfo().GetSdkName())
+			require.Equal(t, temporal.SDKVersion, describeResp.GetInfo().GetSdkVersion())
+
 			_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
 				Namespace: env.Namespace().String(),
 				TaskToken: pollResp1.TaskToken,
@@ -3529,7 +3538,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			require.NoError(t, err)
 			require.EqualValues(t, 2, pollResp2.Attempt)
 
-			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			describeResp, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 			})
