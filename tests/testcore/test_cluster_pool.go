@@ -145,6 +145,9 @@ type suiteScopedCluster struct {
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
 // The cluster is created on first use and torn down when `t` completes.
+//
+// Deprecated: this only exists for backwards-compatibility with legacy sequential
+// suite execution.
 func UseSuiteScopedCluster(t *testing.T) {
 	t.Helper()
 	rootName, _, _ := strings.Cut(t.Name(), "/")
