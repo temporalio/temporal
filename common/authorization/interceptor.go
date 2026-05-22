@@ -195,13 +195,14 @@ func (a *Interceptor) InterceptStream(
 	bypassAuth := a.disableStreamingAuthorizer()
 	if !bypassAuth {
 		tlsConnection := TLSInfoFromContext(ctx)
+		headerGetter := headers.NewGRPCHeaderGetter(ctx)
 
-		authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
-			// No request body or *grpc.UnaryServerInfo at stream init; per-RPC audience mappers see nils.
-			if a.audienceGetter != nil {
-				return a.audienceGetter.Audience(ctx, nil, nil)
+		authInfo := a.GetAuthInfo(tlsConnection, headerGetter, func() string {
+			// Skip the mapper for tokenless streams; calling custom impls with nil req/info would be a behavior change.
+			if a.audienceGetter == nil || headerGetter.Get(a.authHeaderName) == "" {
+				return ""
 			}
-			return ""
+			return a.audienceGetter.Audience(ctx, nil, nil)
 		})
 
 		var claims *Claims
