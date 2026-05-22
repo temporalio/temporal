@@ -566,9 +566,8 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() 
 	)
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
-	s.Error(err)
 	var failedPrecondition *serviceerror.FailedPrecondition
-	s.ErrorAs(err, &failedPrecondition)
+	s.Require().ErrorAs(err, &failedPrecondition)
 	s.Contains(err.Error(), "global-ns")
 }
 
