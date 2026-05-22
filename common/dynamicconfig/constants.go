@@ -2418,6 +2418,15 @@ archivalQueueProcessor`,
 		`MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
 state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.`,
 	)
+	MaximumEventBatchSizeInBytes = NewGlobalIntSetting(
+		"history.maximumEventBatchSizeInBytes",
+		0,
+		`This is EXPERIMENTAL feature that is under development. Things can break if you use it.
+MaximumEventBatchSizeInBytes is the size threshold (in bytes) at which the EventStore rolls the
+current in-memory batch and starts a new one. A single oversized event may cause a batch to
+exceed this size. A value of 0 disables the check. This value should stay below
+system.transactionSizeLimit, since each batch is persisted within a single transaction.`,
+	)
 	MaximumSignalsPerExecution = NewNamespaceIntSetting(
 		"history.maximumSignalsPerExecution",
 		10000,

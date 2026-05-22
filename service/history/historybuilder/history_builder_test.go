@@ -2,6 +2,7 @@ package historybuilder
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +23,12 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -152,6 +155,7 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 }
 
@@ -2139,6 +2143,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{startEvent}
 	s.historyBuilder.memEventsBatches = nil
@@ -2186,6 +2191,7 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	historyBuilder.dbBufferBatch = nil
 	historyBuilder.memEventsBatches = nil
@@ -2676,4 +2682,121 @@ func (s *historyBuilderSuite) taskIDGenerator(number int) ([]int64, error) {
 		nextTaskID++
 	}
 	return result, nil
+}
+
+// newBuilderWithMaxBatchBytes constructs a fresh HistoryBuilder using the
+// suite's task/time fixtures with MaximumEventBatchSizeInBytes overridden.
+func (s *historyBuilderSuite) newBuilderWithMaxBatchBytes(limit int) *HistoryBuilder {
+	return New(
+		s.mockTimeSource,
+		s.taskIDGenerator,
+		s.version,
+		s.nextEventID,
+		nil,
+		metrics.NoopMetricsHandler,
+		dynamicconfig.GetIntPropertyFn(limit),
+	)
+}
+
+func makeMarkerEvent(markerNameSize int) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
+		Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{
+			MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
+				MarkerName: strings.Repeat("x", markerNameSize),
+			},
+		},
+	}
+}
+
+func makeBufferedEvent(signalNameSize int) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+				SignalName: strings.Repeat("s", signalNameSize),
+			},
+		},
+	}
+}
+
+func (s *historyBuilderSuite) TestEventStore_NoRolloverWhenDisabled() {
+	b := s.newBuilderWithMaxBatchBytes(0)
+
+	for range 5 {
+		_, _ = b.add(makeMarkerEvent(1024))
+	}
+
+	s.Empty(b.memEventsBatches, "no batch should be sealed while feature disabled")
+	s.Len(b.memLatestBatch, 5)
+	s.Equal(0, b.memLatestBatchSize, "size accounting should be skipped when disabled")
+}
+
+func (s *historyBuilderSuite) TestEventStore_RolloverOnSizeThreshold() {
+	eventSize := proto.Size(makeMarkerEvent(500))
+	// Sized such that two events fit and the third forces a rollover.
+	limit := 2*eventSize + eventSize/2
+	b := s.newBuilderWithMaxBatchBytes(limit)
+
+	var batchIDs []int64
+	for range 5 {
+		_, batchID := b.add(makeMarkerEvent(500))
+		batchIDs = append(batchIDs, batchID)
+	}
+
+	s.Len(b.memEventsBatches, 2)
+	s.Len(b.memEventsBatches[0], 2)
+	s.Len(b.memEventsBatches[1], 2)
+	s.Len(b.memLatestBatch, 1)
+
+	s.Equal(batchIDs[0], batchIDs[1])
+	s.Equal(batchIDs[2], batchIDs[3])
+	s.NotEqual(batchIDs[1], batchIDs[2])
+	s.Equal(b.memEventsBatches[0][0].EventId, batchIDs[0])
+	s.Equal(b.memEventsBatches[1][0].EventId, batchIDs[2])
+	s.Equal(b.memLatestBatch[0].EventId, batchIDs[4])
+}
+
+// A single event larger than the configured threshold must still be appended
+func (s *historyBuilderSuite) TestEventStore_SingleOversizedEventAppended() {
+	b := s.newBuilderWithMaxBatchBytes(10)
+
+	_, batchID := b.add(makeMarkerEvent(1024))
+	s.Empty(b.memEventsBatches)
+	s.Len(b.memLatestBatch, 1)
+	s.Equal(b.memLatestBatch[0].EventId, batchID)
+
+	// Adding a second oversized event triggers a rollover so each lives alone.
+	_, batchID2 := b.add(makeMarkerEvent(1024))
+	s.Len(b.memEventsBatches, 1)
+	s.Len(b.memEventsBatches[0], 1)
+	s.Len(b.memLatestBatch, 1)
+	s.NotEqual(batchID, batchID2)
+}
+
+func (s *historyBuilderSuite) TestEventStore_FlushBufferRolloverProducesMultipleBatches() {
+	eventSize := proto.Size(makeBufferedEvent(500))
+	limit := 2*eventSize + eventSize/2
+	b := s.newBuilderWithMaxBatchBytes(limit)
+
+	// Buffered event type: WorkflowExecutionSignaled lands in memBufferBatch.
+	for range 5 {
+		b.memBufferBatch = append(b.memBufferBatch, makeBufferedEvent(500))
+	}
+
+	_, _ = b.FlushBufferToCurrentBatch()
+
+	s.Len(b.memEventsBatches, 2)
+	s.Len(b.memEventsBatches[0], 2)
+	s.Len(b.memEventsBatches[1], 2)
+	s.Len(b.memLatestBatch, 1)
+	s.Empty(b.memBufferBatch)
+
+	all := append([]*historypb.HistoryEvent{}, b.memEventsBatches[0]...)
+	all = append(all, b.memEventsBatches[1]...)
+	all = append(all, b.memLatestBatch...)
+	for i, ev := range all {
+		s.Equal(s.nextEventID+int64(i), ev.EventId)
+		s.NotEqual(common.BufferedEventID, ev.EventId)
+	}
 }
