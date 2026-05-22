@@ -4995,7 +4995,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
-	searchAttrAny, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	searchAttrAny, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	var searchAttr []string
 	if searchAttrAny != nil {
 		searchAttr = searchAttrAny.([]string)

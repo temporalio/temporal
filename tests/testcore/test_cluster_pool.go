@@ -170,9 +170,9 @@ func UseSuiteScopedCluster(t *testing.T) {
 	})
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if dedicated || len(dynamicConfig) > 0 {
-		return p.getDedicated(t, dynamicConfig)
+func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
+		return p.getDedicated(t, dynamicConfig, clusterOpts)
 	}
 	if cluster := p.getSuiteScoped(t); cluster != nil {
 		return cluster
@@ -182,7 +182,7 @@ func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynami
 
 func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, true)
+		return p.createCluster(t, nil, true, nil)
 	})
 }
 
@@ -195,17 +195,17 @@ func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 	suiteCluster.once.Do(func() {
-		suiteCluster.cluster = p.createCluster(t, nil, true)
+		suiteCluster.cluster = p.createCluster(t, nil, true, nil)
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
 }
 
-func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if len(dynamicConfig) > 0 {
-		// Custom dynamic config requires a fresh cluster (can't reuse).
+func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
+		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.acquireSlot(t)
-		cluster := p.createCluster(t, dynamicConfig, false)
+		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
@@ -217,23 +217,25 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 		return cluster
 	}
 
-	// If no custom dynamic config is provided, reuse an existing cluster.
+	// If no custom config is provided, reuse an existing cluster.
 	return p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, false)
+		return p.createCluster(t, nil, false, nil)
 	})
 }
 
-func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool) *FunctionalTestBase {
+func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	var opts []TestClusterOption
+	// Keep the worker service off unless explicitly enabled via WithWorkerService.
+	opts := []TestClusterOption{withWorkerService(false)}
 	if shared {
 		opts = append(opts, WithSharedCluster())
 	}
 	if len(dynamicConfig) > 0 {
 		opts = append(opts, WithDynamicConfigOverrides(dynamicConfig))
 	}
+	opts = append(opts, clusterOpts...)
 
 	tbase.setupCluster(opts...)
 

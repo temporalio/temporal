@@ -115,6 +115,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		attr.GetTimeSkippingConfig(),
+		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -163,6 +164,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		timeSkippingConfig,
+		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -217,6 +219,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
+		"",
 		event.Links,
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
@@ -361,6 +364,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetInput(),
 		attr1.GetIdentity(),
 		attr1.GetHeader(),
+		"",
 		event1.Links,
 	).Return(event1, nil)
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -408,6 +412,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
+		"",
 		event.Links,
 	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
@@ -507,6 +512,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
+		"",
 		event.Links,
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
@@ -560,6 +566,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflow
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
+		"",
 		event.Links,
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()

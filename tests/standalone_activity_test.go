@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -272,7 +271,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 
 		t.Run("OnConflictOptions", func(t *testing.T) {
 			env.OverrideDynamicConfig(
-				callbacks.AllowedAddresses,
+				callback.AllowedAddresses,
 				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 			)
 
@@ -5840,7 +5839,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	defer cancel()
 
 	env.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
+		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 

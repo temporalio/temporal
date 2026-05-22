@@ -84,6 +84,10 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
+			err = validateTimeSkippingConfig(requestedOptions.GetTimeSkippingConfig(), mutableState)
+			if err != nil {
+				return nil, err
+			}
 
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
@@ -124,6 +128,28 @@ func Invoke(
 	return ret, nil
 }
 
+// validateTimeSkippingConfig rejects an update whose MaxSkippedDuration is
+// below what the workflow has already skipped — the new bound would be
+// retroactively violated. Validated against current MS state, before merge.
+func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.MutableState) error {
+	if !cfg.GetEnabled() {
+		return nil
+	}
+	bound, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
+	if !ok {
+		return nil
+	}
+	maxSkipped := bound.MaxSkippedDuration.AsDuration()
+	accumulated := ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	if maxSkipped <= accumulated {
+		return serviceerror.NewInvalidArgumentf(
+			"max skipped duration must be greater than skipped duration: %v <= %v",
+			maxSkipped, accumulated,
+		)
+	}
+	return nil
+}
+
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
 // and applies the changes to the mutable state. Returns the merged options and a boolean indicating if there were any changes.
 func MergeAndApply(
@@ -152,7 +178,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig())
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}

@@ -755,6 +755,55 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}
 }
 
+// TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression guards against
+// reintroducing a bug where the per-deployment loop in CalculateTaskQueueVersioningInfo
+// would pick an unversioned-but-newer RoutingConfig over a versioned-and-member
+// RoutingConfig depending on Go map iteration order. Go re-randomizes map iteration
+// per range, so calling the function many times on the same input makes a
+// ~50%-per-call probabilistic bug practically deterministic.
+func TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression(t *testing.T) {
+	t1 := timestamp.TimePtr(time.Now().Add(-time.Hour))
+	t2 := timestamp.TimePtr(time.Now())
+
+	data := &persistencespb.DeploymentData{
+		DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+			"foo": {
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					CurrentVersionChangedTime:           t1,
+					RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					RampingVersionPercentage:            30,
+					RampingVersionPercentageChangedTime: t1,
+				},
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+					v1.GetBuildId(): {},
+				},
+			},
+			"bar": {
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentDeploymentVersion:            nil,
+					CurrentVersionChangedTime:           t2,
+					RampingDeploymentVersion:            nil,
+					RampingVersionPercentage:            20,
+					RampingVersionPercentageChangedTime: t2,
+				},
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
+			},
+		},
+	}
+
+	const N = 100
+	for i := range N {
+		current, _, _, ramping, _, _, _, _ := CalculateTaskQueueVersioningInfo(data)
+		if !current.Equal(v1) {
+			t.Fatalf("iteration %d: got current = %v, want %v (map iteration order regression)", i, current, v1)
+		}
+		if !ramping.Equal(v1) {
+			t.Fatalf("iteration %d: got ramping = %v, want %v (map iteration order regression)", i, ramping, v1)
+		}
+	}
+}
+
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
 		name              string

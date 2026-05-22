@@ -873,6 +873,7 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetRequestId(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
@@ -971,6 +972,7 @@ func reapplyEvents(
 				attr.GetIdentity(),
 				attr.GetPriority(),
 				attr.GetTimeSkippingConfig(),
+				attr.GetWorkflowUpdateOptions(),
 			); err != nil {
 				return reappliedEvents, err
 			}
