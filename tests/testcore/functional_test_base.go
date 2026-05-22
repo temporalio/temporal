@@ -301,7 +301,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
-		// The writer routes log lines to the currently-registered test (see AcquireForTest)
+		// The writer routes log lines to the currently-registered test (see RegisterTest)
 		// and falls back to stderr when there is no single active test.
 		// WithoutCloseOnCleanup keeps the logger alive across tests for shared clusters.
 		tl := testlogger.NewTestLogger(s.T(),
@@ -752,6 +752,11 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 
 // RegisterTest registers t as currently using this cluster and fails t at
 // cleanup time if the cluster's logger has flipped Failed() during t's window.
+// RegisterTest records t as currently using this cluster. At t's Cleanup, it
+// fails t if the cluster's logger has flipped Failed() during t's window, and
+// tears the cluster down if t was the last active user of a poisoned cluster.
+// The pool's slot reference is replaced when poison is observed, so no new tests
+// will land on a poisoned cluster — it lives only as long as it has in-flight users.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	s.mu.Lock()
 	s.activeTests = append(s.activeTests, t)
@@ -759,7 +764,6 @@ func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 
 	t.Cleanup(func() {
 		s.mu.Lock()
-		defer s.mu.Unlock()
 		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
 			if f := tl.Failed(); f != nil {
 				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
@@ -769,6 +773,14 @@ func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 			if x == t {
 				s.activeTests = append(s.activeTests[:i], s.activeTests[i+1:]...)
 				break
+			}
+		}
+		shouldTearDown := len(s.activeTests) == 0 && s.Poisoned() && s.testCluster != nil
+		s.mu.Unlock()
+
+		if shouldTearDown {
+			if err := s.testCluster.TearDownCluster(); err != nil {
+				t.Logf("Failed to tear down poisoned cluster: %v", err)
 			}
 		}
 	})

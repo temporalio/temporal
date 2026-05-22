@@ -119,13 +119,13 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 
 	cluster := p.clusters[idx]
 
-	// Recreate the cluster if a previous test poisoned it.
+	// Swap the slot reference if a previous test poisoned this cluster. The
+	// poisoned cluster lives on (referenced by its in-flight tests' cleanups)
+	// until its last user releases it, at which point that test's RegisterTest
+	// cleanup tears it down.
 	if cluster.Poisoned() {
 		p.clusterMu[idx].Lock()
 		if p.clusters[idx].Poisoned() {
-			if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
-				t.Logf("Failed to tear down poisoned cluster %d: %v", idx, err)
-			}
 			p.clusters[idx] = createCluster()
 			if p.maxUsage > 0 {
 				p.usageCounts[idx].Store(1)

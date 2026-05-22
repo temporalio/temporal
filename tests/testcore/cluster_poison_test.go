@@ -34,7 +34,7 @@ func (m *mockOwningT) Fatalf(format string, args ...any) {
 	m.failure.Store(&s)
 }
 
-// mockSubtestT stands in for an in-flight subtest passed to AcquireForTest.
+// mockSubtestT stands in for an in-flight subtest passed to RegisterTest.
 // It captures Cleanup callbacks into a slice (instead of registering with the
 // testing framework) and captures Errorf so the test can assert on it.
 type mockSubtestT struct {
