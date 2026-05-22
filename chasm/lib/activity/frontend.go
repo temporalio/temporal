@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -409,6 +410,14 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := commonlinks.Validate(
+		req.GetLinks(),
+		h.config.MaxLinksPerRequest(req.GetNamespace()),
+		h.config.LinkMaxSize(req.GetNamespace()),
+	); err != nil {
+		return nil, err
 	}
 
 	return req, nil

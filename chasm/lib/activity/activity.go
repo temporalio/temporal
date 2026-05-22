@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -165,6 +166,7 @@ func NewStandaloneActivity(
 			Input:        request.Input,
 			Header:       request.Header,
 			UserMetadata: request.UserMetadata,
+			Links:        request.Links,
 		}),
 		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
@@ -257,6 +259,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 					HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				},
 			},
+			Links: requestData.GetLinks(),
 		},
 	}, nil
 }
@@ -341,6 +344,48 @@ func (a *Activity) addCompletionCallbacks(
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+// attachLinks appends the given links to the activity's request data, skipping any that are
+// proto-equal to a link already attached or to an earlier entry in the same batch. Returns an
+// error if the activity is closed or if attaching the deduplicated set would exceed maxLinks.
+func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, maxLinks int) error {
+	if len(links) == 0 {
+		return nil
+	}
+	if a.LifecycleState(ctx).IsClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach links to a closed activity")
+	}
+	requestData := a.RequestData.Get(ctx)
+	existing := requestData.GetLinks()
+	toAdd := make([]*commonpb.Link, 0, len(links))
+	for _, l := range links {
+		if containsLink(existing, l) || containsLink(toAdd, l) {
+			continue
+		}
+		toAdd = append(toAdd, l)
+	}
+	if len(toAdd) == 0 {
+		return nil
+	}
+	if len(existing)+len(toAdd) > maxLinks {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d links to an activity (%d links already attached)",
+			maxLinks,
+			len(existing),
+		)
+	}
+	requestData.Links = append(existing, toAdd...)
+	return nil
+}
+
+func containsLink(haystack []*commonpb.Link, needle *commonpb.Link) bool {
+	for _, l := range haystack {
+		if proto.Equal(l, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
@@ -824,6 +869,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
+		Links:                   requestData.GetLinks(),
 		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),

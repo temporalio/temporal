@@ -33,6 +33,12 @@ var (
 		false,
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
+
+	MaxLinksPerExecution = dynamicconfig.NewNamespaceIntSetting(
+		"activity.maxLinksPerExecution",
+		2000,
+		`MaxLinksPerExecution is the maximum number of links that can be attached to a standalone activity execution across all start/attach calls.`,
+	)
 )
 
 type Config struct {
@@ -40,10 +46,13 @@ type Config struct {
 	BlobSizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	Enabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LinkMaxSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinksPerExecution        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinksPerRequest          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	StartDelayEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -56,9 +65,12 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:  dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		Enabled:                     Enabled.Get(dc),
+		LinkMaxSize:                 dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		LongPollBuffer:              LongPollBuffer.Get(dc),
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxLinksPerExecution:        MaxLinksPerExecution.Get(dc),
+		MaxLinksPerRequest:          dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 		StartDelayEnabled:           StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),

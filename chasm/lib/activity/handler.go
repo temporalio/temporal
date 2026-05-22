@@ -63,6 +63,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+	maxLinks := h.config.MaxLinksPerExecution(frontendReq.GetNamespace())
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -103,17 +104,31 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	// Attach callbacks to an existing activity when on_conflict_options.attach_completion_callbacks is set.
+	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
 	cbs := frontendReq.GetCompletionCallbacks()
-	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
+				if attachCallbacks {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, maxLinks); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
 			},
 			nil,
 		)

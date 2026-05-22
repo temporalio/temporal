@@ -182,6 +182,9 @@ message ActivityRequestData {
 
   // Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
   temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+
+  // Links associated with the activity at start time.
+  repeated temporal.api.common.v1.Link links = 4;
 }
 
 message ActivityOutcome {

@@ -216,30 +216,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	var links []*commonpb.Link
-	for _, nexusLink := range r.Links {
-		switch nexusLink.Type {
-		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-			if err != nil {
-				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-				// so ignoring the error for now; we will revisit how to handle these errors later.
-				h.Logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-					tag.Error(err),
-				)
-				continue
-			}
-			links = append(links, &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: link,
-				},
-			})
-		default:
-			// If the link data type is unsupported, just ignore it for now.
-			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
-		}
-	}
+	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, h.Logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive

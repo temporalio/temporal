@@ -25,7 +25,9 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 		config: &Config{
 			BlobSizeLimitError:         defaultBlobSizeLimitError,
 			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			LinkMaxSize:                defaultLinkMaxSize,
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxLinksPerRequest:         defaultMaxLinksPerRequest,
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
 		},
 		logger: log.NewNoopLogger(),
