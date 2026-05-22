@@ -138,6 +138,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
 	var callback *commonpb.Callback
+	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
 	// outside of this function (outside of the MS lock).
@@ -166,6 +167,12 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			}
 			callback = common.CloneProto(cb)
 
+			// Capture the framework clock for any BackoffTime stamps computed
+			// outside this read closure - in tests the wall clock and the
+			// injected TimeSource diverge, and BackoffTime must match the
+			// clock used by LastProcessedTime/eligibility checks.
+			now = ctx.Now(i)
+
 			return struct{}{}, nil
 		},
 		nil,
@@ -186,7 +193,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback)
+	sres, startResults := h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback, now)
 	result = result.Append(sres)
 
 	// Record action results on the Invoker (internal state), as well as the
@@ -306,6 +313,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
+	now time.Time,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := metricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
@@ -350,8 +358,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 				}
 
 				if isRetryableError(err) {
-					// Apply backoff to start and retry.
-					h.applyBackoff(start, err)
+					h.applyBackoff(start, err, now)
 					result.RetryableStarts = append(result.RetryableStarts, start)
 				} else {
 					// Drop the start from the buffer.
@@ -447,23 +454,23 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	// Update result metrics.
 	result.overlapSkipped = action.OverlapSkipped
 
-	// Add starting workflows to result, trim others.
+	// Add starting workflows to result, trim others. Catchup-window expiry is
+	// checked before useScheduledAction so that a start past its catchup
+	// window doesn't consume a LimitedActions slot.
 	for _, start := range readyStarts {
-		// Ensure we can take more actions. Manual actions are always allowed.
-		if !start.Manual && !scheduler.useScheduledAction(true) {
-			// Drop buffered automated actions while paused.
-			result.discardStarts = append(result.discardStarts, start)
-			continue
-		}
-
 		if ctx.Now(invoker).After(h.startWorkflowDeadline(ctx, scheduler, start)) {
-			// Drop expired starts.
 			result.missedCatchupWindow++
 			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}
 
-		// Append for immediate execution.
+		// Ensure we can take more actions. Manual actions are always allowed.
+		if !start.Manual && !scheduler.useScheduledAction(true) {
+			// Drop buffered automated actions while paused or out of actions.
+			result.discardStarts = append(result.discardStarts, start)
+			continue
+		}
+
 		keepStarts[start.GetRequestId()] = struct{}{}
 		result.startWorkflows = append(result.startWorkflows, start)
 	}
@@ -484,22 +491,22 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 }
 
 // applyBackoff updates start's BackoffTime based on err and the retry policy.
-func (h *InvokerExecuteTaskHandler) applyBackoff(start *schedulespb.BufferedStart, err error) {
+// `now` is the framework clock captured at task start - using time.Now would
+// diverge from the LastProcessedTime/eligibility comparison in tests.
+func (h *InvokerExecuteTaskHandler) applyBackoff(start *schedulespb.BufferedStart, err error, now time.Time) {
 	if err == nil {
 		return
 	}
 
 	var delay time.Duration
 	if rateLimitDelay, ok := isRateLimitedError(err); ok {
-		// If we have the rate limiter's delay, use that.
 		delay = rateLimitDelay
 	} else {
-		// Otherwise, use the backoff policy. Elapsed time is left at 0 because we bound
-		// on number of attempts.
+		// Elapsed time is left at 0 because we bound on number of attempts.
 		delay = h.config.RetryPolicy().ComputeNextDelay(0, int(start.Attempt), nil)
 	}
 
-	start.BackoffTime = timestamppb.New(time.Now().Add(delay))
+	start.BackoffTime = timestamppb.New(now.Add(delay))
 }
 
 // startWorkflowDeadline returns the latest time at which a buffered workflow

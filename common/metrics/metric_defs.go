@@ -1437,6 +1437,26 @@ var (
 		"schedule_generate_latency",
 		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
 	)
+	ScheduleGeneratorTicks = NewCounterDef(
+		"schedule_generator_ticks",
+		WithDescription("The number of times a scheduler's generator task fired. Compare with schedule_generator_paused_ticks to attribute task throughput to paused vs. active schedules."),
+	)
+	ScheduleGeneratorPausedTicks = NewCounterDef(
+		"schedule_generator_paused_ticks",
+		WithDescription("The number of times a scheduler's generator task fired while the schedule was paused (HWM advanced, actions dropped)"),
+	)
+	SchedulerGeneratorLoopCompleted = NewCounterDef(
+		"scheduler_generator_loop_completed",
+		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleIdleTaskFired = NewCounterDef(
+		"schedule_idle_task_fired",
+		WithDescription("The number of times a schedule's idle task fired and closed the component. Compare with schedule_idle_task_invalidated to compute the natural-close rate."),
+	)
+	ScheduleIdleTaskInvalidated = NewCounterDef(
+		"schedule_idle_task_invalidated",
+		WithDescription("The number of times a schedule's idle task was dropped by Validate without closing the component. Tagged with reason (held_open, expiration_shift, closed). Expect a low steady baseline of expiration_shift for actively-firing schedules; sustained spikes or other reasons warrant investigation."),
+	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),

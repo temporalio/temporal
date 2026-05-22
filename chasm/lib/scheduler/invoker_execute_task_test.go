@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -400,6 +401,148 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 		ExpectedBufferedStarts:   maxStarts * 2, // all kept: started + pending
 		ExpectedRunningWorkflows: maxStarts,     // only started ones
 		ExpectedActionCount:      int64(maxStarts),
+	})
+}
+
+// A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
+// Regression for the strict-Before check, which excluded equal-time entries
+// and stranded retries that landed precisely at the HWM boundary.
+func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+
+	now := env.TimeSource.Now()
+	invoker.LastProcessedTime = timestamppb.New(now)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId:   "boundary",
+		Attempt:     2,
+		BackoffTime: timestamppb.New(now),
+	}}
+
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
+}
+
+// Validate must skip Execute when no work is ready. Without this gate, an
+// already-consumed task would re-enter Execute and the no-op would still
+// emit an Execute task (oscillation).
+func TestExecuteTask_Validate(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	now := env.TimeSource.Now()
+
+	cases := []struct {
+		name          string
+		setup         func()
+		expectedValid bool
+	}{
+		{
+			name:          "empty invoker is invalid",
+			setup:         func() {},
+			expectedValid: false,
+		},
+		{
+			name: "eligible start is valid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "ready",
+					Attempt:   1,
+				}}
+			},
+			expectedValid: true,
+		},
+		{
+			name: "running start (RunId set) is invalid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "running",
+					Attempt:   1,
+					RunId:     "run-1",
+				}}
+			},
+			expectedValid: false,
+		},
+		{
+			name: "backing-off start is invalid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId:   "backoff",
+					Attempt:     2,
+					BackoffTime: timestamppb.New(now.Add(time.Minute)),
+				}}
+			},
+			expectedValid: false,
+		},
+		{
+			name: "pending cancel is valid",
+			setup: func() {
+				invoker.CancelWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf", RunId: "r"}}
+			},
+			expectedValid: true,
+		},
+		{
+			name: "pending terminate is valid",
+			setup: func() {
+				invoker.TerminateWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf", RunId: "r"}}
+			},
+			expectedValid: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			invoker.BufferedStarts = nil
+			invoker.CancelWorkflows = nil
+			invoker.TerminateWorkflows = nil
+			invoker.LastProcessedTime = nil
+			c.setup()
+			valid, err := env.handler.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+			require.NoError(t, err)
+			require.Equal(t, c.expectedValid, valid)
+		})
+	}
+}
+
+// BackoffTime must be derived from the framework clock (chasm.Context.Now),
+// not wall-clock time.Now. Test by advancing TimeSource so it diverges from
+// the wall clock, then asserting BackoffTime falls within the framework
+// clock's frame.
+func TestExecuteTask_BackoffUsesFrameworkClock(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
+	env.TimeSource.Update(frameworkNow)
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, serviceerror.NewDeadlineExceeded("transient"))
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		}},
+		ExpectedBufferedStarts: 1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, env *invokerExecuteTestEnv) {
+			backoff := invoker.BufferedStarts[0].BackoffTime.AsTime()
+			require.True(t, backoff.After(frameworkNow),
+				"BackoffTime %v must be after framework clock %v", backoff, frameworkNow)
+			// time.Now() + any plausible delay is far before frameworkNow (TimeSource
+			// was advanced by 24h). If BackoffTime were derived from wall clock,
+			// this assertion would fail.
+			require.True(t, backoff.After(time.Now().Add(time.Hour)),
+				"BackoffTime %v looks derived from wall clock, not framework clock", backoff)
+		},
 	})
 }
 

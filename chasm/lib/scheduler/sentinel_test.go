@@ -2,7 +2,6 @@ package scheduler_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
@@ -18,8 +17,7 @@ func TestNewSentinel(t *testing.T) {
 	require.NotNil(t, sentinel.Info.GetCreateTime())
 	require.False(t, sentinel.Info.CreateTime.AsTime().IsZero())
 
-	// Sentinels should have no Visibility component, which prevents them from
-	// appearing in ListSchedules results.
+	// Sentinels have no Visibility component, which keeps them out of ListSchedules.
 	_, ok := sentinel.Visibility.TryGet(ctx)
 	require.False(t, ok)
 }
@@ -27,13 +25,8 @@ func TestNewSentinel(t *testing.T) {
 func TestSentinelIdleTask_Validate_Valid(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-		Config: defaultConfig(),
-	})
-
-	task := &schedulerpb.SchedulerIdleTask{
-		IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime),
-	}
+	executor := newIdleHandler(scheduler.SentinelIdleTime)
+	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime)}
 	taskAttrs := chasm.TaskAttributes{
 		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
 	}
@@ -47,13 +40,8 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 	sentinel.Closed = true
 
-	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-		Config: defaultConfig(),
-	})
-
-	task := &schedulerpb.SchedulerIdleTask{
-		IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime),
-	}
+	executor := newIdleHandler(scheduler.SentinelIdleTime)
+	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime)}
 	taskAttrs := chasm.TaskAttributes{
 		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
 	}
@@ -63,18 +51,15 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 	require.False(t, isValid)
 }
 
-func TestSentinelIdleTask_Validate_MismatchedScheduledTime(t *testing.T) {
+// Task armed before the natural sentinel deadline must drop: idleDeadline
+// (CreateTime + SentinelIdleTime) is after ScheduledTime (CreateTime).
+func TestSentinelIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-		Config: defaultConfig(),
-	})
-
-	task := &schedulerpb.SchedulerIdleTask{
-		IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime),
-	}
+	executor := newIdleHandler(scheduler.SentinelIdleTime)
+	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime)}
 	taskAttrs := chasm.TaskAttributes{
-		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(99 * time.Hour),
+		ScheduledTime: sentinel.Info.CreateTime.AsTime(),
 	}
 
 	isValid, err := executor.Validate(ctx, sentinel, taskAttrs, task)
@@ -85,10 +70,7 @@ func TestSentinelIdleTask_Validate_MismatchedScheduledTime(t *testing.T) {
 func TestSentinelIdleTask_Execute(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-		Config: defaultConfig(),
-	})
-
+	executor := newIdleHandler(scheduler.SentinelIdleTime)
 	require.False(t, sentinel.Closed)
 	err := executor.Execute(ctx, sentinel, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
 	require.NoError(t, err)

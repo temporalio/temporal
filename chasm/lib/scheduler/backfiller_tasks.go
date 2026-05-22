@@ -110,6 +110,10 @@ func (b *BackfillerTaskHandler) Execute(
 		logger.Debug("backfill complete, deleting Backfiller",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
+
+		// Revive the Generator so it can re-evaluate idle/close eligibility now
+		// that this backfiller is gone.
+		scheduler.Generator.Get(ctx).Generate(ctx)
 		return nil
 	}
 

@@ -84,6 +84,8 @@ func (g *GeneratorTaskHandler) Execute(
 		t2 = t1
 	}
 
+	// Generate BufferedStarts and determine the next HWM. Actions are skipped when
+	// they can't be taken (paused, or limited and without any remaining actions).
 	result, err := g.SpecProcessor.ProcessTimeRange(
 		scheduler,
 		t1, t2,
@@ -107,6 +109,14 @@ func (g *GeneratorTaskHandler) Execute(
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
 
+	// Track tick volume so operators can attribute CHASM pure-task throughput
+	// to paused schedules vs. real work. Each fire while paused advances the
+	// HWM without buffering anything.
+	metricsHandler.Counter(metrics.ScheduleGeneratorTicks.Name()).Record(1)
+	if scheduler.Schedule.State.Paused {
+		metricsHandler.Counter(metrics.ScheduleGeneratorPausedTicks.Name()).Record(1)
+	}
+
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
@@ -116,12 +126,18 @@ func (g *GeneratorTaskHandler) Execute(
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
-	// Check if the schedule has gone idle.
+	// Schedule the next timer task. Three outcomes are possible:
+	// - isIdle: the schedule is done; arm the idle task to close it.
+	// - NextWakeupTime is set: arm the next generator tick.
+	// - Neither: Hold open without a task: this can happen when the schedule is paused and without
+	//   any schedule specified (e.g., manual-only), IdleTime is configured to zero, or a
+	//   backfill is pending. In each of those cases an external trigger (Patch.Unpause,
+	//   Update, or BackfillerTask's completion-time Generate call) revives us.
 	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
-		// backing mutable state explicitly open for a the idle period, during which the
+		// backing mutable state explicitly open for the idle period, during which the
 		// customer can describe/modify/restart the schedule.
 		//
 		// Once the idle timer expires, we close the component.
@@ -130,16 +146,17 @@ func (g *GeneratorTaskHandler) Execute(
 		}, &schedulerpb.SchedulerIdleTask{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
 		})
-		return nil
+	} else if !result.NextWakeupTime.IsZero() {
+		// Keep the generator task perpetually scheduled. When paused, the next
+		// fire will simply advance the HWM without appending actions (handled in
+		// ProcessTimeRange).
+		generator.scheduleTask(ctx, result.NextWakeupTime)
+	} else {
+		// Hold open without a task: this can happen when the schedule is paused and without
+		// any schedule specified (e.g., manual-only), IdleTime is configured to zero, or a
+		// backfill is pending.
+		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
-
-	// No more tasks if we're paused.
-	if scheduler.Schedule.State.Paused {
-		return nil
-	}
-
-	// Another buffering task is added if we aren't completely out of actions or paused.
-	generator.scheduleTask(ctx, result.NextWakeupTime)
 
 	return nil
 }
