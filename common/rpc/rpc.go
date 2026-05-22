@@ -13,7 +13,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -48,8 +47,7 @@ type RPCFactory struct {
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption
 	monitor               membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient      func() (*common.FrontendHTTPClient, error)
-	interNodeGrpcConnections cache.Cache
+	localFrontendClient func() (*common.FrontendHTTPClient, error)
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -88,7 +86,6 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.interNodeGrpcConnections = cache.NewSimple(nil)
 	return f
 }
 
@@ -231,9 +228,6 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // createInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
-	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
-		return c
-	}
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -244,9 +238,7 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		}
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
-	c := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
-	d.interNodeGrpcConnections.Put(hostName, c)
-	return c
+	return d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
 }
 
 func (d *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {

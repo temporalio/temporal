@@ -576,8 +576,8 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
 		if externalPayloadCount > 0 {
-			externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-			externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+			externalPayloadCountPayload := sadefs.MustEncodeValue(externalPayloadCount, enumspb.INDEXED_VALUE_TYPE_INT)
+			externalPayloadSizeBytesPayload := sadefs.MustEncodeValue(externalPayloadSizeBytes, enumspb.INDEXED_VALUE_TYPE_INT)
 			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
 			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
 		}

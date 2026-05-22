@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -127,6 +128,52 @@ func TestGetNotFound(t *testing.T) {
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()
 	assert.Equal(t, int64(1), reg.tableVersion)
+}
+
+func TestRefreshOnRead(t *testing.T) {
+	t.Parallel()
+
+	for name, read := range map[string]func(*EndpointRegistryImpl, *persistencespb.NexusEndpointEntry) (*persistencespb.NexusEndpointEntry, error){
+		"GetByName": func(reg *EndpointRegistryImpl, entry *persistencespb.NexusEndpointEntry) (*persistencespb.NexusEndpointEntry, error) {
+			return reg.GetByName(context.Background(), "ignored", entry.Endpoint.Spec.Name)
+		},
+		"GetByID": func(reg *EndpointRegistryImpl, entry *persistencespb.NexusEndpointEntry) (*persistencespb.NexusEndpointEntry, error) {
+			return reg.GetByID(context.Background(), entry.Id)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			testEntry := newEndpointEntry(t.Name())
+			mocks := newTestMocks(t)
+			mocks.config.refreshOnRead = dynamicconfig.GetBoolPropertyFn(true)
+
+			mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+				PageSize:              int32(100),
+				LastKnownTableVersion: int64(0),
+				Wait:                  false,
+			}).Return(&matchingservice.ListNexusEndpointsResponse{
+				Entries:      []*persistencespb.NexusEndpointEntry{testEntry},
+				TableVersion: int64(2),
+			}, nil)
+
+			reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+
+			// Skip StartLifecycle so the background loop does not race with the single mock
+			// expectation above. Pre-closing ready lets waitUntilInitialized fall through.
+			ready := make(chan struct{})
+			close(ready)
+			reg.dataReady.Store(&dataReady{ready: ready})
+
+			endpoint, err := read(reg, testEntry)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, testEntry, endpoint)
+
+			reg.dataLock.RLock()
+			defer reg.dataLock.RUnlock()
+			require.Equal(t, int64(2), reg.tableVersion)
+		})
+	}
 }
 
 func TestInitializationFallback(t *testing.T) {

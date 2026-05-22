@@ -27,6 +27,7 @@ var (
 	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
 	defaultDynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():         1000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
@@ -62,6 +63,7 @@ var (
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		nexusoperations.UseSystemCallbackURL.Key():                          true,

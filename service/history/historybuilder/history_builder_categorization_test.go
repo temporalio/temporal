@@ -208,7 +208,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
 		// add another event to memBufferBatch
-		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "", nil, nil)
+		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "", nil, nil, nil)
 		if len(hb.memBufferBatch) != 2 {
 			t.Errorf("expected 2 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
@@ -220,6 +220,29 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		}
 		if len(hb.memBufferBatch) != 0 {
 			t.Errorf("wrong size of memBufferBatch expected 0 got %d", len(hb.memBufferBatch))
+		}
+	})
+
+	t.Run("signal requestID should be wired into requestIDToEventID map after flush", func(t *testing.T) {
+		nextEventID := int64(12)
+		hb := newHistoryBuilderFromConfig(builderConfig{nextEventId: nextEventID})
+		// Signal events are buffered (go to memBufferBatch)
+		signalEvent := hb.AddWorkflowExecutionSignaledEvent("signal-name", nil, "identity-1", nil, nil, "signal-request-id", nil)
+		if signalEvent.EventId != common.BufferedEventID {
+			t.Fatalf("expected signal to be buffered, got event id %d", signalEvent.EventId)
+		}
+
+		_, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+
+		if signalEvent.EventId != nextEventID {
+			t.Errorf("expected signal event id %d after flush, got %d", nextEventID, signalEvent.EventId)
+		}
+		eventID, ok := requestIDToEventID["signal-request-id"]
+		if !ok {
+			t.Fatal("signal requestID not found in requestIDToEventID map after flush")
+		}
+		if eventID != nextEventID {
+			t.Errorf("expected requestIDToEventID[signal-request-id] == %d, got %d", nextEventID, eventID)
 		}
 	})
 
@@ -1473,6 +1496,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 		"identity-1",
 		nil,
 		nil,
+		"",
 		nil,
 	)
 }

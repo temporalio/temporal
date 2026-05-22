@@ -16,7 +16,7 @@ service NexusOperationService {
 
   rpc DescribeNexusOperation(DescribeNexusOperationRequest) returns (DescribeNexusOperationResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
 
   rpc RequestCancelNexusOperation(RequestCancelNexusOperationRequest) returns (RequestCancelNexusOperationResponse) {

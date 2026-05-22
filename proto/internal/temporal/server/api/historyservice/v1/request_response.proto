@@ -496,7 +496,9 @@ message SignalWorkflowExecutionRequest {
   bool child_workflow_only = 4;
 }
 
-message SignalWorkflowExecutionResponse {}
+message SignalWorkflowExecutionResponse {
+  temporal.api.common.v1.Link link = 1;
+}
 
 message SignalWithStartWorkflowExecutionRequest {
   option (routing).workflow_id = "signal_with_start_request.workflow_id";
@@ -510,6 +512,7 @@ message SignalWithStartWorkflowExecutionRequest {
 message SignalWithStartWorkflowExecutionResponse {
   string run_id = 1;
   bool started = 2;
+  temporal.api.common.v1.Link signal_link = 3;
 }
 
 message RemoveSignalMutableStateRequest {
@@ -1116,6 +1119,19 @@ message ForceDeleteWorkflowExecutionRequest {
 message ForceDeleteWorkflowExecutionResponse {
   temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }
+
+message DeleteExecutionRequest {
+  option (routing).workflow_id = "execution.workflow_id";
+
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 3;
+  string reason = 4;
+  string identity = 5;
+}
+
+message DeleteExecutionResponse {}
 
 message GetDLQTasksRequest {
   option (routing).any_host = true;

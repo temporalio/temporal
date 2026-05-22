@@ -289,26 +289,17 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 		pollerErrCh := env.nexusTaskPoller(env.Context(), s.T(), endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
-		eventuallyTick := 500 * time.Millisecond
 		header := nexus.Header{"key": "value", "temporal-nexus-failure-support": "true"}
 		if tc.timeout > 0 {
-			eventuallyTick = tc.timeout + (100 * time.Millisecond)
 			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
 		}
 
-		var result *nexusrpc.ClientStartOperationResponse[string]
-
-		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
-			result, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{
-				CallbackURL: "http://localhost/callback",
-				RequestID:   "request-id",
-				Header:      header,
-				Links:       []nexus.Link{callerNexusLink},
-			})
-			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
-		}, 10*time.Second, eventuallyTick)
+		result, err := nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{
+			CallbackURL: "http://localhost/callback",
+			RequestID:   "request-id",
+			Header:      header,
+			Links:       []nexus.Link{callerNexusLink},
+		})
 
 		tc.assertion(s, result, err, headerCapture.lastHeaders)
 		s.NoError(<-pollerErrCh)
@@ -562,19 +553,12 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		handle, err := client.NewOperationHandle("operation", "token")
 		s.NoError(err)
 
-		eventuallyTick := 500 * time.Millisecond
 		header := nexus.Header{"key": "value"}
 		if tc.timeout > 0 {
-			eventuallyTick = tc.timeout + (100 * time.Millisecond)
 			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
 		}
 
-		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
-			err = handle.Cancel(env.Context(), nexus.CancelOperationOptions{Header: header})
-			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
-		}, 10*time.Second, eventuallyTick)
+		err = handle.Cancel(env.Context(), nexus.CancelOperationOptions{Header: header})
 
 		tc.assertion(s, err, headerCapture.lastHeaders)
 		s.NoError(<-pollerErrCh)
@@ -708,11 +692,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
-		_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
-		var handlerErr *nexus.HandlerError
-		return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
-	}, 10*time.Second, 500*time.Millisecond)
+	_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)
 
