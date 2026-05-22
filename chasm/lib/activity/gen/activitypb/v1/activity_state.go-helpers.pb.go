@@ -316,6 +316,7 @@ var (
 		"TimedOut":        8,
 		"Paused":          9,
 		"PauseRequested":  10,
+		"ResetRequested":  11,
 	}
 )
 

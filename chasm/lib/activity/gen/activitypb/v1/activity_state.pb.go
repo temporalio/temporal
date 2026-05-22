@@ -71,6 +71,12 @@ const (
 	// heartbeat response. When the worker yields due to failure with retries remaining, or due to
 	// timeout with retries remaining, the activity will transition to PAUSED.
 	ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ActivityExecutionStatus = 10
+	// An operator reset was issued while the activity was STARTED. The worker is still executing
+	// under its existing task token; status remains in the worker-token-valid set so heartbeat and
+	// completion calls continue to authenticate. The worker is notified via ActivityReset=true on
+	// its next heartbeat response. When the worker yields (failure or timeout with retries
+	// remaining), the activity transitions back to SCHEDULED at attempt 1.
+	ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED ActivityExecutionStatus = 11
 )
 
 // Enum value maps for ActivityExecutionStatus.
@@ -87,6 +93,7 @@ var (
 		8:  "ACTIVITY_EXECUTION_STATUS_TIMED_OUT",
 		9:  "ACTIVITY_EXECUTION_STATUS_PAUSED",
 		10: "ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED",
+		11: "ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED",
 	}
 	ActivityExecutionStatus_value = map[string]int32{
 		"ACTIVITY_EXECUTION_STATUS_UNSPECIFIED":      0,
@@ -100,6 +107,7 @@ var (
 		"ACTIVITY_EXECUTION_STATUS_TIMED_OUT":        8,
 		"ACTIVITY_EXECUTION_STATUS_PAUSED":           9,
 		"ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED":  10,
+		"ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED":  11,
 	}
 )
 
@@ -135,6 +143,8 @@ func (x ActivityExecutionStatus) String() string {
 		return "Paused"
 	case ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return "PauseRequested"
+	case ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		return "ResetRequested"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -214,11 +224,10 @@ type ActivityState struct {
 	ScheduleToCloseStamp int32 `protobuf:"varint,15,opt,name=schedule_to_close_stamp,json=scheduleToCloseStamp,proto3" json:"schedule_to_close_stamp,omitempty"`
 	// Set if the activity was paused.
 	PauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=pause_state,json=pauseState,proto3" json:"pause_state,omitempty"`
-	// Set when reset was requested while the activity was running.
-	// On the next retry, TransitionRescheduled will reset the attempt count to 1 before incrementing.
-	ActivityReset bool `protobuf:"varint,17,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
-	// Set alongside activity_reset when heartbeat details should be cleared on the next retry.
-	ResetHeartbeats bool `protobuf:"varint,18,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
+	// Set when reset was requested while the activity was STARTED and the operator asked for
+	// heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
+	// activity transitions out of RESET_REQUESTED.
+	ResetHeartbeats bool `protobuf:"varint,17,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -363,13 +372,6 @@ func (x *ActivityState) GetPauseState() *ActivityPauseState {
 		return x.PauseState
 	}
 	return nil
-}
-
-func (x *ActivityState) GetActivityReset() bool {
-	if x != nil {
-		return x.ActivityReset
-	}
-	return false
 }
 
 func (x *ActivityState) GetResetHeartbeats() bool {
@@ -1046,7 +1048,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xd8\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xb1\n" +
 	"\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
@@ -1068,9 +1070,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x10original_options\x18\x0e \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0foriginalOptions\x125\n" +
 	"\x17schedule_to_close_stamp\x18\x0f \x01(\x05R\x14scheduleToCloseStamp\x12`\n" +
 	"\vpause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\n" +
-	"pauseState\x12%\n" +
-	"\x0eactivity_reset\x18\x11 \x01(\bR\ractivityReset\x12)\n" +
-	"\x10reset_heartbeats\x18\x12 \x01(\bR\x0fresetHeartbeats\"\xa7\x01\n" +
+	"pauseState\x12)\n" +
+	"\x10reset_heartbeats\x18\x11 \x01(\bR\x0fresetHeartbeats\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
@@ -1118,7 +1119,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06output\x18\x01 \x01(\v2 .temporal.api.common.v1.PayloadsR\x06output\x1aD\n" +
 	"\x06Failed\x12:\n" +
 	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureB\t\n" +
-	"\avariant*\xe3\x03\n" +
+	"\avariant*\x92\x04\n" +
 	"\x17ActivityExecutionStatus\x12)\n" +
 	"%ACTIVITY_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12'\n" +
 	"#ACTIVITY_EXECUTION_STATUS_SCHEDULED\x10\x01\x12%\n" +
@@ -1131,7 +1132,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"#ACTIVITY_EXECUTION_STATUS_TIMED_OUT\x10\b\x12$\n" +
 	" ACTIVITY_EXECUTION_STATUS_PAUSED\x10\t\x12-\n" +
 	")ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED\x10\n" +
-	"BDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x12-\n" +
+	")ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED\x10\vBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce sync.Once

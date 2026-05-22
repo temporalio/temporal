@@ -52,6 +52,12 @@ enum ActivityExecutionStatus {
   // heartbeat response. When the worker yields due to failure with retries remaining, or due to
   // timeout with retries remaining, the activity will transition to PAUSED.
   ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 10;
+  // An operator reset was issued while the activity was STARTED. The worker is still executing
+  // under its existing task token; status remains in the worker-token-valid set so heartbeat and
+  // completion calls continue to authenticate. The worker is notified via ActivityReset=true on
+  // its next heartbeat response. When the worker yields (failure or timeout with retries
+  // remaining), the activity transitions back to SCHEDULED at attempt 1.
+  ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED = 11;
 }
 
 message ActivityState {
@@ -119,12 +125,10 @@ message ActivityState {
   // Set if the activity was paused.
   ActivityPauseState pause_state = 16;
 
-  // Set when reset was requested while the activity was running.
-  // On the next retry, TransitionRescheduled will reset the attempt count to 1 before incrementing.
-  bool activity_reset = 17;
-
-  // Set alongside activity_reset when heartbeat details should be cleared on the next retry.
-  bool reset_heartbeats = 18;
+  // Set when reset was requested while the activity was STARTED and the operator asked for
+  // heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
+  // activity transitions out of RESET_REQUESTED.
+  bool reset_heartbeats = 17;
 }
 
 message ActivityCancelState {

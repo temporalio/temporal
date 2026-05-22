@@ -601,7 +601,8 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
 		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
 		// The old task was invalidated by the stamp increment above.
 		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
@@ -943,7 +944,11 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 
 // handleReset handles the activity execution reset.
 // For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
-// For STARTED/CANCEL_REQUESTED activities: defers the reset to the next retry via the ActivityReset flag.
+// For STARTED activities: transitions to RESET_REQUESTED. The worker is notified via
+// ActivityReset=true on its next heartbeat response and continues to use its existing task token.
+// When the worker yields (failure or timeout with retries remaining), the activity transitions
+// back to SCHEDULED at attempt 1 via TransitionResetAttemptFailedToScheduled.
+// For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	keepPaused := frontendReq.GetKeepPaused()
@@ -970,12 +975,10 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 	}
 
 	switch a.Status {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		// Activity is running. Defer reset to the next retry so we don't break
-		// the running worker's task token (which encodes the current attempt count).
-		a.ActivityReset = true
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		if frontendReq.GetResetHeartbeat() {
 			a.ResetHeartbeats = true
 		}
@@ -987,6 +990,24 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 			}); err != nil {
 				return nil, err
 			}
+		}
+		// Worker is still executing under its existing task token. Transition to RESET_REQUESTED
+		// so heartbeat/completion calls continue to authenticate; when the worker yields the
+		// activity will land back in SCHEDULED at attempt 1.
+		if frontendReq.GetResetHeartbeat() {
+			a.ResetHeartbeats = true
+		}
+		if !keepPaused {
+			// Clear PauseState now so the deferred reset can dispatch on retry without being
+			// blocked by the validator (which drops dispatch tasks when PauseState != nil).
+			a.PauseState = nil
+		}
+		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
+			req:          frontendReq,
+			scheduleTime: scheduleTime,
+			handler:      metricsHandler,
+		}); err != nil {
+			return nil, err
 		}
 		a.emitOnResetMetrics(metricsHandler)
 		return &activitypb.ResetActivityExecutionResponse{}, nil
@@ -1088,8 +1109,11 @@ func (a *Activity) recordFailedAttempt(
 }
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible. If a pause request has been received then we transition to Paused;
-// otherwise to Scheduled.
+// if retry is not possible. When the activity has PauseState set (flag-based pause from STARTED),
+// the retry transitions to SCHEDULED normally but the dispatch task is blocked by the pause flag
+// until the activity is unpaused. If a reset request has been received then the retry transitions
+// through TransitionResetAttemptFailedToScheduled which applies the deferred reset (attempt count
+// goes back to 1).
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	overridingRetryInterval time.Duration,
@@ -1103,11 +1127,14 @@ func (a *Activity) tryReschedule(
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
 		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
 	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	}
 	return true, TransitionRescheduled.Apply(a, ctx, event)
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
-	if !TransitionRescheduled.Possible(a) && !TransitionAttemptFailedWhilePauseRequested.Possible(a) {
+	if !TransitionRescheduled.Possible(a) && !TransitionAttemptFailedWhilePauseRequested.Possible(a) && !TransitionResetAttemptFailedToScheduled.Possible(a) {
 		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
@@ -1202,8 +1229,8 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
-		ActivityReset:   a.ActivityReset,
+		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED1,
+		ActivityReset:   a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 	}, nil
 }
 
@@ -1214,7 +1241,8 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
@@ -1237,7 +1265,12 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		// RESET_REQUESTED surfaces as STARTED externally — the worker is still executing
+		// under its existing task token; the public PendingActivityState enum does not have
+		// a RESET_REQUESTED variant. The reset is surfaced to the worker via
+		// ActivityReset=true on its next heartbeat response.
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
@@ -1473,7 +1506,8 @@ func (a *Activity) validateActivityTaskToken(
 ) error {
 	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
 		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {

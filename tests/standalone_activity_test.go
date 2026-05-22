@@ -9019,16 +9019,9 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("WhileCancelRequestedDoesNotFail", func(t *testing.T) {
-		// Reset while the activity is in CANCEL_REQUESTED state.
-		// handleReset sets the ActivityReset flag (same deferred path as STARTED).
-		// NOTE: TransitionRescheduled currently only allows STARTED as a source state, so a
-		// CANCEL_REQUESTED activity that fails retryably goes to FAILED (terminal) rather
-		// than retrying — the ActivityReset flag would have no effect in that case. This test
-		// verifies: (1) the reset API succeeds, (2) the activity remains in CANCEL_REQUESTED
-		// with its state intact, and (3) the activity can still complete normally. Full
-		// deferred-reset verification (attempt count reset to 1) requires extending
-		// TransitionRescheduled to accept CANCEL_REQUESTED as a source state.
+	t.Run("WhileCancelRequestedReturnsFailedPrecondition", func(t *testing.T) {
+		// Reset on a CANCEL_REQUESTED activity is rejected: cancel takes precedence and the
+		// state machine has no meaningful transition for "reset while cancel is pending".
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -9039,7 +9032,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.EqualValues(t, 1, pollResp1.Attempt)
 
-		// Request cancellation — moves to CANCEL_REQUESTED
+		// Request cancellation — moves to CANCEL_REQUESTED.
 		_, err := env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -9049,7 +9042,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Verify CANCEL_REQUESTED state
 		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -9058,19 +9050,18 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, desc.GetInfo().GetRunState())
 
-		// Reset while CANCEL_REQUESTED — must succeed without error
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
-
-		// Activity must still be in CANCEL_REQUESTED (reset is deferred, no immediate side effect)
-		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		// Reset while CANCEL_REQUESTED — must be rejected.
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, desc.GetInfo().GetRunState())
+		require.Error(t, err)
+		var failedPrecondition *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecondition,
+			"reset on CANCEL_REQUESTED activity must return FailedPrecondition")
 
-		// Worker ignores the cancel and completes — activity should complete cleanly
+		// Activity is still CANCEL_REQUESTED and can still complete via the existing token.
 		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp1.TaskToken,
@@ -9658,6 +9649,184 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			Identity:  defaultIdentity,
 		})
 		require.NoError(t, err)
+	})
+
+	// StartToCloseTimeoutWhileResetRequested: a STARTED activity with a pending reset must still
+	// observe its StartToClose timeout. The worker stops responding, the timer fires, the retry
+	// path consumes the reset-request and lands the activity in SCHEDULED with the attempt count
+	// reset to 1.
+	t.Run("StartToCloseTimeoutWhileResetRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker polls → activity is STARTED.
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Reset while STARTED → RESET_REQUESTED.
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+
+		// Worker stops responding. StartToCloseTimeout must fire and the reset-request must be
+		// consumed by a retry, landing the activity in SCHEDULED at attempt 1 (reset applied).
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// HeartbeatTimeoutWhileResetRequested: as above but for the heartbeat timer. Without the
+	// validator accepting RESET_REQUESTED, the HeartbeatTimeoutTask is silently dropped and the
+	// activity never times out (only the longer ScheduleToCloseTimeout would catch it).
+	t.Run("HeartbeatTimeoutWhileResetRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			HeartbeatTimeout:       durationpb.New(1 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+
+		// No heartbeat → HeartbeatTimeoutTask fires → retry consumes reset-request → SCHEDULED at attempt 1.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// UpdateOptionsPreservesTimeoutsWhileResetRequested: UpdateActivityExecutionOptions bumps the
+	// attempt stamp, which invalidates all attempt-scoped timeout tasks. The handler must re-emit
+	// fresh StartToClose and Heartbeat timeout tasks for RESET_REQUESTED activities, otherwise the
+	// running worker is left with no server-side timeout enforcement (only the long
+	// ScheduleToCloseTimeout would eventually catch a hung worker).
+	t.Run("UpdateOptionsPreservesTimeoutsWhileResetRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			RequestId:              env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Reset while STARTED → RESET_REQUESTED.
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+
+		// Update StartToCloseTimeout to 1s. The handler bumps the attempt stamp (invalidating the
+		// old 1-minute timeout task) and must re-emit a fresh 1-second timeout task that fires
+		// while the activity is RESET_REQUESTED.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(1 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// New StartToCloseTimeout fires → retry consumes reset-request → SCHEDULED at attempt 1.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
 	})
 
 	t.Run("Jitter", func(t *testing.T) {

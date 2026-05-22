@@ -177,7 +177,8 @@ func (h *startToCloseTimeoutTaskHandler) Validate(
 ) (bool, error) {
 	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
 		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED) &&
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
@@ -239,7 +240,8 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 	// Execute function runs and we fail the attempt.
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
 		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
-		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.
