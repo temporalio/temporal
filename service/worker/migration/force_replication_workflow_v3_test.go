@@ -373,9 +373,144 @@ func TestPendingListMarshalUnmarshal(t *testing.T) {
 	})
 }
 
+// TestEstimateCANPayloadBytes locks down the upper-bound invariant:
+// estimateCANPayloadBytes must not underestimate the actual marshalled
+// size of the input-growing CAN fields. If the constants drift below the
+// real per-entry overhead, the early-CAN / hard-cap triggers stop
+// firing in time and the SDK's 512KB blob warn becomes the de-facto
+// limit. This test catches that regression.
+func TestEstimateCANPayloadBytes(t *testing.T) {
+	t.Parallel()
+
+	// Build a state that exercises every term in the estimator. Mix
+	// long and short BIDs, repeat some BIDs to confirm pending entries
+	// over-count vs the BID-grouped wire form, and populate the
+	// WF-ID-keyed maps independently.
+	s := &adaptiveWorkflowState{
+		params: &AdaptiveForceReplicationParams{NamespaceID: "ns-1", HistoryShardCount: 4},
+		quarantinedWF: map[string]struct{}{
+			"wf-hot-a": {},
+			"wf-hot-b": {},
+			"some-long-business-id-aaaaaaaaaaaaaaaaaaaaaaaaaa": {},
+		},
+		wfIDPending: map[string]int{
+			"wf-hot-a": 3,
+			"wf-hot-b": 999,
+			"some-long-business-id-aaaaaaaaaaaaaaaaaaaaaaaaaa": 42,
+			"wf-cool": 1,
+		},
+	}
+	for i := range 50 {
+		// Two runs per BID to exercise the over-count path.
+		bid := fmt.Sprintf("wf-fast-%d", i%25)
+		s.fastPending = append(s.fastPending, &ExecutionInfo{
+			BusinessID:  bid,
+			RunID:       fmt.Sprintf("run-%d", i),
+			ArchetypeID: uint32(i),
+		})
+	}
+	for i := range 20 {
+		s.slowPending = append(s.slowPending, &ExecutionInfo{
+			BusinessID: fmt.Sprintf("wf-slow-%d", i),
+			RunID:      fmt.Sprintf("run-%d", i),
+		})
+	}
+
+	// Marshal each CAN-serialized field independently and sum. The estimator
+	// covers exactly these four; shard-keyed state is bounded by shard count
+	// and intentionally excluded.
+	fpBytes, err := json.Marshal(pendingList(s.fastPending))
+	require.NoError(t, err)
+	spBytes, err := json.Marshal(pendingList(s.slowPending))
+	require.NoError(t, err)
+	qwBytes, err := json.Marshal(s.snapshotQuarantinedWFIDs())
+	require.NoError(t, err)
+	wpBytes, err := json.Marshal(s.wfIDPending)
+	require.NoError(t, err)
+
+	actual := len(fpBytes) + len(spBytes) + len(qwBytes) + len(wpBytes)
+	estimate := s.estimateCANPayloadBytes()
+	require.GreaterOrEqual(t, estimate, actual,
+		"estimate must be a non-strict upper bound on actual marshalled size (estimate=%d, actual=%d)",
+		estimate, actual)
+}
+
+// TestReclassifyPendingForRetry covers the two-direction routing in
+// reclassifyPendingForRetry: fast→slow when a WF-ID becomes quarantined,
+// and slow→fast when a previously-quarantined shard has been released.
+// WF-ID quarantine stays sticky in both directions.
+func TestReclassifyPendingForRetry(t *testing.T) {
+	t.Parallel()
+
+	newState := func(quarantinedWFIDs []string, quarantinedShards []int32) *adaptiveWorkflowState {
+		return &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				NamespaceID:       "ns-1",
+				HistoryShardCount: 4,
+			},
+			quarantinedWF:    sliceToStringSet(quarantinedWFIDs),
+			quarantinedShard: sliceToInt32Set(quarantinedShards),
+		}
+	}
+
+	t.Run("slow entries move to fast when shard quarantine released", func(t *testing.T) {
+		// Shard quarantine has been released since these entries were
+		// originally routed to slow. With WFIDQuarantineThreshold never
+		// crossed for them, they should move back to fast.
+		s := newState(nil, nil)
+		s.slowPending = []*ExecutionInfo{
+			{BusinessID: "wf-a", RunID: "r1"},
+			{BusinessID: "wf-b", RunID: "r2"},
+		}
+		reFast, reSlow := s.reclassifyPendingForRetry()
+		require.Len(t, reFast, 2, "released shard should let entries return to fast")
+		require.Empty(t, reSlow)
+		require.Empty(t, s.fastPending, "consumed into reFast/reSlow")
+		require.Empty(t, s.slowPending)
+	})
+
+	t.Run("WF-ID quarantine keeps slow entry sticky", func(t *testing.T) {
+		// wf-hot is in quarantinedWF (sticky); wf-cool is not. After
+		// reclassify, wf-hot stays in slow, wf-cool moves to fast.
+		s := newState([]string{"wf-hot"}, nil)
+		s.slowPending = []*ExecutionInfo{
+			{BusinessID: "wf-hot", RunID: "r1"},
+			{BusinessID: "wf-cool", RunID: "r2"},
+		}
+		reFast, reSlow := s.reclassifyPendingForRetry()
+		require.Len(t, reFast, 1)
+		require.Equal(t, "wf-cool", reFast[0].BusinessID)
+		require.Len(t, reSlow, 1)
+		require.Equal(t, "wf-hot", reSlow[0].BusinessID)
+	})
+
+	t.Run("fast entries move to slow when WF-ID newly quarantined", func(t *testing.T) {
+		s := newState([]string{"wf-hot"}, nil)
+		s.fastPending = []*ExecutionInfo{
+			{BusinessID: "wf-hot", RunID: "r1"},
+			{BusinessID: "wf-cool", RunID: "r2"},
+		}
+		reFast, reSlow := s.reclassifyPendingForRetry()
+		require.Len(t, reFast, 1)
+		require.Equal(t, "wf-cool", reFast[0].BusinessID)
+		require.Len(t, reSlow, 1)
+		require.Equal(t, "wf-hot", reSlow[0].BusinessID)
+	})
+
+	t.Run("fast entry on quarantined shard moves to slow", func(t *testing.T) {
+		// Compute the shard wf-x hashes onto, then quarantine that shard.
+		s := newState(nil, nil)
+		shard := s.shardOf("wf-x")
+		s.quarantinedShard[shard] = struct{}{}
+		s.fastPending = []*ExecutionInfo{{BusinessID: "wf-x", RunID: "r1"}}
+		reFast, reSlow := s.reclassifyPendingForRetry()
+		require.Empty(t, reFast)
+		require.Len(t, reSlow, 1)
+	})
+}
+
 // continueAsNewParams extracts the CAN input from the workflow's error or
-// fails the test. Mirrors V1/V2's pattern in
-// testRunForceReplicationForContinueAsNew.
+// fails the test.
 func continueAsNewParams(t require.TestingT, err error) AdaptiveForceReplicationParams {
 	require.Error(t, err)
 	var canErr *workflow.ContinueAsNewError
@@ -666,10 +801,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestDrainOnlySkipsListing() {
 
 // TestAIMDIncreasesOnClean drives the workflow through several clean
 // batches and verifies the fast-lane RPS additively ramped up via the
-// status query. The dispatch-time RPS captured on each InjectBatch is
-// lagged by one batch (page loop reads currentFastRPS before the prior
-// goroutine's adjustRPS runs), so we assert on the final value
-// observable after drainSemaphores has completed.
+// status query.
 //
 // Initial fast RPS = OverallRps / ConcurrentActivityCount = 10.
 // Step = AIMDIncreaseStep × initial = 0.10 × 10 = 1.0.
@@ -745,11 +877,8 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 1}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
-	// One page, final cycle. The exec is pending on first verify, then
-	// clean on the drainRetries retry — so AIMD sees two pending events
-	// (initial batch + first retry... wait actually drainRetries also
-	// adjusts based on Pending). Set verifyCalls so we get exactly two
-	// pending events then clean.
+	// One page, final cycle. AIMD sees two pending events (initial verify
+	// + drainRetries round 0) before the third verify returns clean.
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
 		Executions:    []*ExecutionInfo{{BusinessID: "stuck-wf", RunID: "run-1"}},
 		NextPageToken: nil,

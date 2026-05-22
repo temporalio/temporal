@@ -15,18 +15,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// ForceReplicationWorkflowV3 is the adaptive forced-replication workflow. It
-// addresses the failure mode V1/V2 hit under heavy WF-ID reuse, where the
-// in-activity 30-minute no-progress timer is starved by a stuck head-of-batch
-// even when the rest of the system is making progress.
-//
-// Two design changes relative to V1/V2:
+// ForceReplicationWorkflowV3 is the adaptive forced-replication workflow.
+// Two design properties matter for understanding the rest of the file:
 //
 //  1. Inject and skip-ahead verify run as separate activities chained on the
-//     same lane slot. VerifyBatch continues past busy/missing slots instead of
-//     breaking, so a hot WF ID at the head of a batch cannot starve the rest,
-//     and returns whatever didn't verify within its wall-budget deadline as
-//     Pending — not a failure, just a re-queue trigger.
+//     same lane slot. VerifyBatch continues past busy/missing slots, so a hot
+//     WF ID at the head of a batch cannot starve the rest, and returns
+//     whatever didn't verify within its wall-budget deadline as Pending —
+//     not a failure, just a re-queue trigger.
 //
 //  2. The no-progress detector lives in the workflow. The aggregate verified
 //     count across all batches is the authoritative progress signal; the
@@ -41,11 +37,7 @@ import (
 // ReplicationReceiverMaxOutstandingTaskCount gate from tripping.
 
 type (
-	// AdaptiveForceReplicationParams is the workflow input. It extends the
-	// V1/V2 ForceReplicationParams shape with the adaptive knobs so a
-	// caller migrating off V1/V2 has to add only the new fields.
 	AdaptiveForceReplicationParams struct {
-		// Shared with V1/V2.
 		Namespace               string `validate:"required"`
 		Query                   string
 		ConcurrentActivityCount int
@@ -95,8 +87,6 @@ type (
 		NamespaceID       string
 		HistoryShardCount int32
 
-		// Adaptive-specific knobs.
-
 		// BatchDeadlineSeconds is the wall-budget each fast-lane batch gets
 		// to verify before returning unverified executions as pending. Slow
 		// lane uses SlowLaneBatchDeadlineSeconds.
@@ -142,34 +132,34 @@ type (
 
 		// AIMDDisabled turns off the per-batch additive-increase /
 		// multiplicative-decrease RPS controller. Inverted so the zero
-		// value (false) leaves AIMD on — the production default — and
-		// callers explicitly opt out with true.
+		// value leaves AIMD on (the production default) and callers
+		// explicitly opt out with true.
 		AIMDDisabled bool
 
 		// AIMDIncreaseStep is the additive bump per clean batch, as a
-		// fraction of the lane's INITIAL per-batch RPS so the curve is
-		// invariant to the configured rate. Default 0.10 (+10% of
-		// initial per clean batch).
+		// fraction of the lane's initial per-batch RPS so the curve is
+		// invariant to the configured rate. Default 0.10.
 		AIMDIncreaseStep float64
 
-		// AIMDDecreaseFactor is the multiplicative cut on any batch
-		// that returns pending. New RPS = current × factor. Default 0.5
-		// (halve on pending). Lower values back off harder.
+		// AIMDDecreaseFactor is the multiplicative cut on a batch that
+		// returns pending: new RPS = current × factor. Default 0.5.
 		AIMDDecreaseFactor float64
 
-		// AIMDMinRPSFactor is the floor as a multiple of initial
-		// per-batch RPS. Default 0.1.
+		// AIMDMinRPSFactor is the floor as a multiple of initial per-batch
+		// RPS. Effective floor is max(factor × initial, 1) — a sub-1 RPS
+		// floor is clamped to 1 so the controller can't stall the lane.
+		// Default 0.1.
 		AIMDMinRPSFactor float64
 
 		// AIMDMaxRPSFactor is the ceiling as a multiple of initial
-		// per-batch RPS. Default 2.0 (ramp up to 2× configured). Set to
-		// 1.0 to enforce OverallRps as a hard cap.
+		// per-batch RPS. Default 2.0. Set to 1.0 to enforce OverallRps
+		// as a hard cap.
 		AIMDMaxRPSFactor float64
 	}
 
-	// AdaptiveForceReplicationStatus is what the status query returns. Same
-	// fields as V1/V2 plus quarantine counts and live AIMD RPS so an
-	// operator can see how much adaptive routing has kicked in.
+	// AdaptiveForceReplicationStatus is what the status query returns.
+	// Quarantine counts and live AIMD RPS let an operator see how much
+	// adaptive routing has kicked in.
 	AdaptiveForceReplicationStatus struct {
 		ForceReplicationStatus
 		QuarantinedWFIDCount  int
@@ -184,19 +174,10 @@ const (
 	forceReplicationWorkflowV3Name          = "force-replication-v3"
 	adaptiveForceReplicationStatusQueryType = "adaptive-force-replication-status"
 
-	// Metric names. Quarantine counters tagged with namespace; AIMD
-	// counters also tagged with lane. Operators alert on quarantine
-	// spikes / missing recoveries, and chart ramp-up vs. back-off.
-	forceRepWFQuarantinedMetric    = "force_replication_wf_quarantined_count"
-	forceRepShardQuarantinedMetric = "force_replication_shard_quarantined_count"
-	forceRepShardRecoveredMetric   = "force_replication_shard_recovered_count"
-	forceRepRPSIncreasedMetric     = "force_replication_rps_increased_count"
-	forceRepRPSDecreasedMetric     = "force_replication_rps_decreased_count"
-
 	// Defaults applied in validateAndSetAdaptiveParams when a caller
 	// leaves the corresponding param at its zero value.
 	defaultAdaptiveBatchDeadlineSeconds       = 60
-	defaultAdaptiveNoProgressTimeoutSeconds   = 30 * 60 // matches V1/V2's defaultNoProgressNotRetryableTimeout
+	defaultAdaptiveNoProgressTimeoutSeconds   = 30 * 60
 	defaultAdaptiveSlowLaneConcurrency        = 1
 	defaultAdaptiveWFIDQuarantineThreshold    = 3
 	defaultAdaptiveShardQuarantineThreshold   = 10
@@ -219,17 +200,14 @@ const (
 	maxCANCarryBytes         = 450 * 1024
 )
 
-// pendingList carries unverified executions across CAN with a compact
-// JSON form. The wire format groups by BusinessID:
+// pendingList carries unverified executions across CAN. The wire form
+// groups by BusinessID to amortize repeated BIDs (common in the WF-ID-
+// reuse case):
 //
 //	{"<bid>": [["<rid>", <aid>], ["<rid>", <aid>]], ...}
 //
-// vs the per-entry struct form this saves field-name overhead and
-// amortizes the BusinessID across runs — common in the WF-ID-reuse
-// case the pending list is sized for. Slice order after unmarshal is
-// deterministic (sorted by BusinessID, then preserved within each
-// group from the JSON array), so workflow replay produces the same
-// activity-dispatch order as the original execution.
+// Slice order after unmarshal is deterministic (BIDs sorted, runs preserved
+// within each group), so workflow replay produces the same dispatch order.
 type pendingList []*ExecutionInfo
 
 func (pl pendingList) MarshalJSON() ([]byte, error) {
@@ -257,15 +235,15 @@ func (pl *pendingList) UnmarshalJSON(b []byte) error {
 	for _, bid := range bids {
 		for _, tup := range grouped[bid] {
 			if len(tup) != 2 {
-				return fmt.Errorf("pendingList: expected 2-element [rid, aid] tuple for %q, got %d", bid, len(tup))
+				return fmt.Errorf("pendingList %q: expected 2-element [rid, aid] tuple, got %d", bid, len(tup))
 			}
 			var rid string
 			if err := json.Unmarshal(tup[0], &rid); err != nil {
-				return fmt.Errorf("pendingList: decode RunID for %q: %w", bid, err)
+				return fmt.Errorf("pendingList %q: decode RunID: %w", bid, err)
 			}
 			var aid uint32
 			if err := json.Unmarshal(tup[1], &aid); err != nil {
-				return fmt.Errorf("pendingList: decode ArchetypeID for %q: %w", bid, err)
+				return fmt.Errorf("pendingList %q: decode ArchetypeID: %w", bid, err)
 			}
 			out = append(out, &ExecutionInfo{BusinessID: bid, RunID: rid, ArchetypeID: aid})
 		}
@@ -274,8 +252,6 @@ func (pl *pendingList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ForceReplicationWorkflowV3 is the adaptive variant. See package doc above
-// for the design rationale.
 func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplicationParams) error {
 	startPageToken := params.NextPageToken
 
@@ -451,7 +427,8 @@ func validateAndSetAdaptiveParams(params *AdaptiveForceReplicationParams) error 
 
 // applyAdaptiveAIMDDefaults sets conservative AIMD defaults: enabled,
 // +10% per clean batch, halve on pending, floor 10% / ceiling 200% of
-// initial per-batch RPS.
+// initial per-batch RPS. Split out of validateAndSetAdaptiveParams to
+// keep that function's cyclomatic complexity under the lint threshold.
 func applyAdaptiveAIMDDefaults(params *AdaptiveForceReplicationParams) {
 	if params.AIMDIncreaseStep <= 0 {
 		params.AIMDIncreaseStep = defaultAdaptiveAIMDIncreaseStep
@@ -520,10 +497,9 @@ type adaptiveWorkflowState struct {
 	lastVerified   int64
 	lastProgressAt time.Time
 
-	// AIMD controller state: per-lane current RPS plus the precomputed
-	// step / floor / ceiling for each. currentFastRPS / currentSlowRPS
-	// start at the configured initial rate and adjust after every
-	// batch outcome via adjustRPS.
+	// AIMD controller: per-lane current RPS plus the precomputed step,
+	// floor, and ceiling. currentFastRPS / currentSlowRPS adjust after
+	// every batch outcome via adjustRPS.
 	currentFastRPS float64
 	currentSlowRPS float64
 	fastStep       float64
@@ -562,12 +538,18 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 	params.FastPending = nil
 	params.SlowPending = nil
 	s.fastSem = workflow.NewBufferedChannel(ctx, params.ConcurrentActivityCount)
-	for range params.ConcurrentActivityCount {
-		s.fastSem.Send(ctx, true)
-	}
 	s.slowSem = workflow.NewBufferedChannel(ctx, params.SlowLaneConcurrency)
-	for range params.SlowLaneConcurrency {
-		s.slowSem.Send(ctx, true)
+	// Pre-fill the semaphores only on the listing path. The DrainOnly
+	// path skips listing and goes straight into drainRetries, which
+	// refills the sems at the top of each round; pre-filling there
+	// would just be cycled out again by an unnecessary drain.
+	if !params.DrainOnly {
+		for range params.ConcurrentActivityCount {
+			s.fastSem.Send(ctx, true)
+		}
+		for range params.SlowLaneConcurrency {
+			s.slowSem.Send(ctx, true)
+		}
 	}
 
 	// Initial per-batch RPS = aggregate / lane concurrency. Step / floor /
@@ -603,9 +585,8 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 // cycle.
 func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 	if s.params.DrainOnly {
-		// No listing to do; drain the pre-filled semaphores so drainRetries
-		// starts from its expected empty state.
-		s.drainSemaphores(ctx)
+		// No listing to do; semaphores were left empty by the constructor
+		// so drainRetries can refill cleanly. Nothing to do here.
 		return nil
 	}
 
@@ -717,9 +698,17 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested
 	return false, nil
 }
 
-// reclassifyPendingForRetry consumes the current pending lists, then
-// re-routes fast-lane entries onto the slow lane if their WF-ID has
-// crossed the quarantine threshold since the original batch ran.
+// reclassifyPendingForRetry consumes the current pending lists and routes
+// each entry by current quarantine state. Two directions:
+//
+//   - fast → slow when a WF-ID or its shard has crossed the quarantine
+//     threshold since the original batch ran.
+//   - slow → fast when shard quarantine has since been released (shard
+//     hotness is transient; WF-ID quarantine stays sticky so a WF-ID-
+//     quarantined entry remains in slow).
+//
+// Without the slow→fast direction, a workflow whose shard recovered
+// would stay pinned in the slow lane through every drainRetries round.
 func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*ExecutionInfo) {
 	toRetryFast := s.fastPending
 	toRetrySlow := s.slowPending
@@ -733,7 +722,13 @@ func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*E
 			reFast = append(reFast, ex)
 		}
 	}
-	reSlow = append(reSlow, toRetrySlow...)
+	for _, ex := range toRetrySlow {
+		if s.isQuarantined(ex.BusinessID) {
+			reSlow = append(reSlow, ex)
+		} else {
+			reFast = append(reFast, ex)
+		}
+	}
 	return
 }
 
@@ -771,17 +766,21 @@ func slowLaneRetryBatchSize(fastPageSize int) int {
 // Slot release happens via defer regardless of which phase failed.
 func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, execs []*ExecutionInfo, slow bool, targetClusters []string) {
 	sem := s.fastSem
-	rps := s.currentFastRPS
 	deadlineMs := int64(s.params.BatchDeadlineSeconds) * 1000
 	intervalMs := int64(s.params.VerifyIntervalInSeconds) * 1000
 	if slow {
 		sem = s.slowSem
-		rps = s.currentSlowRPS
 		deadlineMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
 	}
 	var slot bool
 	sem.Receive(ctx, &slot)
+	// Read the lane's current RPS after the slot is held so the prior
+	// batch's AIMD adjustment has already applied.
+	rps := s.currentFastRPS
+	if slow {
+		rps = s.currentSlowRPS
+	}
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		defer sem.Send(ctx, true)
 		// HeartbeatTimeout < StartToCloseTimeout so worker crashes
@@ -919,7 +918,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		s.wfIDPending[bid]++
 		if !wasQuarantinedWF && s.wfIDPending[bid] >= s.params.WFIDQuarantineThreshold {
 			s.quarantinedWF[bid] = struct{}{}
-			s.emitTransition(ctx, forceRepWFQuarantinedMetric,
+			s.emitTransition(ctx, metrics.ForceReplicationWFQuarantinedCount.Name(),
 				"adaptive: quarantined WF-ID",
 				"wfId", bid,
 				"pendingCount", s.wfIDPending[bid])
@@ -935,7 +934,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		s.shardPending[sh]++
 		if _, already := s.quarantinedShard[sh]; !already && s.shardPending[sh] >= s.params.ShardQuarantineThreshold {
 			s.quarantinedShard[sh] = struct{}{}
-			s.emitTransition(ctx, forceRepShardQuarantinedMetric,
+			s.emitTransition(ctx, metrics.ForceReplicationShardQuarantinedCount.Name(),
 				"adaptive: quarantined shard",
 				"shard", sh,
 				"pendingCount", s.shardPending[sh])
@@ -961,7 +960,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		}
 		if _, ok := s.quarantinedShard[sh]; ok && s.shardPending[sh] <= releaseAt {
 			delete(s.quarantinedShard, sh)
-			s.emitTransition(ctx, forceRepShardRecoveredMetric,
+			s.emitTransition(ctx, metrics.ForceReplicationShardRecoveredCount.Name(),
 				"adaptive: released shard quarantine",
 				"shard", sh,
 				"pendingCount", s.shardPending[sh])
@@ -1055,9 +1054,9 @@ func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, slow bool, hadPe
 	if *current == prev {
 		return
 	}
-	metricName := forceRepRPSIncreasedMetric
+	metricName := metrics.ForceReplicationRPSIncreasedCount.Name()
 	if hadPending {
-		metricName = forceRepRPSDecreasedMetric
+		metricName = metrics.ForceReplicationRPSDecreasedCount.Name()
 	}
 	workflow.GetLogger(ctx).Info("adaptive: AIMD adjusted RPS",
 		"lane", lane,
@@ -1114,12 +1113,10 @@ func (s *adaptiveWorkflowState) refillSemaphores(ctx workflow.Context) {
 // user-keyed quarantine state). Shard-keyed state is bounded by shard
 // count and excluded.
 //
-// Conservative because it doesn't dedupe BusinessIDs shared across runs
-// of the same WF — the pendingList wire form groups by BID so the real
-// encoded size is smaller, but for capping CAN input we'd rather
-// over-estimate (and CAN slightly sooner) than miss the SDK's 512KB
-// warn threshold. Sum over map iteration is commutative so the result
-// stays deterministic across replay.
+// Over-estimates because it doesn't dedupe BusinessIDs shared across runs
+// of the same WF — intentional, since over-CAN'ing is preferable to
+// missing the SDK's 512KB blob warn. Sum over map iteration is commutative,
+// so the result is replay-deterministic.
 func (s *adaptiveWorkflowState) estimateCANPayloadBytes() int {
 	// Per-pending-entry overhead in the wire form: tuple brackets,
 	// quotes, comma, archetypeID digits, plus the BID grouping key

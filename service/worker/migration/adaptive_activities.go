@@ -23,11 +23,9 @@ import (
 
 type (
 	// adaptiveInjectBatchRequest drives the inject phase of one batch: emit
-	// replication tasks for every execution at the configured RPS. Returns
-	// no per-execution data; the verify phase is a separate activity. The
-	// workflow holds its per-lane slot through both phases so adjacent
-	// batches on the same lane serialize (drip-feed for the slow lane,
-	// matching V1/V2 pacing for the fast lane).
+	// replication tasks for every execution at the configured RPS. The
+	// workflow holds its per-lane slot through inject+verify so adjacent
+	// batches on the same lane serialize.
 	adaptiveInjectBatchRequest struct {
 		Namespace      string
 		NamespaceID    string
@@ -37,10 +35,9 @@ type (
 		RPS        float64
 	}
 
-	// adaptiveVerifyBatchRequest drives the skip-ahead verify phase for a
-	// previously-injected batch. The wall-budget DeadlineMs is not a
-	// failure — whatever doesn't verify by then is returned as Pending and
-	// the workflow re-queues it on the appropriate lane.
+	// adaptiveVerifyBatchRequest drives the skip-ahead verify phase. The
+	// wall-budget DeadlineMs is not a failure — whatever doesn't verify by
+	// then is returned as Pending and re-queued by the workflow.
 	adaptiveVerifyBatchRequest struct {
 		Namespace             string
 		NamespaceID           string
@@ -52,21 +49,16 @@ type (
 		VerifyIntervalMs int64
 	}
 
-	// adaptiveVerifyBatchResponse reports outcomes. Pending is the list of
-	// executions that didn't verify before the deadline.
 	adaptiveVerifyBatchResponse struct {
 		Verified int64
 		Pending  []*ExecutionInfo
 	}
 )
 
-// InjectBatch is the inject phase of one V3 batch: emit replication tasks
-// for every execution at the configured per-batch RPS. The workflow
-// dispatches this then immediately chains a VerifyBatch for the same
-// executions while holding the lane slot. Splitting inject and verify into
-// separate activities (vs combining them) gives the workflow per-phase
-// visibility and lets the AIMD controller see which phase contributes to
-// outcomes.
+// InjectBatch emits replication tasks for every execution at the configured
+// per-batch RPS. Inject and verify are split into separate activities so
+// the workflow has per-phase visibility and the AIMD controller can see
+// which phase contributes to outcomes.
 func (a *activities) InjectBatch(ctx context.Context, request *adaptiveInjectBatchRequest) error {
 	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(request.NamespaceID))
 	start := time.Now()
@@ -103,9 +95,8 @@ func (a *activities) InjectBatch(ctx context.Context, request *adaptiveInjectBat
 			request.TargetClusters,
 			generateViaFrontend,
 		); err != nil {
-			// Same NotFound tolerance as the legacy GenerateReplicationTasks
-			// — a deleted workflow won't land on the target, and verify will
-			// skip it via checkSkipWorkflowExecution.
+			// Tolerate NotFound: a deleted workflow won't land on the
+			// target and verify will skip it via checkSkipWorkflowExecution.
 			if !common.IsNotFoundError(err) {
 				return fmt.Errorf("generate replication task for %s/%s: %w", we.BusinessID, we.RunID, err)
 			}
@@ -120,11 +111,10 @@ func (a *activities) InjectBatch(ctx context.Context, request *adaptiveInjectBat
 	return nil
 }
 
-// VerifyBatch is the verify phase of one V3 batch. Skip-ahead verifies
-// each execution against the target cluster, returning everything that
-// didn't verify by DeadlineMs as Pending. Used for both fresh batches
-// (chained after InjectBatch) and retry rounds (workflow re-dispatches
-// just this activity with the already-injected pending list).
+// VerifyBatch skip-ahead verifies each execution against the target
+// cluster, returning everything that didn't verify by DeadlineMs as
+// Pending. Used for both fresh batches (chained after InjectBatch) and
+// retry rounds (re-dispatched alone with the already-injected pending list).
 func (a *activities) VerifyBatch(ctx context.Context, request *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(request.NamespaceID))
 	start := time.Now()
@@ -134,20 +124,15 @@ func (a *activities) VerifyBatch(ctx context.Context, request *adaptiveVerifyBat
 	return a.skipAheadVerify(ctx, request)
 }
 
-// skipAheadVerify is the shared skip-ahead verify loop. Differences from
-// verifyReplicationTasks (the V1/V2 verifier):
+// skipAheadVerify scans all unverified executions on every pass — a hot
+// WF ID at the head of the batch can't starve verification of the rest.
+// No in-activity no-progress timer; the wall-budget deadline returns
+// pending to the workflow, which is the failure-detection authority.
 //
-//  1. Continues past not-yet-verified slots instead of breaking at the first
-//     one. Every iteration scans all unverified executions, so a hot WF ID at
-//     the head of the batch can't starve verification of the rest.
-//  2. No no-progress timer in the activity — the wall-budget deadline returns
-//     pending to the workflow, which is the failure-detection authority.
-//
-// Per-execution outcomes are turned into one of three terminal states:
-//   - verified (DescribeMutableState returned OK, workflowVerifier OK)
-//   - skipped (DescribeMutableState returned NotFound and checkSkipWorkflowExecution
-//     decided this is a zombie / past-retention / etc — counts as verified for
-//     completion purposes)
+// Per-execution outcomes resolve to one of three terminal states:
+//   - verified (DescribeMutableState OK, workflowVerifier OK)
+//   - skipped (NotFound + zombie / past-retention; counts as verified
+//     for completion purposes)
 //   - pending (BUSY_WORKFLOW, NotFound + not skippable, or any retryable error)
 func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
@@ -170,9 +155,8 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 		return nil, err
 	}
 
-	// Build the v1-compatible request shape verifySingleReplicationTask
-	// expects. The activity surface is different (skip-ahead vs strict
-	// in-order) but the per-execution check is the same.
+	// Reuse the per-execution request shape; only the surrounding loop
+	// shape differs between skip-ahead and the in-order verifier.
 	singleReq := &verifyReplicationTasksRequest{
 		Namespace:             request.Namespace,
 		NamespaceID:           request.NamespaceID,
@@ -233,8 +217,7 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 	}, nil
 }
 
-// skipAheadVerifySingle mirrors the per-execution branches of
-// verifySingleReplicationTask. Returns true when verification is terminal
+// skipAheadVerifySingle returns true when verification is terminal
 // (verified or skipped); false when the execution should be retried.
 func (a *activities) skipAheadVerifySingle(
 	ctx context.Context,
@@ -266,10 +249,9 @@ func (a *activities) skipAheadVerifySingle(
 		if verr != nil {
 			return false, verr
 		}
-		// Match V1/V2 metric semantics: only `verified` increments the
-		// success counter. `skipped` (zombie / past-retention) still
-		// terminates verification but is not counted as a confirmed
-		// replication.
+		// Only `verified` increments the success counter; `skipped`
+		// (zombie / past-retention) terminates verification but isn't
+		// counted as a confirmed replication.
 		if result.status == verified {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
