@@ -170,8 +170,16 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
-	// MaxRate limits scale change frequency.
+	// MaxRate limits target change frequency.
 	MaxRate float32
+	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
+	// at any time. E.g. if ShrinkRatio is 0.1 and read partitions is 40, then write partitions
+	// may not be lower than 36, until read partitions falls lower.
+	ShrinkRatio float32
+	// ShrinkDelta is how much smaller write partitions is allowed to be than read partitions,
+	// by absolute count. E.g. if ShrinkDelta is 2 and read partitions is 24, then write
+	// partitions may not be lower than 22.
+	ShrinkDelta int32
 	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
 	// reload.)
 	BatchSize int32
