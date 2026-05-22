@@ -63,6 +63,7 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 
 			config := NewConfig(dc.NewNoopCollection(), 1)
 			config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(tc.enableCreation)
+			config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
 			config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(tc.enableRouting)
 			config.AllowedExperiments = dc.GetTypedPropertyFnFilteredByNamespace(tc.allowedExp)
 

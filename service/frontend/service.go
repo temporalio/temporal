@@ -170,7 +170,7 @@ type Config struct {
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Per-namespace percentage [0-100] of new schedules routed to CHASM when
-	// EnableCHASMSchedulerCreation is true. Default 100.
+	// EnableCHASMSchedulerCreation is true. Default 0.
 	CHASMSchedulerCreationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter

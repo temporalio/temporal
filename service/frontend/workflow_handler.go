@@ -3789,7 +3789,8 @@ func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, na
 	if !wh.config.EnableCHASMSchedulerCreation(namespaceName) {
 		return false
 	}
-	return common.RolloutAccepts(namespaceName, scheduleID, wh.config.CHASMSchedulerCreationRolloutPercent(namespaceName))
+	key := fmt.Appendf(nil, "%s\x00%s", namespaceName, scheduleID)
+	return dynamicconfig.RolloutAccepts(key, wh.config.CHASMSchedulerCreationRolloutPercent(namespaceName))
 }
 
 // chasmSchedulerEnabled returns true when schedule RPCs should route to CHASM

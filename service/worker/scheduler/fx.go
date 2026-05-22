@@ -11,7 +11,6 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -108,8 +107,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
 		enableMigration := s.enableCHASMMigration(nsName) &&
-			common.RolloutAccepts(nsName, args.State.ScheduleId, s.chasmMigrationRolloutPercent(nsName))
+			dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})

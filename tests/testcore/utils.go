@@ -14,7 +14,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"google.golang.org/protobuf/proto"
@@ -31,7 +31,8 @@ func PickRolloutSplit(t *testing.T, namespace string, percent int) (accepted, re
 			break
 		}
 		id := fmt.Sprintf("%s-%d", base, i)
-		if common.RolloutAccepts(namespace, id, percent) {
+		key := fmt.Appendf(nil, "%s\x00%s", namespace, id)
+		if dynamicconfig.RolloutAccepts(key, percent) {
 			if accepted == "" {
 				accepted = id
 			}
