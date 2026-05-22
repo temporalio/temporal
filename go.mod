@@ -8,6 +8,8 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
+replace go.temporal.io/api => ../api-go
+
 require (
 	cloud.google.com/go/storage v1.62.1
 	github.com/Masterminds/sprig/v3 v3.3.0

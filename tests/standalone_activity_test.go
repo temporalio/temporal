@@ -6327,3 +6327,98 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 	})
 }
+
+func (s *standaloneActivityTestSuite) TestStartWithIncludeOutcome() {
+	env := s.newTestEnv()
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	startActivityAgain := func(activityID string, taskQueue string, idReusePolicy enumspb.ActivityIdReusePolicy) (*workflowservice.StartActivityExecutionResponse, error) {
+		return env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			IdReusePolicy:       idReusePolicy,
+			IncludeOutcome:      true,
+		})
+	}
+
+	t.Run("SuccessResponse", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollTaskResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  "new-worker",
+		})
+		require.NoError(t, err)
+		env.validateCompletion(ctx, t, activityID, runID, "new-worker")
+
+		t.Run("OutcomeWhenRejectDuplicate", func(t *testing.T) {
+			secondResp, err := startActivityAgain(activityID, taskQueue, enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE)
+			require.NoError(t, err)
+			require.NotNil(t, secondResp.GetOutcome())
+			require.False(t, secondResp.GetStarted())
+			require.Equal(t, runID, secondResp.GetRunId())
+			protorequire.ProtoEqual(t, defaultResult, secondResp.GetOutcome().GetResult())
+		})
+
+		t.Run("OutcomeWhenAllowDuplicateFailedOnly", func(t *testing.T) {
+			secondResp, err := startActivityAgain(activityID, taskQueue, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
+			require.NoError(t, err)
+			require.NotNil(t, secondResp.GetOutcome())
+			require.False(t, secondResp.GetStarted())
+			require.Equal(t, runID, secondResp.GetRunId())
+			protorequire.ProtoEqual(t, defaultResult, secondResp.GetOutcome().GetResult())
+		})
+
+		t.Run("NoOutcomeWhenAllowDuplicate", func(t *testing.T) {
+			secondResp, err := startActivityAgain(activityID, taskQueue, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+			require.NoError(t, err)
+			require.Nil(t, secondResp.GetOutcome())
+			require.True(t, secondResp.GetStarted())
+			require.NotEqual(t, runID, secondResp.GetRunId())
+		})
+	})
+
+	t.Run("FailureResponse", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollTaskResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Failure:   defaultFailure,
+			Identity:  "new-worker",
+		})
+		require.NoError(t, err)
+		env.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
+
+		t.Run("NoOutcomeWhenAllowDuplicateFailedOnly", func(t *testing.T) {
+			secondResp, err := startActivityAgain(activityID, taskQueue, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
+			require.NoError(t, err)
+			require.Nil(t, secondResp.GetOutcome())
+			require.True(t, secondResp.GetStarted())
+			require.NotEqual(t, runID, secondResp.GetRunId())
+		})
+	})
+}

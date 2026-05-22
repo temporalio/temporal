@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -94,47 +95,88 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
+	// runID to be used in the success result
+	var resultRunID string
+	// outcome is set in result only when IncludeOutcome is set and the activity is already completed
+	var outcome *apiactivitypb.ActivityExecutionOutcome
+
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 		if errors.As(err, &alreadyStartedErr) {
-			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
+			resultRunID = alreadyStartedErr.CurrentRunID
+
+			// Get outcome if needed, and if reuse policy or conflict policy result in an already started error.
+			if frontendReq.GetIncludeOutcome() {
+				var readerr error
+				outcome, readerr = chasm.ReadComponent(
+					ctx,
+					chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+						NamespaceID: req.GetNamespaceId(),
+						BusinessID:  frontendReq.GetActivityId(),
+						RunID:       resultRunID,
+					}),
+					func(a *Activity, ctx chasm.Context, _ any) (*apiactivitypb.ActivityExecutionOutcome, error) {
+						return a.outcome(ctx), nil
+					},
+					nil,
+				)
+				if readerr != nil {
+					outcome = nil
+				}
+			}
+
+			if outcome == nil {
+				return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
+			} // else fallback to return success later
 		}
 
-		return nil, err
+		if outcome == nil {
+			return nil, err
+		} // else fallback to return success later
+	} else {
+		resultRunID = result.ExecutionKey.RunID
 	}
 
 	// Attach callbacks to an existing activity when on_conflict_options.attach_completion_callbacks is set.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+
 	cbs := frontendReq.GetCompletionCallbacks()
-	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+	if outcome == nil && !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
-		_, _, err := chasm.UpdateComponent(
+		var updateErr error
+		outcome, _, updateErr = chasm.UpdateComponent(
 			ctx,
 			ref,
-			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
+			(*Activity).getOutcomeOrAddCallbacks,
+			getOutcomeOrAddCallbacksInput{
+				includeOutcome: frontendReq.GetIncludeOutcome(),
+				requestID:      requestID,
+				callbacks:      cbs,
+				maxCallbacks:   maxCallbacks,
 			},
-			nil,
 		)
-		if err != nil {
-			return nil, err
+		if updateErr != nil {
+			if outcome == nil {
+				return nil, updateErr
+			} // else fallback to return success later
 		}
 	}
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
-			RunId:   result.ExecutionKey.RunID,
+			RunId:   resultRunID,
 			Started: result.Created,
 			Link: &commonpb.Link{
 				Variant: &commonpb.Link_Activity_{
 					Activity: &commonpb.Link_Activity{
 						Namespace:  frontendReq.GetNamespace(),
 						ActivityId: frontendReq.GetActivityId(),
-						RunId:      result.ExecutionKey.RunID,
+						RunId:      resultRunID,
 					},
 				},
 			},
+			Outcome: outcome,
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
