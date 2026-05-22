@@ -674,6 +674,93 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	}
 }
 
+// TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget confirms that a timer
+// canceled via command is excluded from the skip-target calculation.
+// ApplyTimerCanceledEvent deletes the timer from pendingTimerInfoIDs, so it is
+// invisible to calculateTimeSkippingTransition.
+//
+// If a canceled timer were mistakenly used, the accumulated skip would equal
+// the sum of all timers' durations rather than just the surviving timers'.
+//
+// Sequence:
+//
+//	WT1 → start timer-A (1h) + timer-B (5h)
+//	Skip to timer-A (nearest), accumulated = 1h, timer-A fires → WT2
+//	WT2 → cancel timer-B + start timer-C (2h)
+//	Skip to timer-C (2h), accumulated = 1h + 2h = 3h, timer-C fires → WT3
+//	WT3 → complete workflow
+//	Verify: AccumulatedSkippedDuration ≈ 3h (NOT 1h+4h=5h from canceled timer-B)
+func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	const (
+		timerADuration = time.Hour
+		timerBDuration = 5 * time.Hour
+		timerCDuration = 2 * time.Hour
+		runTimeout     = 10 * time.Hour
+	)
+
+	runID := s.startWorkflowWithTimeSkipping(env, tv, runTimeout)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: start timer-A (1h) + timer-B (5h). No activity → time skipping fires
+	// on close-tx and targets timer-A (nearest candidate).
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				startTimerCmd("timer-A", timerADuration),
+				startTimerCmd("timer-B", timerBDuration),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2: timer-A has fired. Cancel timer-B and start timer-C (2h). After this
+	// WFT, only timer-C is a candidate — timer-B is gone from pendingTimerInfoIDs.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
+					Attributes: &commandpb.Command_CancelTimerCommandAttributes{
+						CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{
+							TimerId: "timer-B",
+						},
+					},
+				},
+				startTimerCmd("timer-C", timerCDuration),
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT3: timer-C fired (skip targeted it at 2h, not the 4h remaining on
+	// canceled timer-B). Complete workflow.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Accumulated skip ≈ 1h + 2h = 3h. 1s tolerance covers real-time slack
+	// between skip transition and timer-fired and is far below the 2h margin
+	// between the right answer (3h) and the wrong answer (5h with canceled
+	// timer-B included).
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	accumulated := ms.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.InDelta(float64(timerADuration+timerCDuration), float64(accumulated), float64(time.Second),
+		"AccumulatedSkippedDuration must equal sum of non-canceled timer durations (1h+2h=3h), not include the canceled timer-B")
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(), RunId: runID,
+	})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_CANCELED), "timer-B must be canceled")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+}
+
 // TestWorkflowLifecycle_VirtualTimeContract is an end-to-end regression test
 // that exercises the virtual-time contract across a full workflow lifecycle:
 // activity execution before and after skip, skip transition, workflow close,

@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,13 +133,49 @@ func (p *pool) acquireSlot(t *testing.T) {
 }
 
 type clusterPool struct {
-	shared    *pool
-	dedicated *pool
+	shared      *pool
+	dedicated   *pool
+	suiteScoped sync.Map
+}
+
+type suiteScopedCluster struct {
+	once    sync.Once
+	cluster *FunctionalTestBase
+}
+
+// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
+// The cluster is created on first use and torn down when `t` completes.
+//
+// Deprecated: this only exists for backwards-compatibility with legacy sequential
+// suite execution.
+func UseSuiteScopedCluster(t *testing.T) {
+	t.Helper()
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	if t.Name() != rootName {
+		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
+	}
+	testClusterPool.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+
+	t.Cleanup(func() {
+		suiteClusterAny, ok := testClusterPool.suiteScoped.Load(rootName)
+		if ok {
+			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
+			if suiteCluster.cluster != nil {
+				if err := suiteCluster.cluster.testCluster.TearDownCluster(); err != nil {
+					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
+				}
+			}
+		}
+		testClusterPool.suiteScoped.Delete(rootName)
+	})
 }
 
 func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, dynamicConfig, clusterOpts)
+	}
+	if cluster := p.getSuiteScoped(t); cluster != nil {
+		return cluster
 	}
 	return p.getShared(t)
 }
@@ -147,6 +184,21 @@ func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, nil, true, nil)
 	})
+}
+
+func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	if _, ok := p.suiteScoped.Load(rootName); !ok {
+		return nil
+	}
+
+	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
+	suiteCluster.once.Do(func() {
+		suiteCluster.cluster = p.createCluster(t, nil, true, nil)
+	})
+	suiteCluster.cluster.SetT(t)
+	return suiteCluster.cluster
 }
 
 func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {

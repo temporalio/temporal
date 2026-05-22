@@ -180,6 +180,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		if completedStart, ok := completed[start.RequestId]; ok {
 			start.RunId = completedStart.GetRunId()
 			start.StartTime = completedStart.GetStartTime()
+			start.HasCallback = true
 		}
 		if retry, ok := retryable[start.RequestId]; ok {
 			start.Attempt++
