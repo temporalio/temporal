@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -4657,6 +4658,80 @@ func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCo
 	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)
 }
 
+// GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
+// in-flight activities that have a worker control queue.
+func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
+	if !ms.config.EnableCancelActivityWorkerCommand() {
+		return nil
+	}
+
+	// Cancel commands are best-effort and only dispatched on the active cluster.
+	// Skip task generation on standby to avoid creating tasks that will be dropped.
+	activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(
+		ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
+	if activeCluster != ms.clusterMetadata.GetCurrentClusterName() {
+		return nil
+	}
+
+	serializer := tasktoken.NewSerializer()
+	wfKey := ms.GetWorkflowKey()
+	nsID := ms.GetNamespaceEntry().ID().String()
+
+	commandsByQueue := make(map[string][]*workerpb.WorkerCommand)
+	for _, ai := range ms.pendingActivityInfoIDs {
+		// No control queue means the activity was started before this feature was deployed.
+		if ai.WorkerControlTaskQueue == "" {
+			continue
+		}
+		if ai.StartedClock == nil {
+			// StartedClock is nil when the activity is not currently started (e.g. in retry backoff)
+			// or was started before this feature was deployed. Skip cancel command.
+			ms.logger.Debug("Skipping worker cancel command: activity not currently started",
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID),
+				tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+			)
+			continue
+		}
+
+		taskToken, err := serializer.Serialize(tasktoken.NewActivityTaskToken(
+			nsID,
+			wfKey.WorkflowID,
+			wfKey.RunID,
+			ai.ScheduledEventId,
+			ai.ActivityId,
+			ai.ActivityType.GetName(),
+			ai.Attempt,
+			ai.StartedClock,
+			ai.Version,
+			ai.StartVersion,
+			nil,
+		))
+		if err != nil {
+			return err
+		}
+
+		commandsByQueue[ai.WorkerControlTaskQueue] = append(
+			commandsByQueue[ai.WorkerControlTaskQueue],
+			&workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: taskToken,
+					},
+				},
+			},
+		)
+	}
+
+	for controlQueue, commands := range commandsByQueue {
+		if err := ms.AddWorkerCommandsTasks(commands, controlQueue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(
 	event *historypb.HistoryEvent,
 ) error {
@@ -8837,7 +8912,6 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// todo@time-skipping: impacts of paused workflow to be considered
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
@@ -9998,6 +10072,7 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 }
 
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
+	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
 	}
@@ -10046,6 +10121,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 		noSkippingReason = "workflow is not running"
 		return false, nil
 	}
+	if ms.IsWorkflowExecutionStatusPaused() {
+		noSkippingReason = "workflow is paused"
+		return false, nil
+	}
 	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
 		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
 		return false, nil
@@ -10079,6 +10158,14 @@ func (d timeSkippingTransition) isValid() bool {
 	return !d.targetTime.IsZero() || d.disabledAfterBound
 }
 
+// calculateTimeSkippingTransition calculates the transition state which includes two fields:
+// 1. targetTime: the time to skip to
+// 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
+// right now the time points considered for target time are:
+// 1. the first expiry time of the pending user timers
+// 2. the start delay of the workflow execution
+// 3. the current elapsed duration bound of the time skipping config
+// 4. the remaining time to skip to the max skipped duration bound
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {

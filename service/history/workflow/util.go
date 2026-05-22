@@ -143,7 +143,6 @@ func TerminateWorkflow(
 		deleteAfterTerminate,
 		links,
 	)
-
 	return err
 }
 

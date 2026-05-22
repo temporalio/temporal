@@ -7,39 +7,47 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type CallbacksMigrationSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*CallbacksMigrationSuite]
 }
 
 func TestCallbacksMigrationSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(CallbacksMigrationSuite))
+	parallelsuite.Run(t, &CallbacksMigrationSuite{})
 }
 
-func (s *CallbacksMigrationSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	// Start with CHASM disabled by default for migration tests
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
+func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {
+	return testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false),
+	)
+}
+
+func (s *CallbacksMigrationSuite) runNexusCompletionHTTPServer(h *completionHandler) string {
+	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
+	srv := httptest.NewServer(hh)
+	s.T().Cleanup(func() {
+		srv.Close()
+	})
+	return srv.URL
 }
 
 // TODO (seankane): This test can be removed once CHASM callbacks are the default
@@ -51,24 +59,14 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	// 4. Send signal to unblock workflow and let it complete
 	// 5. Verify callback is invoked successfully
 
-	s.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+	env := s.newTestEnv()
 
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
+	ctx := s.Context()
+	sdkClient := env.SdkClient()
 
-	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "blockingWorkflow"
-	workflowID := tv.WorkflowID()
+	workflowID := env.Tv().WorkflowID()
 
-	// Setup completion handler and HTTP server
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
@@ -77,30 +75,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-
-	// Start HTTP server for nexus callback completion
-	callbackAddress := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
-		srv := httptest.NewServer(hh)
-		s.T().Cleanup(func() {
-			srv.Close()
-		})
-		return srv.URL
-	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(ch)
 
 	// Register workflow that blocks until it receives a signal
-	w := worker.New(sdkClient, taskQueue, worker.Options{})
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
-		// Block until we receive the "continue" signal
 		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 		return 1, nil
 	}
-	w.RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
-	s.NoError(w.Start())
-	defer w.Stop()
+	env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
 
 	// Start workflow with callback (CHASM is disabled at this point)
-	callback := &commonpb.Callback{
+	cb := &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url: callbackAddress + "/callback",
@@ -110,17 +95,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
-		CompletionCallbacks: []*commonpb.Callback{callback},
+		CompletionCallbacks: []*commonpb.Callback{cb},
 	}
 
-	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -134,19 +119,19 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	// Enable CHASM mid-workflow
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
 	// Unblock the workflow by sending the continue signal
-	_, err = s.FrontendClient().SignalWorkflowExecution(
+	_, err = env.FrontendClient().SignalWorkflowExecution(
 		ctx,
 		&workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
 		},
@@ -166,7 +151,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		var callbackResult int
 		s.NoError(completion.Result.Consume(&callbackResult))
 		s.Equal(1, callbackResult)
-		// Acknowledge the callback
 		ch.requestCompleteCh <- nil
 	case <-time.After(5 * time.Second):
 		s.Fail("timeout waiting for callback")
@@ -184,28 +168,18 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	// 5. Send signal to unblock workflow and let it complete
 	// 6. Verify callback is invoked successfully despite EnableCHASMCallbacks being disabled
 
-	s.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+	env := s.newTestEnv()
 
 	// Enable CHASM for this test
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
+	ctx := s.Context()
+	sdkClient := env.SdkClient()
 
-	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "blockingWorkflow"
-	workflowID := tv.WorkflowID()
+	workflowID := env.Tv().WorkflowID()
 
-	// Setup completion handler and HTTP server
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
@@ -214,30 +188,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-
-	// Start HTTP server for nexus callback completion
-	callbackAddress := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
-		srv := httptest.NewServer(hh)
-		s.T().Cleanup(func() {
-			srv.Close()
-		})
-		return srv.URL
-	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(ch)
 
 	// Register workflow that blocks until it receives a signal
-	w := worker.New(sdkClient, taskQueue, worker.Options{})
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
-		// Block until we receive the "continue" signal
 		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 		return 1, nil
 	}
-	w.RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
-	s.NoError(w.Start())
-	defer w.Stop()
+	env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
 
 	// Start workflow with callback (CHASM is enabled at this point)
-	callback := &commonpb.Callback{
+	cb := &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url: callbackAddress + "/callback",
@@ -247,17 +208,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
-		CompletionCallbacks: []*commonpb.Callback{callback},
+		CompletionCallbacks: []*commonpb.Callback{cb},
 	}
 
-	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -271,17 +232,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
 
 	// Unblock the workflow by sending the continue signal
-	_, err = s.FrontendClient().SignalWorkflowExecution(
+	_, err = env.FrontendClient().SignalWorkflowExecution(
 		ctx,
 		&workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
 		},
@@ -301,7 +262,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		var callbackResult int
 		s.NoError(completion.Result.Consume(&callbackResult))
 		s.Equal(1, callbackResult)
-		// Acknowledge the callback
 		ch.requestCompleteCh <- nil
 	case <-time.After(5 * time.Second):
 		s.Fail("timeout waiting for callback - callback should still be triggered even with EnableCHASMCallbacks disabled")
@@ -318,24 +278,14 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	// 5. Send signal to unblock workflow and let it complete
 	// 6. Verify both callbacks (HSM and CHASM) are invoked successfully
 
-	s.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+	env := s.newTestEnv()
 
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
+	ctx := s.Context()
+	sdkClient := env.SdkClient()
 
-	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "blockingWorkflow"
-	workflowID := tv.WorkflowID()
+	workflowID := env.Tv().WorkflowID()
 
-	// Setup completion handlers for both callbacks
 	ch1 := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
@@ -351,35 +301,15 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		close(ch2.requestCompleteCh)
 	}()
 
-	// Start HTTP servers for nexus callback completion
-	callbackAddress1 := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch1})
-		srv := httptest.NewServer(hh)
-		s.T().Cleanup(func() {
-			srv.Close()
-		})
-		return srv.URL
-	}()
-
-	callbackAddress2 := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch2})
-		srv := httptest.NewServer(hh)
-		s.T().Cleanup(func() {
-			srv.Close()
-		})
-		return srv.URL
-	}()
+	callbackAddress1 := s.runNexusCompletionHTTPServer(ch1)
+	callbackAddress2 := s.runNexusCompletionHTTPServer(ch2)
 
 	// Register workflow that blocks until it receives a signal
-	w := worker.New(sdkClient, taskQueue, worker.Options{})
 	blockingWorkflow := func(ctx workflow.Context) (int, error) {
-		// Block until we receive the "continue" signal
 		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 		return 1, nil
 	}
-	w.RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
-	s.NoError(w.Start())
-	defer w.Stop()
+	env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
 
 	// Start workflow with first callback (CHASM is disabled, so this creates an HSM callback)
 	callback1 := &commonpb.Callback{
@@ -392,17 +322,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{callback1},
 	}
 
-	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -416,13 +346,13 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
 		4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	// Enable CHASM mid-workflow
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
 	// Add a second callback using the USE_EXISTING conflict policy
 	// This should create a CHASM callback since CHASM is now enabled
@@ -436,10 +366,10 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	request2 := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
-		Namespace:                s.Namespace().String(),
+		Namespace:                env.Namespace().String(),
 		WorkflowId:               workflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:                    nil,
 		WorkflowRunTimeout:       durationpb.New(30 * time.Second),
 		Identity:                 s.T().Name(),
@@ -451,7 +381,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		},
 	}
 
-	response2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
+	response2, err := env.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
 	s.False(response2.Started)
 	s.Equal(workflowExecution.RunId, response2.RunId)
@@ -465,16 +395,15 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	for _, callbackInfo := range description.Callbacks {
 		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
 		s.Equal(int32(0), callbackInfo.Attempt)
-		// Verify trigger type is WorkflowClosed
 		s.NotNil(callbackInfo.Trigger)
 		s.NotNil(callbackInfo.Trigger.GetWorkflowClosed())
 	}
 
 	// Unblock the workflow by sending the continue signal
-	_, err = s.FrontendClient().SignalWorkflowExecution(
+	_, err = env.FrontendClient().SignalWorkflowExecution(
 		ctx,
 		&workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
 		},
@@ -513,17 +442,17 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.Equal(2, callbacksReceived)
 
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(suite *CallbacksMigrationSuite) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		require.NoError(t, err)
-		require.Len(t, description.Callbacks, 2, "should still have 2 callbacks")
+		suite.NoError(err)
+		suite.Len(description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
-			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			require.Equal(t, int32(1), callbackInfo.Attempt)
-			require.Nil(t, callbackInfo.LastAttemptFailure)
-			require.NotNil(t, callbackInfo.LastAttemptCompleteTime)
+			suite.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			suite.Equal(int32(1), callbackInfo.Attempt)
+			suite.Nil(callbackInfo.LastAttemptFailure)
+			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }
