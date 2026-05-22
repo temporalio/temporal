@@ -162,7 +162,6 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 		Query:                   "",
 		ConcurrentActivityCount: 2,
 		OverallRps:              10,
-		GetParentInfoRPS:        2.0,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   testMaxPageCountPerExecution,
 		NextPageToken:           []byte("fake-page-token-2"),

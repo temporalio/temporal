@@ -50,7 +50,6 @@ type (
 		Query                   string
 		ConcurrentActivityCount int
 		OverallRps              float64
-		GetParentInfoRPS        float64
 		ListWorkflowsPageSize   int
 		PageCountPerExecution   int
 		NextPageToken           []byte
@@ -407,9 +406,6 @@ func validateAndSetAdaptiveParams(params *AdaptiveForceReplicationParams) error 
 	if params.OverallRps <= 0 {
 		params.OverallRps = float64(params.ConcurrentActivityCount)
 	}
-	if params.GetParentInfoRPS <= 0 {
-		params.GetParentInfoRPS = float64(params.ConcurrentActivityCount)
-	}
 	if params.ListWorkflowsPageSize <= 0 {
 		params.ListWorkflowsPageSize = defaultListWorkflowsPageSize
 	}
@@ -633,6 +629,13 @@ func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 		if s.lastActivityErr != nil {
 			break
 		}
+		// Break early when the SDK signals history budget is approaching
+		// the warn threshold so the CAN snapshot fits. Without this,
+		// PageCountPerExecution (up to 1000) can blow past the warn
+		// before any of the pending-list thresholds trip.
+		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			break
+		}
 		listReq := &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     s.params.Namespace,
 			PageSize:      int32(s.params.ListWorkflowsPageSize),
@@ -739,10 +742,7 @@ func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*E
 // pathological run doesn't end up with hour-long deadlines.
 func (s *adaptiveWorkflowState) retryDeadlinesForRound(round int) (fastMs, slowMs int64) {
 	const maxDeadlineMultiplier = 10
-	mult := round + 2
-	if mult > maxDeadlineMultiplier {
-		mult = maxDeadlineMultiplier
-	}
+	mult := min(round+2, maxDeadlineMultiplier)
 	fastMs = int64(s.params.BatchDeadlineSeconds) * 1000 * int64(mult)
 	slowMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000 * int64(mult)
 	return
@@ -752,10 +752,7 @@ func (s *adaptiveWorkflowState) retryDeadlinesForRound(round int) (fastMs, slowM
 // chunks of batchSize.
 func (s *adaptiveWorkflowState) dispatchRetryChunks(ctx workflow.Context, execs []*ExecutionInfo, slow bool, batchSize int, deadlineMs int64) {
 	for i := 0; i < len(execs); i += batchSize {
-		end := i + batchSize
-		if end > len(execs) {
-			end = len(execs)
-		}
+		end := min(i+batchSize, len(execs))
 		s.dispatchVerifyOnly(ctx, execs[i:end], slow, deadlineMs)
 	}
 }
@@ -764,11 +761,7 @@ func (s *adaptiveWorkflowState) dispatchRetryChunks(ctx workflow.Context, execs 
 // fast-lane so concurrency=1 doesn't pin a single huge batch and
 // starve the lane.
 func slowLaneRetryBatchSize(fastPageSize int) int {
-	size := fastPageSize / 4
-	if size < 25 {
-		size = 25
-	}
-	return size
+	return max(fastPageSize/4, 25)
 }
 
 // dispatchInjectThenVerify chains InjectBatch + VerifyBatch on the
@@ -784,9 +777,6 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 	if slow {
 		sem = s.slowSem
 		rps = s.currentSlowRPS
-		if rps < 1 {
-			rps = 1
-		}
 		deadlineMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
 	}
@@ -812,17 +802,17 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		var a *activities
 
 		injReq := &adaptiveInjectBatchRequest{
-			Namespace:        s.params.Namespace,
-			NamespaceID:      s.params.NamespaceID,
-			TargetClusters:   targetClusters,
-			Executions:       execs,
-			RPS:              rps,
-			GetParentInfoRPS: s.params.GetParentInfoRPS / float64(s.params.ConcurrentActivityCount),
+			Namespace:      s.params.Namespace,
+			NamespaceID:    s.params.NamespaceID,
+			TargetClusters: targetClusters,
+			Executions:     execs,
+			RPS:            rps,
 		}
 		if err := workflow.ExecuteActivity(injectCtx, a.InjectBatch, injReq).Get(ctx, nil); err != nil {
+			// lastActivityErr causes the workflow to fail (no CAN), so
+			// don't bother routing pending or adjusting AIMD — neither
+			// is observable after a failure return.
 			s.lastActivityErr = err
-			s.routePending(execs)
-			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		if !s.params.EnableVerification {
@@ -844,8 +834,6 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		var resp adaptiveVerifyBatchResponse
 		if err := workflow.ExecuteActivity(verifyCtx, a.VerifyBatch, verReq).Get(ctx, &resp); err != nil {
 			s.lastActivityErr = err
-			s.routePending(execs)
-			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		s.totalVerified += resp.Verified
@@ -888,8 +876,6 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		var resp adaptiveVerifyBatchResponse
 		if err := workflow.ExecuteActivity(actx, a.VerifyBatch, req).Get(ctx, &resp); err != nil {
 			s.lastActivityErr = err
-			s.routePending(execs)
-			s.adjustRPS(ctx, slow, true)
 			return
 		}
 		s.totalVerified += resp.Verified
@@ -899,7 +885,10 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 }
 
 // recordBatchOutcome updates the WF-ID and shard counters and routes pending
-// executions onto their lane.
+// executions onto their lane. Counters move once per BusinessID per batch:
+// multiple pending or clean runs of the same WF-ID in a single batch count
+// as a single observation, so a WF-ID isn't quarantined off one batch's
+// pending list.
 //
 // Shard counters skip increments for already-quarantined WF-IDs so a hot
 // WF-ID doesn't double-count and trip shard quarantine off its own signal;
@@ -908,25 +897,32 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 // (release at threshold/2 hysteresis) because shard hotness is transient,
 // whereas WF-ID quarantine stays sticky.
 func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatched, pending []*ExecutionInfo) {
-	type execKey struct{ bid, rid string }
-	pendingSet := make(map[execKey]struct{}, len(pending))
+	// Dedupe by BusinessID, preserving first-seen order for replay
+	// determinism. The pending/dispatched slices come straight from
+	// activity results / inputs and are themselves deterministic.
+	pendingBIDs := make(map[string]struct{}, len(pending))
+	pendingBIDOrder := make([]string, 0, len(pending))
 	for _, ex := range pending {
-		pendingSet[execKey{ex.BusinessID, ex.RunID}] = struct{}{}
+		if _, seen := pendingBIDs[ex.BusinessID]; seen {
+			continue
+		}
+		pendingBIDs[ex.BusinessID] = struct{}{}
+		pendingBIDOrder = append(pendingBIDOrder, ex.BusinessID)
 	}
 
-	for _, ex := range pending {
+	for _, bid := range pendingBIDOrder {
 		wasQuarantinedWF := false
-		if _, ok := s.quarantinedWF[ex.BusinessID]; ok {
+		if _, ok := s.quarantinedWF[bid]; ok {
 			wasQuarantinedWF = true
 		}
 
-		s.wfIDPending[ex.BusinessID]++
-		if !wasQuarantinedWF && s.wfIDPending[ex.BusinessID] >= s.params.WFIDQuarantineThreshold {
-			s.quarantinedWF[ex.BusinessID] = struct{}{}
+		s.wfIDPending[bid]++
+		if !wasQuarantinedWF && s.wfIDPending[bid] >= s.params.WFIDQuarantineThreshold {
+			s.quarantinedWF[bid] = struct{}{}
 			s.emitTransition(ctx, forceRepWFQuarantinedMetric,
 				"adaptive: quarantined WF-ID",
-				"wfId", ex.BusinessID,
-				"pendingCount", s.wfIDPending[ex.BusinessID])
+				"wfId", bid,
+				"pendingCount", s.wfIDPending[bid])
 			wasQuarantinedWF = true
 		}
 
@@ -935,7 +931,7 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 			// against the shard.
 			continue
 		}
-		sh := s.shardOf(ex.BusinessID)
+		sh := s.shardOf(bid)
 		s.shardPending[sh]++
 		if _, already := s.quarantinedShard[sh]; !already && s.shardPending[sh] >= s.params.ShardQuarantineThreshold {
 			s.quarantinedShard[sh] = struct{}{}
@@ -946,14 +942,19 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		}
 	}
 
-	releaseAt := s.params.ShardQuarantineThreshold / 2
-	if releaseAt < 1 {
-		releaseAt = 1
-	}
+	releaseAt := max(s.params.ShardQuarantineThreshold/2, 1)
+	// Decrement per fully-clean BID (no pending runs in this batch).
+	// Deduped against pending so partial-clean BIDs don't decay the
+	// counter that the increment loop just bumped.
+	seenClean := make(map[string]struct{}, len(dispatched))
 	for _, ex := range dispatched {
-		if _, isPending := pendingSet[execKey{ex.BusinessID, ex.RunID}]; isPending {
+		if _, isPending := pendingBIDs[ex.BusinessID]; isPending {
 			continue
 		}
+		if _, already := seenClean[ex.BusinessID]; already {
+			continue
+		}
+		seenClean[ex.BusinessID] = struct{}{}
 		sh := s.shardOf(ex.BusinessID)
 		if s.shardPending[sh] > 0 {
 			s.shardPending[sh]--

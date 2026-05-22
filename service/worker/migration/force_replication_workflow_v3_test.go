@@ -526,12 +526,12 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 		"hard cap should bound carried pending")
 }
 
-// TestHardCAPDrainsBeforeCAN feeds the workflow more carry-over pending
+// TestHardCapDrainsBeforeCAN feeds the workflow more carry-over pending
 // than maxPendingCarryAcrossCAN and verifies the workflow runs
 // drainRetries inline before CAN so the snapshot stays bounded. The
 // drain mocks VerifyBatch as clean so retries empty the pending list
 // entirely.
-func (s *ForceReplicationWorkflowV3TestSuite) TestHardCAPDrainsBeforeCAN() {
+func (s *ForceReplicationWorkflowV3TestSuite) TestHardCapDrainsBeforeCAN() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})

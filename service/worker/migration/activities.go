@@ -63,11 +63,10 @@ type (
 	}
 
 	generateReplicationTasksRequest struct {
-		NamespaceID      string
-		Executions       []*ExecutionInfo
-		RPS              float64
-		GetParentInfoRPS float64
-		TargetClusters   []string
+		NamespaceID    string
+		Executions     []*ExecutionInfo
+		RPS            float64
+		TargetClusters []string
 	}
 
 	verifyReplicationTasksRequest struct {

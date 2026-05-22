@@ -33,9 +33,8 @@ type (
 		NamespaceID    string
 		TargetClusters []string
 
-		Executions       []*ExecutionInfo
-		RPS              float64
-		GetParentInfoRPS float64
+		Executions []*ExecutionInfo
+		RPS        float64
 	}
 
 	// adaptiveVerifyBatchRequest drives the skip-ahead verify phase for a
@@ -208,11 +207,11 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 			// batches the actual network calls, so the cost is bounded
 			// even with large batches.
 			activity.RecordHeartbeat(ctx, nil)
-			outcome, err := a.skipAheadVerifySingle(ctx, singleReq, remoteAdminClient, nsEntry, we)
+			isVerified, err := a.skipAheadVerifySingle(ctx, singleReq, remoteAdminClient, nsEntry, we)
 			if err != nil {
 				return nil, err
 			}
-			if outcome == verifyOutcomeVerified {
+			if isVerified {
 				verified[i] = true
 				verifiedCount++
 			}
@@ -234,28 +233,20 @@ func (a *activities) skipAheadVerify(ctx context.Context, request *adaptiveVerif
 	}, nil
 }
 
-type verifyOutcome int
-
-const (
-	verifyOutcomeUnknown verifyOutcome = iota
-	verifyOutcomeMissing
-	verifyOutcomeVerified
-)
-
 // skipAheadVerifySingle mirrors the per-execution branches of
-// verifySingleReplicationTask but returns a tri-state outcome the skip-ahead
-// loop can act on without breaking.
+// verifySingleReplicationTask. Returns true when verification is terminal
+// (verified or skipped); false when the execution should be retried.
 func (a *activities) skipAheadVerifySingle(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	execution *ExecutionInfo,
-) (verifyOutcome, error) {
+) (bool, error) {
 	s := time.Now()
 	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
 	if err != nil {
-		return verifyOutcomeUnknown, err
+		return false, err
 	}
 	mu, err := remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
@@ -273,7 +264,7 @@ func (a *activities) skipAheadVerifySingle(
 	case nil:
 		result, verr := a.workflowVerifier(ctx, request, remoteAdminClient, a.adminClient, ns, execution, mu)
 		if verr != nil {
-			return verifyOutcomeUnknown, verr
+			return false, verr
 		}
 		// Match V1/V2 metric semantics: only `verified` increments the
 		// success counter. `skipped` (zombie / past-retention) still
@@ -283,9 +274,9 @@ func (a *activities) skipAheadVerifySingle(
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
 		if result.status == verified || result.status == skipped {
-			return verifyOutcomeVerified, nil
+			return true, nil
 		}
-		return verifyOutcomeMissing, nil
+		return false, nil
 
 	case *serviceerror.NotFound:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
@@ -295,27 +286,27 @@ func (a *activities) skipAheadVerifySingle(
 		// pending.
 		result, serr := a.checkSkipWorkflowExecution(ctx, request, execution, ns)
 		if serr != nil {
-			return verifyOutcomeUnknown, serr
+			return false, serr
 		}
 		if result.status == verified || result.status == skipped {
-			return verifyOutcomeVerified, nil
+			return true, nil
 		}
-		return verifyOutcomeMissing, nil
+		return false, nil
 
 	case *serviceerror.NamespaceNotFound:
-		return verifyOutcomeUnknown, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
+		return false, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
 
 	case *serviceerror.ResourceExhausted:
 		if e.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 			// Apply is mid-flight on the passive — a small sign of progress
 			// but not yet verified. Pending until the next scan.
-			return verifyOutcomeUnknown, nil
+			return false, nil
 		}
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
-		return verifyOutcomeUnknown, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
+		return false, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 
 	default:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
-		return verifyOutcomeUnknown, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
+		return false, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 	}
 }

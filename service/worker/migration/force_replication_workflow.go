@@ -31,7 +31,6 @@ type (
 		Query                   string `validate:"required"` // query to list workflows for replication
 		ConcurrentActivityCount int
 		OverallRps              float64 // RPS for enqueuing of replication tasks
-		GetParentInfoRPS        float64 // RPS for getting parent child info
 		ListWorkflowsPageSize   int     // PageSize of ListWorkflow, will paginate through results.
 		PageCountPerExecution   int     // number of pages to be processed before continue as new, max is 1000.
 		NextPageToken           []byte  // used by continue as new
@@ -365,9 +364,6 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 	if params.OverallRps <= 0 {
 		params.OverallRps = float64(params.ConcurrentActivityCount)
 	}
-	if params.GetParentInfoRPS <= 0 {
-		params.GetParentInfoRPS = float64(params.ConcurrentActivityCount)
-	}
 
 	if params.ListWorkflowsPageSize <= 0 {
 		params.ListWorkflowsPageSize = defaultListWorkflowsPageSize
@@ -502,11 +498,10 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 			actx,
 			a.GenerateReplicationTasks,
 			&generateReplicationTasksRequest{
-				NamespaceID:      namespaceID,
-				Executions:       migrationExecutions,
-				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
-				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
-				TargetClusters:   targetClusters,
+				NamespaceID:    namespaceID,
+				Executions:     migrationExecutions,
+				RPS:            params.OverallRps / float64(params.ConcurrentActivityCount),
+				TargetClusters: targetClusters,
 			})
 
 		pendingGenerateTasks++
@@ -643,11 +638,10 @@ func enqueueReplicationTasksLocal(
 			lactx,
 			a.GenerateReplicationTasks,
 			&generateReplicationTasksRequest{
-				NamespaceID:      namespaceID,
-				Executions:       executions,
-				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
-				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
-				TargetClusters:   targetClusters,
+				NamespaceID:    namespaceID,
+				Executions:     executions,
+				RPS:            params.OverallRps / float64(params.ConcurrentActivityCount),
+				TargetClusters: targetClusters,
 			})
 
 		pendingGenerateTasks++

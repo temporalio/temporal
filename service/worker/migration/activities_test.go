@@ -736,10 +736,9 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 	env, iceptor := s.initEnv()
 
 	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*ExecutionInfo{execution1, execution2},
+		NamespaceID: mockedNamespaceID,
+		RPS:         10,
+		Executions:  []*ExecutionInfo{execution1, execution2},
 	}
 
 	for i := 0; i < len(request.Executions); i++ {
@@ -767,10 +766,9 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	env, iceptor := s.initEnv()
 
 	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*ExecutionInfo{execution1, execution2},
+		NamespaceID: mockedNamespaceID,
+		RPS:         10,
+		Executions:  []*ExecutionInfo{execution1, execution2},
 	}
 
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
@@ -806,11 +804,10 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success_ViaFrontend() {
 	s.a.generateMigrationTaskViaFrontend = dynamicconfig.GetBoolPropertyFn(true)
 
 	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*ExecutionInfo{execution1, execution2},
-		TargetClusters:   []string{remoteCluster},
+		NamespaceID:    mockedNamespaceID,
+		RPS:            10,
+		Executions:     []*ExecutionInfo{execution1, execution2},
+		TargetClusters: []string{remoteCluster},
 	}
 
 	// Test startIndex logic, and it should be 1 when running the activity.
