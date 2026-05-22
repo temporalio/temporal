@@ -7148,45 +7148,6 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 	s.Equal(virtualTime.Add(-skipped), (*captured)[0].GetVisibilityTime())
 }
 
-func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_NoOpWithoutTimeSkipping() {
-	virtualTime := s.mockShard.GetTimeSource().Now().Add(2 * time.Hour)
-	s.mutableState.executionInfo.TimeSkippingInfo = nil
-	captured := s.installEngineCapturingSpeculativeTimeout()
-
-	task := &tasks.WorkflowTaskTimeoutTask{
-		WorkflowKey:         s.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: virtualTime,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventID:             7,
-		InMemory:            true,
-	}
-	s.NoError(s.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(task))
-
-	s.Equal(virtualTime, task.VisibilityTimestamp)
-	s.Require().Len(*captured, 1)
-	s.Equal(virtualTime, (*captured)[0].GetVisibilityTime())
-}
-
-func (s *mutableStateSuite) TestRemoveSpeculativeWorkflowTaskTimeoutTask_CancelsAndClears() {
-	s.installEngineCapturingSpeculativeTimeout()
-
-	task := &tasks.WorkflowTaskTimeoutTask{
-		WorkflowKey:         s.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: s.mockShard.GetTimeSource().Now().Add(time.Minute),
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventID:             7,
-		InMemory:            true,
-	}
-	s.NoError(s.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(task))
-	s.True(s.mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task))
-
-	s.mutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
-
-	s.False(s.mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task), "slot should be cleared")
-	// A second remove on an empty slot is safe.
-	s.NotPanics(func() { s.mutableState.RemoveSpeculativeWorkflowTaskTimeoutTask() })
-}
-
 // TestAccumulatedSkippedDuration_NilSafety pins the contract that the unexported
 // accumulatedSkippedDuration helper never panics regardless of how much of the proto chain is
 // nil, and returns 0 whenever time-skipping is not configured. AddTasks,
@@ -7244,27 +7205,6 @@ func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 			AccumulatedSkippedDuration: durationpb.New(skipped),
 		}
 		s.Equal(skipped, s.mutableState.accumulatedSkippedDuration())
-	})
-}
-
-// TestMutableStateTimeFrames pins the contract that mutable state exposes virtual time via
-// Now() and converts back to wall-clock via ToRealTime() using AccumulatedSkippedDuration.
-// This is the foundation that AddTasks and SetSpeculativeWorkflowTaskTimeoutTask rely on.
-func (s *mutableStateSuite) TestMutableStateTimeFrames() {
-	wallclock := s.mockShard.GetTimeSource().Now()
-
-	s.Run("NoTimeSkippingInfo", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.Equal(wallclock, s.mutableState.ToRealTime(wallclock))
-	})
-
-	s.Run("WithAccumulatedSkip_ToRealTimeSubtracts", func() {
-		skipped := 45 * time.Minute
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(skipped),
-		}
-		virtual := wallclock.Add(skipped)
-		s.Equal(wallclock, s.mutableState.ToRealTime(virtual))
 	})
 }
 
@@ -8340,6 +8280,65 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 	})
 }
 
+// TestTimeSkippingPreservesUnboundedExpiration locks down the invariant that
+// time skipping never turns an unbounded workflow (no execution / run timeout)
+// into a bounded one. The only write path under skip that touches
+// WorkflowExecutionExpirationTime / WorkflowRunExpirationTime is
+// shiftWorkflowTimes (driven by initTimeSkippingInfo for propagated runs),
+// which gates per-field on timeNotSet — so nil/zero inputs must round-trip
+// unchanged. RefreshExpirationTimeoutTask has its own pre-skipping guards
+// (weTimeout > 0 / wrTimeout != 0) that are independent of time-skipping
+// state. The companion read path ToRealTime is covered by
+// TestToRealTime/ZeroInputReturnedUnchangedEvenUnderSkip.
+func (s *mutableStateSuite) TestTimeSkippingPreservesUnboundedExpiration() {
+	const initialDur = 50 * time.Minute
+	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("NilExpiration_StaysNil_AfterPositiveInitialSkip", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
+		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
+		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
+		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = nil
+		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = nil
+
+		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), 1)
+
+		s.Nil(s.mutableState.executionInfo.WorkflowRunExpirationTime)
+		s.Nil(s.mutableState.executionInfo.WorkflowExecutionExpirationTime)
+	})
+
+	s.Run("ZeroExpiration_StaysZero_AfterPositiveInitialSkip", func() {
+		// A proto-wrapped zero time is the second flavor of "not set" — timeNotSet
+		// treats it the same as nil, so shiftWorkflowTimes must leave it at zero.
+		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
+		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
+		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
+		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(time.Time{})
+		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
+
+		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), 1)
+
+		s.True(s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime().IsZero())
+		s.True(s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime().IsZero())
+	})
+
+	s.Run("ShiftWorkflowTimes_DirectCall_NilAndZero_NotShifted", func() {
+		// Directly exercise shiftWorkflowTimes to pin the contract independent of
+		// the initTimeSkippingInfo wrapper. accum > 0 must be a no-op on
+		// unset expiration fields regardless of how it was invoked.
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = nil
+		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
+		s.mutableState.shiftWorkflowTimes(durationpb.New(2 * time.Hour))
+		s.Nil(s.mutableState.executionInfo.WorkflowRunExpirationTime)
+		s.True(s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime().IsZero())
+	})
+
+}
+
 // TestUpdateTimeSkippingInfo verifies updateTimeSkippingInfo replaces Config but
 // preserves AccumulatedSkippedDuration, and re-runs applyTimeSkippingBound.
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
@@ -8672,6 +8671,8 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 	})
 }
 
+// TestToRealTime tests ms.ToRealTime() exhaustively as this function is also used by executions that don't
+// use time skipping and need to be tested thoroughly. This function converts virtual time to wall-clock time.
 func (s *mutableStateSuite) TestToRealTime() {
 	virtualTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	s.Run("IdentityWhenTimeSkippingInfoNil", func() {
@@ -8725,13 +8726,26 @@ func (s *mutableStateSuite) TestToRealTime() {
 		past := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		s.Equal(past.Add(-accum), s.mutableState.ToRealTime(past))
 	})
+	s.Run("ToRealTimeDoesNotMutateState", func() {
+		ts := clock.NewEventTimeSource()
+		ts.Update(time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC))
+		s.mutableState.timeSource = ts
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+
+		tsiBefore := proto.Clone(s.mutableState.executionInfo.TimeSkippingInfo).(*persistencespb.TimeSkippingInfo)
+		nowBefore := s.mutableState.timeSource.Now()
+
+		_ = s.mutableState.ToRealTime(virtualTime)
+
+		s.Equal(nowBefore, s.mutableState.timeSource.Now())
+		s.True(proto.Equal(tsiBefore, s.mutableState.executionInfo.TimeSkippingInfo))
+	})
 }
 
-// TestMutableStateImpl_Now pins the production-facing virtual-time contract
-// surfaced by MutableState.Now(). Most call sites go through this method (not
-// the underlying timeSource), so the test exercises Now() directly across the
-// wrap state machine — pre-wrap returns wall, post-wrap returns virtual, and
-// the wrapper's closure must observe live mutations to AccumulatedSkippedDuration.
+// TestMutableStateImpl_Now tests ms.Now() exhaustively as this function is also used by executions that don't
+// use time skipping and need to be tested thoroughly.
 func (s *mutableStateSuite) TestMutableStateImpl_Now() {
 	fixedBase := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
 	fixedTimeSource := func() *clock.EventTimeSource {

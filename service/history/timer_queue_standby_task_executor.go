@@ -239,6 +239,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.UserTimerTask,
 ) error {
+	referenceTime := t.Now()
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
@@ -247,7 +248,6 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 
 		timerSequence := t.getTimerSequence(mutableState)
 		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
-		referenceTime := mutableState.Now()
 		if len(timerSequenceIDs) > 0 {
 			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
@@ -260,7 +260,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				timerSequenceID.Timestamp,
+				mutableState.ToRealTime(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -299,13 +299,13 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
+	referenceTime := t.Now()
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
 			return nil, nil
 		}
 
-		referenceTime := mutableState.Now()
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
 		timerSequenceIDs := timerSequence.LoadAndSortActivityTimers()
@@ -321,7 +321,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				timerSequenceID.Timestamp,
+				mutableState.ToRealTime(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}

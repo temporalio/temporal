@@ -1947,6 +1947,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
+	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2082,6 +2083,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
+	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2192,6 +2194,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
+	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)

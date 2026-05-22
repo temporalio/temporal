@@ -2153,6 +2153,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
