@@ -332,7 +332,7 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 		return err
 	}
 
-	// if client has sent its idea of counts, also validate difference
+	// if client has sent its idea of counts, also validate drift
 	clientPC, err := matching.ParsePartitionCountsFromIncomingContext(ctx)
 	if err != nil {
 		pm.throttledLogger.Info("partition count header parse error", tag.Error(err))
@@ -340,8 +340,8 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	} else if !clientPC.Valid() {
 		return nil // client didn't send anything or invalid, skip check
 	}
-	difference := pm.config.PartitionScaleDifference()
-	return validatePartitionCountDifference(scaleInfo, forWrite, clientPC, difference)
+	allowedDrift := pm.config.PartitionScaleAllowedDrift()
+	return validatePartitionScaleDrift(scaleInfo, forWrite, clientPC, allowedDrift)
 }
 
 // validatePartitionCounts checks whether a partition should accept an RPC based on the current
@@ -364,14 +364,14 @@ func validatePartitionCounts(
 	}
 }
 
-// validatePartitionCountDifference checks whether a partition should accept an RPC based on
+// validatePartitionScaleDrift checks whether a partition should accept an RPC based on
 // the client's idea of partition counts. It returns nil if the RPC should be accepted, or an
 // error if it should be rejected. scaleInfo and clientPC must both be valid.
-func validatePartitionCountDifference(
+func validatePartitionScaleDrift(
 	scaleInfo *taskqueuespb.PartitionScaleInfo,
 	forWrite bool,
 	clientPC matching.PartitionCounts,
-	difference dynamicconfig.PartitionScaleDifference,
+	allowedDrift dynamicconfig.PartitionScaleAllowedDrift,
 ) error {
 	var delta int32
 	var ratio float32
@@ -382,8 +382,8 @@ func validatePartitionCountDifference(
 		delta = clientPC.Read - scaleInfo.Read
 		ratio = float32(clientPC.Read) / float32(scaleInfo.Read)
 	}
-	effectiveRatio := max(1.001, difference.AllowedRatio)
-	if delta >= -difference.AllowedDelta && delta <= difference.AllowedDelta ||
+	effectiveRatio := max(1.001, allowedDrift.Ratio)
+	if delta >= -allowedDrift.Delta && delta <= allowedDrift.Delta ||
 		ratio >= 1/effectiveRatio && ratio <= effectiveRatio {
 		return nil
 	}
