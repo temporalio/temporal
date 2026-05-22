@@ -251,20 +251,69 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 		return err
 	}
 
-	// Query handler reads from state when available so live counters are
-	// visible mid-run; before state is built, falls back to carry-over params.
 	var state *adaptiveWorkflowState
+	registerAdaptiveStatusQuery(ctx, &params, startPageToken, &state)
+
+	retryPolicy := newForceReplicationRetryPolicy()
+
+	if params.TotalForceReplicateWorkflowCount == 0 {
+		wfCount, err := countWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
+		if err != nil {
+			return err
+		}
+		params.TotalForceReplicateWorkflowCount = wfCount
+	}
+
+	if err := resolveAdaptiveMetadata(ctx, &params, retryPolicy); err != nil {
+		return err
+	}
+
+	if !params.TaskQueueUserDataReplicationStatus.Done {
+		if err := kickoffTaskQueueUserDataReplication(ctx, &params); err != nil {
+			return err
+		}
+	}
+
+	state = newAdaptiveWorkflowState(ctx, &params, retryPolicy)
+	if err := state.runOnePagedCycle(ctx); err != nil {
+		return err
+	}
+
+	complete, err := state.finalizeBeforeCAN(ctx)
+	if err != nil {
+		return err
+	}
+	if complete {
+		return awaitTaskQueueUserDataDone(ctx, &params)
+	}
+
+	params.ContinuedAsNewCount++
+	params.QuarantinedWFIDs = state.snapshotQuarantinedWFIDs()
+	params.QuarantinedShards = state.snapshotQuarantinedShards()
+	params.WFIDPendingCounts = state.wfIDPending
+	params.ShardPendingCounts = state.shardPending
+	params.FastPending = pendingList(state.fastPending)
+	params.SlowPending = pendingList(state.slowPending)
+	params.ReplicatedWorkflowCount = state.totalVerified
+	params.LastProgressAt = state.lastProgressAt
+	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV3, params)
+}
+
+// registerAdaptiveStatusQuery installs the status query handler. The
+// handler reads from state when it's been built so live counters are
+// visible mid-run, and falls back to the carry-over params before then.
+func registerAdaptiveStatusQuery(ctx workflow.Context, params *AdaptiveForceReplicationParams, startPageToken []byte, stateRef **adaptiveWorkflowState) {
 	_ = workflow.SetQueryHandler(ctx, adaptiveForceReplicationStatusQueryType, func() (AdaptiveForceReplicationStatus, error) {
 		verified := params.ReplicatedWorkflowCount
 		qWF := len(params.QuarantinedWFIDs)
 		qShard := len(params.QuarantinedShards)
 		var fastRPS, slowRPS float64
-		if state != nil {
-			verified = state.totalVerified
-			qWF = len(state.quarantinedWF)
-			qShard = len(state.quarantinedShard)
-			fastRPS = state.currentFastRPS
-			slowRPS = state.currentSlowRPS
+		if s := *stateRef; s != nil {
+			verified = s.totalVerified
+			qWF = len(s.quarantinedWF)
+			qShard = len(s.quarantinedShard)
+			fastRPS = s.currentFastRPS
+			slowRPS = s.currentSlowRPS
 		}
 		return AdaptiveForceReplicationStatus{
 			ForceReplicationStatus: ForceReplicationStatus{
@@ -282,83 +331,66 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 			CurrentSlowRPS:        slowRPS,
 		}, nil
 	})
+}
 
-	retryPolicy := newForceReplicationRetryPolicy()
-
-	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, params.Namespace, params.Query, retryPolicy)
-		if err != nil {
-			return err
-		}
-		params.TotalForceReplicateWorkflowCount = wfCount
+// resolveAdaptiveMetadata fills NamespaceID and HistoryShardCount from a
+// GetMetadata call when either is unset, leaving caller-provided values
+// untouched (callers may override HistoryShardCount when the target has
+// a different shard count).
+func resolveAdaptiveMetadata(ctx workflow.Context, params *AdaptiveForceReplicationParams, retryPolicy *temporal.RetryPolicy) error {
+	if params.NamespaceID != "" && params.HistoryShardCount != 0 {
+		return nil
 	}
-
-	if params.NamespaceID == "" || params.HistoryShardCount == 0 {
-		metadataResp, err := getClusterMetadata(ctx, params.Namespace, retryPolicy)
-		if err != nil {
-			return err
-		}
-		if params.NamespaceID == "" {
-			params.NamespaceID = metadataResp.NamespaceID
-		}
-		if params.HistoryShardCount == 0 {
-			params.HistoryShardCount = metadataResp.ShardCount
-		}
-	}
-
-	if !params.TaskQueueUserDataReplicationStatus.Done {
-		if err := kickoffTaskQueueUserDataReplication(ctx, &params); err != nil {
-			return err
-		}
-	}
-
-	state = newAdaptiveWorkflowState(ctx, &params, retryPolicy)
-	if err := state.runOnePagedCycle(ctx); err != nil {
+	metadataResp, err := getClusterMetadata(ctx, params.Namespace, retryPolicy)
+	if err != nil {
 		return err
 	}
+	if params.NamespaceID == "" {
+		params.NamespaceID = metadataResp.NamespaceID
+	}
+	if params.HistoryShardCount == 0 {
+		params.HistoryShardCount = metadataResp.ShardCount
+	}
+	return nil
+}
 
+// finalizeBeforeCAN runs end-of-cycle drain logic. Returns complete=true
+// when the workflow should await TQ-user-data and complete; complete=false
+// means the caller should snapshot state and continue-as-new. On the
+// final/drain-only path a mid-drain history-budget trip flips DrainOnly
+// on so the next cycle resumes draining.
+func (s *adaptiveWorkflowState) finalizeBeforeCAN(ctx workflow.Context) (complete bool, err error) {
+	params := s.params
 	if params.DrainOnly || params.NextPageToken == nil {
-		// Final-cycle / drain-only path: try to drain, but bail if the
-		// SDK signals we're approaching the history budget so we CAN
-		// and resume draining next cycle.
-		canSuggested, err := state.drainRetries(ctx)
-		if err != nil {
-			return err
+		canSuggested, drainErr := s.drainRetries(ctx)
+		if drainErr != nil {
+			return false, drainErr
 		}
 		if !canSuggested {
-			// Pending fully drained — wait for the TQ-user-data child
-			// and complete.
-			if err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done }); err != nil {
-				return err
-			}
-			if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
-				return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
-			}
-			return nil
+			return true, nil
 		}
-		// History budget tripped mid-drain. Set DrainOnly so the next
-		// cycle skips listing and resumes draining; fall through to the
-		// CAN snapshot below.
 		params.DrainOnly = true
-	} else if len(state.fastPending)+len(state.slowPending) > maxPendingCarryAcrossCAN ||
-		state.estimateCANPayloadBytes() > maxCANCarryBytes {
+		return false, nil
+	}
+	if len(s.fastPending)+len(s.slowPending) > maxPendingCarryAcrossCAN ||
+		s.estimateCANPayloadBytes() > maxCANCarryBytes {
 		// Overshoot past the early-CAN trigger pushed pending over the
 		// hard cap; drain inline before snapshotting.
-		if _, err := state.drainRetries(ctx); err != nil {
-			return err
+		if _, drainErr := s.drainRetries(ctx); drainErr != nil {
+			return false, drainErr
 		}
 	}
+	return false, nil
+}
 
-	params.ContinuedAsNewCount++
-	params.QuarantinedWFIDs = state.snapshotQuarantinedWFIDs()
-	params.QuarantinedShards = state.snapshotQuarantinedShards()
-	params.WFIDPendingCounts = state.wfIDPending
-	params.ShardPendingCounts = state.shardPending
-	params.FastPending = pendingList(state.fastPending)
-	params.SlowPending = pendingList(state.slowPending)
-	params.ReplicatedWorkflowCount = state.totalVerified
-	params.LastProgressAt = state.lastProgressAt
-	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV3, params)
+func awaitTaskQueueUserDataDone(ctx workflow.Context, params *AdaptiveForceReplicationParams) error {
+	if err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done }); err != nil {
+		return err
+	}
+	if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+		return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+	}
+	return nil
 }
 
 func validateAndSetAdaptiveParams(params *AdaptiveForceReplicationParams) error {
