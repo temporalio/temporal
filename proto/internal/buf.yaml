@@ -17,6 +17,8 @@ breaking:
     # TODO: Remove once this is stable. business_id was intentionally changed from
     # optional to repeated to support multiple fallback routing fields.
     - temporal/server/api/routing/v1/extension.proto
+    # TODO (seankane): Remove after merging PR #10364
+    - chasm/lib/activity/proto/v1/activity_state.proto
 lint:
   use:
     - DEFAULT
