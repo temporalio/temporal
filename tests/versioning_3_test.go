@@ -5598,16 +5598,14 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 	s.NoError(err)
 
 	// Wait for the workflow to start on v1
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := env.SdkClient().DescribeWorkflowExecution(env.Context(), run.GetID(), "")
-		require.NoError(t, err)
-		require.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+	s.Await(func(s *Versioning3Suite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), "")
+		s.NoError(err)
+		s.Equal(tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for first activity attempt to fail (should be on v1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		require.Equal(t, int32(1), v1AttemptCount.Load())
-	}, 10*time.Second, 100*time.Millisecond)
+	s.AwaitTrue(func() bool { return v1AttemptCount.Load() == 1 }, 10*time.Second, 100*time.Millisecond)
 
 	// Now the activity is in retry backoff. Change the current deployment to v2
 	// while the activity is waiting to retry.
