@@ -93,6 +93,20 @@ func (c *metricClient) DeleteDLQTasks(
 	return c.client.DeleteDLQTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDeleteExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
