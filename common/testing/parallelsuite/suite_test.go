@@ -73,7 +73,7 @@ func TestRun_AcceptsSuite(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validWithArgsSuite{}, "hello", 42) })
 	})
 	t.Run("legacy", func(t *testing.T) {
-		require.NotPanics(t, func() { RunLegacySequential(t, &validSuite{}) })
+		require.NotPanics(t, func() { RunLegacySequential(t, &validSuite{}) }) //nolint:staticcheck // SA1019: validating deprecated legacy runner
 	})
 }
 

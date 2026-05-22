@@ -87,8 +87,8 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 
 // RunLegacySequential behaves like [Run] but does not mark any test as parallel.
 //
-// It is only intended for backwards-compatibility with legacy behavior to ease migration
-// and should not be used in new tests.
+// Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
+// with legacy behavior to ease migration.
 func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
