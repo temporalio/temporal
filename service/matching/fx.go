@@ -50,6 +50,7 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
+	fx.Provide(func() PartitionScalerFactory { return nil }),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
