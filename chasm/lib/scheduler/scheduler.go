@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -262,6 +261,10 @@ func CreateSchedulerFromMigration(
 	}
 	sched.setNullableFields()
 
+	// These components won't start with any tasks, as stale running workflow entries
+	// can cause immediate computation after migration to drop actions due to overlap
+	// policy. Instead, SchedulerCallbacksTask fires both tasks after ensuring cached
+	// running workflow state is up-to-date.
 	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
 	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
 
@@ -444,15 +447,17 @@ func (s *Scheduler) updateConflictToken() {
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
-	var lastEvent time.Time
 	invoker := s.Invoker.Get(ctx)
 	recentActions := invoker.recentActions()
+
+	latest := util.MaxTime(
+		s.Info.GetCreateTime().AsTime(),
+		s.Info.GetUpdateTime().AsTime(),
+	)
 	if len(recentActions) > 0 {
-		lastEvent = recentActions[len(recentActions)-1].GetActualTime().AsTime()
+		latest = util.MaxTime(latest, recentActions[len(recentActions)-1].GetActualTime().AsTime())
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
-	return lastEvent
+	return latest
 }
 
 // getIdleExpiration returns an idle close time and the boolean value of 'true'
@@ -579,6 +584,11 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
+	// Generate immediately after recording completions, so that an idle task
+	// can be scheduled if no more actions are remaining. Necessary as
+	// additional events invalidate in-flight idle tasks.
+	s.Generator.Get(ctx).Generate(ctx)
+
 	return nil
 }
 
@@ -624,6 +634,9 @@ func (s *Scheduler) Describe(
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
 	info.FutureActionTimes = generator.GetFutureActionTimes()
+	// BufferedStarts holds waiting, running, and recently-completed entries; only the
+	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
@@ -711,6 +724,9 @@ func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
@@ -928,15 +944,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}

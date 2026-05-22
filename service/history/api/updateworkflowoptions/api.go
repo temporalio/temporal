@@ -27,8 +27,7 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
@@ -40,6 +39,8 @@ func Invoke(
 
 	// Store versioning override to send reactivation signal after successful persistence
 	var versioningOverrideForReactivation *workflowpb.VersioningOverride
+	var shouldSkipReactivation bool
+	var revisionNumber int64
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -79,7 +80,11 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			shouldSkipReactivation, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			if err != nil {
+				return nil, err
+			}
+			err = validateTimeSkippingConfig(requestedOptions.GetTimeSkippingConfig(), mutableState)
 			if err != nil {
 				return nil, err
 			}
@@ -118,9 +123,31 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 
 	return ret, nil
+}
+
+// validateTimeSkippingConfig rejects an update whose MaxSkippedDuration is
+// below what the workflow has already skipped — the new bound would be
+// retroactively violated. Validated against current MS state, before merge.
+func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.MutableState) error {
+	if !cfg.GetEnabled() {
+		return nil
+	}
+	bound, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
+	if !ok {
+		return nil
+	}
+	maxSkipped := bound.MaxSkippedDuration.AsDuration()
+	accumulated := ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	if maxSkipped <= accumulated {
+		return serviceerror.NewInvalidArgumentf(
+			"max skipped duration must be greater than skipped duration: %v <= %v",
+			maxSkipped, accumulated,
+		)
+	}
+	return nil
 }
 
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
@@ -151,7 +178,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig())
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -250,13 +277,6 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.disablePropagation"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.DisablePropagation = mergeFrom.GetTimeSkippingConfig().GetDisablePropagation()
-	}
-
 	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
 			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
@@ -272,15 +292,6 @@ func mergeWorkflowExecutionOptions(
 		}
 		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
 			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
-		}
-	}
-
-	if _, ok := updateFields["timeSkippingConfig.maxTargetTime"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxTargetTime{
-			MaxTargetTime: mergeFrom.GetTimeSkippingConfig().GetMaxTargetTime(),
 		}
 	}
 

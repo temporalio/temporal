@@ -51,7 +51,7 @@ func routeSystemCallbackRequest(
 			}
 			return nil, commonnexus.ConvertGRPCError(err, false)
 		}
-		clusterName := ns.ActiveClusterName(completion.GetWorkflowId())
+		clusterName := ns.ActiveClusterName(namespace.RoutingKey{ID: completion.GetWorkflowId()})
 		if clusterMetadata.GetCurrentClusterName() == clusterName {
 			frontendClient = localClient
 		} else {

@@ -39,7 +39,6 @@ func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerSta
 	i := &Invoker{
 		InvokerState: state,
 	}
-	i.addTasks(ctx)
 	return i
 }
 
@@ -181,6 +180,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		if completedStart, ok := completed[start.RequestId]; ok {
 			start.RunId = completedStart.GetRunId()
 			start.StartTime = completedStart.GetStartTime()
+			start.HasCallback = true
 		}
 		if retry, ok := retryable[start.RequestId]; ok {
 			start.Attempt++

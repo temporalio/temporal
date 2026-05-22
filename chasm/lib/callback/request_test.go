@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -129,8 +128,9 @@ func TestRouteRequest_SourceHeaderUnknownCluster(t *testing.T) {
 
 func TestRouteSystemCallbackRequest_NilHeaders(t *testing.T) {
 	// When the request has nil headers, it should fall back to the local client.
+	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -155,6 +155,7 @@ func TestRouteSystemCallbackRequest_NilHeaders(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, gotPath)
 }
 
 func TestRouteSystemCallbackRequest_InvalidToken(t *testing.T) {
@@ -209,6 +210,8 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
+		RunId:       "run-1",
+		Ref:         &persistencespb.StateMachineRef{},
 	})
 	require.NoError(t, err)
 
@@ -235,63 +238,150 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	require.Equal(t, nexus.HandlerErrorTypeNotFound, handlerErr.Type)
 }
 
+func TestRouteSystemCallbackRequest_InvalidChasmComponentRef(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ref  *persistencespb.ChasmComponentRef
+	}{
+		{
+			name: "missing namespace id",
+			ref: &persistencespb.ChasmComponentRef{
+				BusinessId: "wf-1",
+				RunId:      "run-1",
+			},
+		},
+		{
+			name: "missing business id",
+			ref: &persistencespb.ChasmComponentRef{
+				NamespaceId: "ns-id-1",
+				RunId:       "run-1",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tokenGen := commonnexus.NewCallbackTokenGenerator()
+
+			ref, err := tc.ref.Marshal()
+			require.NoError(t, err)
+
+			tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{ComponentRef: ref})
+			require.NoError(t, err)
+
+			r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
+			require.NoError(t, err)
+			r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
+
+			_, err = routeSystemCallbackRequest(
+				r,
+				nil,
+				nil,
+				nil,
+				tokenGen,
+				nil,
+				log.NewNoopLogger(),
+			)
+			require.Error(t, err)
+			var handlerErr *nexus.HandlerError
+			require.ErrorAs(t, err, &handlerErr)
+			require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+			require.Contains(t, handlerErr.Error(), "invalid callback token")
+		})
+	}
+}
+
 func TestRouteSystemCallbackRequest_Success(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer ts.Close()
+	for _, tc := range []struct {
+		name            string
+		completionToken func(*commonnexus.CallbackTokenGenerator) (string, error)
+	}{
+		{
+			name: "HSM",
+			completionToken: func(tokenGen *commonnexus.CallbackTokenGenerator) (string, error) {
+				return tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
+					// HSM sets the deprecated execution fields and ref.
+					NamespaceId: "ns-id-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					Ref:         &persistencespb.StateMachineRef{},
+				})
+			},
+		},
+		{
+			name: "CHASM",
+			completionToken: func(tokenGen *commonnexus.CallbackTokenGenerator) (string, error) {
+				ref, err := (&persistencespb.ChasmComponentRef{
+					NamespaceId: "ns-id-1",
+					BusinessId:  "wf-1",
+					RunId:       "run-1",
+				}).Marshal()
+				if err != nil {
+					return "", err
+				}
+				return tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
+					// CHASM sets ComponentRef.
+					ComponentRef: ref,
+				})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer ts.Close()
 
-	ctrl := gomock.NewController(t)
-	clusterMeta := cluster.NewMockMetadata(ctrl)
-	nsRegistry := namespace.NewMockRegistry(ctrl)
+			ctrl := gomock.NewController(t)
+			clusterMeta := cluster.NewMockMetadata(ctrl)
+			nsRegistry := namespace.NewMockRegistry(ctrl)
 
-	tokenGen := commonnexus.NewCallbackTokenGenerator()
-	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
-		NamespaceId: "ns-id-1",
-		WorkflowId:  "wf-1",
-	})
-	require.NoError(t, err)
+			tokenGen := commonnexus.NewCallbackTokenGenerator()
+			tokenStr, err := tc.completionToken(tokenGen)
+			require.NoError(t, err)
 
-	testNS := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: "ns-id-1", Name: "test-ns"},
-		nil,
-		"cluster-A",
-	)
-	nsRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id-1")).Return(testNS, nil)
+			testNS := namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: "ns-id-1", Name: "test-ns"},
+				nil,
+				"cluster-A",
+			)
+			nsRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id-1")).Return(testNS, nil)
 
-	// httpClientCache.Get will fail for "cluster-A", so it falls back to localClient.
-	clusterMeta.EXPECT().GetCurrentClusterName().Return("cluster-A").AnyTimes()
-	clusterMeta.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{}).AnyTimes()
-	clusterMeta.EXPECT().RegisterMetadataChangeCallback(gomock.Any(), gomock.Any())
+			// httpClientCache.Get will fail for "cluster-A", so it falls back to localClient.
+			clusterMeta.EXPECT().GetCurrentClusterName().Return("cluster-A").AnyTimes()
+			clusterMeta.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{}).AnyTimes()
+			clusterMeta.EXPECT().RegisterMetadataChangeCallback(gomock.Any(), gomock.Any())
 
-	localClient := newTestFrontendHTTPClient(ts)
+			localClient := newTestFrontendHTTPClient(ts)
+			// Create a cache that will fail for the requested cluster since we don't set up metadata fully.
+			httpClientCache := cluster.NewFrontendHTTPClientCache(clusterMeta, nil)
 
-	// Create a cache that will fail for the requested cluster since we don't set up metadata fully.
-	httpClientCache := cluster.NewFrontendHTTPClientCache(clusterMeta, nil)
+			r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
+			require.NoError(t, err)
+			r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
 
-	r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
-	require.NoError(t, err)
-	r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
-
-	resp, err := routeSystemCallbackRequest(
-		r,
-		clusterMeta,
-		nsRegistry,
-		httpClientCache,
-		tokenGen,
-		localClient,
-		log.NewNoopLogger(),
-	)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+			resp, err := routeSystemCallbackRequest(
+				r,
+				clusterMeta,
+				nsRegistry,
+				httpClientCache,
+				tokenGen,
+				localClient,
+				log.NewNoopLogger(),
+			)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, gotPath)
+		})
+	}
 }
 
 func TestRouteRequest_SystemCallback(t *testing.T) {
 	// Verify that routeRequest delegates to routeSystemCallbackRequest for system callback URLs.
+	var gotPath string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -321,4 +411,5 @@ func TestRouteRequest_SystemCallback(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, gotPath)
 }

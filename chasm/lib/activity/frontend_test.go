@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -50,11 +51,11 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 	// validateAndPopulateStartRequest with the same request pointer.
 	validateTwoAttempts := func(t *testing.T, req *workflowservice.StartActivityExecutionRequest) {
 		t.Helper()
-		clone1, err := h.validateAndPopulateStartRequest(req, nsID)
+		clone1, err := h.validateAndPopulateStartRequest(context.Background(), req, nsID)
 		require.NoError(t, err)
 		require.NotEmpty(t, clone1.RequestId)
 
-		clone2, err := h.validateAndPopulateStartRequest(req, nsID)
+		clone2, err := h.validateAndPopulateStartRequest(context.Background(), req, nsID)
 		require.NoError(t, err)
 		require.Equal(t, clone1.RequestId, clone2.RequestId)
 	}

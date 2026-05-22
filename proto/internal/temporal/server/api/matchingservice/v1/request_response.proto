@@ -738,6 +738,21 @@ message CheckTaskQueueVersionMembershipRequest {
 
 message CheckTaskQueueVersionMembershipResponse {
   bool is_member = 1;
+  // True when a reactivation signal to this version would be redundant — i.e., matching
+  // determined the version is already in a state where it does not need to be reactivated
+  // (today: CURRENT, RAMPING, or DRAINING). History uses this to suppress such signals.
+  // The zero value (false) is the safe default; it applies when matching has no definitive
+  // answer (version not present in matching's deployment data, or old matching servers
+  // that do not set this field) and tells history to send the signal.
+  bool should_skip_reactivation = 2;
+  // revision_number is the version's current revision as tracked in matching's per-TQ
+  // deployment data. It is returned so history can compose a stable, cluster-wide-deterministic
+  // RequestId on the reactivation signal. All history pods querying the same version at the
+  // same point in time converge on the same revision_number, so Temporal's built-in
+  // SignalRequestedIds dedup (see signalworkflow/api.go) collapses the N-pod signal fan-out
+  // into exactly one event on the version workflow. Zero when unknown (old matching server or
+  // legacy DeploymentVersionData format that does not carry revision_number).
+  int64 revision_number = 3;
 }
 
 // PollConditions are extra conditions to set on the poll. Only supported with new matcher.

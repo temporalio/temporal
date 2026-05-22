@@ -92,7 +92,8 @@ message PhysicalTaskQueueInfo {
   map<int32, temporal.api.taskqueue.v1.TaskQueueStats> task_queue_stats_by_priority_key = 4;
 }
 
-// Represents a normal or sticky partition of a task queue.
+// Internal representation of a task queue partition, used for server-to-server RPCs.
+// This is the internal equivalent of temporal.api.taskqueue.v1.TaskQueue.
 message TaskQueuePartition {
   // This is the user-facing name for this task queue
   string task_queue = 1;
@@ -101,8 +102,11 @@ message TaskQueuePartition {
   oneof partition_id {
     int32 normal_partition_id = 3;
     string sticky_name = 4;
+    WorkerCommandsPartitionId worker_commands = 5;
   }
 }
+
+message WorkerCommandsPartitionId {}
 
 // Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
 // Deprecated.

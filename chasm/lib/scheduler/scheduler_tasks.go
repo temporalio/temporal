@@ -48,6 +48,14 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	return nil
 }
 
+// Validate returns true when all three conditions hold:
+//  1. The schedule is still idle — no new actions have been queued since this
+//     task was created (getIdleExpiration returns isIdle=true).
+//  2. The idle expiration has not shifted — getIdleExpiration recomputes
+//     getLastEventTime()+idleTimeTotal and it must equal the task's scheduled
+//     time. If a workflow start has advanced getLastEventTime() since the task
+//     was written, the expiration no longer matches and the task is dropped.
+//  3. The scheduler is not already closed (idempotency guard).
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
@@ -146,12 +154,14 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		results[start.RequestId] = result
 	}
 
-	// Apply results to the invoker's BufferedStarts.
+	// Apply results to the invoker's BufferedStarts and fire tasks.
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		schedulerRef,
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
+			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
 					start.HasCallback = true
@@ -160,6 +170,12 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 					}
 				}
 			}
+
+			// Now that running workflow state has been refreshed, scheduler tasks can be
+			// fired.
+			invoker.addTasks(ctx)
+			generator.Generate(ctx)
+
 			return nil, nil
 		},
 		nil,

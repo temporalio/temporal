@@ -85,6 +85,7 @@ type (
 		ESConfig                        *esclient.Config
 		MockAdminClient                 map[string]adminservice.AdminServiceClient
 		FaultInjection                  *config.FaultInjection
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
@@ -339,7 +340,8 @@ func newClusterWithPersistenceTestBaseFactory(
 		MatchingConfig:                   clusterConfig.MatchingConfig,
 		WorkerConfig:                     clusterConfig.WorkerConfig,
 		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger),
+		DCRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
