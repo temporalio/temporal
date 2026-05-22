@@ -750,9 +750,9 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	return err
 }
 
-// AcquireForTest registers t as currently using this cluster and fails t at
+// RegisterTest registers t as currently using this cluster and fails t at
 // cleanup time if the cluster's logger has flipped Failed() during t's window.
-func (s *FunctionalTestBase) AcquireForTest(t testlogger.CleanupCapableT) {
+func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	s.mu.Lock()
 	s.activeTests = append(s.activeTests, t)
 	s.mu.Unlock()

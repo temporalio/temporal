@@ -127,7 +127,7 @@ func TestSharedClusterPoison(t *testing.T) {
 
 			for i, p := range tc.phases {
 				sub := &mockSubtestT{T: t}
-				s.AcquireForTest(sub)
+				s.RegisterTest(sub)
 				if p.log != nil {
 					p.log(s.Logger)
 				}

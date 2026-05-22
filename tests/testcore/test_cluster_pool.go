@@ -136,7 +136,6 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	}
 
 	cluster.SetT(t)
-	cluster.AcquireForTest(t)
 	return cluster
 }
 
@@ -188,7 +187,10 @@ func UseSuiteScopedCluster(t *testing.T) {
 	})
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+	defer func() {
+		tb.RegisterTest(t)
+	}()
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, dynamicConfig, clusterOpts)
 	}
@@ -224,7 +226,6 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.acquireSlot(t)
 		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
-		cluster.AcquireForTest(t)
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
