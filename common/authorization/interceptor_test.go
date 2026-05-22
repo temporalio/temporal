@@ -834,8 +834,8 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	inCtx := peer.NewContext(ctx, &peer.Peer{AuthInfo: tlsInfo})
 
 	s.mockClaimMapper.EXPECT().GetClaims(gomock.Any()).DoAndReturn(func(authInfo *AuthInfo) (*Claims, error) {
-		s.Equal("", authInfo.AuthToken)
-		s.Equal("", authInfo.Audience)
+		s.Empty(authInfo.AuthToken)
+		s.Empty(authInfo.Audience)
 		s.NotNil(authInfo.TLSSubject)
 		return &Claims{System: RoleAdmin}, nil
 	})
