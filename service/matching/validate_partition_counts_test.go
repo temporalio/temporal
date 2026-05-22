@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	matching "go.temporal.io/server/client/matching"
+	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
