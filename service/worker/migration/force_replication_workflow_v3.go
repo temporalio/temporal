@@ -46,16 +46,11 @@ type (
 		PageCountPerExecution   int
 		NextPageToken           []byte
 
-		// EnableVerification controls whether each batch's VerifyBatch
-		// activity runs after InjectBatch. When false (inject-only mode),
-		// inject success is the progress signal — quarantine and slow lane
-		// stay idle and AIMD ramps up monotonically.
-		//
-		// Caveat: in inject-only mode, ReplicatedWorkflowCount in the
-		// status query reflects *injected* executions, not confirmed
-		// replicated. Without VerifyBatch the workflow has no way to
-		// observe arrival on the target. Use only when the caller
-		// independently verifies replication some other way.
+		// EnableVerification runs VerifyBatch after InjectBatch. When
+		// false (inject-only mode), quarantine, slow lane, AIMD back-off,
+		// and the no-progress detector all stay idle, and
+		// ReplicatedWorkflowCount in the status query reflects injected,
+		// not confirmed-replicated, executions.
 		EnableVerification      bool
 		TargetClusterEndpoint   string
 		TargetClusterName       string
@@ -68,12 +63,9 @@ type (
 		ReplicatedWorkflowCount            int64
 		TotalForceReplicateWorkflowCount   int64
 
-		// LastProgressAt is the workflow timestamp at which totalVerified
-		// last advanced. Carried across CAN so the no-progress detector
-		// spans cycles: a workflow that CANs every few minutes without
-		// progress still trips the detector once cumulative idle time
-		// exceeds NoProgressTimeoutSeconds. Zero on the first cycle —
-		// the constructor falls back to workflow.Now in that case.
+		// LastProgressAt is the workflow time of the last totalVerified
+		// advance, carried across CAN so the no-progress detector spans
+		// cycles. Zero on the first cycle falls back to workflow.Now.
 		LastProgressAt time.Time
 
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
@@ -474,9 +466,8 @@ func kickoffTaskQueueUserDataReplication(ctx workflow.Context, params *AdaptiveF
 	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
 }
 
-// adaptiveWorkflowState bundles the mutable state the workflow coroutines
-// touch. Workflow coroutines are cooperatively scheduled (yield only at SDK
-// calls), so plain maps and slices are safe without mutexes.
+// Workflow coroutines yield only at SDK calls, so plain maps and slices
+// on adaptiveWorkflowState are safe without mutexes.
 type adaptiveWorkflowState struct {
 	params *AdaptiveForceReplicationParams
 
@@ -576,13 +567,9 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 	return s
 }
 
-// runOnePagedCycle does up to PageCountPerExecution pages of listing +
-// dispatching InjectBatch then VerifyBatch. Each page is split between
-// fast and slow lanes based on current quarantine state. Returns when
-// listing is exhausted, the page-count cap is reached, or combined
-// pending exceeds earlyCANPendingThreshold. Pending lists carry over to
-// drainRetries on the final cycle, or via the CAN snapshot to the next
-// cycle.
+// runOnePagedCycle lists workflows in pages and dispatches inject+verify
+// for each. Returns when listing is exhausted, the page-count cap is
+// reached, or the early-CAN pending threshold trips.
 func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 	if s.params.DrainOnly {
 		// No listing to do; semaphores were left empty by the constructor
@@ -663,15 +650,11 @@ func (s *adaptiveWorkflowState) runOnePagedCycle(ctx workflow.Context) error {
 	return nil
 }
 
-// drainRetries runs retry rounds until both pending lists are empty, the
-// no-progress detector fires, or the SDK signals that the workflow's
-// history budget is close to exhausted. Each round increases the
-// per-batch deadline so the tail has progressively more time to drain
-// on the passive.
-//
-// Returns canSuggested=true when GetContinueAsNewSuggested fires mid-drain;
-// the caller is expected to CAN with DrainOnly=true so the next cycle
-// picks up where this one left off.
+// drainRetries reverifies pending until both lanes are empty, with the
+// per-batch deadline scaling each round so the tail gets more time.
+// Returns canSuggested=true when GetContinueAsNewSuggested fires
+// mid-drain; the caller is expected to CAN with DrainOnly=true so the
+// next cycle resumes the drain.
 func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested bool, err error) {
 	for round := 0; len(s.fastPending) > 0 || len(s.slowPending) > 0; round++ {
 		// Check before working so we don't burn another round when history
@@ -698,17 +681,11 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested
 	return false, nil
 }
 
-// reclassifyPendingForRetry consumes the current pending lists and routes
-// each entry by current quarantine state. Two directions:
-//
-//   - fast → slow when a WF-ID or its shard has crossed the quarantine
-//     threshold since the original batch ran.
-//   - slow → fast when shard quarantine has since been released (shard
-//     hotness is transient; WF-ID quarantine stays sticky so a WF-ID-
-//     quarantined entry remains in slow).
-//
-// Without the slow→fast direction, a workflow whose shard recovered
-// would stay pinned in the slow lane through every drainRetries round.
+// reclassifyPendingForRetry routes each pending entry by current
+// quarantine state. The slow→fast direction matters: without it, a
+// workflow whose shard recovered would stay pinned in the slow lane
+// through every drainRetries round. WF-ID quarantine is sticky in
+// both directions.
 func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*ExecutionInfo) {
 	toRetryFast := s.fastPending
 	toRetrySlow := s.slowPending
@@ -759,11 +736,9 @@ func slowLaneRetryBatchSize(fastPageSize int) int {
 	return max(fastPageSize/4, 25)
 }
 
-// dispatchInjectThenVerify chains InjectBatch + VerifyBatch on the
-// requested lane, holding the lane's single slot through BOTH phases.
-// This is the drip-feed contract: adjacent batches on the same lane
-// serialize so the apply pipeline has time to drain between bursts.
-// Slot release happens via defer regardless of which phase failed.
+// dispatchInjectThenVerify holds the lane's slot across both InjectBatch
+// and VerifyBatch — the drip-feed contract: adjacent batches on the same
+// lane serialize so the apply pipeline drains between bursts.
 func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, execs []*ExecutionInfo, slow bool, targetClusters []string) {
 	sem := s.fastSem
 	deadlineMs := int64(s.params.BatchDeadlineSeconds) * 1000
@@ -773,8 +748,7 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 		deadlineMs = int64(s.params.SlowLaneBatchDeadlineSeconds) * 1000
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
 	}
-	var slot bool
-	sem.Receive(ctx, &slot)
+	sem.Receive(ctx, nil)
 	// Read the lane's current RPS after the slot is held so the prior
 	// batch's AIMD adjustment has already applied.
 	rps := s.currentFastRPS
@@ -815,8 +789,9 @@ func (s *adaptiveWorkflowState) dispatchInjectThenVerify(ctx workflow.Context, e
 			return
 		}
 		if !s.params.EnableVerification {
-			// Inject-only mode: count inject success toward totalVerified
-			// so the no-progress detector still has a signal.
+			// Inject-only mode: totalVerified surfaces injected count in
+			// the status query. No-progress detector is bypassed in
+			// checkProgress since there's no arrival signal.
 			s.totalVerified += int64(len(execs))
 			s.adjustRPS(ctx, slow, false)
 			return
@@ -852,8 +827,7 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 		sem = s.slowSem
 		intervalMs = int64(s.params.SlowLaneVerifyIntervalSeconds) * 1000
 	}
-	var slot bool
-	sem.Receive(ctx, &slot)
+	sem.Receive(ctx, nil)
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		defer sem.Send(ctx, true)
 		ao := workflow.ActivityOptions{
@@ -883,18 +857,13 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 	})
 }
 
-// recordBatchOutcome updates the WF-ID and shard counters and routes pending
-// executions onto their lane. Counters move once per BusinessID per batch:
-// multiple pending or clean runs of the same WF-ID in a single batch count
-// as a single observation, so a WF-ID isn't quarantined off one batch's
-// pending list.
-//
-// Shard counters skip increments for already-quarantined WF-IDs so a hot
-// WF-ID doesn't double-count and trip shard quarantine off its own signal;
-// shard quarantine should only fire when MULTIPLE WF-IDs on the same shard
-// are independently struggling. Shard counters then decay on clean verifies
-// (release at threshold/2 hysteresis) because shard hotness is transient,
-// whereas WF-ID quarantine stays sticky.
+// recordBatchOutcome updates pending counters and routes pending execs
+// to lanes. Counters move once per BusinessID per batch so a single
+// batch can't quarantine a WF-ID off its own runs. Shard counters skip
+// already-WF-quarantined BIDs (otherwise a hot WF-ID trips shard
+// quarantine off its own signal) and decay on clean verifies with
+// threshold/2 hysteresis — shard hotness is transient, WF-ID
+// quarantine is sticky.
 func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatched, pending []*ExecutionInfo) {
 	// Dedupe by BusinessID, preserving first-seen order for replay
 	// determinism. The pending/dispatched slices come straight from
@@ -1072,6 +1041,12 @@ func (s *adaptiveWorkflowState) adjustRPS(ctx workflow.Context, slow bool, hadPe
 }
 
 func (s *adaptiveWorkflowState) checkProgress(ctx workflow.Context) error {
+	// Inject-only mode has no way to observe arrival on the target, so
+	// totalVerified is just the injected count and a no-progress signal
+	// from it would fire spuriously.
+	if !s.params.EnableVerification {
+		return nil
+	}
 	if s.totalVerified > s.lastVerified {
 		s.lastVerified = s.totalVerified
 		s.lastProgressAt = workflow.Now(ctx)
@@ -1090,12 +1065,10 @@ func (s *adaptiveWorkflowState) checkProgress(ctx workflow.Context) error {
 
 func (s *adaptiveWorkflowState) drainSemaphores(ctx workflow.Context) {
 	for range s.params.ConcurrentActivityCount {
-		var slot bool
-		s.fastSem.Receive(ctx, &slot)
+		s.fastSem.Receive(ctx, nil)
 	}
 	for range s.params.SlowLaneConcurrency {
-		var slot bool
-		s.slowSem.Receive(ctx, &slot)
+		s.slowSem.Receive(ctx, nil)
 	}
 }
 
@@ -1167,9 +1140,7 @@ func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
 	return out
 }
 
-// cloneStringIntMap returns a non-nil copy of m. Non-nil because callers
-// write into the result (e.g. wfIDPending[bid]++), which panics on a nil
-// map.
+// Non-nil so callers can write to the result without panicking on nil.
 func cloneStringIntMap(m map[string]int) map[string]int {
 	out := maps.Clone(m)
 	if out == nil {

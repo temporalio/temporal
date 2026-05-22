@@ -945,6 +945,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressFiresWhenStale() 
 			params: &AdaptiveForceReplicationParams{
 				Namespace:                "test-ns",
 				NoProgressTimeoutSeconds: 1,
+				EnableVerification:       true,
 			},
 			lastProgressAt: workflow.Now(ctx).Add(-2 * time.Second),
 		}
@@ -960,6 +961,30 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressFiresWhenStale() 
 	s.True(appErr.NonRetryable(), "no-progress timeout should be non-retryable")
 }
 
+// TestCheckProgressBypassedInInjectOnlyMode verifies the detector
+// returns nil even with stale lastProgressAt when EnableVerification
+// is false — inject-only has no arrival signal so totalVerified is
+// just the injected count and would fire spuriously.
+func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressBypassedInInjectOnlyMode() {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		state := &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				Namespace:                "test-ns",
+				NoProgressTimeoutSeconds: 1,
+				EnableVerification:       false,
+			},
+			lastProgressAt: workflow.Now(ctx).Add(-2 * time.Second),
+		}
+		return state.checkProgress(ctx)
+	})
+
+	s.True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+}
+
 // TestCheckProgressResetsOnProgress verifies the inverse: when
 // totalVerified has advanced past lastVerified, checkProgress updates
 // lastProgressAt and returns nil even if wall-time has elapsed past
@@ -973,6 +998,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestCheckProgressResetsOnProgress(
 			params: &AdaptiveForceReplicationParams{
 				Namespace:                "test-ns",
 				NoProgressTimeoutSeconds: 1,
+				EnableVerification:       true,
 			},
 			lastProgressAt: workflow.Now(ctx).Add(-2 * time.Second),
 			totalVerified:  5,
