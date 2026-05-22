@@ -848,6 +848,15 @@ func (n *Node) serializeComponentNode() error {
 					"component type is not registered",
 					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
 			}
+			// TypeId mismatch on a brand new node indicates node reassignment.
+			existingTypeID := n.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
+			if existingTypeID != 0 && existingTypeID != rc.componentID {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component node TypeId changed on first serialization",
+					fmt.Errorf("existing: %d, new: %d", existingTypeID, rc.componentID),
+				)
+			}
 			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		}
 
