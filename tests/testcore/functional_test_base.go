@@ -304,7 +304,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		// The writer routes log lines to the currently-registered test (see AcquireForTest)
 		// and falls back to stderr when there is no single active test.
 		// WithoutCloseOnCleanup keeps the logger alive across tests for shared clusters.
-		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly,
+		tl := testlogger.NewTestLogger(s.T(),
+			testlogger.FailOnExpectedErrorOnly,
 			testlogger.WithWriter(&clusterLogWriter{s: s}),
 			testlogger.WithoutCloseOnCleanup(),
 		)

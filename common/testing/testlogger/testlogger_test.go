@@ -3,13 +3,13 @@ package testlogger_test
 import (
 	"bytes"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/zap/zapcore"
 )
 
 // mockT wraps a testing.T such that we can know if a test is failed.
@@ -195,36 +195,16 @@ func TestTestLogger_Failed_NoMatch(t *testing.T) {
 	require.Nil(t, tl.Failed())
 }
 
-// syncBuf is a thread-safe zapcore.WriteSyncer backed by a bytes.Buffer.
-type syncBuf struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (s *syncBuf) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.buf.Write(p)
-}
-
-func (s *syncBuf) Sync() error { return nil }
-
-func (s *syncBuf) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.buf.String()
-}
-
 // TestTestLogger_WithWriter verifies that WithWriter routes log output to the
 // supplied WriteSyncer instead of zaptest's TestingWriter.
 func TestTestLogger_WithWriter(t *testing.T) {
-	var w syncBuf
+	var buf bytes.Buffer
 	tl := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly,
-		testlogger.WithWriter(&w))
+		testlogger.WithWriter(zapcore.AddSync(&buf)))
 
 	tl.Info("hello-with-writer")
 
-	require.Contains(t, w.String(), "hello-with-writer")
+	require.Contains(t, buf.String(), "hello-with-writer")
 }
 
 // TestTestLogger_DontCloseOnCleanup verifies that with DontCloseOnCleanup set,
@@ -232,19 +212,19 @@ func TestTestLogger_WithWriter(t *testing.T) {
 // Cleanup chain) has completed. Without the option the default Cleanup(tl.Close)
 // would flip state.closed and the post-cleanup Info call would be dropped.
 func TestTestLogger_DontCloseOnCleanup(t *testing.T) {
-	var w syncBuf
+	var buf bytes.Buffer
 
 	var tl *testlogger.TestLogger
 	t.Run("inner", func(inner *testing.T) {
 		tl = testlogger.NewTestLogger(inner, testlogger.FailOnExpectedErrorOnly,
-			testlogger.WithWriter(&w),
+			testlogger.WithWriter(zapcore.AddSync(&buf)),
 			testlogger.WithoutCloseOnCleanup())
 		tl.Info("during-inner")
 	})
 	// inner's Cleanup has run by here. Without DontCloseOnCleanup tl would be closed.
 	tl.Info("after-inner")
 
-	out := w.String()
+	out := buf.String()
 	require.Contains(t, out, "during-inner")
 	require.Contains(t, out, "after-inner")
 }

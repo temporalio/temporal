@@ -139,7 +139,7 @@ type sharedTestLoggerState struct {
 	logExpectations bool
 	logCaller       bool
 	level           zapcore.Level
-	failed          atomic.Pointer[Failure]
+	failure         atomic.Pointer[Failure]
 }
 
 // Failure describes a log call that shouldFailTest considered a test-failing log.
@@ -416,13 +416,13 @@ func (tl *TestLogger) FailOnFatal(b bool) bool {
 // Failed returns the first Failure that shouldFailTest considered a test-failing
 // log, or nil if no such log has been observed. Sticky: first failure wins.
 func (tl *TestLogger) Failed() *Failure {
-	return tl.state.failed.Load()
+	return tl.state.failure.Load()
 }
 
 // recordFailure stores the first observed failure (first-failure-wins via CAS).
 // Tags are copied so the recorded value is independent of the caller's slice.
 func (tl *TestLogger) recordFailure(level Level, msg string, tags []tag.Tag) {
-	if tl.state.failed.Load() != nil {
+	if tl.state.failure.Load() != nil {
 		// fast-path: already recorded; avoid the copy and the stack capture.
 		return
 	}
@@ -434,7 +434,7 @@ func (tl *TestLogger) recordFailure(level Level, msg string, tags []tag.Tag) {
 		Tags:  tagsCopy,
 		Stack: captureStack(3), // skip captureStack, recordFailure, and the log.Logger method that called it
 	}
-	tl.state.failed.CompareAndSwap(nil, f)
+	tl.state.failure.CompareAndSwap(nil, f)
 }
 
 func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
@@ -470,7 +470,6 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
 	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(DPanic, msg, tags) {
-		tl.recordFailure(DPanic, msg, tags)
 		tl.state.t.Helper()
 		tl.failTest(DPanic, msg, tags...)
 	}
@@ -502,7 +501,6 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	tl.state.mu.RUnlock()
 
 	if tl.state.failOnError.Load() {
-		tl.recordFailure(Error, msg, tags)
 		tl.state.t.Helper()
 		tl.wrapped.Error(msg, tags...)
 		tl.failTest(Error, msg, tags...)
@@ -522,7 +520,6 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 	tags = tl.mergeWithLoggerTags(tags)
 	tl.state.t.Helper()
 	if tl.state.failOnFatal.Load() && tl.shouldFailTest(Fatal, msg, tags) {
-		tl.recordFailure(Fatal, msg, tags)
 		tl.failTest(Fatal, msg, tags...)
 	}
 	// Panic to emulate a fatal in a way we can catch.
@@ -556,7 +553,6 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 	tl.state.t.Helper()
 	// Forcibly fail the test when required as otherwise panics can be caught.
 	if tl.shouldFailTest(Panic, msg, tags) {
-		tl.recordFailure(Panic, msg, tags)
 		tl.state.t.Helper()
 		tl.failTest(Panic, msg, tags...)
 	}
@@ -577,6 +573,7 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 // the failure arose.
 func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
 	tl.state.t.Helper()
+	tl.recordFailure(level, msg, tags)
 	// skip captureStack, failTest, and the log.Logger function that called failTest
 	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), captureStack(3))
 }
