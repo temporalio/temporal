@@ -79,7 +79,7 @@ const (
 	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
 	// the interval never drops below this value; if the interval is already at or below
 	// this floor, no jitter is applied.
-	forwardedPollMinInterval = 20 * time.Second
+	forwardedPollMinInterval = common.CriticalLongPollTimeout
 
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
