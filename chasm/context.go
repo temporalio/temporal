@@ -41,6 +41,10 @@ type Context interface {
 	Value(key any) any
 	// RequestHeader returns the first value of the named gRPC metadata header from the inbound request context, or ""
 	// if absent.
+	//
+	// Only available when this Context was constructed from an inbound gRPC request, i.e. inside the start/update/read
+	// callbacks invoked by the chasm engine. In other contexts, such as pure tasks executed at the end of a transaction
+	// or background task handlers, the underlying ctx has no gRPC metadata and this method always returns "".
 	RequestHeader(key string) string
 
 	// Intent() OperationIntent
