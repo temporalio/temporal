@@ -4284,12 +4284,12 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	workerInstanceKey := "worker-instance-123"
 
 	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally.
-	// Verify frontend sends root partition (task queue name, not /_sys/.../N).
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsRequest, _ ...any) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
-			s.Equal(taskQueue, req.GetTaskQueue().GetName(), "should send root partition name, not a child partition")
-			s.Equal(enumspb.TASK_QUEUE_KIND_NORMAL, req.GetTaskQueue().GetKind())
+			partition, err := tqid.PartitionFromProto(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
+			s.NoError(err)
+			s.True(partition.IsRoot(), "should send root partition only")
 			s.Equal(workerInstanceKey, req.GetWorkerInstanceKey())
 			s.Equal("worker", req.GetWorkerIdentity())
 			return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil

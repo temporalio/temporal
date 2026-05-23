@@ -1731,10 +1731,8 @@ func (x *CancelOutstandingWorkerPollsPartitionRequest) GetWorkers() []*CancelOut
 type CancelOutstandingWorkerPollsPartitionResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	CancelledCount int32                  `protobuf:"varint,1,opt,name=cancelled_count,json=cancelledCount,proto3" json:"cancelled_count,omitempty"`
-	// Number of partitions that failed during fan-out.
-	FailedPartitions int32 `protobuf:"varint,2,opt,name=failed_partitions,json=failedPartitions,proto3" json:"failed_partitions,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CancelOutstandingWorkerPollsPartitionResponse) Reset() {
@@ -1770,13 +1768,6 @@ func (*CancelOutstandingWorkerPollsPartitionResponse) Descriptor() ([]byte, []in
 func (x *CancelOutstandingWorkerPollsPartitionResponse) GetCancelledCount() int32 {
 	if x != nil {
 		return x.CancelledCount
-	}
-	return 0
-}
-
-func (x *CancelOutstandingWorkerPollsPartitionResponse) GetFailedPartitions() int32 {
-	if x != nil {
-		return x.FailedPartitions
 	}
 	return 0
 }
@@ -5633,11 +5624,15 @@ func (x *PollConditions) GetNoWait() bool {
 }
 
 type CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	WorkerInstanceKey string                 `protobuf:"bytes,1,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
-	WorkerIdentity    string                 `protobuf:"bytes,2,opt,name=worker_identity,json=workerIdentity,proto3" json:"worker_identity,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SDK-generated unique identifier for a worker instance. All pollers from the
+	// same worker share this key.
+	WorkerInstanceKey string `protobuf:"bytes,1,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
+	// Worker identity string (e.g., "pid@hostname"). Poller history predates
+	// worker_instance_key and is keyed by identity, so we need both.
+	WorkerIdentity string `protobuf:"bytes,2,opt,name=worker_identity,json=workerIdentity,proto3" json:"worker_identity,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry) Reset() {
@@ -6121,10 +6116,9 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\aworkers\x18\x04 \x03(\v2`.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionRequest.WorkerEntryR\aworkers\x1af\n" +
 	"\vWorkerEntry\x12.\n" +
 	"\x13worker_instance_key\x18\x01 \x01(\tR\x11workerInstanceKey\x12'\n" +
-	"\x0fworker_identity\x18\x02 \x01(\tR\x0eworkerIdentity\"\x85\x01\n" +
+	"\x0fworker_identity\x18\x02 \x01(\tR\x0eworkerIdentity\"X\n" +
 	"-CancelOutstandingWorkerPollsPartitionResponse\x12'\n" +
-	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\x12+\n" +
-	"\x11failed_partitions\x18\x02 \x01(\x05R\x10failedPartitions\"\xf1\x01\n" +
+	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\"\xf1\x01\n" +
 	"\x18DescribeTaskQueueRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\\\n" +
 	"\fdesc_request\x18\x02 \x01(\v29.temporal.api.workflowservice.v1.DescribeTaskQueueRequestR\vdescRequest\x12T\n" +

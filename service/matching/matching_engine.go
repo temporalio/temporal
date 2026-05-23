@@ -1208,6 +1208,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		return nil, err
 	}
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
+		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
+		// fully rolled out. This check is only needed during the transition since the legacy
+		// frontend fan-out path may send non-root partitions to this handler.
 		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
 		}
@@ -1245,7 +1248,8 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
 	cfg := rootPM.GetConfig()
-	numPartitions := max(1, cfg.NumReadPartitions())
+	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
+	numPartitions := cfg.NumReadPartitions()
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
@@ -1255,50 +1259,38 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		tag.NewInt32("partition-count", int32(numPartitions)),
 	)
 
-	// Build partition protos for all partitions.
-	tqName := rootPartition.TaskQueue().Name()
-	tqType := request.GetTaskQueueType()
-	allPartitions := make([]*taskqueuespb.TaskQueuePartition, numPartitions)
-	for i := range numPartitions {
-		allPartitions[i] = &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     tqName,
-			TaskQueueType: tqType,
-			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
-		}
-	}
-
 	workers := []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
 		WorkerInstanceKey: request.GetWorkerInstanceKey(),
 		WorkerIdentity:    request.GetWorkerIdentity(),
 	}}
 
-	// Group partitions by target. Keys are host identities from Route(). When Route()
-	// is unavailable or fails, each unroutable partition gets a synthetic key so it's
-	// sent as an individual RPC.
+	// Group partitions by destination host. When Route() is unavailable or fails, each
+	// unroutable partition gets a synthetic key so it's sent as an individual RPC.
 	routingClient, ok := e.matchingRawClient.(matching.RoutingClient)
 	if !ok {
 		routingClient = nil
 	}
 	self := e.hostInfoProvider.HostInfo().Identity()
-	partitionsByTarget := map[string][]*taskqueuespb.TaskQueuePartition{}
+	tq := rootPartition.TaskQueue()
+	partitionsByTarget := map[string][]*tqid.NormalPartition{}
 
-	for _, partitionProto := range allPartitions {
-		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
+	for i := range numPartitions {
+		partition := tq.NormalPartition(i)
 		target := ""
 		if routingClient != nil {
 			h, err := routingClient.Route(partition)
 			if err != nil {
 				e.logger.Warn("Failed to resolve matching host for poll cancellation, sending individual RPC",
-					tag.NewInt32("partition-id", partitionProto.GetNormalPartitionId()),
+					tag.NewInt32("partition-id", int32(i)),
 					tag.Error(err))
 			} else {
 				target = h
 			}
 		}
 		if target == "" {
-			target = fmt.Sprintf("_unroutable_%d", partitionProto.GetNormalPartitionId())
+			target = fmt.Sprintf("_unroutable_%d", i)
 		}
-		partitionsByTarget[target] = append(partitionsByTarget[target], partitionProto)
+		partitionsByTarget[target] = append(partitionsByTarget[target], partition)
 	}
 
 	// Process each target: local via direct call, remote via RPC.
@@ -1307,10 +1299,18 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	var wg sync.WaitGroup
 
 	for target, partitions := range partitionsByTarget {
+		partitionProtos := make([]*taskqueuespb.TaskQueuePartition, len(partitions))
+		for i, np := range partitions {
+			partitionProtos[i] = &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     np.TaskQueue().Name(),
+				TaskQueueType: np.TaskType(),
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(np.PartitionId())},
+			}
+		}
 		req := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
 			NamespaceId:        request.GetNamespaceId(),
-			TaskQueuePartition: partitions[0], // routing key
-			Partitions:         partitions,
+			TaskQueuePartition: partitionProtos[0], // routing key
+			Partitions:         partitionProtos,
 			Workers:            workers,
 		}
 		if target == self {
@@ -1335,7 +1335,6 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 				return
 			}
 			totalCancelled.Add(resp.GetCancelledCount())
-			failedPartitions.Add(resp.GetFailedPartitions())
 		})
 	}
 
@@ -1399,9 +1398,6 @@ func (e *matchingEngineImpl) removePollerFromHistory(
 	taskQueueName := partition.RpcName()
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
 	if err != nil {
-		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
-			tag.WorkflowTaskQueueName(taskQueueName),
-			tag.Error(err))
 		return
 	}
 	if pm == nil {
