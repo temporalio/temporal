@@ -3330,6 +3330,7 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	var invalidArgBlob *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgBlob)
 }
+
 // TestScheduleCreationRolloutPercent verifies that
 // CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
 // after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
