@@ -37,8 +37,3 @@ func (s *Scheduler) RecordCompletedAction(
 func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
-
-const (
-	MaxEventLogEntries    = maxEventLogEntries
-	MaxEventLogMessageLen = maxEventLogMessageLen
-)

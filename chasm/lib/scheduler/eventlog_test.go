@@ -9,8 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/chasm/lib/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	testEventLogMaxEntries    = 30
+	testEventLogMaxMessageLen = 1000
 )
 
 func TestEventLog_Accumulates(t *testing.T) {
@@ -20,7 +24,7 @@ func TestEventLog_Accumulates(t *testing.T) {
 
 	messages := []string{"first", "second", "third"}
 	for _, m := range messages {
-		eventLog.LogEvent(ctx, m)
+		eventLog.LogEvent(ctx, m, testEventLogMaxEntries, testEventLogMaxMessageLen)
 	}
 
 	require.Len(t, eventLog.Events, len(messages))
@@ -35,12 +39,12 @@ func TestEventLog_TruncatesLongMessages(t *testing.T) {
 	eventLog := sched.EventLog.Get(ctx)
 	eventLog.Events = nil
 
-	long := strings.Repeat("x", scheduler.MaxEventLogMessageLen+50)
-	eventLog.LogEvent(ctx, long)
+	long := strings.Repeat("x", testEventLogMaxMessageLen+50)
+	eventLog.LogEvent(ctx, long, testEventLogMaxEntries, testEventLogMaxMessageLen)
 
 	require.Len(t, eventLog.Events, 1)
-	require.Len(t, eventLog.Events[0].Message, scheduler.MaxEventLogMessageLen)
-	require.Equal(t, long[:scheduler.MaxEventLogMessageLen], eventLog.Events[0].Message)
+	require.Len(t, eventLog.Events[0].Message, testEventLogMaxMessageLen)
+	require.Equal(t, long[:testEventLogMaxMessageLen], eventLog.Events[0].Message)
 }
 
 func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
@@ -49,12 +53,12 @@ func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
 	eventLog.Events = nil
 
 	const overflow = 5
-	total := scheduler.MaxEventLogEntries + overflow
+	total := testEventLogMaxEntries + overflow
 	for i := range total {
-		eventLog.LogEvent(ctx, fmt.Sprintf("event-%d", i))
+		eventLog.LogEvent(ctx, fmt.Sprintf("event-%d", i), testEventLogMaxEntries, testEventLogMaxMessageLen)
 	}
 
-	require.Len(t, eventLog.Events, scheduler.MaxEventLogEntries)
+	require.Len(t, eventLog.Events, testEventLogMaxEntries)
 	// The earliest `overflow` entries should have been dropped; the retained
 	// window starts at event-`overflow` and ends at the most recent event.
 	require.Equal(t, fmt.Sprintf("event-%d", overflow), eventLog.Events[0].Message)
@@ -82,7 +86,7 @@ func TestEventLog_EachComponentHasOwn(t *testing.T) {
 	sched.Generator.Get(ctx).EventLog.Get(ctx).Events = nil
 	backfiller.EventLog.Get(ctx).Events = nil
 
-	sched.EventLog.Get(ctx).LogEvent(ctx, "scheduler-event")
+	sched.EventLog.Get(ctx).LogEvent(ctx, "scheduler-event", testEventLogMaxEntries, testEventLogMaxMessageLen)
 	require.Len(t, sched.EventLog.Get(ctx).Events, 1)
 	require.Empty(t, sched.Generator.Get(ctx).EventLog.Get(ctx).Events)
 	require.Empty(t, backfiller.EventLog.Get(ctx).Events)

@@ -9,14 +9,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	// Maximum number of EventLog entries retained.
-	maxEventLogEntries = 30
-
-	// Maximum length of an EventLog message; longer messages are truncated.
-	maxEventLogMessageLen = 1000
-)
-
 // EventLog is a CHASM component that keeps a bounded, human-readable history
 // of state changes for its parent component. Entries are not used for any
 // scheduler computation.
@@ -39,13 +31,13 @@ func (e *EventLog) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 // LogEvent appends an event with the given message. Messages longer than
-// maxEventLogMessageLen are truncated; once the log has more than
-// maxEventLogEntries entries, the earliest entries are dropped.
-func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string) {
-	if len(msg) > maxEventLogMessageLen {
+// maxMessageLen bytes are truncated at a UTF-8 rune boundary; once the log
+// has more than maxEntries entries, the earliest entries are dropped.
+func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string, maxEntries, maxMessageLen int) {
+	if len(msg) > maxMessageLen {
 		// Back off to the nearest UTF-8 rune boundary so we don't split a
 		// multibyte rune.
-		truncateAt := maxEventLogMessageLen
+		truncateAt := maxMessageLen
 		for truncateAt > 0 && !utf8.RuneStart(msg[truncateAt]) {
 			truncateAt--
 		}
@@ -55,7 +47,7 @@ func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string) {
 		Time:    timestamppb.New(ctx.Now(e)),
 		Message: msg,
 	})
-	if keepFrom := len(e.Events) - maxEventLogEntries; keepFrom > 0 {
+	if keepFrom := len(e.Events) - maxEntries; keepFrom > 0 {
 		// Clone so the dropped entries don't stay reachable via the backing array.
 		e.Events = slices.Clone(e.Events[keepFrom:])
 	}
