@@ -214,7 +214,8 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	err = node.syncSubComponents()
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
-	s.Len(node.mutation.DeletedNodes, 1)
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -311,8 +312,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			s.NoError(err)
 
 			rootComponent := tc.initComponent()
-			rootNode.value = rootComponent
-			rootNode.valueState = valueStateNeedSyncStructure
+			err = rootNode.SetRootComponent(rootComponent)
+			s.NoError(err)
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -382,7 +383,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 		})
 
@@ -406,7 +408,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 
@@ -433,10 +436,83 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			// Now map is empty and must be deleted.
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
+
+		s.Run("Nil map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field that was never set (nil) should not produce any DeletedNodes
+			// entries when the first transaction is closed — there is nothing in persistence
+			// to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			err = rootNode.SetRootComponent(&TestComponent{}) // all map fields are nil
+			s.NoError(err)
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a map that never existed")
+		})
+
+		s.Run("Empty (non-nil) map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field initialized to an empty (non-nil) map should also not produce
+			// any DeletedNodes entries — an empty map is equivalent to nil at the
+			// persistence layer and there is nothing to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			var rootComponent TestComponent
+			switch tc.mapField {
+			case "SubComponents":
+				rootComponent.SubComponents = Map[string, *TestSubComponent1]{}
+			case "PendingActivities":
+				rootComponent.PendingActivities = Map[int, *TestSubComponent1]{}
+			default:
+				s.Failf("unexpected mapField", "unknown mapField %q in test case", tc.mapField)
+			}
+			err = rootNode.SetRootComponent(&rootComponent)
+			s.NoError(err)
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a newly-created empty map")
+		})
 	}
+}
+
+func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
+	// Verify that a Map field that was never set deserializes to an empty (non-nil)
+	// map so callers can range over it without nil checks.
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	rootNode, err := s.newTestTree(nilSerializedNodes)
+	s.NoError(err)
+
+	err = rootNode.SetRootComponent(&TestComponent{})
+	s.NoError(err)
+
+	mutations, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	// Only root is updated; no collection nodes because maps were nil/empty.
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Empty(mutations.DeletedNodes)
+
+	persistedNodes := common.CloneProtoMap(mutations.UpdatedNodes)
+
+	rootNode2, err := s.newTestTree(persistedNodes)
+	s.NoError(err)
+
+	err = rootNode2.deserialize(reflect.TypeFor[*TestComponent]())
+	s.NoError(err)
+
+	rootComponent := rootNode2.value.(*TestComponent)
+	s.NotNil(rootComponent.SubComponents, "SubComponents must be non-nil after deserialization")
+	s.Empty(rootComponent.SubComponents)
+	s.NotNil(rootComponent.PendingActivities, "PendingActivities must be non-nil after deserialization")
+	s.Empty(rootComponent.PendingActivities)
 }
 
 func (s *nodeSuite) TestPointerAttributes() {
@@ -536,7 +612,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.NotEmpty(mutation.UpdatedNodes)
+		// The parent component's data bytes are unchanged; the pointer deletion is recorded in DeletedNodes.
+		s.Empty(mutation.UpdatedNodes)
 		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
@@ -616,8 +693,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 1)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	// SubComponent11 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -637,11 +714,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 3)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
-
+	// SubComponent1 and its children were never persisted (nil LVT), so no storage deletes are needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"])
 }
 
@@ -2099,16 +2173,16 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
-	s.Len(mutations.DeletedNodes, 1)
-	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(mutations.DeletedNodes)
 
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
-	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	// SubComponent1 was read but not mutated, so its data bytes are unchanged and the write is skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 }
 
@@ -2966,7 +3040,8 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
+	// The terminated state is unchanged from the prior transaction, so the write is skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
@@ -3039,31 +3114,17 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	var nilSerializedNodes map[string]*persistencespb.ChasmNode
-	// Create an empty tree.
 	node, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
-	s.Nil(node.value)
 
-	// Get an empty top-level component from the empty tree.
-	err = node.deserialize(reflect.TypeFor[*TestComponent]())
+	tc := &TestComponent{}
+	setTestComponentFields(tc, s.nodeBackend)
+	err = node.SetRootComponent(tc)
 	s.NoError(err)
-	s.NotNil(node.value)
-	s.IsType(&TestComponent{}, node.value)
-	s.Equal(valueStateSynced, node.valueState)
-
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
-	s.NoError(err)
-	s.Equal(valueStateNeedSyncStructure, node.valueState)
-	// Create subcomponents by assigning fields to TestComponent instance.
-	setTestComponentFields(tc.(*TestComponent), s.nodeBackend)
-
-	// Sync tree with subcomponents of TestComponent.
-	err = node.syncSubComponents()
 	s.False(node.needsPointerResolution)
-	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
-	return node // maybe tc too
+	return node
 }
 
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
@@ -3113,7 +3174,8 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	// Immediate pure tasks run inline without changing data bytes, so all writes are skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.

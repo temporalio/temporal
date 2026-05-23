@@ -321,6 +321,16 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
+	PollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
+		"system.pollWaitForNamespaceRateLimitToken",
+		false,
+		`PollWaitForNamespaceRateLimitToken controls whether poll requests wait for
+a namespace RPS rate limit token to become available instead of immediately rejecting
+with ResourceExhausted. When enabled, poll requests block until a token is available
+or the request context deadline is reached. The concurrent request rate limiter fires
+before this limiter and will still reject requests that exceed the concurrent limit.`,
+	)
+
 	// keys for size limit
 
 	BlobSizeLimitError = NewNamespaceIntSetting(
@@ -698,15 +708,6 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
-	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
-		"frontend.pollWaitForNamespaceRateLimitToken",
-		false,
-		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for
-a namespace RPS rate limit token to become available instead of immediately rejecting
-with ResourceExhausted. When enabled, poll requests block until a token is available
-or the request context deadline is reached. The concurrent request rate limiter fires
-before this limiter and will still reject requests that exceed the concurrent limit.`,
-	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,
@@ -959,6 +960,14 @@ and deployment interaction in matching and history.`,
 		1*time.Second,
 		`RefreshNexusEndpointsMinWait is the minimum wait time between background long poll requests to update Nexus endpoints.`,
 	)
+	ForceNexusEndpointRefreshOnRead = NewGlobalBoolSetting(
+		"system.forceNexusEndpointRefreshOnRead",
+		false,
+		`ForceNexusEndpointRefreshOnRead forces the Nexus endpoint registry to refresh from matching service on read.
+This effectively bypasses the cache so that endpoint writes are visible to readers immediately, instead of after the
+next background long-poll refresh. This should not be turned on in production, as it would introduce scalability
+and reliability problems.`,
+	)
 	NexusReadThroughCacheSize = NewGlobalIntSetting(
 		"system.nexusReadThroughCacheSize",
 		100,
@@ -1009,6 +1018,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"system.maxCallbacksPerWorkflow",
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+	)
+	MaxCallbacksPerUpdateID = NewNamespaceIntSetting(
+		"system.maxCallbacksPerUpdateID",
+		32,
+		`MaxCallbacksPerUpdateID is the maximum number of callbacks that can be attached to a single update ID.`,
 	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
@@ -1070,6 +1084,15 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
 
+	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
+		"frontend.deleteNamespaceUseChasmDeleteExecution",
+		false,
+		`DeleteNamespaceUseChasmDeleteExecution controls whether the delete namespace workflow uses the
+DeleteExecution history service API (CHASM engine path) for non-workflow CHASM executions, instead
+of ForceDeleteWorkflowExecution. Only enable after all history and worker services have been upgraded
+to a version that supports the DeleteExecution API.`,
+	)
+
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeleteActivityRPS",
 		100,
@@ -1115,6 +1138,12 @@ Default is 0, means, namespace will be deleted immediately.`,
 		"matching.rps",
 		1200,
 		`MatchingRPS is request rate per second for each matching host`,
+	)
+	MatchingNamespaceRPS = NewNamespaceIntSetting(
+		"matching.namespaceRPS",
+		0,
+		`MatchingNamespaceRPS is namespace rate limit per second for each matching host. 
+If value less or equal to 0, will fall back to MatchingRPS`,
 	)
 	MatchingPersistenceMaxQPS = NewGlobalIntSetting(
 		"matching.persistenceMaxQPS",
@@ -1488,6 +1517,14 @@ default as namespace cardinality can be high and this requires a metrics collect
 		"matching.autoEnableV2",
 		false,
 		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
+	)
+	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
+		"matching.partitionScaleAllowedDrift",
+		PartitionScaleAllowedDrift{
+			Delta: 1,
+			Ratio: 1.5,
+		},
+		`How far off client partition scale values have to be to reject RPCs.`,
 	)
 
 	// Worker registry settings
@@ -2941,6 +2978,28 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 		false,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	EnableSignalWithStartFromWorkflow = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartFromWorkflow",
+		false,
+		`Controls whether signal with start from workflow is enabled.`,
+	)
+
+	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(
+		"history.enableCHASMSignalBacklinks",
+		false,
+		`Controls whether incoming signal request IDs are tracked in the CHASM IncomingSignals
+map to enable DescribeWorkflow to resolve RequestIDRef signal backlinks. Requires EnableChasm.
+Only enable once all servers in the fleet have been upgraded to a version that understands
+the IncomingSignals CHASM field.`,
+	)
+	EnableWorkflowUpdateCallbacks = NewNamespaceBoolSetting(
+		"history.enableUpdateCallbacks",
+		false,
+		`Controls whether completion callbacks are created for workflow updates using
+the CHASM implementation. When disabled, new update callbacks will not be registered,
+but existing callbacks will still be processed and fired.`,
 	)
 
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(

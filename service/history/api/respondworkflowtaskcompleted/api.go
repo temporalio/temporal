@@ -516,7 +516,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() {
+	// Do not schedule a new workflow task if the workflow is paused. Accepting the in-flight
+	// WT completion is intentional (see HistoryBuilder buffering of WORKFLOW_EXECUTION_PAUSED),
+	// but scheduling a follow-up WT would call ApplyWorkflowTaskScheduledEvent, which resets
+	// Status to RUNNING while leaving executionInfo.PauseInfo set — desyncing pause state.
+	// Mirrors the gate in closeTransactionHandleWorkflowTaskScheduling.
+	if ms.IsWorkflowExecutionRunning() && !ms.IsWorkflowExecutionStatusPaused() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||

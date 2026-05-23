@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -453,15 +452,17 @@ func (s *Scheduler) updateConflictToken() {
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
-	var lastEvent time.Time
 	invoker := s.Invoker.Get(ctx)
 	recentActions := invoker.recentActions()
+
+	latest := util.MaxTime(
+		s.Info.GetCreateTime().AsTime(),
+		s.Info.GetUpdateTime().AsTime(),
+	)
 	if len(recentActions) > 0 {
-		lastEvent = recentActions[len(recentActions)-1].GetActualTime().AsTime()
+		latest = util.MaxTime(latest, recentActions[len(recentActions)-1].GetActualTime().AsTime())
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
-	return lastEvent
+	return latest
 }
 
 // getIdleExpiration returns an idle close time and the boolean value of 'true'
@@ -588,6 +589,11 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
+	// Generate immediately after recording completions, so that an idle task
+	// can be scheduled if no more actions are remaining. Necessary as
+	// additional events invalidate in-flight idle tasks.
+	s.Generator.Get(ctx).Generate(ctx)
+
 	return nil
 }
 
@@ -636,6 +642,9 @@ func (s *Scheduler) Describe(
 	// BufferedStarts holds waiting, running, and recently-completed entries; only the
 	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
 	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+
+	executionInfo := ctx.ExecutionInfo()
+	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
@@ -916,6 +925,7 @@ func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
+	executionInfo := ctx.ExecutionInfo()
 
 	// Clear fields that are too large/not useful for the list view.
 	spec.TimezoneData = nil
@@ -935,6 +945,7 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
+		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
 	}
 }
 
@@ -943,15 +954,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
