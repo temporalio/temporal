@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/metadata"
 )
 
 var _ Context = (*MockContext)(nil)
@@ -60,6 +61,13 @@ func (c *MockContext) goContext() context.Context {
 		c.GoCtx = context.Background()
 	}
 	return c.GoCtx
+}
+
+func (c *MockContext) RequestHeader(key string) string {
+	if values := metadata.ValueFromIncomingContext(c.goContext(), key); len(values) > 0 {
+		return values[0]
+	}
+	return ""
 }
 
 func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
