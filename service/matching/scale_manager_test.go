@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -28,7 +28,7 @@ import (
 
 type ScaleManagerSuite struct {
 	suite.Suite
-	protoassert.ProtoAssertions
+	protorequire.ProtoAssertions
 	controller *gomock.Controller
 	scaler     *MockPartitionScaler
 	scaleDB    *MockscaleDB
@@ -45,7 +45,7 @@ func TestScaleManagerSuite(t *testing.T) {
 }
 
 func (s *ScaleManagerSuite) SetupTest() {
-	s.ProtoAssertions = protoassert.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.scaler = NewMockPartitionScaler(s.controller)
 	s.scaleDB = NewMockscaleDB(s.controller)

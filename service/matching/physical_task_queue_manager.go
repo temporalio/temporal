@@ -360,7 +360,7 @@ func (c *physicalTaskQueueManagerImpl) LoadedMetadata(scaleState *persistencespb
 
 func (c *physicalTaskQueueManagerImpl) UpdateScaleState(scaleState *persistencespb.PartitionScaleState, syncToDB bool) error {
 	if !syncToDB {
-		return c.backlogMgr.getDB().UpdateScaleState(nil, scaleState, false)
+		return c.backlogMgr.getDB().UpdateScaleState(c.tqCtx /* unused */, scaleState, false)
 	}
 	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 	defer cancel()
