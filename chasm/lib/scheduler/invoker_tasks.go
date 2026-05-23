@@ -10,7 +10,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -94,10 +93,11 @@ var (
 // Invoker task invalidation and buffered-start drop reasons. Limited cardinality
 // for ReasonTag.
 const (
-	invokerProcessBufferInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
-	invokerExecuteInvalidatedNoWork         metrics.ReasonString = "no_work"
-	bufferedStartDroppedMissedCatchup       metrics.ReasonString = "missed_catchup_window"
-	bufferedStartDroppedPausedOrLimited     metrics.ReasonString = "paused_or_limited"
+	invokerProcessBufferInvalidatedStaleHWM  metrics.ReasonString = "stale_hwm"
+	invokerExecuteInvalidatedNoWork          metrics.ReasonString = "no_work"
+	invokerExecuteInvalidatedAlreadyRecorded metrics.ReasonString = "already_recorded"
+	bufferedStartDroppedMissedCatchup        metrics.ReasonString = "missed_catchup_window"
+	bufferedStartDroppedPausedOrLimited      metrics.ReasonString = "paused_or_limited"
 )
 
 func NewInvokerExecuteTaskHandler(opts InvokerTaskHandlerOptions) *InvokerExecuteTaskHandler {
@@ -118,6 +118,21 @@ func NewInvokerProcessBufferTaskHandler(opts InvokerTaskHandlerOptions) *Invoker
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
 	}
+}
+
+// recordDuplicateExecuteDrops emits a metric + Debug log for CompletedStarts
+// that were dropped because a concurrent ExecuteTask already recorded the
+// RunId. A nonzero rate means two ExecuteTasks raced through clone-then-write
+// for the same RequestId; the server's RequestId dedupe collapses the RPCs
+// to one RunId and the idempotency guard in recordExecuteResult absorbs the
+// duplicate without inflating ActionCount.
+func (h *InvokerExecuteTaskHandler) recordDuplicateExecuteDrops(scheduler *Scheduler, count int) {
+	newTaggedMetricsHandler(h.metricsHandler, scheduler).
+		Counter(metrics.ScheduleInvokerExecuteInvalidated.Name()).
+		Record(int64(count), metrics.ReasonTag(invokerExecuteInvalidatedAlreadyRecorded))
+	newTaggedLogger(h.baseLogger, scheduler).Debug(
+		"duplicate ExecuteTask result dropped",
+		tag.NewInt("count", count))
 }
 
 func (h *InvokerExecuteTaskHandler) Validate(
@@ -206,8 +221,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback, now)
-	result = result.Append(sres)
+	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback, now))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -216,10 +230,13 @@ func (h *InvokerExecuteTaskHandler) Execute(
 		invokerRef,
 		func(i *Invoker, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s := i.Scheduler.Get(ctx)
-
-			i.recordExecuteResult(ctx, &result)
-			s.recordActionResult(&schedulerActionResult{actionCount: int64(len(startResults))})
-
+			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
+			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
+			newlyStarted, droppedDuplicates := i.recordExecuteResult(ctx, &result)
+			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
+			if droppedDuplicates > 0 {
+				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
+			}
 			return nil, nil
 		},
 		nil,
@@ -327,7 +344,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 	now time.Time,
-) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
+) (result executeResult) {
 	metricsWithTag := metricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 
@@ -356,7 +373,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			startResult, err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
+			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -383,7 +400,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 
 			metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
 			result.CompletedStarts = append(result.CompletedStarts, start)
-			startResults = append(startResults, startResult)
 		})
 	}
 
@@ -568,21 +584,21 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
-) (*schedulepb.ScheduleActionResult, error) {
+) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
 	if start.Attempt >= InvokerMaxStartAttempts {
-		return nil, errRetryLimitExceeded
+		return errRetryLimitExceeded
 	}
 
 	// Get rate limiter permission once per buffered start, on the first attempt only.
 	if start.Attempt == 1 {
 		delay, err := h.getRateLimiterPermission()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if delay > 0 {
-			return nil, newRateLimitedError(delay)
+			return newRateLimitedError(delay)
 		}
 	}
 
@@ -622,7 +638,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	actualStartTime := time.Now()
 
@@ -640,16 +656,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(desiredTime.AsTime()))
 	}
-
-	return &schedulepb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
-		ActualTime:   timestamppb.New(actualStartTime),
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: start.WorkflowId,
-			RunId:      result.RunId,
-		},
-		StartWorkflowStatus: result.Status, // usually should be RUNNING
-	}, nil
+	return nil
 }
 
 func (h *InvokerExecuteTaskHandler) terminateWorkflow(

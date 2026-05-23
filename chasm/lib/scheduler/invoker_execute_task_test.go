@@ -404,6 +404,109 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 	})
 }
 
+// Two concurrent ExecuteTasks can both clone the invoker before either
+// commits, both fire StartWorkflow for the same RequestId, and both observe
+// success (server dedupes by RequestId). The losing commit must not
+// double-count, stomp the winner's RunId/StartTime/HasCallback, or rewind
+// Attempt/BackoffTime on the already-running entry.
+func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	winning := "winning-run"
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime: startTime,
+		ActualTime:  startTime,
+		DesiredTime: startTime,
+		RequestId:   "req",
+		WorkflowId:  "wf",
+		Attempt:     1,
+		RunId:       winning,
+		StartTime:   startTime,
+		HasCallback: true,
+	}}
+	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+	loserStartTime := timestamppb.New(env.TimeSource.Now().Add(time.Second))
+	loser := []*schedulespb.BufferedStart{{
+		RequestId: "req",
+		RunId:     "loser-run",
+		StartTime: loserStartTime,
+	}}
+
+	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, loser, nil)
+	require.Equal(t, 0, newlyStarted, "duplicate RunId-set start must not be counted")
+	require.Equal(t, 1, droppedDuplicates, "the dropped completion must be reported for observability")
+	live := invoker.BufferedStarts[0]
+	require.Equal(t, winning, live.RunId, "live RunId must not be stomped")
+	require.Equal(t, startTime.AsTime(), live.StartTime.AsTime(), "live StartTime must not be stomped")
+	require.True(t, live.HasCallback, "live HasCallback must not be cleared")
+
+	// First-mover case: a CompletedStart for a fresh RequestId increments
+	// newlyStarted and writes through to the live entry.
+	invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+		NominalTime: startTime,
+		ActualTime:  startTime,
+		DesiredTime: startTime,
+		RequestId:   "req2",
+		WorkflowId:  "wf2",
+		Attempt:     1,
+	})
+	first := []*schedulespb.BufferedStart{{
+		RequestId: "req2",
+		RunId:     "first-run",
+		StartTime: startTime,
+	}}
+	newlyStarted, droppedDuplicates = invoker.RecordExecuteResult(ctx, first, nil)
+	require.Equal(t, 1, newlyStarted, "first-time RunId assignment must be counted")
+	require.Equal(t, 0, droppedDuplicates, "no duplicate was dropped")
+	freshlyStarted := invoker.BufferedStarts[1]
+	require.Equal(t, "first-run", freshlyStarted.RunId)
+	require.Equal(t, startTime.AsTime(), freshlyStarted.StartTime.AsTime())
+	require.True(t, freshlyStarted.HasCallback, "first-time RunId assignment must set HasCallback")
+}
+
+// A RetryableStart for a request whose live BufferedStart already has RunId
+// set must not bump Attempt or set BackoffTime - the same RunId guard that
+// protects the completed branch must also protect the retryable branch,
+// otherwise stale retry metadata persists on an already-running entry.
+func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime: startTime,
+		ActualTime:  startTime,
+		DesiredTime: startTime,
+		RequestId:   "req",
+		WorkflowId:  "wf",
+		Attempt:     1,
+		RunId:       "winning-run",
+		StartTime:   startTime,
+		HasCallback: true,
+	}}
+	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+	// A losing concurrent Execute saw the start as eligible, its RPC failed
+	// retryably, and applyBackoff produced a RetryableStart entry.
+	loserBackoff := timestamppb.New(env.TimeSource.Now().Add(time.Minute))
+	retryable := []*schedulespb.BufferedStart{{
+		RequestId:   "req",
+		BackoffTime: loserBackoff,
+	}}
+
+	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, nil, retryable)
+	require.Equal(t, 0, newlyStarted)
+	require.Equal(t, 0, droppedDuplicates, "retryable drops aren't counted as duplicates - only completed-side drops are")
+	live := invoker.BufferedStarts[0]
+	require.Equal(t, int64(1), live.Attempt, "Attempt must not be incremented on a started entry")
+	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
+}
+
 // A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
 // Regression for the strict-Before check, which excluded equal-time entries
 // and stranded retries that landed precisely at the HWM boundary.

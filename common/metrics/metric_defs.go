@@ -1415,7 +1415,7 @@ var (
 	)
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
-		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+		WithDescription("The number of successful StartWorkflow RPCs issued by a schedule. Concurrent ExecuteTasks may produce duplicates that all succeed via RequestId dedupe; ScheduleInfo.ActionCount counts only the first commit (via the recordExecuteResult idempotency guard), so this counter and ActionCount can diverge under race - see schedule_invoker_execute_invalidated[reason=already_recorded]."),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
@@ -1471,7 +1471,7 @@ var (
 	)
 	ScheduleInvokerExecuteInvalidated = NewCounterDef(
 		"schedule_invoker_execute_invalidated",
-		WithDescription("The number of times a scheduler's Execute side-effect task was dropped by Validate. Tagged with reason (currently only no_work). A nonzero rate indicates redundant task scheduling - the work was completed or canceled by another task before this one ran."),
+		WithDescription("The number of times a scheduler's Execute side-effect task's work was dropped. Tagged with reason: no_work (Validate dropped the whole task because nothing was eligible); already_recorded (recordExecuteResult skipped a CompletedStart because a concurrent ExecuteTask already wrote RunId). A nonzero rate is normal under concurrent scheduling - sustained or rising rates warrant investigation."),
 	)
 	ScheduleBackfillerFired = NewCounterDef(
 		"schedule_backfiller_fired",
