@@ -101,38 +101,15 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	var outcome *apiactivitypb.ActivityExecutionOutcome
 
 	if err != nil {
-		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-		if errors.As(err, &alreadyStartedErr) {
-			resultRunID = alreadyStartedErr.CurrentRunID
-
-			// Get outcome if needed, and if reuse policy or conflict policy result in an already started error.
-			if frontendReq.GetIncludeOutcome() {
-				var readerr error
-				outcome, readerr = chasm.ReadComponent(
-					ctx,
-					chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
-						NamespaceID: req.GetNamespaceId(),
-						BusinessID:  frontendReq.GetActivityId(),
-						RunID:       resultRunID,
-					}),
-					func(a *Activity, ctx chasm.Context, _ any) (*apiactivitypb.ActivityExecutionOutcome, error) {
-						return a.outcome(ctx), nil
-					},
-					nil,
-				)
-				if readerr != nil {
-					outcome = nil
-				}
-			}
-
-			if outcome == nil {
-				return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
-			} // else fallback to return success later
+		alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err)
+		if !ok {
+			return nil, err
 		}
 
-		if outcome == nil {
+		outcome, resultRunID, err = h.handleAlreadyStartedError(ctx, req, frontendReq, alreadyStartedErr)
+		if err != nil {
 			return nil, err
-		} // else fallback to return success later
+		}
 	} else {
 		resultRunID = result.ExecutionKey.RunID
 	}
@@ -180,6 +157,48 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
+}
+
+// handleAlreadyStartedError handles the AlreadyStarted error in StartExecution.
+// If IncludeOutcome is set, and the activity is completed, it returns the
+// outcome and associated runID. Otherwise, and in case of error, it return
+// NewActivityExecutionAlreadyStarted error.
+func (h *handler) handleAlreadyStartedError(
+	ctx context.Context,
+	req *activitypb.StartActivityExecutionRequest,
+	frontendReq *workflowservice.StartActivityExecutionRequest,
+	alreadyStartedErr *chasm.ExecutionAlreadyStartedError,
+) (*apiactivitypb.ActivityExecutionOutcome, string, error) {
+
+	var outcome *apiactivitypb.ActivityExecutionOutcome
+	resultRunID := alreadyStartedErr.CurrentRunID
+
+	// Get outcome if needed, and if reuse policy or conflict policy result in an already started error.
+	if frontendReq.GetIncludeOutcome() {
+		var readerr error
+		outcome, readerr = chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  frontendReq.GetActivityId(),
+				RunID:       resultRunID,
+			}),
+			func(a *Activity, ctx chasm.Context, _ any) (*apiactivitypb.ActivityExecutionOutcome, error) {
+				return a.outcome(ctx), nil
+			},
+			nil,
+		)
+
+		if readerr != nil {
+			return nil, "", readerr
+		}
+	}
+
+	if outcome == nil {
+		return nil, "", serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
+	}
+
+	return outcome, resultRunID, nil
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits

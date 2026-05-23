@@ -299,18 +299,12 @@ type getOutcomeOrAddCallbacksInput struct {
 }
 
 // Get outcome if includeOutcome is set and outcome is available.
-// Add completion callbacks only if no outcome is found and returned.
+// Add completion callbacks only if the activity is not yet completed.
 func (a *Activity) getOutcomeOrAddCallbacks(
 	ctx chasm.MutableContext, input getOutcomeOrAddCallbacksInput,
 ) (*apiactivitypb.ActivityExecutionOutcome, error) {
-	var outcome *apiactivitypb.ActivityExecutionOutcome
-
-	if input.includeOutcome {
-		outcome = a.outcome(ctx)
-	}
-	// Do not add completion callbacks if activity already completed.
-	if outcome != nil {
-		return outcome, nil
+	if input.includeOutcome && a.LifecycleState(ctx).IsClosed() {
+		return a.outcome(ctx), nil
 	}
 
 	return nil, a.addCompletionCallbacks(ctx, input.requestID, input.callbacks, input.maxCallbacks)
