@@ -4117,7 +4117,7 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory, c sched
 	}, 15*time.Second, 200*time.Millisecond, "schedule should idle-close after IdleTime")
 
 	if c.strictRunCount {
-		s.EqualValues(c.expectedRuns, runs.Load(), "schedule must not exceed its action budget")
+		s.Equal(c.expectedRuns, runs.Load(), "schedule must not exceed its action budget")
 	}
 }
 
