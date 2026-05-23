@@ -301,6 +301,16 @@ type (
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
 		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
+
+		// Injector optionally injects faults using runtime code instead of static YAML config.
+		Injector FaultInjector `yaml:"-" json:"-"`
+	}
+
+	FaultInjector func(FaultInjectionTarget) error
+
+	FaultInjectionTarget struct {
+		Store  DataStoreName
+		Method string
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
