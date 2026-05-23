@@ -1457,6 +1457,38 @@ var (
 		"schedule_idle_task_invalidated",
 		WithDescription("The number of times a schedule's idle task was dropped by Validate without closing the component. Tagged with reason (held_open, expiration_shift, closed). Expect a low steady baseline of expiration_shift for actively-firing schedules; sustained spikes or other reasons warrant investigation."),
 	)
+	ScheduleInvokerProcessBufferFired = NewCounterDef(
+		"schedule_invoker_process_buffer_fired",
+		WithDescription("The number of times a scheduler's ProcessBuffer task executed. Compare with schedule_invoker_process_buffer_invalidated for the drop rate."),
+	)
+	ScheduleInvokerProcessBufferInvalidated = NewCounterDef(
+		"schedule_invoker_process_buffer_invalidated",
+		WithDescription("The number of times a scheduler's ProcessBuffer task was dropped by Validate. Tagged with reason (currently only stale_hwm). A nonzero rate indicates redundant task scheduling - a more recent ProcessBuffer already advanced LastProcessedTime past this task's scheduled time."),
+	)
+	ScheduleInvokerExecuteFired = NewCounterDef(
+		"schedule_invoker_execute_fired",
+		WithDescription("The number of times a scheduler's Execute side-effect task executed. Compare with schedule_invoker_execute_invalidated for the drop rate, and with schedule_action_success/errors for actual work performed."),
+	)
+	ScheduleInvokerExecuteInvalidated = NewCounterDef(
+		"schedule_invoker_execute_invalidated",
+		WithDescription("The number of times a scheduler's Execute side-effect task was dropped by Validate. Tagged with reason (currently only no_work). A nonzero rate indicates redundant task scheduling - the work was completed or canceled by another task before this one ran."),
+	)
+	ScheduleBackfillerFired = NewCounterDef(
+		"schedule_backfiller_fired",
+		WithDescription("The number of times a scheduler's Backfiller task executed. Includes both buffer-fill and buffer-full-backoff fires."),
+	)
+	ScheduleBackfillerInvalidated = NewCounterDef(
+		"schedule_backfiller_invalidated",
+		WithDescription("The number of times a scheduler's Backfiller task was dropped by Validate. Tagged with reason (currently only stale_hwm)."),
+	)
+	ScheduleBackfillerCompleted = NewCounterDef(
+		"schedule_backfiller_completed",
+		WithDescription("The number of times a scheduler's Backfiller drained its requested time range and deleted itself. End-to-end signal for backfill request lifecycle."),
+	)
+	ScheduleBufferedStartDropped = NewCounterDef(
+		"schedule_buffered_start_dropped",
+		WithDescription("The number of buffered starts dropped by ProcessBuffer before execution. Tagged with reason (missed_catchup_window, paused_or_limited). Closes the operator-visibility gap where dropped starts only showed up as a per-schedule Info counter."),
+	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
