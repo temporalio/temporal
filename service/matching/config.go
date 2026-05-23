@@ -27,6 +27,7 @@ type (
 		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		RPS                                  dynamicconfig.IntPropertyFn
 		NamespaceRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+		NamespaceFairShare                   dynamicconfig.FloatPropertyFnWithNamespaceFilter
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		PollWaitForNamespaceRateLimitToken   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
@@ -277,6 +278,7 @@ func NewConfig(
 		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		NamespaceRPS:                             dynamicconfig.MatchingNamespaceRPS.Get(dc),
+		NamespaceFairShare:                       dynamicconfig.MatchingNamespaceFairShare.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		PollWaitForNamespaceRateLimitToken:       dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		RangeSize:                                100000,

@@ -635,7 +635,7 @@ var (
 	ServicePanic                            = NewCounterDef("service_panics")
 	ServiceRequestsNamespaceFairnessDemoted = NewCounterDef(
 		"service_requests_namespace_fairness_demoted",
-		WithDescription("The number of requests demoted by the history namespace fairness mechanism (over-share). Tagged with namespace and original caller type."),
+		WithDescription("The number of requests demoted by the per-service namespace fairness mechanism (over-share). Tagged with namespace and original caller type."),
 	)
 	ServiceErrorWithType = NewCounterDef(
 		"service_error_with_type",

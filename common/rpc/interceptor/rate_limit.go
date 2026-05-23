@@ -81,7 +81,11 @@ func (i *RateLimitInterceptor) Allow(
 	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
-		"", // this interceptor layer does not throttle based on caller name
+		// Caller name (namespace) is forwarded so per-service fairness priority
+		// functions can route requests to the correct per-namespace bucket. It
+		// is not used for host-level throttling here; bucket selection still
+		// happens by priority, not by caller.
+		headerGetter.Get(headers.CallerNameHeaderName),
 		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation

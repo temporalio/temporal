@@ -1,11 +1,14 @@
 package matching
 
 import (
+	"time"
+
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -15,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -138,13 +142,104 @@ func NamespaceRateLimitInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	metricsHandler metrics.Handler,
 ) *interceptor.RateLimitInterceptor {
+	priorityFn, priorities := getFairnessPriorityFn(serviceConfig, metricsHandler)
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
+		quotas.NewPriorityRateLimiterHelper(
+			quotas.NewDefaultIncomingRateBurst(func() float64 { return float64(serviceConfig.RPS()) }),
+			serviceConfig.OperatorRPSRatio,
+			priorityFn,
+			priorities,
+		),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
 		},
 	)
+}
+
+// getFairnessPriorityFn builds the namespace-fairness-aware priority function
+// for the matching host RPS rate limiter, along with the priority list to pass
+// to NewPriorityRateLimiterHelper.
+//
+// Priority layout (5 levels):
+//
+//	0  Operator
+//	1  Normal API band
+//	2  CancelOutstandingWorkerPolls + unknown
+//	3  over-share
+//	4  Preemptable
+//
+// All caller types except Preemptable participate in the fairness check:
+// in-share traffic keeps its API priority (including Operator at 0), and
+// over-share traffic collapses into the single over-share band at priority 3
+// and emits a demotion metric. Preemptable is outside the fairness model: it
+// never consumes the namespace bucket, never produces a demotion metric, and
+// always sinks to the bottom band.
+//
+// share(ns) = MatchingRPS * NamespaceFairShare(ns). NamespaceFairShare is a
+// float in [0, 1]. This single knob also controls whether fairness applies:
+// values outside the open interval (0, 1) disable the fairness check for
+// that namespace, so the namespace keeps its API priority. 0 = feature off;
+// >=1 = allow up to the full host budget (no demotion possible before the
+// host limit anyway).
+func getFairnessPriorityFn(
+	cfg *Config,
+	metricsHandler metrics.Handler,
+) (quotas.RequestPriorityFn, []int) {
+	const (
+		overSharePriority   = 3
+		preemptablePriority = 4
+	)
+	priorities := append([]int{}, configs.APIPrioritiesOrdered...)
+	priorities = append(priorities, overSharePriority, preemptablePriority)
+
+	// share returns the per-namespace fair-share rate, or 0 when the configured
+	// fair share is outside (0, 1) — both endpoints mean "fairness disabled
+	// for this namespace."
+	share := func(ns string) float64 {
+		fs := cfg.NamespaceFairShare(ns)
+		if fs <= 0 || fs >= 1 {
+			return 0
+		}
+		return float64(cfg.RPS()) * fs
+	}
+
+	// Per-namespace fair-share buckets, sized at share(ns) with the standard
+	// incoming burst ratio. Reuses NewNamespaceRequestRateLimiter (per-namespace
+	// map keyed on req.Caller, 1-hour TTL eviction) and NewDefaultIncomingRateLimiter
+	// (dynamic rate read live each call).
+	nsBuckets := quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			ns := req.Caller
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultIncomingRateLimiter(func() float64 { return share(ns) }),
+			)
+		},
+	)
+
+	priorityFn := func(req quotas.Request) int {
+		apiPri := configs.RequestToPriority(req)
+		if req.Caller == "" {
+			return apiPri
+		}
+		if share(req.Caller) <= 0 {
+			return apiPri
+		}
+		if req.CallerType == headers.CallerTypePreemptable {
+			return preemptablePriority
+		}
+		if nsBuckets.Allow(time.Now().UTC(), req) {
+			return apiPri
+		}
+		metrics.ServiceRequestsNamespaceFairnessDemoted.With(metricsHandler).Record(
+			1,
+			metrics.NamespaceTag(req.Caller),
+			metrics.StringTag("caller_type", req.CallerType),
+		)
+		return overSharePriority
+	}
+	return priorityFn, priorities
 }
 
 // PersistenceRateLimitingParamsProvider is the same between services but uses different config sources.

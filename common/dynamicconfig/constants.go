@@ -1142,8 +1142,15 @@ Default is 0, means, namespace will be deleted immediately.`,
 	MatchingNamespaceRPS = NewNamespaceIntSetting(
 		"matching.namespaceRPS",
 		0,
-		`MatchingNamespaceRPS is namespace rate limit per second for each matching host. 
+		`MatchingNamespaceRPS is namespace rate limit per second for each matching host.
 If value less or equal to 0, will fall back to MatchingRPS`,
+	)
+	MatchingNamespaceFairShare = NewNamespaceFloatSetting(
+		"matching.namespaceFairShare",
+		0,
+		`MatchingNamespaceFairShare is the fraction of the matching host RPS limit (MatchingRPS) each namespace
+is allowed to consume before its requests are demoted by the fairness mechanism.
+share(ns) = MatchingRPS * MatchingNamespaceFairShare(ns). Setting it to 0 or 1 disables the fairness check for that namespace.`,
 	)
 	MatchingPersistenceMaxQPS = NewGlobalIntSetting(
 		"matching.persistenceMaxQPS",
