@@ -919,6 +919,16 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		pendingBIDOrder = append(pendingBIDOrder, ex.BusinessID)
 	}
 
+	s.incrementPendingCounters(ctx, pendingBIDOrder)
+	s.decrementCleanCounters(ctx, dispatched, pendingBIDs)
+	s.routePending(pending)
+}
+
+// incrementPendingCounters bumps WF-ID and shard pending counters for
+// each deduped pending BID and quarantines once thresholds are reached.
+// Already-quarantined BIDs skip the increment side entirely so a
+// shard counter is never charged off a WF-ID's own signal.
+func (s *adaptiveWorkflowState) incrementPendingCounters(ctx workflow.Context, pendingBIDOrder []string) {
 	for _, bid := range pendingBIDOrder {
 		if _, alreadyQuarantined := s.quarantinedWF[bid]; alreadyQuarantined {
 			continue
@@ -943,12 +953,17 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 				"pendingCount", s.shardPending[sh])
 		}
 	}
+}
 
+// decrementCleanCounters decays counters for dispatched BIDs that did
+// not appear in pending, and releases quarantine when counts cross the
+// threshold/2 hysteresis floor. Deduped against pendingBIDs so a
+// partial-clean BID doesn't decay the counter the increment loop just
+// bumped. Repeated reuse-bursts on the same BID could flap quarantine
+// on/off; accepted as unusual.
+func (s *adaptiveWorkflowState) decrementCleanCounters(ctx workflow.Context, dispatched []*ExecutionInfo, pendingBIDs map[string]struct{}) {
 	shardReleaseAt := max(s.params.ShardQuarantineThreshold/2, 1)
 	wfReleaseAt := max(s.params.WFIDQuarantineThreshold/2, 1)
-	// Deduped against pendingBIDs so a partial-clean BID doesn't decay
-	// the counter the increment loop just bumped. Repeated reuse-bursts
-	// on the same BID could flap quarantine on/off; accepted as unusual.
 	seenClean := make(map[string]struct{}, len(dispatched))
 	for _, ex := range dispatched {
 		if _, isPending := pendingBIDs[ex.BusinessID]; isPending {
@@ -958,34 +973,48 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 			continue
 		}
 		seenClean[ex.BusinessID] = struct{}{}
-		if c := s.wfIDPending[ex.BusinessID]; c > 0 {
-			if c == 1 {
-				delete(s.wfIDPending, ex.BusinessID)
-			} else {
-				s.wfIDPending[ex.BusinessID] = c - 1
-			}
-		}
-		if _, ok := s.quarantinedWF[ex.BusinessID]; ok && s.wfIDPending[ex.BusinessID] <= wfReleaseAt {
-			delete(s.quarantinedWF, ex.BusinessID)
-			s.emitTransition(ctx, metrics.ForceReplicationWFRecoveredCount.Name(),
-				"adaptive: released WF-ID quarantine",
-				"wfId", ex.BusinessID,
-				"pendingCount", s.wfIDPending[ex.BusinessID])
-		}
+		s.decayWFIDPending(ex.BusinessID)
+		s.maybeReleaseWFQuarantine(ctx, ex.BusinessID, wfReleaseAt)
 		sh := s.shardOf(ex.BusinessID)
 		if s.shardPending[sh] > 0 {
 			s.shardPending[sh]--
 		}
-		if _, ok := s.quarantinedShard[sh]; ok && s.shardPending[sh] <= shardReleaseAt {
-			delete(s.quarantinedShard, sh)
-			s.emitTransition(ctx, metrics.ForceReplicationShardRecoveredCount.Name(),
-				"adaptive: released shard quarantine",
-				"shard", sh,
-				"pendingCount", s.shardPending[sh])
-		}
+		s.maybeReleaseShardQuarantine(ctx, sh, shardReleaseAt)
 	}
+}
 
-	s.routePending(pending)
+func (s *adaptiveWorkflowState) decayWFIDPending(bid string) {
+	c := s.wfIDPending[bid]
+	if c == 0 {
+		return
+	}
+	if c == 1 {
+		delete(s.wfIDPending, bid)
+		return
+	}
+	s.wfIDPending[bid] = c - 1
+}
+
+func (s *adaptiveWorkflowState) maybeReleaseWFQuarantine(ctx workflow.Context, bid string, releaseAt int) {
+	if _, ok := s.quarantinedWF[bid]; !ok || s.wfIDPending[bid] > releaseAt {
+		return
+	}
+	delete(s.quarantinedWF, bid)
+	s.emitTransition(ctx, metrics.ForceReplicationWFRecoveredCount.Name(),
+		"adaptive: released WF-ID quarantine",
+		"wfId", bid,
+		"pendingCount", s.wfIDPending[bid])
+}
+
+func (s *adaptiveWorkflowState) maybeReleaseShardQuarantine(ctx workflow.Context, sh int32, releaseAt int) {
+	if _, ok := s.quarantinedShard[sh]; !ok || s.shardPending[sh] > releaseAt {
+		return
+	}
+	delete(s.quarantinedShard, sh)
+	s.emitTransition(ctx, metrics.ForceReplicationShardRecoveredCount.Name(),
+		"adaptive: released shard quarantine",
+		"shard", sh,
+		"pendingCount", s.shardPending[sh])
 }
 
 // routePending puts each execution onto whichever lane its current
