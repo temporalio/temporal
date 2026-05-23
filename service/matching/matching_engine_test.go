@@ -6393,6 +6393,54 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(1), resp.GetCancelledCount())
 		require.NotNil(t, engine.shutdownWorkers.Get("worker-key"))
 	})
+
+	t.Run("partition API: cancels pollers across multiple batched partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		// Register pollers on different partitions for the same worker.
+		// In production, each partition's poller gets a unique tracker key.
+		var cancelledCount atomic.Int32
+		engine.workerInstancePollers.Add("worker-key", "test-queue:poller-0", func() { cancelledCount.Add(1) })
+		engine.workerInstancePollers.Add("worker-key", "/_sys/test-queue/1:poller-1", func() { cancelledCount.Add(1) })
+		engine.workerInstancePollers.Add("worker-key", "/_sys/test-queue/2:poller-2", func() { cancelledCount.Add(1) })
+
+		partition0 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		partition1 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+		}
+		partition2 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 2},
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partition0,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partition0, partition1, partition2},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+					WorkerIdentity:    "worker-identity",
+				}},
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.GetCancelledCount())
+		require.Equal(t, int32(3), cancelledCount.Load())
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-key"))
+	})
 }
 
 // routingMatchingClient wraps a mock matching client with a Route() method
