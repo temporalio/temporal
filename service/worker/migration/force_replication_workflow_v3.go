@@ -102,12 +102,13 @@ type (
 		WFIDQuarantineThreshold  int
 		ShardQuarantineThreshold int
 
-		// Continue-as-new carry-over. Sticky quarantine state survives CAN
-		// so a hot WF ID identified in cycle N is still slow-laned in cycle
-		// N+1.
-		QuarantinedWFIDs   []string
+		// Continue-as-new carry-over for shard-keyed quarantine state.
+		// Bounded by HistoryShardCount, safe to carry. WF-ID-keyed state
+		// (quarantinedWF, wfIDPending) is intentionally not carried: it
+		// would grow without bound across cycles, and the cost of
+		// re-discovering hot WF-IDs each cycle is bounded by the carried
+		// pending lists and absorbed by AIMD.
 		QuarantinedShards  []int32
-		WFIDPendingCounts  map[string]int
 		ShardPendingCounts map[int32]int
 
 		// FastPending and SlowPending carry unverified executions across
@@ -288,9 +289,7 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 	}
 
 	params.ContinuedAsNewCount++
-	params.QuarantinedWFIDs = state.snapshotQuarantinedWFIDs()
 	params.QuarantinedShards = state.snapshotQuarantinedShards()
-	params.WFIDPendingCounts = state.wfIDPending
 	params.ShardPendingCounts = state.shardPending
 	params.FastPending = pendingList(state.fastPending)
 	params.SlowPending = pendingList(state.slowPending)
@@ -305,7 +304,9 @@ func ForceReplicationWorkflowV3(ctx workflow.Context, params AdaptiveForceReplic
 func registerAdaptiveStatusQuery(ctx workflow.Context, params *AdaptiveForceReplicationParams, startPageToken []byte, stateRef **adaptiveWorkflowState) {
 	_ = workflow.SetQueryHandler(ctx, adaptiveForceReplicationStatusQueryType, func() (AdaptiveForceReplicationStatus, error) {
 		verified := params.ReplicatedWorkflowCount
-		qWF := len(params.QuarantinedWFIDs)
+		// quarantinedWF isn't carried across CAN, so it's 0 until
+		// state is built. quarantinedShard survives CAN via params.
+		qWF := 0
 		qShard := len(params.QuarantinedShards)
 		var fastRPS, slowRPS float64
 		if s := *stateRef; s != nil {
@@ -539,9 +540,9 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 	s := &adaptiveWorkflowState{
 		params:           params,
 		retryPolicy:      retryPolicy,
-		wfIDPending:      cloneStringIntMap(params.WFIDPendingCounts),
+		wfIDPending:      make(map[string]int),
+		quarantinedWF:    make(map[string]struct{}),
 		shardPending:     cloneInt32IntMap(params.ShardPendingCounts),
-		quarantinedWF:    sliceToStringSet(params.QuarantinedWFIDs),
 		quarantinedShard: sliceToInt32Set(params.QuarantinedShards),
 		// Copy the carry-over rather than alias so the next CAN's
 		// snapshot doesn't observe lists mutated by this cycle.
@@ -555,6 +556,15 @@ func newAdaptiveWorkflowState(ctx workflow.Context, params *AdaptiveForceReplica
 	}
 	if s.lastProgressAt.IsZero() {
 		s.lastProgressAt = workflow.Now(ctx)
+	}
+	// Carried pending BIDs were pending in their last observed batch:
+	// credit that one observation against WFIDQuarantineThreshold so
+	// CAN doesn't reset their re-quarantine countdown.
+	for _, ex := range s.fastPending {
+		s.wfIDPending[ex.BusinessID] = 1
+	}
+	for _, ex := range s.slowPending {
+		s.wfIDPending[ex.BusinessID] = 1
 	}
 	// state now owns the live pending lists; params will be repopulated
 	// from state before continue-as-new.
@@ -715,9 +725,8 @@ func (s *adaptiveWorkflowState) drainRetries(ctx workflow.Context) (canSuggested
 
 // reclassifyPendingForRetry routes each pending entry by current
 // quarantine state. The slow→fast direction matters: without it, a
-// workflow whose shard recovered would stay pinned in the slow lane
-// through every drainRetries round. WF-ID quarantine is sticky in
-// both directions.
+// workflow whose shard or WF-ID quarantine has been released would
+// stay pinned in the slow lane through every drainRetries round.
 func (s *adaptiveWorkflowState) reclassifyPendingForRetry() (reFast, reSlow []*ExecutionInfo) {
 	toRetryFast := s.fastPending
 	toRetrySlow := s.slowPending
@@ -891,11 +900,11 @@ func (s *adaptiveWorkflowState) dispatchVerifyOnly(ctx workflow.Context, execs [
 
 // recordBatchOutcome updates pending counters and routes pending execs
 // to lanes. Counters move once per BusinessID per batch so a single
-// batch can't quarantine a WF-ID off its own runs. Shard counters skip
-// already-WF-quarantined BIDs (otherwise a hot WF-ID trips shard
-// quarantine off its own signal) and decay on clean verifies with
-// threshold/2 hysteresis — shard hotness is transient, WF-ID
-// quarantine is sticky.
+// batch can't quarantine a WF-ID off its own runs. Already-quarantined
+// BIDs skip the increment side entirely — the routing decision is made
+// and the shard counter must not be charged off a WF-ID's own signal.
+// On clean verifies both counters decay; both quarantines release with
+// threshold/2 hysteresis.
 func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatched, pending []*ExecutionInfo) {
 	// Dedupe by BusinessID, preserving first-seen order for replay
 	// determinism. The pending/dispatched slices come straight from
@@ -911,24 +920,17 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 	}
 
 	for _, bid := range pendingBIDOrder {
-		wasQuarantinedWF := false
-		if _, ok := s.quarantinedWF[bid]; ok {
-			wasQuarantinedWF = true
+		if _, alreadyQuarantined := s.quarantinedWF[bid]; alreadyQuarantined {
+			continue
 		}
 
 		s.wfIDPending[bid]++
-		if !wasQuarantinedWF && s.wfIDPending[bid] >= s.params.WFIDQuarantineThreshold {
+		if s.wfIDPending[bid] >= s.params.WFIDQuarantineThreshold {
 			s.quarantinedWF[bid] = struct{}{}
 			s.emitTransition(ctx, metrics.ForceReplicationWFQuarantinedCount.Name(),
 				"adaptive: quarantined WF-ID",
 				"wfId", bid,
 				"pendingCount", s.wfIDPending[bid])
-			wasQuarantinedWF = true
-		}
-
-		if wasQuarantinedWF {
-			// Already attributed to WF-ID hotness — don't double-count
-			// against the shard.
 			continue
 		}
 		sh := s.shardOf(bid)
@@ -942,10 +944,11 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 		}
 	}
 
-	releaseAt := max(s.params.ShardQuarantineThreshold/2, 1)
-	// Decrement per fully-clean BID (no pending runs in this batch).
-	// Deduped against pending so partial-clean BIDs don't decay the
-	// counter that the increment loop just bumped.
+	shardReleaseAt := max(s.params.ShardQuarantineThreshold/2, 1)
+	wfReleaseAt := max(s.params.WFIDQuarantineThreshold/2, 1)
+	// Deduped against pendingBIDs so a partial-clean BID doesn't decay
+	// the counter the increment loop just bumped. Repeated reuse-bursts
+	// on the same BID could flap quarantine on/off; accepted as unusual.
 	seenClean := make(map[string]struct{}, len(dispatched))
 	for _, ex := range dispatched {
 		if _, isPending := pendingBIDs[ex.BusinessID]; isPending {
@@ -955,11 +958,25 @@ func (s *adaptiveWorkflowState) recordBatchOutcome(ctx workflow.Context, dispatc
 			continue
 		}
 		seenClean[ex.BusinessID] = struct{}{}
+		if c := s.wfIDPending[ex.BusinessID]; c > 0 {
+			if c == 1 {
+				delete(s.wfIDPending, ex.BusinessID)
+			} else {
+				s.wfIDPending[ex.BusinessID] = c - 1
+			}
+		}
+		if _, ok := s.quarantinedWF[ex.BusinessID]; ok && s.wfIDPending[ex.BusinessID] <= wfReleaseAt {
+			delete(s.quarantinedWF, ex.BusinessID)
+			s.emitTransition(ctx, metrics.ForceReplicationWFRecoveredCount.Name(),
+				"adaptive: released WF-ID quarantine",
+				"wfId", ex.BusinessID,
+				"pendingCount", s.wfIDPending[ex.BusinessID])
+		}
 		sh := s.shardOf(ex.BusinessID)
 		if s.shardPending[sh] > 0 {
 			s.shardPending[sh]--
 		}
-		if _, ok := s.quarantinedShard[sh]; ok && s.shardPending[sh] <= releaseAt {
+		if _, ok := s.quarantinedShard[sh]; ok && s.shardPending[sh] <= shardReleaseAt {
 			delete(s.quarantinedShard, sh)
 			s.emitTransition(ctx, metrics.ForceReplicationShardRecoveredCount.Name(),
 				"adaptive: released shard quarantine",
@@ -1114,23 +1131,18 @@ func (s *adaptiveWorkflowState) refillSemaphores(ctx workflow.Context) {
 }
 
 // estimateCANPayloadBytes returns a conservative upper bound on the
-// marshalled size of the input-growing CAN fields (pending lists +
-// user-keyed quarantine state). Shard-keyed state is bounded by shard
-// count and excluded.
+// marshalled size of the input-growing CAN fields (pending lists only).
+// Shard-keyed state is bounded by shard count and excluded; WF-ID-keyed
+// state is in-memory only and not carried across CAN.
 //
 // Over-estimates because it doesn't dedupe BusinessIDs shared across runs
 // of the same WF — intentional, since over-CAN'ing is preferable to
-// missing the SDK's 512KB blob warn. Sum over map iteration is commutative,
-// so the result is replay-deterministic.
+// missing the SDK's 512KB blob warn.
 func (s *adaptiveWorkflowState) estimateCANPayloadBytes() int {
 	// Per-pending-entry overhead in the wire form: tuple brackets,
 	// quotes, comma, archetypeID digits, plus the BID grouping key
 	// (over-counted for repeated BIDs, intentionally).
 	const pendingEntryOverhead = 20
-	// Per QuarantinedWFIDs slice entry: surrounding quotes + comma.
-	const quarantineEntryOverhead = 4
-	// Per WFIDPendingCounts map entry: quotes, colon, count digits, comma.
-	const pendingCountEntryOverhead = 12
 
 	bytes := 0
 	for _, e := range s.fastPending {
@@ -1139,27 +1151,7 @@ func (s *adaptiveWorkflowState) estimateCANPayloadBytes() int {
 	for _, e := range s.slowPending {
 		bytes += len(e.BusinessID) + len(e.RunID) + pendingEntryOverhead
 	}
-	//workflowcheck:ignore (summation is commutative; result independent of iteration order)
-	for k := range s.quarantinedWF {
-		bytes += len(k) + quarantineEntryOverhead
-	}
-	//workflowcheck:ignore (summation is commutative; result independent of iteration order)
-	for k := range s.wfIDPending {
-		bytes += len(k) + pendingCountEntryOverhead
-	}
 	return bytes
-}
-
-// snapshotQuarantinedWFIDs returns the quarantined WF-ID set as a sorted
-// slice; sorting makes the CAN input deterministic across replays.
-func (s *adaptiveWorkflowState) snapshotQuarantinedWFIDs() []string {
-	out := make([]string, 0, len(s.quarantinedWF))
-	//workflowcheck:ignore (output is sorted below, so map iteration order does not affect history)
-	for k := range s.quarantinedWF {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
 }
 
 func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
@@ -1173,26 +1165,10 @@ func (s *adaptiveWorkflowState) snapshotQuarantinedShards() []int32 {
 }
 
 // Non-nil so callers can write to the result without panicking on nil.
-func cloneStringIntMap(m map[string]int) map[string]int {
-	out := maps.Clone(m)
-	if out == nil {
-		out = make(map[string]int)
-	}
-	return out
-}
-
 func cloneInt32IntMap(m map[int32]int) map[int32]int {
 	out := maps.Clone(m)
 	if out == nil {
 		out = make(map[int32]int)
-	}
-	return out
-}
-
-func sliceToStringSet(s []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(s))
-	for _, v := range s {
-		out[v] = struct{}{}
 	}
 	return out
 }

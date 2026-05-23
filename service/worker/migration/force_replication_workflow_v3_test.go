@@ -383,22 +383,10 @@ func TestEstimateCANPayloadBytes(t *testing.T) {
 	t.Parallel()
 
 	// Build a state that exercises every term in the estimator. Mix
-	// long and short BIDs, repeat some BIDs to confirm pending entries
-	// over-count vs the BID-grouped wire form, and populate the
-	// WF-ID-keyed maps independently.
+	// long and short BIDs, and repeat some BIDs to confirm pending
+	// entries over-count vs the BID-grouped wire form.
 	s := &adaptiveWorkflowState{
 		params: &AdaptiveForceReplicationParams{NamespaceID: "ns-1", HistoryShardCount: 4},
-		quarantinedWF: map[string]struct{}{
-			"wf-hot-a": {},
-			"wf-hot-b": {},
-			"some-long-business-id-aaaaaaaaaaaaaaaaaaaaaaaaaa": {},
-		},
-		wfIDPending: map[string]int{
-			"wf-hot-a": 3,
-			"wf-hot-b": 999,
-			"some-long-business-id-aaaaaaaaaaaaaaaaaaaaaaaaaa": 42,
-			"wf-cool": 1,
-		},
 	}
 	for i := range 50 {
 		// Two runs per BID to exercise the over-count path.
@@ -416,19 +404,16 @@ func TestEstimateCANPayloadBytes(t *testing.T) {
 		})
 	}
 
-	// Marshal each CAN-serialized field independently and sum. The estimator
-	// covers exactly these four; shard-keyed state is bounded by shard count
-	// and intentionally excluded.
+	// Marshal each CAN-serialized field independently and sum. The
+	// estimator covers exactly these two; shard-keyed state is bounded
+	// by shard count and WF-ID-keyed state is in-memory only — both
+	// intentionally excluded.
 	fpBytes, err := json.Marshal(pendingList(s.fastPending))
 	require.NoError(t, err)
 	spBytes, err := json.Marshal(pendingList(s.slowPending))
 	require.NoError(t, err)
-	qwBytes, err := json.Marshal(s.snapshotQuarantinedWFIDs())
-	require.NoError(t, err)
-	wpBytes, err := json.Marshal(s.wfIDPending)
-	require.NoError(t, err)
 
-	actual := len(fpBytes) + len(spBytes) + len(qwBytes) + len(wpBytes)
+	actual := len(fpBytes) + len(spBytes)
 	estimate := s.estimateCANPayloadBytes()
 	require.GreaterOrEqual(t, estimate, actual,
 		"estimate must be a non-strict upper bound on actual marshalled size (estimate=%d, actual=%d)",
@@ -436,19 +421,22 @@ func TestEstimateCANPayloadBytes(t *testing.T) {
 }
 
 // TestReclassifyPendingForRetry covers the two-direction routing in
-// reclassifyPendingForRetry: fast→slow when a WF-ID becomes quarantined,
-// and slow→fast when a previously-quarantined shard has been released.
-// WF-ID quarantine stays sticky in both directions.
+// reclassifyPendingForRetry: fast→slow when a BID is in quarantinedWF,
+// and slow→fast when its shard quarantine has since been released.
 func TestReclassifyPendingForRetry(t *testing.T) {
 	t.Parallel()
 
 	newState := func(quarantinedWFIDs []string, quarantinedShards []int32) *adaptiveWorkflowState {
+		qWF := make(map[string]struct{}, len(quarantinedWFIDs))
+		for _, v := range quarantinedWFIDs {
+			qWF[v] = struct{}{}
+		}
 		return &adaptiveWorkflowState{
 			params: &AdaptiveForceReplicationParams{
 				NamespaceID:       "ns-1",
 				HistoryShardCount: 4,
 			},
-			quarantinedWF:    sliceToStringSet(quarantinedWFIDs),
+			quarantinedWF:    qWF,
 			quarantinedShard: sliceToInt32Set(quarantinedShards),
 		}
 	}
