@@ -129,10 +129,3 @@ message PartitionScaleState {
   //     aip.dev/not-precedent: This is not public. --)
   google.protobuf.Any private_scaler_state = 100;
 }
-
-
-// key for history tasks (everything above is for matching tasks)
-message TaskKey {
-  google.protobuf.Timestamp fire_time = 1;
-  int64 task_id = 2;
-}
