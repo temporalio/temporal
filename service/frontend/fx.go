@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -127,7 +128,9 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
+	chasmscheduler.Module,
 	chasmworkflow.Module,
+	callback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -853,6 +856,7 @@ func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator 
 }
 
 func HandlerProvider(
+	dc *dynamicconfig.Collection,
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
@@ -878,6 +882,7 @@ func HandlerProvider(
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	saValidator *searchattribute.Validator,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
@@ -915,6 +920,7 @@ func HandlerProvider(
 		namespaceRegistry,
 		saMapperProvider,
 		saProvider,
+		saValidator,
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
@@ -927,6 +933,11 @@ func HandlerProvider(
 		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
+		chasmworkflow.NewValidator(
+			chasmworkflow.NewConfig(dc),
+			saMapperProvider,
+			saValidator,
+		),
 	)
 	return wfHandler
 }

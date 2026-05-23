@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -146,6 +147,8 @@ var TransitionStarted = chasm.NewTransition(
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
 		attempt.StartRequestId = request.GetRequestId()
 		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
+		attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
+		attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 				BuildId:        versionDirective.GetBuildId(),

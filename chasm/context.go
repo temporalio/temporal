@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/metadata"
 )
 
 type Context interface {
@@ -38,6 +39,13 @@ type Context interface {
 	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
 	// Alternatively, use ContextWithValue() to manually set values on Context which will take precedence over registered ones.
 	Value(key any) any
+	// RequestHeader returns the first value of the named gRPC metadata header from the inbound request context, or ""
+	// if absent.
+	//
+	// Only available when this Context was constructed from an inbound gRPC request, i.e. inside the start/update/read
+	// callbacks invoked by the chasm engine. In other contexts, such as pure tasks executed at the end of a transaction
+	// or background task handlers, the underlying ctx has no gRPC metadata and this method always returns "".
+	RequestHeader(key string) string
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -190,6 +198,13 @@ func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
 
 func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
+}
+
+func (c *immutableCtx) RequestHeader(key string) string {
+	if values := metadata.ValueFromIncomingContext(c.ctx, key); len(values) > 0 {
+		return values[0]
+	}
+	return ""
 }
 
 func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {

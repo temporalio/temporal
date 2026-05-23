@@ -45,7 +45,8 @@ func findProtoImports() []string {
 				if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
 					i := match[1]
 					if strings.HasPrefix(i, "temporal/api/") ||
-						strings.HasPrefix(i, "google/") {
+						strings.HasPrefix(i, "google/") ||
+						strings.HasPrefix(i, "nexus/") {
 						importMap[i] = struct{}{}
 					}
 				}
@@ -84,9 +85,19 @@ func genFileList(protoImports []string) {
 		} else if strings.HasPrefix(i, "google/") {
 			base := strings.TrimSuffix(filepath.Base(i), ".proto") + "pb"
 			base = strings.ReplaceAll(base, "field_mask", "fieldmask")
-			goImport := "google.golang.org/protobuf/types/known/" + base
+			var goImport string
+			if base == "descriptorpb" {
+				goImport = "google.golang.org/protobuf/types/descriptorpb"
+			} else {
+				goImport = "google.golang.org/protobuf/types/known/" + base
+			}
 			goImportsMap[goImport] = base
 			protoToPackage[i] = base
+		} else if strings.HasPrefix(i, "nexusannotations/") {
+			goImport := filepath.Dir(strings.Replace(i, "nexusannotations/", "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/", 1))
+			importName := "nexusannotations"
+			goImportsMap[goImport] = importName
+			protoToPackage[i] = importName
 		}
 	}
 	goImports := expmaps.Keys(goImportsMap)
@@ -146,7 +157,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		num := imports.Len()
 		for i := range num {
 			imp := imports.Get(i).Path()
-			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") {
+			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") {
 				if _, ok := files[imp]; !ok {
 					missing[imp] = struct{}{}
 				}
