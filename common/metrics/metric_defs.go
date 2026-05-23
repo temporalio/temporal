@@ -1479,7 +1479,7 @@ var (
 	)
 	ScheduleBackfillerInvalidated = NewCounterDef(
 		"schedule_backfiller_invalidated",
-		WithDescription("The number of times a scheduler's Backfiller task was dropped by Validate. Tagged with reason (currently only stale_hwm)."),
+		WithDescription("The number of times a scheduler's Backfiller task was dropped by Validate. "),
 	)
 	ScheduleBackfillerCompleted = NewCounterDef(
 		"schedule_backfiller_completed",
@@ -1487,7 +1487,7 @@ var (
 	)
 	ScheduleBufferedStartDropped = NewCounterDef(
 		"schedule_buffered_start_dropped",
-		WithDescription("The number of buffered starts dropped by ProcessBuffer before execution. Tagged with reason (missed_catchup_window, paused_or_limited). Closes the operator-visibility gap where dropped starts only showed up as a per-schedule Info counter."),
+		WithDescription("The number of buffered starts dropped by ProcessBuffer before execution. Tagged with reason (missed_catchup_window, paused_or_limited)."),
 	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
