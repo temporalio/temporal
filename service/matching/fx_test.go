@@ -163,7 +163,7 @@ func TestFairnessPriorityFn_DisablingValues(t *testing.T) {
 // (over-share, preemptable) are appended at the end.
 func TestFairnessPriorityFn_PrioritiesIncludeAPIAndExtras(t *testing.T) {
 	_, priorities := makeTestPriorityFn(t, 100, nil)
-	require.Equal(t, len(configs.APIPrioritiesOrdered)+2, len(priorities),
+	require.Len(t, priorities, len(configs.APIPrioritiesOrdered)+2,
 		"priorities should be the matching API priorities + 2 fairness bands")
 	require.Equal(t, configs.APIPrioritiesOrdered, priorities[:len(configs.APIPrioritiesOrdered)])
 	require.Equal(t, 3, priorities[len(priorities)-2], "over-share band")
