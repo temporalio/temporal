@@ -956,4 +956,3 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 		IndexedFields: fields,
 	}
 }
-

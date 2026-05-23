@@ -312,4 +312,3 @@ func TestContextMetadata(t *testing.T) {
 		require.Nil(t, md)
 	})
 }
-
