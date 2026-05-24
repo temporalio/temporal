@@ -60,6 +60,13 @@ type PublisherState struct {
 	*streampb.PublisherState
 }
 
+// LifecycleState: per-publisher dedup state is "running" while it
+// exists; removal happens via the publisher_ttl sweeper (entry deleted
+// from the map outright).
+func (*PublisherState) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
 // InflightPublish is one entry in the Inflights map.  See
 // exactly-once.html §6 protocol.
 //
@@ -67,6 +74,12 @@ type PublisherState struct {
 type InflightPublish struct {
 	chasm.UnimplementedComponent
 	*streampb.InflightPublishState
+}
+
+// LifecycleState: inflights are running until committed, aborted, or
+// swept.  Removal happens via map delete in any of those paths.
+func (*InflightPublish) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
 }
 
 // Subscription is one entry in the Subscriptions map.  Its own
@@ -169,11 +182,34 @@ func NewStream(
 }
 
 // LifecycleState reports closed / running to the chasm framework.
-func (s *Stream) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
+func (s *Stream) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	if s.StreamState.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 	return chasm.LifecycleStateRunning
+}
+
+// ContextMetadata is the RootComponent hook for surfacing chasm metadata
+// to gRPC context.  Streams don't currently surface anything (the
+// stream_id is already the BusinessID); future fields like attached
+// owner_workflow_id could go here.
+func (s *Stream) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+// Terminate is the RootComponent hook for forceful termination.  Maps
+// to Close with close_reason = DELETED.
+func (s *Stream) Terminate(
+	ctx chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	if !s.StreamState.Closed {
+		_ = s.Close(ctx, CloseInput{
+			ClosedBy:    "system-terminate",
+			CloseReason: streampb.STREAM_CLOSE_REASON_DELETED,
+		})
+	}
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // closeGuard is the close-guard predicate every mutator hits.  Returns
