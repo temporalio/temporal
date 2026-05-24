@@ -319,6 +319,143 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
+		{
+			Name:  "audit",
+			Usage: "Audit a namespace's schedules for missed runs in a time window",
+			Description: `Lists every schedule in the target namespace(s), computes the nominal fire times each spec should have
+produced in the audit window, and classifies each fire against actual workflow executions found in visibility.
+Designed to answer: did the scheduler fire when it should have, during a specific time range?
+
+OUTPUT FORMAT
+  With --output-dir set, two file types are written:
+    summary.csv                  one row per flagged namespace (aggregated counts)
+    per-namespace/<ns>.csv       one row per flagged schedule
+
+  Without --output-dir, a single CSV stream of every flagged row across all namespaces is written to stdout, with one
+  header and no summary file. The same per-schedule columns are used.
+
+  Per-schedule columns (identical in both modes, in order):
+    namespace                      namespace the schedule lives in
+    schedule_id                    schedule's ID
+    workflow_type                  workflow type the schedule's action starts 
+    jitter_s                       schedule's configured jitter in seconds
+    expected                       how many fires the spec should have produced
+    actual                         unique workflows observed in visibility (multiple ContinueAsNew links of one
+                                   fire are counted once)
+    matched                        fires whose nominal time aligns with a workflow
+    missed                         total unmatched expected fires (real_miss + skip_overlap + inconclusive + unsupported)
+    real_miss                      expected fires with no matching workflow and nothing else from this schedule
+                                   running to justify a skip; counts here warrant investigation (see CAVEATS for
+                                   known by-design patterns)
+    skip_overlap                   fires the scheduler correctly skipped because a prior workflow from this schedule
+                                   was still running
+    inconclusive_schedule_changed  schedule's spec was modified DURING the audit window; current spec doesn't describe
+                                   what was firing earlier, so unmatched fires can't be classified as real_miss
+                                   (the row stays for inspection)
+    unsupported_policy             fires belonging to a schedule using a policy this audit does not fully model;
+                                   exposed rather than counted as real_miss (see unsupported_reason for which one)
+    unsupported_reason             which policy was detected; semicolon-separated if multiple. Possible values:
+                                     keep_original_workflow_id  -- all fires share one WorkflowID, so the audit can't
+                                                                   distinguish individual fires from each other
+                                     overlap_buffer_all         -- fires can be queued for arbitrary durations, beyond
+                                                                   our 24h query buffer; we may miss the workflow
+                                     overlap_allow_all          -- scheduler never skips on overlap, so skip_overlap
+                                                                   labels for this schedule may actually be real misses
+                                     overlap_cancel_other       -- new fire cancels prior; workflow lifecycle differs
+                                                                   from the standard model 
+                                     overlap_terminate_other    -- same as cancel_other
+    catchup_window_s               the schedule's configured catchupWindow in seconds
+    real_miss_times                up to 20 nominal times classified as real_miss after post-process reclassification
+                                   (excludes skip_overlap, inconclusive_schedule_changed, unsupported_policy times)
+
+CAVEATS AND LIMITATIONS
+  Retention: the audit will not process a namespace whose windowStart is past (retention - 24h). Visibility purges
+    closed workflows after retention; the guard prevents silent false-positive real_miss against purged data. Skipped
+    namespaces are logged to stderr.
+
+  Schedule modified during window: see inconclusive_schedule_changed. The audit can't compute the historical spec,
+    so any unmatched fires for these schedules are reclassified rather than counted.
+
+  Unsupported policies: the audit's algorithm doesn't fully model a few overlap policies and keep_original_workflow_id.
+    Real_miss entries on schedules using those are moved to unsupported_policy with the specific reason in
+    unsupported_reason.
+
+  Paused / exhausted schedules: dropped from analysis (their spec evaluates to fire times but the scheduler won't fire).
+
+  Catchup window: a schedule with a tight catchupWindow (e.g. 10s) will lose fires if the scheduler is briefly
+    unavailable. The audit reports such losses as real_miss; the catchup_window_s column lets users distinguish
+    "true sustained outage" from "brief blip + tight catchup".
+
+  Catchup under overlap=SKIP after a brief outage: when the V1 scheduler resumes with multiple queued fires, it
+    dispatches only the oldest and discards the rest. The audit reports the discarded fires as real_miss. A burst of
+    real_miss across many schedules within minutes typically indicates this behavior. To confirm, the user must:
+    (1) ListWorkflowExecutions with WorkflowId='temporal-sys-scheduler:<schedule_id>' and
+    TemporalNamespaceDivision='TemporalScheduler' to find the scheduler workflow run active during the window;
+    (2) GetWorkflowExecutionHistory on that run and look for WORKFLOW_TASK_TIMED_OUT events with escalating attempt
+    numbers, followed by a multi-minute gap, then a single WORKFLOW_TASK_COMPLETED that resumes normal cadence;
+    (3) compare the identity field on WORKFLOW_TASK_STARTED across affected schedules. A shared worker identity points
+    to a single sick worker pod; distinct identities point to a broader frontend/matching/persistence issue.
+
+  Window size cap: --start and --end must span no more than 7 days. Wider windows are rejected; chunk into multiple
+    shorter audits instead.
+
+EXAMPLES
+  Single namespace, 1-day window, write CSV bundle:
+    tdbg schedule audit --namespace my-ns --start 2026-05-19T00:00:00Z --end 2026-05-20T00:00:00Z --output-dir ./audit-out
+
+  Many namespaces from a file:
+    tdbg schedule audit --namespace-file ./ns-list.txt --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
+      --output-dir ./audit-out
+
+  Single schedule deep-dive (omit --output-dir to print one CSV row to stdout):
+    tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
+      --start 2026-05-19T18:00:00Z --end 2026-05-19T22:00:00Z
+
+  Pipe stdout output to your favorite filter (e.g. only show rows with real_miss > 0):
+    tdbg schedule audit --namespace-file ./ns-list.txt \
+      --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
+      | awk -F, 'NR==1 || $9 > 0'`,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagNamespace,
+					Aliases: FlagNamespaceAlias,
+					Usage:   "Single namespace to audit (mutually exclusive with --namespace-file)",
+				},
+				&cli.StringFlag{
+					Name:  FlagNamespaceFile,
+					Usage: "Path to file with one namespace per line (mutually exclusive with --namespace)",
+				},
+				&cli.StringFlag{
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage:   "Optional: audit only this schedule within --namespace",
+				},
+				&cli.StringFlag{
+					Name:     FlagAuditStart,
+					Usage:    "Window start (RFC3339)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagAuditEnd,
+					Usage:    "Window end (RFC3339)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:    FlagOutputDir,
+					Aliases: FlagOutputDirAlias,
+					Usage: "Directory to write summary.csv + per-namespace/<ns>.csv (will be created if missing). " +
+						"If unset, writes one CSV stream (all rows from all namespaces, single header) to stdout instead.",
+				},
+				&cli.IntFlag{
+					Name:  FlagNamespaceConcurrency,
+					Usage: "How many namespaces to audit in parallel.",
+					Value: 8,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminAuditSchedules(c, clientFactory)
+			},
+		},
 	}
 }
 
