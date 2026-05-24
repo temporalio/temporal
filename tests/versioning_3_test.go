@@ -5576,7 +5576,7 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Wait for first activity attempt to fail (should be on v1)
-	s.AwaitTrue(func() bool { return v1AttemptCount.Load() == 1 }, 10*time.Second, 500*time.Millisecond)
+	s.AwaitTrue(func() bool { return v1AttemptCount.Load() == 1 }, 10*time.Second, 100*time.Millisecond)
 
 	// Now the activity is in retry backoff. Change the current deployment to v2
 	// while the activity is waiting to retry.
