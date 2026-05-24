@@ -202,6 +202,11 @@ func UseSuiteScopedClusters(t *testing.T, size int) {
 	})
 }
 
+func UseSuiteScopedCluster(t *testing.T) {
+	t.Helper()
+	UseSuiteScopedClusters(t, 1)
+}
+
 func (p *clusterPool) get(t *testing.T, dedicated bool, workerService bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, workerService, dynamicConfig, clusterOpts)
