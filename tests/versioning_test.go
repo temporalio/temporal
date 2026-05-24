@@ -52,8 +52,8 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                             //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
-	parallelsuite.RunLegacySequential(t, &VersioningIntegSuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseSuiteScopedClusters(t, testcore.DefaultSuiteClusterPoolSize())
+	parallelsuite.Run(t, &VersioningIntegSuite{})
 }
 
 func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
@@ -2480,7 +2480,9 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 			VersioningIntent:    temporal.VersioningIntentCompatible,
 		}), "act")
 		var val string
-		s.NoError(fut.Get(ctx, &val))
+		if err := fut.Get(ctx, &val); err != nil {
+			return "", err
+		}
 		return val, nil
 	}
 
@@ -2510,9 +2512,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
-	// workflow should be terminated by invalid argument
-	var out string
-	s.Error(run.Get(s.Context(), &out))
+	s.waitForWorkflowTaskFailedCause(env, run, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES)
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test complete", nil))
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
@@ -2821,7 +2822,9 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 			VersioningIntent: temporal.VersioningIntentCompatible,
 		}), "child")
 		var val string
-		s.NoError(fut.Get(ctx, &val))
+		if err := fut.Get(ctx, &val); err != nil {
+			return "", err
+		}
 		return val, nil
 	}
 
@@ -2851,9 +2854,27 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 
-	// workflow should be terminated by invalid argument
-	var out string
-	s.Error(run.Get(s.Context(), &out))
+	s.waitForWorkflowTaskFailedCause(env, run, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES)
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test complete", nil))
+}
+
+func (s *VersioningIntegSuite) waitForWorkflowTaskFailedCause(
+	env *testcore.TestEnv,
+	run sdkclient.WorkflowRun,
+	cause enumspb.WorkflowTaskFailedCause,
+) {
+	s.Await(func(s *VersioningIntegSuite) {
+		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		})
+		for _, event := range events {
+			if attrs := event.GetWorkflowTaskFailedEventAttributes(); attrs.GetCause() == cause {
+				return
+			}
+		}
+		s.Failf("WorkflowTaskFailed event not found", "cause: %v", cause)
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) TestDispatchQueryOld() {
@@ -3973,7 +3994,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		})
 		s.NoError(err)
 		s.Positive(resp.GetCount())
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 5*time.Second, 500*time.Millisecond)
 
 	// 3. Commit a different build id --> A should now only be reachable via visibility query
 	s.commitBuildID(env, tq, "B", true, s.getVersioningRules(env, tq).GetConflictToken(), true)
@@ -4040,7 +4061,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		})
 		s.NoError(err)
 		s.Positive(resp.GetCount())
-	}, 3*time.Second, 50*time.Millisecond)
+	}, 3*time.Second, 500*time.Millisecond)
 
 	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
 	s.commitBuildID(env, tq, "B", true, s.getVersioningRules(env, tq).GetConflictToken(), true)
@@ -4061,7 +4082,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 			"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
 		}))
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 5*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
@@ -4116,7 +4137,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		}
 
 		s.Equal(workerN, foundN)
-	}, 3*time.Second, 50*time.Millisecond)
+	}, 3*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
@@ -4163,7 +4184,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 			}
 		}
 		s.True(foundPoller)
-	}, 3*time.Second, 50*time.Millisecond)
+	}, 3*time.Second, 500*time.Millisecond)
 
 	// ask for reachability only
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
@@ -4298,7 +4319,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 		s.False(havePoller(v1))
 		s.True(havePoller(v11))
 		s.True(havePoller(v2))
-	}, 3*time.Second, 50*time.Millisecond)
+	}, 3*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
@@ -4344,7 +4365,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 		s.NoError(err)
 		//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
 		s.Equal(v1, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 500*time.Millisecond)
 
 	// now register v11 as newer compatible with v1
 	s.addCompatibleBuildID(env, tq, v11, v1, false)
@@ -4373,7 +4394,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 		s.NoError(err)
 		//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
 		s.Equal(v11, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 500*time.Millisecond)
 
 	// unblock. it should complete
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), "", "wait", nil))
@@ -4975,7 +4996,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			}
 		}
 		s.Empty(remaining)
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(
