@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// StreamState is the top-level chasm component state for a native stream.
+// Tracks the visibility frontier, lifecycle, ownership epoch, and bounded
+// retention configuration.  Heavy state (publisher dedup, inflight publishes,
+// subscriptions) lives in sibling chasm.Map fields on the Stream component,
+// not in this message.  Segment data lives in the stream_segments
+// persistence facet.
+message StreamState {
+  // The visibility frontier — subscribers see offsets in [base_offset, head_offset).
+  int64 head_offset = 1;
+  int64 base_offset = 2;
+
+  // The largest committed txn_id; subscribers filter with txn_id <= committed_txn_id.
+  int64 committed_txn_id = 3;
+
+  // Ownership-epoch fence: incremented by the chasm framework on shard ownership
+  // transfer.  Inflights record prep_epoch at PreparePublish time;
+  // CommitPublish requires prep_epoch == owner_epoch.  See
+  // exactly-once.html §6 Ownership-epoch fence.
+  int64 owner_epoch = 4;
+
+  // Lifecycle: true after phase-1 Close has run.  Mutators are close-guarded.
+  bool closed = 5;
+
+  // Audit identity, recorded at creation and at close.  See
+  // design-overview.html §4d.
+  string created_by = 6;
+  google.protobuf.Timestamp created_time = 7;
+  string closed_by = 8;
+  google.protobuf.Timestamp closed_time = 9;
+  StreamCloseReason close_reason = 10;
+  string terminal_run_id = 11;
+
+  // Optional owner-workflow link.  Auto-closes the stream on workflow
+  // completion via a side-effect task.  See design-overview.html §4a.
+  string owner_workflow_id = 12;
+  string owner_run_id = 13;
+
+  // Retention truncation caps.  Per-stream TTL is excluded by design (Q6).
+  // Either or both may be unset (0 = unlimited).
+  int64 retention_max_bytes = 14;
+  int64 retention_max_items = 15;
+
+  // Segment size policy.  Default: max_items=1024 OR max_bytes=1 MB
+  // (first-to-trip).  Immutable after CreateStream.
+  int64 segment_max_items = 16;
+  int64 segment_max_bytes = 17;
+
+  // Publisher dedup TTL.  Default 15 minutes per the contract in
+  // exactly-once.html.
+  google.protobuf.Duration publisher_ttl = 18;
+
+  // The next monotone txn_id to allocate.  Stream-global; never decreases,
+  // even across owner_epoch bumps.  Backed by chasm's monotone counter
+  // semantics.
+  int64 next_txn_id = 19;
+}
+
+// StreamCloseReason: bounded enum recorded at close time.  See
+// design-overview.html §4d.  Not a free-text reason.
+enum StreamCloseReason {
+  STREAM_CLOSE_REASON_UNSPECIFIED = 0;
+  STREAM_CLOSE_REASON_EXPLICIT = 1;             // Close() RPC
+  STREAM_CLOSE_REASON_OWNER_WORKFLOW_DONE = 2;  // owner workflow completed
+  STREAM_CLOSE_REASON_DELETED = 3;              // DeleteStream() RPC (terminal)
+  STREAM_CLOSE_REASON_NAMESPACE_DELETED = 4;
+}
+
+// PublisherState is one entry in the per-stream publisher dedup map.
+// chasm.Map[string, PublisherState] keyed by publisher_id.
+//
+// Stores the rolling dedup state: last sequence committed for this publisher,
+// the offset range it landed at (for replay-returns-same-result semantics),
+// and last-seen for TTL sweep.  See exactly-once.html "Contract".
+message PublisherState {
+  uint64 last_seq = 1;
+  google.protobuf.Timestamp last_seen = 2;
+  int64 first_offset = 3;
+  int64 item_count = 4;
+}
+
+// InflightPublishState is one entry in the per-stream inflights map.
+// chasm.Map[int64, InflightPublishState] keyed by txn_id.
+//
+// Records the prepared (but not yet committed) publish so CommitPublish
+// can verify CAS, hash, expiry, ownership-epoch, and close-state.  See
+// exactly-once.html §6 protocol prepare/write/commit and the new
+// "Load-bearing invariants" subsection on ownership-epoch.
+message InflightPublishState {
+  string publisher_id = 1;
+  uint64 sequence = 2;
+  int64 first_offset = 3;
+  int64 end_offset = 4;
+  int64 first_segment_id = 5;
+  int64 last_segment_id = 6;
+
+  // Hash over the codec-applied payload bytes.  Verified at CommitPublish.
+  bytes payload_hash = 7;
+
+  google.protobuf.Timestamp prepared_at = 8;
+  google.protobuf.Timestamp expires_at = 9;
+
+  // owner_epoch observed at PreparePublish time.  CommitPublish requires
+  // prep_epoch == owner_epoch; mismatch aborts with PublishAbortedByOwnerChange.
+  int64 prep_epoch = 10;
+}
+
+// SubscriptionState is one entry in the per-stream subscriptions map.
+// chasm.Map[string, SubscriptionState] keyed by subscription_id.
+//
+// Subscriptions can be external (long-poll RPC) or in-workflow (signal /
+// update delivery).  Cursor is the next offset to deliver.
+message SubscriptionState {
+  // Subscriber identity.  For in-workflow subscriptions, the target
+  // workflow_id + run_id.  For external (long-poll), an opaque client ID.
+  string subscriber_id = 1;
+  bool in_workflow = 2;
+  string target_workflow_id = 3;
+  string target_run_id = 4;
+
+  // Cursor: next offset to deliver.  Advances on ack from the subscriber.
+  // Pins base_offset — Truncate(upTo) requires upTo <= cursor unless
+  // force=true.
+  int64 cursor = 5;
+
+  // Topics this subscription matches.  Empty list = all topics.  See
+  // design-overview.html §4b "subscribe protocol".
+  repeated string topics = 6;
+
+  // Outstanding-bytes backpressure counter.  Decrements on delivery ack.
+  // When at capacity, the arm step skips delivery.  See design-overview.html
+  // §4b "Subscription buffer".
+  int64 outstanding_bytes = 7;
+  int64 max_outstanding_bytes = 8;
+
+  // Lifecycle.
+  google.protobuf.Timestamp created_time = 9;
+  bool at_capacity = 10;
+  google.protobuf.Timestamp at_capacity_since = 11;
+}

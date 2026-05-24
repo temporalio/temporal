@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "chasm/lib/stream/proto/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// CreateStreamRequest creates a new stream chasm execution.
+message CreateStreamRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+
+  // Optional retention truncation caps.  Per-stream TTL is excluded by
+  // design (namespace-policy TTL only — see open-questions.html Q6).
+  int64 retention_max_bytes = 3;
+  int64 retention_max_items = 4;
+
+  // Segment size policy.  Defaults applied if unset:
+  // max_items=1024, max_bytes=1MB.  Immutable after CreateStream.
+  int64 segment_max_items = 5;
+  int64 segment_max_bytes = 6;
+
+  // Publisher dedup TTL.  Default 15 minutes if unset.
+  google.protobuf.Duration publisher_ttl = 7;
+
+  // Optional owner-workflow link.  Auto-closes the stream when the
+  // owner workflow completes.
+  string owner_workflow_id = 8;
+  string owner_run_id = 9;
+
+  string created_by = 10;
+}
+
+message CreateStreamResponse {
+  // Component reference for subsequent calls.  Opaque to the caller.
+  bytes execution_ref = 1;
+  string stream_id = 2;
+}
+
+// DescribeStreamRequest returns the current visibility frontier, audit
+// fields, and selected counts.  Read-only.
+message DescribeStreamRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+}
+
+message DescribeStreamResponse {
+  StreamState state = 1;
+  int64 inflight_count = 2;
+  int64 subscription_count = 3;
+  int64 publisher_count = 4;
+  int64 stuck_subscription_count = 5;
+  int64 force_truncated_subscription_count = 6;
+}
+
+// PublishRequest appends a batch of items under a (publisher_id, sequence)
+// dedup key.  Server-enforced exactly-once on retry.  Whole-batch
+// atomicity: all items become visible at contiguous offsets or none do.
+message PublishRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+
+  string publisher_id = 3;
+  uint64 sequence = 4;
+
+  // Each item is opaque, codec-applied bytes plus an optional topic.
+  repeated PublishItem items = 5;
+
+  // Hash over the concatenated payload bytes, used for the proof-of-write
+  // check at commit time.  Computed by the SDK over the same bytes that
+  // get persisted in stream_segments.data.
+  bytes payload_hash = 6;
+}
+
+message PublishItem {
+  bytes data = 1;
+  string topic = 2;
+}
+
+message PublishResponse {
+  // The committed offset range.  On dedup-replay, returns the prior outcome.
+  int64 first_offset = 1;
+  int64 item_count = 2;
+}
+
+// ReadRangeRequest returns committed items in [start_offset, end_offset).
+// Reads honour the visibility filter (txn_id <= committed_txn_id), so
+// tentative or aborted segments are never returned.
+message ReadRangeRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+  int64 start_offset = 3;
+  int64 end_offset = 4;
+  repeated string topics = 5;
+}
+
+message ReadRangeResponse {
+  repeated PublishItem items = 1;
+  int64 next_offset = 2;
+}
+
+// CloseRequest seals the stream (phase 1).  Phase 2 (drain) runs as a
+// pure task; the response returns once phase 1 commits.
+message CloseRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+  string closed_by = 3;
+  StreamCloseReason close_reason = 4;
+}
+
+message CloseResponse {}
+
+// DeleteStreamRequest is destructive — terminal close + segment-row
+// deletion + chasm execution removal.  Bounded by namespace retention.
+message DeleteStreamRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+}
+
+message DeleteStreamResponse {}
+
+// TruncateRequest moves base_offset forward.  Guards: upTo <= head_offset,
+// upTo >= base_offset, upTo <= min(subscription cursors) unless force=true.
+// See exactly-once.html "Truncate vs in-flight publish".
+message TruncateRequest {
+  string namespace_id = 1;
+  string stream_id = 2;
+  int64 up_to_offset = 3;
+
+  // If true, forcibly closes any subscriptions whose cursor is below
+  // up_to_offset.  Requires admin permission.
+  bool force = 4;
+}
+
+message TruncateResponse {
+  int64 new_base_offset = 1;
+  int64 force_truncated_subscription_count = 2;
+}
+
+// ListStreamsRequest paginates streams in a namespace.  Operator-facing.
+message ListStreamsRequest {
+  string namespace_id = 1;
+  bytes next_page_token = 2;
+  int32 page_size = 3;
+}
+
+message ListStreamsResponse {
+  repeated StreamSummary streams = 1;
+  bytes next_page_token = 2;
+}
+
+message StreamSummary {
+  string stream_id = 1;
+  int64 head_offset = 2;
+  int64 base_offset = 3;
+  bool closed = 4;
+  google.protobuf.Timestamp created_time = 5;
+  google.protobuf.Timestamp closed_time = 6;
+}

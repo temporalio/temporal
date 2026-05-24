@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// SweepExpiredTask is a pure task that periodically walks the inflight map
+// and aborts entries whose expires_at has passed.  Runs under the chasm
+// execution write lock; no I/O.  See exactly-once.html §6 sweeper.
+message SweepExpiredTask {}
+
+// AbortCleanupTask is a side-effect task scheduled by an in-band commit
+// failure or by the sweeper.  Deletes tentative segment rows under a
+// (stream, txn_id) prefix in the stream_segments facet.  Runs outside the
+// state lock; performs I/O.
+message AbortCleanupTask {
+  int64 txn_id = 1;
+  int64 first_segment_id = 2;
+  int64 last_segment_id = 3;
+}
+
+// CloseCleanupTask is the phase-2 close drain.  Iterates the inflight map
+// and subscription map in chunks, aborting each.  Runs as a pure task;
+// schedules per-entry AbortCleanupTask for tentative segment cleanup.
+// See exactly-once.html "Close vs in-flight publish".
+message CloseCleanupTask {
+  // Chunk cursor — opaque to the chasm framework, opaque to callers.
+  int64 inflight_cursor = 1;
+  int64 subscription_cursor = 2;
+}
+
+// OwnerWorkflowCloseTask is a side-effect task scheduled when the linked
+// owner workflow completes.  Calls Close() on this stream (close_reason =
+// OWNER_WORKFLOW_DONE).  See design-overview.html §4a.
+message OwnerWorkflowCloseTask {
+  string terminal_run_id = 1;
+}
+
+// PublisherDedupSweepTask is a pure task that periodically prunes
+// PublisherState entries whose last_seen is older than publisher_ttl.
+// See exactly-once.html "Contract" — dedup state retained for publisher_ttl.
+message PublisherDedupSweepTask {}
+
+// DeliveryTask is a side-effect task that drives one subscription's
+// delivery to its target (signal/update for in-workflow; long-poll
+// response for external).  See design-overview.html §4b.
+message DeliveryTask {
+  string subscription_id = 1;
+}
