@@ -2,6 +2,8 @@ package stream
 
 import (
 	"go.temporal.io/server/chasm"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"google.golang.org/grpc"
 )
 
 // LibraryName is the registered chasm library name for native streams.
@@ -9,8 +11,10 @@ const LibraryName = "stream"
 
 // Component names registered with the chasm framework.
 const (
-	StreamComponentName       = "Stream"
-	SubscriptionComponentName = "Subscription"
+	StreamComponentName          = "Stream"
+	PublisherStateComponentName  = "PublisherState"
+	InflightPublishComponentName = "InflightPublish"
+	SubscriptionComponentName    = "Subscription"
 )
 
 // Task names registered with the chasm framework.
@@ -29,6 +33,8 @@ const (
 type Library struct {
 	chasm.UnimplementedLibrary
 
+	handler *Handler
+
 	SweepExpiredTaskHandler        *SweepExpiredTaskHandler
 	AbortCleanupTaskHandler        *AbortCleanupTaskHandler
 	CloseCleanupTaskHandler        *CloseCleanupTaskHandler
@@ -40,6 +46,7 @@ type Library struct {
 // NewLibrary constructs a Library with all task handlers wired in.  Used
 // by the fx graph; see fx.go.
 func NewLibrary(
+	handler *Handler,
 	sweepExpired *SweepExpiredTaskHandler,
 	abortCleanup *AbortCleanupTaskHandler,
 	closeCleanup *CloseCleanupTaskHandler,
@@ -48,6 +55,7 @@ func NewLibrary(
 	delivery *DeliveryTaskHandler,
 ) *Library {
 	return &Library{
+		handler:                        handler,
 		SweepExpiredTaskHandler:        sweepExpired,
 		AbortCleanupTaskHandler:        abortCleanup,
 		CloseCleanupTaskHandler:        closeCleanup,
@@ -73,6 +81,12 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			StreamComponentName,
 			chasm.WithBusinessIDAlias("StreamId"),
 		),
+		chasm.NewRegistrableComponent[*PublisherState](
+			PublisherStateComponentName,
+		),
+		chasm.NewRegistrableComponent[*InflightPublish](
+			InflightPublishComponentName,
+		),
 		chasm.NewRegistrableComponent[*Subscription](
 			SubscriptionComponentName,
 		),
@@ -88,4 +102,11 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(PublisherDedupSweepTaskName, l.PublisherDedupSweepTaskHandler),
 		chasm.NewRegistrableSideEffectTask(DeliveryTaskName, l.DeliveryTaskHandler),
 	}
+}
+
+func (l *Library) RegisterServices(server *grpc.Server) {
+	if l.handler == nil {
+		return
+	}
+	server.RegisterService(&streampb.StreamService_ServiceDesc, l.handler)
 }

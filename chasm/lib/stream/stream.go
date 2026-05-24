@@ -14,6 +14,8 @@ import (
 
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/proto"
 )
 
 // Stream is the root chasm component for a native stream.  Each Stream is
@@ -50,6 +52,8 @@ type Stream struct {
 	// fields as DescribeStream.
 	Visibility chasm.Field[*chasm.Visibility]
 }
+
+var _ chasm.VisibilityMemoProvider = (*Stream)(nil)
 
 // PublisherState is one entry in the Publishers map.  Wraps the proto so
 // the chasm.Field machinery can serialize it independently.
@@ -166,6 +170,7 @@ func NewStream(
 		Publishers:    make(chasm.Map[string, *PublisherState]),
 		Inflights:     make(chasm.Map[int64, *InflightPublish]),
 		Subscriptions: make(chasm.Map[string, *Subscription]),
+		Visibility:    chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 	}
 
 	// Schedule the sweepers.  Both pure tasks; run under the chasm
@@ -195,6 +200,11 @@ func (s *Stream) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 // owner_workflow_id could go here.
 func (s *Stream) ContextMetadata(_ chasm.Context) map[string]string {
 	return nil
+}
+
+// Memo returns the stream's list-facing state for CHASM visibility.
+func (s *Stream) Memo(chasm.Context) proto.Message {
+	return common.CloneProto(s.StreamState)
 }
 
 // Terminate is the RootComponent hook for forceful termination.  Maps

@@ -615,9 +615,12 @@ func (x *ReadRangeRequest) GetTopics() []string {
 }
 
 type ReadRangeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*PublishItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	NextOffset    int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Items      []*PublishItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextOffset int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	// Absolute offsets corresponding one-for-one with items. Required when
+	// topic filtering skips items inside the requested range.
+	Offsets       []int64 `protobuf:"varint,3,rep,packed,name=offsets,proto3" json:"offsets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -664,6 +667,13 @@ func (x *ReadRangeResponse) GetNextOffset() int64 {
 		return x.NextOffset
 	}
 	return 0
+}
+
+func (x *ReadRangeResponse) GetOffsets() []int64 {
+	if x != nil {
+		return x.Offsets
+	}
+	return nil
 }
 
 // CloseRequest seals the stream (phase 1).  Phase 2 (drain) runs as a
@@ -1236,11 +1246,12 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\fstart_offset\x18\x03 \x01(\x03R\vstartOffset\x12\x1d\n" +
 	"\n" +
 	"end_offset\x18\x04 \x01(\x03R\tendOffset\x12\x16\n" +
-	"\x06topics\x18\x05 \x03(\tR\x06topics\"\x82\x01\n" +
+	"\x06topics\x18\x05 \x03(\tR\x06topics\"\x9c\x01\n" +
 	"\x11ReadRangeResponse\x12L\n" +
 	"\x05items\x18\x01 \x03(\v26.temporal.server.chasm.lib.stream.proto.v1.PublishItemR\x05items\x12\x1f\n" +
 	"\vnext_offset\x18\x02 \x01(\x03R\n" +
-	"nextOffset\"\xcc\x01\n" +
+	"nextOffset\x12\x18\n" +
+	"\aoffsets\x18\x03 \x03(\x03R\aoffsets\"\xcc\x01\n" +
 	"\fCloseRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1b\n" +

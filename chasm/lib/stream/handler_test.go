@@ -3,16 +3,22 @@ package stream_test
 import (
 	"context"
 	"crypto/sha256"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	chasmapi "go.temporal.io/server/api/chasm/v1"
+	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/streamsegmentstore"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // fixedShardResolver is a test ShardResolver that returns a constant.
@@ -32,7 +38,7 @@ func newHandlerTestEngine(t *testing.T) (*stream.Handler, context.Context) {
 	require.NoError(t, registry.Register(stream.NewNilLibrary()))
 
 	segStore := streamsegmentstore.NewMemory()
-	handler := stream.NewHandler(logger, segStore, fixedShardResolver{shard: 1})
+	handler := stream.NewHandler(logger, segStore, fixedShardResolver{shard: 1}, nil)
 
 	testEngine := chasmtest.NewEngine(t, registry)
 	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
@@ -97,7 +103,46 @@ func TestHandlerPublishHappyPath(t *testing.T) {
 	require.Len(t, readResp.Items, 2)
 	require.Equal(t, []byte("hello"), readResp.Items[0].Data)
 	require.Equal(t, []byte("world"), readResp.Items[1].Data)
+	require.Equal(t, []int64{0, 1}, readResp.Offsets)
 	require.Equal(t, int64(2), readResp.NextOffset)
+}
+
+func TestHandlerReadRangeTopicFilterPreservesOffsets(t *testing.T) {
+	h, ctx := newHandlerTestEngine(t)
+
+	_, err := h.CreateStream(ctx, &streampb.CreateStreamRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+	})
+	require.NoError(t, err)
+
+	items := []*streampb.PublishItem{
+		{Data: []byte("a"), Topic: "alpha"},
+		{Data: []byte("b"), Topic: "beta"},
+		{Data: []byte("c"), Topic: "alpha"},
+	}
+	_, err = h.Publish(ctx, &streampb.PublishRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		PublisherId: "pub-1",
+		Sequence:    1,
+		Items:       items,
+		PayloadHash: sha256Hash(items),
+	})
+	require.NoError(t, err)
+
+	readResp, err := h.ReadRange(ctx, &streampb.ReadRangeRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		StartOffset: 0,
+		EndOffset:   3,
+		Topics:      []string{"beta"},
+	})
+	require.NoError(t, err)
+	require.Len(t, readResp.Items, 1)
+	require.Equal(t, []byte("b"), readResp.Items[0].Data)
+	require.Equal(t, []int64{1}, readResp.Offsets)
+	require.Equal(t, int64(3), readResp.NextOffset)
 }
 
 // Handler-level: a Publish retry with the same (publisher_id, sequence)
@@ -152,6 +197,65 @@ func TestHandlerPublishRejectsPayloadHashMismatch(t *testing.T) {
 		PayloadHash: []byte("not the right hash"),
 	})
 	require.Error(t, err)
+}
+
+func TestHandlerListStreamsUsesVisibility(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	visibilityMgr := chasm.NewMockVisibilityManager(ctrl)
+
+	state := &streampb.StreamState{
+		HeadOffset:  7,
+		BaseOffset:  2,
+		Closed:      true,
+		CreatedTime: timestamppb.Now(),
+	}
+	chasmMemo, err := payload.Encode(state)
+	require.NoError(t, err)
+
+	visibilityMgr.EXPECT().
+		ListExecutions(
+			gomock.Any(),
+			reflect.TypeFor[*stream.Stream](),
+			gomock.AssignableToTypeOf(&chasm.ListExecutionsRequest{}),
+		).
+		DoAndReturn(func(
+			ctx context.Context,
+			archetype reflect.Type,
+			req *chasm.ListExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			require.Equal(t, "ns-1", req.NamespaceName)
+			require.Equal(t, 2, req.PageSize)
+			require.Equal(t, []byte("page-1"), req.NextPageToken)
+			return &visibilityservice.ListChasmExecutionsResponse{
+				Executions: []*chasmapi.VisibilityExecutionInfo{{
+					BusinessId: "stream-1",
+					ChasmMemo:  chasmMemo,
+				}},
+				NextPageToken: []byte("page-2"),
+			}, nil
+		})
+
+	h := stream.NewHandler(
+		log.NewTestLogger(),
+		streamsegmentstore.NewMemory(),
+		fixedShardResolver{shard: 1},
+		nil,
+	)
+	resp, err := h.ListStreams(
+		chasm.NewVisibilityManagerContext(context.Background(), visibilityMgr),
+		&streampb.ListStreamsRequest{
+			NamespaceId:   "ns-1",
+			PageSize:      2,
+			NextPageToken: []byte("page-1"),
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []byte("page-2"), resp.NextPageToken)
+	require.Len(t, resp.Streams, 1)
+	require.Equal(t, "stream-1", resp.Streams[0].StreamId)
+	require.Equal(t, int64(7), resp.Streams[0].HeadOffset)
+	require.Equal(t, int64(2), resp.Streams[0].BaseOffset)
+	require.True(t, resp.Streams[0].Closed)
 }
 
 // Handler-level: Close → subsequent Publish returns StreamClosed.

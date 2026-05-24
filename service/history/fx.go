@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
@@ -107,6 +108,7 @@ var Module = fx.Options(
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
 	scheduler.Module,
+	chasmstream.Module,
 	callback.Module,
 	chasmnexus.Module,
 	chasmworkflow.Module,

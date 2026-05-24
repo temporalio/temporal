@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -37,6 +38,7 @@ type Handler struct {
 	logger        log.Logger
 	segmentStore  persistence.StreamSegmentManager
 	shardResolver ShardResolver
+	namespaceReg  namespace.Registry
 }
 
 // ShardResolver maps a (namespace_id, stream_id) to the shard_id used in
@@ -51,11 +53,13 @@ func NewHandler(
 	logger log.Logger,
 	segmentStore persistence.StreamSegmentManager,
 	shardResolver ShardResolver,
+	namespaceReg namespace.Registry,
 ) *Handler {
 	return &Handler{
 		logger:        logger,
 		segmentStore:  segmentStore,
 		shardResolver: shardResolver,
+		namespaceReg:  namespaceReg,
 	}
 }
 
@@ -340,6 +344,7 @@ func (h *Handler) ReadRange(
 		return nil, err
 	}
 	items := make([]*streampb.PublishItem, 0, len(storeResp.Rows))
+	offsets := make([]int64, 0, len(storeResp.Rows))
 	topicFilter := make(map[string]struct{}, len(req.Topics))
 	for _, topic := range req.Topics {
 		topicFilter[topic] = struct{}{}
@@ -363,6 +368,7 @@ func (h *Handler) ReadRange(
 				}
 			}
 			items = append(items, rowItem.item)
+			offsets = append(offsets, rowItem.offset)
 		}
 	}
 	nextOffset := storeResp.NextPageOffset
@@ -372,6 +378,7 @@ func (h *Handler) ReadRange(
 	return &streampb.ReadRangeResponse{
 		Items:      items,
 		NextOffset: nextOffset,
+		Offsets:    offsets,
 	}, nil
 }
 
@@ -471,16 +478,53 @@ func (h *Handler) DeleteStream(
 	return &streampb.DeleteStreamResponse{}, nil
 }
 
-// ListStreams paginates streams in a namespace.  M5 placeholder:
-// returns empty.  Production implementation walks the chasm
-// framework's per-shard execution list and filters by component type.
+// ListStreams paginates streams in a namespace via the CHASM visibility
+// list API.
 func (h *Handler) ListStreams(
 	ctx context.Context,
 	req *streampb.ListStreamsRequest,
 ) (*streampb.ListStreamsResponse, error) {
-	// TODO(M5-followup): implement via chasm.ListExecutions filtered
-	// by component type = Stream within the requested namespace.
-	return &streampb.ListStreamsResponse{}, nil
+	if req.NamespaceId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id required")
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+	namespaceName := req.NamespaceId
+	if h.namespaceReg != nil {
+		name, err := h.namespaceReg.GetNamespaceName(namespace.ID(req.NamespaceId))
+		if err != nil {
+			return nil, err
+		}
+		namespaceName = name.String()
+	}
+	resp, err := chasm.ListExecutions[*Stream, *streampb.StreamState](ctx, &chasm.ListExecutionsRequest{
+		NamespaceName: namespaceName,
+		PageSize:      int(pageSize),
+		NextPageToken: req.NextPageToken,
+		Query:         "",
+	})
+	if err != nil {
+		return nil, err
+	}
+	streams := make([]*streampb.StreamSummary, 0, len(resp.Executions))
+	for _, exec := range resp.Executions {
+		state := exec.ChasmMemo
+		summary := &streampb.StreamSummary{
+			StreamId:    exec.BusinessID,
+			HeadOffset:  state.GetHeadOffset(),
+			BaseOffset:  state.GetBaseOffset(),
+			Closed:      state.GetClosed(),
+			CreatedTime: state.GetCreatedTime(),
+			ClosedTime:  state.GetClosedTime(),
+		}
+		streams = append(streams, summary)
+	}
+	return &streampb.ListStreamsResponse{
+		Streams:       streams,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func validatePublishRequest(req *streampb.PublishRequest) error {
