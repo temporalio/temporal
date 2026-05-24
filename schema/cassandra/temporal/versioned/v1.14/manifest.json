@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.14",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Adds stream_segments table for native streams (TWCS, gc_grace 48h)",
+  "SchemaUpdateCqlFiles": [
+    "stream_segments.cql"
+  ]
+}

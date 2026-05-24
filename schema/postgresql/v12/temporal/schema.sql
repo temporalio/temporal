@@ -410,6 +410,23 @@ CREATE TABLE nexus_endpoints_partition_status (
     CONSTRAINT only_one_row CHECK (id = 0)  -- Restrict the table to a single row since it will only be used for endpoints
 );
 
+-- Native streams: stream_segments persistence facet.
+-- See native-streams/persistence-abi.html Approach C.
+CREATE TABLE stream_segments (
+  shard_id        INTEGER NOT NULL,
+  namespace_id    BYTEA NOT NULL,
+  stream_id       VARCHAR(255) NOT NULL,
+  segment_id      BIGINT NOT NULL,
+  txn_id          BIGINT NOT NULL,
+  first_offset    BIGINT NOT NULL,
+  last_offset     BIGINT NOT NULL,
+  item_count      INTEGER NOT NULL,
+  payload_hash    BYTEA NOT NULL,
+  data            BYTEA NOT NULL,
+  data_encoding   VARCHAR(16) NOT NULL,
+  PRIMARY KEY (shard_id, namespace_id, stream_id, segment_id, txn_id)
+);
+
 CREATE UNIQUE INDEX cm_idx_rolehost ON cluster_membership (role, host_id);
 CREATE INDEX cm_idx_rolelasthb ON cluster_membership (role, last_heartbeat);
 CREATE INDEX cm_idx_rpchost ON cluster_membership (rpc_address, role);

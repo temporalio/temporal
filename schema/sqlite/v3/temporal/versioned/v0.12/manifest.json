@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.12",
+  "MinCompatibleVersion": "0.1",
+  "Description": "Adds stream_segments facet for native streams",
+  "SchemaUpdateCqlFiles": [
+    "stream_segments.sql"
+  ]
+}
