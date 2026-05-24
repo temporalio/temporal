@@ -3584,7 +3584,7 @@ func (s *VersioningIntegSuite) dispatchCron(
 	s.NoError(err)
 
 	// give it >=3 runs on v1
-	s.Eventually(
+	s.AwaitTrue(
 		func() bool {
 			return runs1.Load() >= int32(3)
 		},
@@ -3622,7 +3622,7 @@ func (s *VersioningIntegSuite) dispatchCron(
 	s.NoError(w2.Start())
 
 	// give it >=3 runs on v2
-	s.Eventually(
+	s.AwaitTrue(
 		func() bool {
 			return runs2.Load() >= int32(3)
 		},
@@ -4008,7 +4008,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), "", "wait", nil))
 
 	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
-	s.Eventually(func() bool {
+	s.AwaitTrue(func() bool {
 		return s.checkBuildIDReachability(env, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 		})
@@ -5041,7 +5041,7 @@ func (s *VersioningIntegSuite) waitForWorkflowBuildID(
 	runID string,
 	buildID string,
 ) {
-	s.Eventually(
+	s.AwaitTrue(
 		func() bool {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), wfID, runID)
 			if err != nil {
