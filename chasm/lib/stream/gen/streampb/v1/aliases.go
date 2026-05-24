@@ -5,6 +5,9 @@
 // (StreamCloseReason_STREAM_CLOSE_REASON_*).  We expose aliases under both
 // names so the generated file compiles.  If a future protoc-gen-go release
 // unifies the convention, this file can be deleted.
+//
+// NOTE: `make protoc` regenerates the gen directory and wipes this
+// file.  If you regenerate, restore aliases.go before building.
 
 package streampb
 

@@ -27,7 +27,11 @@ import (
 // chasm.UpdateComponent calls to the Stream component's transitions and
 // runs the persistence-facet writes between PreparePublish and
 // CommitPublish.
+//
+// Implements the gRPC StreamServiceServer.
 type Handler struct {
+	streampb.UnimplementedStreamServiceServer
+
 	logger        log.Logger
 	segmentStore  persistence.StreamSegmentManager
 	shardResolver ShardResolver
@@ -231,6 +235,217 @@ func (h *Handler) verifyProofOfWrite(
 		}
 	}
 	return true, nil
+}
+
+// DescribeStream returns the current frontier, audit fields, and
+// selected counts.  Read-only chasm operation.
+func (h *Handler) DescribeStream(
+	ctx context.Context,
+	req *streampb.DescribeStreamRequest,
+) (*streampb.DescribeStreamResponse, error) {
+	if req.NamespaceId == "" || req.StreamId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and stream_id required")
+	}
+	ref := chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.StreamId,
+	})
+	resp, err := chasm.ReadComponent(
+		ctx, ref,
+		func(s *Stream, _ chasm.Context, _ *struct{}) (*streampb.DescribeStreamResponse, error) {
+			return &streampb.DescribeStreamResponse{
+				State:             s.StreamState,
+				InflightCount:     int64(len(s.Inflights)),
+				SubscriptionCount: int64(len(s.Subscriptions)),
+				PublisherCount:    int64(len(s.Publishers)),
+			}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// ReadRange returns committed items in [start_offset, end_offset).
+// Reads the visibility frontier from the chasm Stream component, then
+// queries the segment facet with that committed_txn_id as filter.
+func (h *Handler) ReadRange(
+	ctx context.Context,
+	req *streampb.ReadRangeRequest,
+) (*streampb.ReadRangeResponse, error) {
+	if req.NamespaceId == "" || req.StreamId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and stream_id required")
+	}
+	if req.EndOffset <= req.StartOffset {
+		return nil, serviceerror.NewInvalidArgument("end_offset must exceed start_offset")
+	}
+	ref := chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.StreamId,
+	})
+	type frontier struct {
+		baseOffset     int64
+		headOffset     int64
+		committedTxnID int64
+	}
+	fr, err := chasm.ReadComponent(
+		ctx, ref,
+		func(s *Stream, _ chasm.Context, _ *struct{}) (frontier, error) {
+			return frontier{
+				baseOffset:     s.StreamState.BaseOffset,
+				headOffset:     s.StreamState.HeadOffset,
+				committedTxnID: s.StreamState.CommittedTxnId,
+			}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if req.StartOffset < fr.baseOffset {
+		return nil, ErrOffsetTruncated
+	}
+
+	streamKey := persistence.StreamSegmentKey{
+		ShardID:     h.shardResolver.Shard(req.NamespaceId, req.StreamId),
+		NamespaceID: req.NamespaceId,
+		StreamID:    req.StreamId,
+	}
+	storeResp, err := h.segmentStore.ReadRange(ctx, &persistence.ReadStreamRangeRequest{
+		Key:            streamKey,
+		StartOffset:    req.StartOffset,
+		EndOffset:      req.EndOffset,
+		CommittedTxnID: fr.committedTxnID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// The on-disk row carries codec-applied bytes; for M5 we re-emit
+	// them as a single PublishItem per row.  Future work breaks rows
+	// into per-item entries with topic metadata once the segment row
+	// schema carries topic-per-item info.
+	items := make([]*streampb.PublishItem, 0, len(storeResp.Rows))
+	for _, row := range storeResp.Rows {
+		data := []byte(nil)
+		if row.Data != nil {
+			data = row.Data.Data
+		}
+		items = append(items, &streampb.PublishItem{Data: data})
+	}
+	return &streampb.ReadRangeResponse{
+		Items:      items,
+		NextOffset: storeResp.NextPageOffset,
+	}, nil
+}
+
+// Close seals the stream (phase 1).
+func (h *Handler) Close(
+	ctx context.Context,
+	req *streampb.CloseRequest,
+) (*streampb.CloseResponse, error) {
+	if req.NamespaceId == "" || req.StreamId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and stream_id required")
+	}
+	ref := chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.StreamId,
+	})
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Stream).Close, CloseInput{
+		ClosedBy:    req.ClosedBy,
+		CloseReason: req.CloseReason,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &streampb.CloseResponse{}, nil
+}
+
+// Truncate moves base_offset forward.  See exactly-once.html "Truncate
+// vs in-flight publish" for the guard set.
+func (h *Handler) Truncate(
+	ctx context.Context,
+	req *streampb.TruncateRequest,
+) (*streampb.TruncateResponse, error) {
+	if req.NamespaceId == "" || req.StreamId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and stream_id required")
+	}
+	ref := chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.StreamId,
+	})
+	out, _, err := chasm.UpdateComponent(ctx, ref, (*Stream).Truncate, TruncateInput{
+		UpToOffset: req.UpToOffset,
+		Force:      req.Force,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Best-effort side-effect: delete segment rows below the new base.
+	// On Cassandra this becomes a single range tombstone per
+	// native-streams/cassandra-operability.html range-delete discipline.
+	streamKey := persistence.StreamSegmentKey{
+		ShardID:     h.shardResolver.Shard(req.NamespaceId, req.StreamId),
+		NamespaceID: req.NamespaceId,
+		StreamID:    req.StreamId,
+	}
+	if err := h.segmentStore.DeletePrefix(ctx, &persistence.DeleteSegmentsPrefixRequest{
+		Key:         streamKey,
+		BelowOffset: out.NewBaseOffset,
+	}); err != nil {
+		h.logger.Warn("stream_segments DeletePrefix failed; rows will be reclaimed by retention")
+	}
+	return &streampb.TruncateResponse{
+		NewBaseOffset:                   out.NewBaseOffset,
+		ForceTruncatedSubscriptionCount: int64(out.ForceTruncatedSubscriptionCount),
+	}, nil
+}
+
+// DeleteStream is terminal: closes the stream (if open), removes all
+// segment rows, and removes the chasm execution.
+func (h *Handler) DeleteStream(
+	ctx context.Context,
+	req *streampb.DeleteStreamRequest,
+) (*streampb.DeleteStreamResponse, error) {
+	if req.NamespaceId == "" || req.StreamId == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and stream_id required")
+	}
+	ref := chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.StreamId,
+	})
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Stream).Close, CloseInput{
+		ClosedBy:    "delete-stream",
+		CloseReason: streampb.STREAM_CLOSE_REASON_DELETED,
+	})
+	if err != nil {
+		// Already-closed is OK at this point; the segment-row delete still proceeds.
+		h.logger.Warn("DeleteStream: close transition failed; continuing to row cleanup")
+	}
+	streamKey := persistence.StreamSegmentKey{
+		ShardID:     h.shardResolver.Shard(req.NamespaceId, req.StreamId),
+		NamespaceID: req.NamespaceId,
+		StreamID:    req.StreamId,
+	}
+	if err := h.segmentStore.DeleteStream(ctx, &persistence.DeleteStreamSegmentsRequest{
+		Key: streamKey,
+	}); err != nil {
+		return nil, err
+	}
+	return &streampb.DeleteStreamResponse{}, nil
+}
+
+// ListStreams paginates streams in a namespace.  M5 placeholder:
+// returns empty.  Production implementation walks the chasm
+// framework's per-shard execution list and filters by component type.
+func (h *Handler) ListStreams(
+	ctx context.Context,
+	req *streampb.ListStreamsRequest,
+) (*streampb.ListStreamsResponse, error) {
+	// TODO(M5-followup): implement via chasm.ListExecutions filtered
+	// by component type = Stream within the requested namespace.
+	return &streampb.ListStreamsResponse{}, nil
 }
 
 func validatePublishRequest(req *streampb.PublishRequest) error {

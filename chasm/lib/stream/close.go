@@ -22,12 +22,16 @@ type CloseInput struct {
 // StreamClosed.
 //
 // Spec correspondence: Close action in StreamCommit.tla L491.
+// CloseOutput is returned from Close.  Empty struct today; reserved for
+// future fields like inflight-count-at-close.
+type CloseOutput struct{}
+
 func (s *Stream) Close(
 	ctx chasm.MutableContext,
 	input CloseInput,
-) error {
+) (CloseOutput, error) {
 	if s.StreamState.Closed {
-		return ErrStreamClosed
+		return CloseOutput{}, ErrStreamClosed
 	}
 	now := ctx.Now(nil)
 	s.StreamState.Closed = true
@@ -38,5 +42,5 @@ func (s *Stream) Close(
 	// Arm phase-2 drain.  The CloseCleanupTask handler runs in chunks
 	// and re-arms itself until both maps are empty.
 	ctx.AddTask(s, chasm.TaskAttributes{}, &streampb.CloseCleanupTask{})
-	return nil
+	return CloseOutput{}, nil
 }

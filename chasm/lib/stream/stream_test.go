@@ -165,10 +165,11 @@ func TestPreparePublishRejectsSeqRegression(t *testing.T) {
 // Spec correspondence: Close action.  After Close, mutators reject.
 func TestCloseRejectsSubsequentMutators(t *testing.T) {
 	s, ctx := setupStreamForTest(t)
-	require.NoError(t, s.Close(ctx, stream.CloseInput{
+	_, closeErr := s.Close(ctx, stream.CloseInput{
 		ClosedBy:    "tester",
 		CloseReason: streampb.STREAM_CLOSE_REASON_EXPLICIT,
-	}))
+	})
+	require.NoError(t, closeErr)
 
 	_, err := s.PreparePublish(ctx, stream.PreparePublishInput{
 		PublisherID: "pub-1", Sequence: 1, ItemCount: 1, PayloadHash: []byte("h"),
@@ -186,10 +187,11 @@ func TestCommitAfterCloseAborts(t *testing.T) {
 	prep, _ := s.PreparePublish(ctx, stream.PreparePublishInput{
 		PublisherID: "pub-1", Sequence: 1, ItemCount: 1, PayloadHash: []byte("h"),
 	})
-	require.NoError(t, s.Close(ctx, stream.CloseInput{
+	_, closeErr := s.Close(ctx, stream.CloseInput{
 		ClosedBy:    "tester",
 		CloseReason: streampb.STREAM_CLOSE_REASON_EXPLICIT,
-	}))
+	})
+	require.NoError(t, closeErr)
 
 	_, err := s.CommitPublish(ctx, stream.CommitPublishInput{
 		TxnID: prep.TxnID, ProofOfWriteVerified: true,

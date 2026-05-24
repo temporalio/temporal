@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "chasm/lib/stream/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// StreamService is the native-streams gRPC service registered with the
+// History service.  Each RPC routes to the shard owning the
+// (namespace_id, stream_id) chasm execution.
+service StreamService {
+  // CreateStream creates a new chasm Stream execution.
+  rpc CreateStream(CreateStreamRequest) returns (CreateStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // DescribeStream returns the current frontier + audit fields.
+  rpc DescribeStream(DescribeStreamRequest) returns (DescribeStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Publish appends one batch under a (publisher_id, sequence) dedup key.
+  rpc Publish(PublishRequest) returns (PublishResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // ReadRange returns committed items in [start_offset, end_offset).
+  rpc ReadRange(ReadRangeRequest) returns (ReadRangeResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Close seals the stream (phase 1).  Phase 2 drain runs async.
+  rpc Close(CloseRequest) returns (CloseResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // DeleteStream is terminal — schedules segment-row deletion and
+  // removes the chasm execution under namespace retention.
+  rpc DeleteStream(DeleteStreamRequest) returns (DeleteStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Truncate moves base_offset forward.  Guards listed in
+  // request_response.proto TruncateRequest comment.
+  rpc Truncate(TruncateRequest) returns (TruncateResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // ListStreams paginates streams in a namespace.  Random-shard
+  // routing — the operator-facing list aggregates across the cluster.
+  rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse) {
+    option (temporal.server.api.routing.v1.routing).random = true;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}

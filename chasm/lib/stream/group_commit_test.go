@@ -92,9 +92,10 @@ func TestGroupCommitAfterCloseAborts(t *testing.T) {
 			{PublisherID: "pub-2", Sequence: 1, ItemCount: 1},
 		},
 	})
-	require.NoError(t, s.Close(ctx, stream.CloseInput{
+	_, closeErr := s.Close(ctx, stream.CloseInput{
 		ClosedBy: "tester", CloseReason: streampb.STREAM_CLOSE_REASON_EXPLICIT,
-	}))
+	})
+	require.NoError(t, closeErr)
 
 	_, err := s.GroupCommit(ctx, stream.GroupCommitInput{
 		TxnIDs: []int64{prep.Items[0].TxnID, prep.Items[1].TxnID},

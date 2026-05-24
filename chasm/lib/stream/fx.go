@@ -12,6 +12,14 @@ func Register(registry *chasm.Registry, library *Library) error {
 }
 
 // Module is the fx module for the native-streams chasm library.
+//
+// Handler and ShardResolver providers are intentionally NOT in this
+// module — they belong to the service that hosts the Stream gRPC
+// service (history service in production), which has the dependencies
+// to wire them.  Composers add their own:
+//
+//	fx.Provide(stream.NewHandler),
+//	fx.Provide(provideShardResolver),
 var Module = fx.Module(
 	"chasm.lib.stream",
 	fx.Provide(NewSweepExpiredTaskHandler),

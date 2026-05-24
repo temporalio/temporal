@@ -204,7 +204,7 @@ func (s *Stream) Terminate(
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	if !s.StreamState.Closed {
-		_ = s.Close(ctx, CloseInput{
+		_, _ = s.Close(ctx, CloseInput{
 			ClosedBy:    "system-terminate",
 			CloseReason: streampb.STREAM_CLOSE_REASON_DELETED,
 		})
