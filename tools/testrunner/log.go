@@ -351,6 +351,9 @@ func parseFailedTestsFromOutput(stdout string) []string {
 func parseFailureDetails(data string) string {
 	lines := normalizedFailureLines(data)
 
+	if start, end, ok := findAwaitFailureBlock(lines); ok {
+		return strings.Join(lines[start:end], "\n")
+	}
 	if start, end, ok := findTestifyFailureBlock(lines); ok {
 		return strings.Join(lines[start:end], "\n")
 	}
@@ -358,6 +361,15 @@ func parseFailureDetails(data string) string {
 		return strings.Join(lines[start:end], "\n")
 	}
 	return noFailureDetails
+}
+
+func findAwaitFailureBlock(lines []string) (start, end int, ok bool) {
+	for i, line := range lines {
+		if strings.Contains(line, "attempt errors:") || strings.Contains(line, "--- attempt ") {
+			return i, len(lines), true
+		}
+	}
+	return 0, 0, false
 }
 
 func normalizedFailureLines(data string) []string {

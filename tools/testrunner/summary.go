@@ -1,6 +1,7 @@
 package testrunner
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
 	"slices"
@@ -8,7 +9,7 @@ import (
 )
 
 const summaryMaxBytes = 1000 * 1024
-const summaryMaxDetailBytes = 1024
+const summaryMaxDetailBytes = 4 * 1024
 
 type summary struct {
 	rows []summaryRow
@@ -86,12 +87,35 @@ func (s summary) String() string {
 	return sb.String()
 }
 
+func (s summary) JSON() ([]byte, error) {
+	type rowJSON struct {
+		Kind    failureType `json:"kind"`
+		Name    string      `json:"name"`
+		Details string      `json:"details,omitempty"`
+		Final   bool        `json:"final,omitempty"`
+	}
+	out := struct {
+		Rows []rowJSON `json:"rows"`
+	}{
+		Rows: make([]rowJSON, 0, len(s.rows)),
+	}
+	for _, row := range s.rows {
+		out.Rows = append(out.Rows, rowJSON{
+			Kind:    row.kind,
+			Name:    row.name,
+			Details: row.details,
+			Final:   strings.Contains(row.name, "(final)"),
+		})
+	}
+	return json.MarshalIndent(out, "", "  ")
+}
+
 // String renders one summary table row.
 func (row summaryRow) String() string {
 	details := row.details
 	truncated := false
 	if len(details) > summaryMaxDetailBytes {
-		details = details[:summaryMaxDetailBytes]
+		details = truncateDetail(details)
 		truncated = true
 	}
 
@@ -114,4 +138,14 @@ func (row summaryRow) String() string {
 	}
 	sb.WriteString("</td></tr>\n")
 	return sb.String()
+}
+
+func truncateDetail(details string) string {
+	if len(details) <= summaryMaxDetailBytes {
+		return details
+	}
+	const marker = "\n… (middle truncated — see full output in job logs)\n"
+	headBytes := (summaryMaxDetailBytes - len(marker)) / 2
+	tailBytes := summaryMaxDetailBytes - len(marker) - headBytes
+	return details[:headBytes] + marker + details[len(details)-tailBytes:]
 }

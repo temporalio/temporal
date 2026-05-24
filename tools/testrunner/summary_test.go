@@ -1,6 +1,7 @@
 package testrunner
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,6 +54,37 @@ func TestRenderSummaryFromReports_KeepsFailureAndAlertRows(t *testing.T) {
 	require.Equal(t, 2, strings.Count(s, "<tr><td>"))
 }
 
+func TestRenderSummaryFromReports_JSON(t *testing.T) {
+	failureReport := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	failureReport.Suites[0].Testcases[0].Name = "TestFoo"
+	failureReport.Suites[0].Testcases[0].Failure.Data = "FAIL\n"
+
+	alertReport := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
+
+	summary := mustNewMergedSummary(t, failureReport, alertReport)
+	content, err := summary.JSON()
+	require.NoError(t, err)
+
+	var decoded struct {
+		Rows []struct {
+			Kind    failureType `json:"kind"`
+			Name    string      `json:"name"`
+			Details string      `json:"details,omitempty"`
+			Final   bool        `json:"final,omitempty"`
+		} `json:"rows"`
+	}
+	require.NoError(t, json.Unmarshal(content, &decoded))
+	require.Len(t, decoded.Rows, 2)
+	require.Equal(t, failureTypeFailed, decoded.Rows[0].Kind)
+	require.Equal(t, "TestFoo", decoded.Rows[0].Name)
+	require.Equal(t, "FAIL\n", decoded.Rows[0].Details)
+	require.False(t, decoded.Rows[0].Final)
+	require.Equal(t, failureTypePanic, decoded.Rows[1].Kind)
+	require.Equal(t, "panic test (retry 1) (final)", decoded.Rows[1].Name)
+	require.Equal(t, "panic: boom", decoded.Rows[1].Details)
+	require.True(t, decoded.Rows[1].Final)
+}
+
 func TestRenderSummaryFromReports_RendersTrimmedFailureBody(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-unexpected-call-failure.xml")
 
@@ -85,17 +117,20 @@ func TestRenderSummaryFromReports_RendersAlertRow(t *testing.T) {
 
 func TestRenderSummaryFromReports_TruncatesOversizedDetail(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
-	report.Suites[0].Testcases[0].Failure.Data = strings.Repeat("x", summaryMaxDetailBytes+1)
+	detail := "head" + strings.Repeat("x", summaryMaxDetailBytes) + "tail"
+	report.Suites[0].Testcases[0].Failure.Data = detail
 
 	summary := mustNewMergedSummary(t, report)
 	require.Equal(t, []summaryRow{{
 		kind:    failureTypeFailed,
 		name:    "TestStandalone",
-		details: strings.Repeat("x", summaryMaxDetailBytes+1),
+		details: detail,
 	}}, summary.rows)
 
 	s := summary.String()
 	require.Contains(t, s, "truncated")
+	require.Contains(t, s, "head")
+	require.Contains(t, s, "tail")
 	require.Less(t, len(s), summaryMaxBytes)
 }
 

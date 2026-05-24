@@ -170,6 +170,35 @@ FAIL`,
 			contains:    []string{"Error Trace:"},
 			notContains: []string{"FAIL"},
 		},
+		{
+			name: "preserves await attempt labels",
+			data: `    report.go:55: attempt errors:
+
+  --- attempt 1 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	Not equal:
+                	expected: "AutoUpgrade"
+                	actual  : "Unspecified"
+
+  ... 22 attempts omitted ...
+
+  --- attempt 24 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	Received unexpected error:
+                	context deadline exceeded
+    require_ctx.go:228: Require: condition not satisfied after 10s (24 polls)
+FAIL`,
+			contains: []string{
+				"attempt errors:",
+				"--- attempt 1 ---",
+				"--- attempt 24 ---",
+				"Error:      \tReceived unexpected error:",
+				"context deadline exceeded",
+			},
+			notContains: []string{"FAIL"},
+		},
 	}
 
 	for _, tt := range tests {

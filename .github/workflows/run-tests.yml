@@ -328,12 +328,12 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Write test summary
+      - name: Generate test summary
         if: ${{ !cancelled() }}
         run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          make -s generate-test-summary
+          if [ -s .testoutput/test-summary.md ]; then
+            cat .testoutput/test-summary.md > "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload code coverage to Codecov
@@ -367,6 +367,15 @@ jobs:
           name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
+          retention-days: 28
+
+      - name: Upload test summary JSON to GitHub
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
+          path: ./.testoutput/test-summary.json
+          if-no-files-found: ignore
           retention-days: 28
 
   integration-test:
@@ -426,12 +435,12 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Write test summary
+      - name: Generate test summary
         if: ${{ !cancelled() }}
         run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          make -s generate-test-summary
+          if [ -s .testoutput/test-summary.md ]; then
+            cat .testoutput/test-summary.md > "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload code coverage to Codecov
@@ -465,6 +474,15 @@ jobs:
           name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
+          retention-days: 28
+
+      - name: Upload test summary JSON to GitHub
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
+          path: ./.testoutput/test-summary.json
+          if-no-files-found: ignore
           retention-days: 28
 
       - name: Tear down docker compose
@@ -563,12 +581,12 @@ jobs:
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
-      - name: Write test summary
+      - name: Generate test summary
         if: ${{ !cancelled() }}
         run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
+          make -s generate-test-summary
+          if [ -s .testoutput/test-summary.md ]; then
+            cat .testoutput/test-summary.md > "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload code coverage to Codecov
@@ -595,6 +613,15 @@ jobs:
           name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
+          retention-days: 28
+
+      - name: Upload test summary JSON to GitHub
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          path: ./.testoutput/test-summary.json
+          if-no-files-found: ignore
           retention-days: 28
 
       - name: Upload debug logs
