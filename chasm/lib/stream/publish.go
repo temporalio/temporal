@@ -28,6 +28,7 @@ type PreparePublishOutput struct {
 	ItemCount      int32
 	FirstSegmentID int64
 	LastSegmentID  int64
+	PayloadHash    []byte
 	IsDedupReplay  bool
 }
 
@@ -99,6 +100,7 @@ func (s *Stream) PreparePublish(
 		ItemCount:      input.ItemCount,
 		FirstSegmentID: firstSegmentID,
 		LastSegmentID:  lastSegmentID,
+		PayloadHash:    input.PayloadHash,
 	}, nil
 }
 

@@ -86,6 +86,18 @@ func TestHandlerPublishHappyPath(t *testing.T) {
 	require.Equal(t, int64(2), descResp.State.HeadOffset)
 	require.Equal(t, int64(1), descResp.PublisherCount)
 	require.Equal(t, int64(0), descResp.InflightCount)
+
+	readResp, err := h.ReadRange(ctx, &streampb.ReadRangeRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		StartOffset: 0,
+		EndOffset:   2,
+	})
+	require.NoError(t, err)
+	require.Len(t, readResp.Items, 2)
+	require.Equal(t, []byte("hello"), readResp.Items[0].Data)
+	require.Equal(t, []byte("world"), readResp.Items[1].Data)
+	require.Equal(t, int64(2), readResp.NextOffset)
 }
 
 // Handler-level: a Publish retry with the same (publisher_id, sequence)

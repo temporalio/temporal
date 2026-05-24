@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/chasm"
@@ -182,9 +184,9 @@ func (h *Handler) writeTentativeSegments(
 	// implementation we put the whole batch in one row covering the
 	// reserved offset range; production drivers can chunk per segment
 	// boundary, but the row schema supports either layout.
-	hasher := sha256.New()
-	for _, item := range items {
-		hasher.Write(item.Data)
+	rowData, err := encodeSegmentRowData(prep.FirstOffset, items)
+	if err != nil {
+		return err
 	}
 	rows := []persistence.StreamSegmentRow{{
 		SegmentID:   prep.FirstSegmentID,
@@ -192,9 +194,10 @@ func (h *Handler) writeTentativeSegments(
 		FirstOffset: prep.FirstOffset,
 		LastOffset:  prep.FirstOffset + int64(prep.ItemCount) - 1,
 		ItemCount:   prep.ItemCount,
-		PayloadHash: hasher.Sum(nil),
+		PayloadHash: hashPublishItemsPayload(items),
+		Data:        &commonpb.DataBlob{Data: rowData},
 	}}
-	_, err := h.segmentStore.WriteTentative(ctx, &persistence.WriteTentativeSegmentsRequest{
+	_, err = h.segmentStore.WriteTentative(ctx, &persistence.WriteTentativeSegmentsRequest{
 		Key:  key,
 		Rows: rows,
 	})
@@ -220,12 +223,22 @@ func (h *Handler) verifyProofOfWrite(
 		return false, err
 	}
 	covered := make(map[int64]bool, prep.ItemCount)
+	items := make([]*streampb.PublishItem, 0, prep.ItemCount)
 	for _, row := range resp.Rows {
 		if row.TxnID != prep.TxnID {
 			continue
 		}
-		for off := row.FirstOffset; off <= row.LastOffset; off++ {
-			covered[off] = true
+		rowItems, err := decodeSegmentRowData(row)
+		if err != nil {
+			return false, err
+		}
+		for _, rowItem := range rowItems {
+			if rowItem.offset < prep.FirstOffset ||
+				rowItem.offset >= prep.FirstOffset+int64(prep.ItemCount) {
+				continue
+			}
+			covered[rowItem.offset] = true
+			items = append(items, rowItem.item)
 		}
 	}
 	endOffset := prep.FirstOffset + int64(prep.ItemCount)
@@ -233,6 +246,10 @@ func (h *Handler) verifyProofOfWrite(
 		if !covered[off] {
 			return false, nil
 		}
+	}
+	if len(prep.PayloadHash) > 0 &&
+		!bytes.Equal(hashPublishItemsPayload(items), prep.PayloadHash) {
+		return false, nil
 	}
 	return true, nil
 }
@@ -322,21 +339,39 @@ func (h *Handler) ReadRange(
 	if err != nil {
 		return nil, err
 	}
-	// The on-disk row carries codec-applied bytes; for M5 we re-emit
-	// them as a single PublishItem per row.  Future work breaks rows
-	// into per-item entries with topic metadata once the segment row
-	// schema carries topic-per-item info.
 	items := make([]*streampb.PublishItem, 0, len(storeResp.Rows))
+	topicFilter := make(map[string]struct{}, len(req.Topics))
+	for _, topic := range req.Topics {
+		topicFilter[topic] = struct{}{}
+	}
+	readEndOffset := req.EndOffset
+	if fr.headOffset < readEndOffset {
+		readEndOffset = fr.headOffset
+	}
 	for _, row := range storeResp.Rows {
-		data := []byte(nil)
-		if row.Data != nil {
-			data = row.Data.Data
+		rowItems, err := decodeSegmentRowData(row)
+		if err != nil {
+			return nil, err
 		}
-		items = append(items, &streampb.PublishItem{Data: data})
+		for _, rowItem := range rowItems {
+			if rowItem.offset < req.StartOffset || rowItem.offset >= readEndOffset {
+				continue
+			}
+			if len(topicFilter) > 0 {
+				if _, ok := topicFilter[rowItem.item.Topic]; !ok {
+					continue
+				}
+			}
+			items = append(items, rowItem.item)
+		}
+	}
+	nextOffset := storeResp.NextPageOffset
+	if nextOffset == 0 {
+		nextOffset = readEndOffset
 	}
 	return &streampb.ReadRangeResponse{
 		Items:      items,
-		NextOffset: storeResp.NextPageOffset,
+		NextOffset: nextOffset,
 	}, nil
 }
 
@@ -460,13 +495,76 @@ func validatePublishRequest(req *streampb.PublishRequest) error {
 	}
 	if len(req.PayloadHash) > 0 {
 		// Best-effort sanity check that the caller's hash matches their bytes.
-		hasher := sha256.New()
-		for _, item := range req.Items {
-			hasher.Write(item.Data)
-		}
-		if !bytes.Equal(hasher.Sum(nil), req.PayloadHash) {
+		if !bytes.Equal(hashPublishItemsPayload(req.Items), req.PayloadHash) {
 			return serviceerror.NewInvalidArgument("payload_hash does not match items")
 		}
 	}
 	return nil
+}
+
+type decodedSegmentRowItem struct {
+	offset int64
+	item   *streampb.PublishItem
+}
+
+func hashPublishItemsPayload(items []*streampb.PublishItem) []byte {
+	hasher := sha256.New()
+	for _, item := range items {
+		hasher.Write(item.Data)
+	}
+	return hasher.Sum(nil)
+}
+
+func encodeSegmentRowData(firstOffset int64, items []*streampb.PublishItem) ([]byte, error) {
+	var buf bytes.Buffer
+	var scratch [8]byte
+	for i, item := range items {
+		topicBytes := []byte(item.Topic)
+		if len(topicBytes) > int(^uint32(0)) || len(item.Data) > int(^uint32(0)) {
+			return nil, serviceerror.NewInvalidArgument("stream item exceeds row framing limits")
+		}
+		binary.BigEndian.PutUint64(scratch[:8], uint64(firstOffset+int64(i)))
+		buf.Write(scratch[:8])
+		binary.BigEndian.PutUint32(scratch[:4], uint32(len(topicBytes)))
+		buf.Write(scratch[:4])
+		buf.Write(topicBytes)
+		binary.BigEndian.PutUint32(scratch[:4], uint32(len(item.Data)))
+		buf.Write(scratch[:4])
+		buf.Write(item.Data)
+	}
+	return buf.Bytes(), nil
+}
+
+func decodeSegmentRowData(row persistence.StreamSegmentRow) ([]decodedSegmentRowItem, error) {
+	if row.Data == nil {
+		return nil, serviceerror.NewInternal("stream segment row missing data")
+	}
+	data := row.Data.Data
+	items := make([]decodedSegmentRowItem, 0, row.ItemCount)
+	for pos := 0; pos < len(data); {
+		if len(data)-pos < 12 {
+			return nil, serviceerror.NewInternal("malformed stream segment row")
+		}
+		offset := int64(binary.BigEndian.Uint64(data[pos : pos+8]))
+		pos += 8
+		topicLen := int(binary.BigEndian.Uint32(data[pos : pos+4]))
+		pos += 4
+		if topicLen < 0 || len(data)-pos < topicLen+4 {
+			return nil, serviceerror.NewInternal("malformed stream segment row")
+		}
+		topic := string(data[pos : pos+topicLen])
+		pos += topicLen
+		payloadLen := int(binary.BigEndian.Uint32(data[pos : pos+4]))
+		pos += 4
+		if payloadLen < 0 || len(data)-pos < payloadLen {
+			return nil, serviceerror.NewInternal("malformed stream segment row")
+		}
+		payload := append([]byte(nil), data[pos:pos+payloadLen]...)
+		pos += payloadLen
+		items = append(items, decodedSegmentRowItem{
+			offset: offset,
+			item:   &streampb.PublishItem{Data: payload, Topic: topic},
+		})
+	}
+	return items, nil
 }
