@@ -1837,6 +1837,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 
 	// v1 is current for both parent and child
 	env.setCurrentDeployment(s, tv1)
+	env.pollUntilRegistered(s, tv1Child)
 
 	startOpts := sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
