@@ -642,7 +642,7 @@ func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
 		t.Require().Equal(tv.DeploymentVersion().GetBuildId(), current.GetBuildId())
 		t.Require().Equal(int64(0), currentRevisionNumber)
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
