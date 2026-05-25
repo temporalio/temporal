@@ -1,0 +1,85 @@
+name: Docker Image Cache
+description: Restore or save Docker images using actions/cache.
+
+inputs:
+  mode:
+    description: Use "restore" or "save".
+    required: true
+  key:
+    description: Cache key.
+    required: true
+  path:
+    description: Directory used to store the Docker image archive.
+    required: true
+  compose-file:
+    description: Docker Compose file whose images should be saved.
+    required: false
+
+outputs:
+  cache-hit:
+    description: Whether the restore found an exact cache hit.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore cache
+      id: restore
+      if: ${{ inputs.mode == 'restore' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+
+    - name: Load Docker images
+      if: ${{ inputs.mode == 'restore' && steps.restore.outputs.cache-hit == 'true' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.path }}
+      run: |
+        if [[ -f "$CACHE_PATH/images.tar" ]]; then
+          docker load --input "$CACHE_PATH/images.tar"
+        else
+          echo "Docker image cache hit did not include images.tar."
+        fi
+
+    - name: Save Docker images to archive
+      id: archive
+      if: ${{ inputs.mode == 'save' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.path }}
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+      run: |
+        if [[ -z "$COMPOSE_FILE" ]]; then
+          echo "compose-file is required when mode is save."
+          exit 1
+        fi
+
+        mkdir -p "$CACHE_PATH"
+        images_file="$CACHE_PATH/images.txt"
+        : > "$images_file"
+
+        while IFS= read -r image; do
+          if docker image inspect "$image" >/dev/null 2>&1; then
+            printf '%s\n' "$image" >> "$images_file"
+          fi
+        done < <(docker compose -f "$COMPOSE_FILE" config --images | sort -u)
+
+        if [[ ! -s "$images_file" ]]; then
+          echo "No Docker images are available to cache."
+          echo "cacheable=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Word splitting is intentional: Docker image references cannot contain whitespace.
+        # shellcheck disable=SC2046
+        docker save --output "$CACHE_PATH/images.tar" $(cat "$images_file")
+        echo "cacheable=true" >> "$GITHUB_OUTPUT"
+
+    - name: Save cache
+      if: ${{ inputs.mode == 'save' && steps.archive.outputs.cacheable == 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}

@@ -17,10 +17,6 @@ inputs:
   timeout-minutes:
     description: Timeout for each pull attempt.
     default: "1"
-  down-flags:
-    description: Additional options to pass to docker compose down.
-    default: ""
-
 runs:
   using: composite
   steps:
@@ -42,8 +38,13 @@ runs:
           docker compose -f "$COMPOSE_FILE" pull $SERVICES
 
     - name: Start services
-      uses: hoverkraft-tech/compose-action@v2.6.0
-      with:
-        compose-file: ${{ inputs['compose-file'] }}
-        services: ${{ inputs.services }}
-        down-flags: ${{ inputs['down-flags'] }}
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+          echo "No services configured for docker compose up."
+          exit 0
+        fi
+        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
