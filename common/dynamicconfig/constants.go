@@ -1148,9 +1148,8 @@ If value less or equal to 0, will fall back to MatchingRPS`,
 	MatchingNamespaceFairShare = NewNamespaceFloatSetting(
 		"matching.namespaceFairShare",
 		0,
-		`MatchingNamespaceFairShare is the fraction of the matching host RPS limit (MatchingRPS) each namespace
-is allowed to consume before its requests are demoted by the fairness mechanism.
-share(ns) = MatchingRPS * MatchingNamespaceFairShare(ns). Setting it to 0 or 1 disables the fairness check for that namespace.`,
+		`MatchingNamespaceFairShare is the fraction of MatchingRPS a namespace can use before fairness demotes its
+requests. Values outside (0, 1) disable fairness for that namespace.`,
 	)
 	MatchingPersistenceMaxQPS = NewGlobalIntSetting(
 		"matching.persistenceMaxQPS",
