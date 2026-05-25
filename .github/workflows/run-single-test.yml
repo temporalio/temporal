@@ -132,7 +132,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -152,7 +152,7 @@ jobs:
           TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"
 
       - name: Stop containerized dependencies
-        if: ${{ always() && contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
+        if: ${{ always() && contains(fromJSON(inputs.test_dbs), matrix.name) }}
         uses: ./.github/actions/docker-compose-stop
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
