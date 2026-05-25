@@ -133,7 +133,7 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose
+        uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
@@ -153,8 +153,7 @@ jobs:
 
       - name: Stop containerized dependencies
         if: ${{ always() && contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose
+        uses: ./.github/actions/docker-compose-stop
         with:
-          action: stop
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          down-flags: -v
+          flags: -v
