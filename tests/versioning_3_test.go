@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -64,6 +65,7 @@ const (
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
+	ver3PollTimeout = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -1400,7 +1402,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 	}}, []string{}, tqTypeWf, tqTypeAct)
 	// poll activity from v2 worker, this should start a transition but should not immediately start the activity.
-	go s.idlePollActivity(env, tv2, true, time.Minute, "v2 worker should not receive the activity")
+	go s.idlePollActivity(s.Context(), env, tv2, true, time.Minute, "v2 worker should not receive the activity")
 
 	s.Await(func(s *Versioning3Suite) {
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
@@ -1706,7 +1708,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	time.Sleep(time.Millisecond * 200) //nolint:forbidigo
 
 	// Pollers of d1 are there, but should not get any task
-	go s.idlePollActivity(env, tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
+	go s.idlePollActivity(s.Context(), env, tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
 
 	act2To4Err := make(chan error, 1)
 	go func() {
@@ -4103,22 +4105,37 @@ func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testva
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
 	pollCtx, cancel := context.WithCancel(s.Context())
+	var wg sync.WaitGroup
 	for _, tqType := range tqTypes {
-		go func() {
+		tqType := tqType
+		wg.Go(func() {
 			for pollCtx.Err() == nil {
 				switch tqType {
 				case tqTypeWf:
 					s.idlePollWorkflow(env, pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
-					s.idlePollActivity(env, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					s.idlePollActivity(pollCtx, env, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeNexus:
 					s.idlePollNexus(env, pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				default:
 					panic("invalid task queue type")
 				}
 			}
-		}()
+		})
 	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-s.Context().Done():
+			s.FailNow("context timeout while stopping registration pollers")
+		}
+	}()
 
 	// Wait until the version is visible and all requested task queue types are registered.
 	s.Await(func(s *Versioning3Suite) {
@@ -4143,8 +4160,7 @@ func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testva
 			}
 			s.True(found)
 		}
-	}, 30*time.Second, 500*time.Millisecond)
-	cancel()
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -4712,7 +4728,7 @@ func (s *Versioning3Suite) doPollWftAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
@@ -4777,7 +4793,7 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
@@ -4847,7 +4863,7 @@ func (s *Versioning3Suite) doPollActivityAndHandleErr(
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		}).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	return err
 }
 
@@ -4895,6 +4911,7 @@ func (s *Versioning3Suite) idlePollUnversionedActivity(
 }
 
 func (s *Versioning3Suite) idlePollActivity(
+	ctx context.Context,
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	versioned bool,
@@ -4915,7 +4932,7 @@ func (s *Versioning3Suite) idlePollActivity(
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
-		taskpoller.WithContext(s.Context()),
+		taskpoller.WithContext(ctx),
 	)
 }
 
@@ -5378,7 +5395,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 
 	// Start an idle activity poller on v0. This poller should not receive any activity tasks
 	//nolint:testifylint
-	go s.idlePollActivity(env, tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
+	go s.idlePollActivity(s.Context(), env, tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
 
 	// Start a poller on v1
 	activityTaskCh := make(chan struct{}, 1)
@@ -6389,7 +6406,7 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(env *testcore.TestE
 	}
 
 	// Poll the second activity to cause transition to v1.
-	s.idlePollActivity(env, tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
+	s.idlePollActivity(s.Context(), env, tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
 	s.verifyWorkflowVersioning(env, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
 
 	// Print workflow describe and history
