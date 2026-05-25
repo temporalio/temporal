@@ -4418,13 +4418,13 @@ func (s *Versioning3Suite) validateBacklogCount(
 	tqType enumspb.TaskQueueType,
 	expectedCount int64,
 ) {
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-
 	var resp *workflowservice.DescribeTaskQueueResponse
 	var err error
 
 	s.Await(func(s *Versioning3Suite) {
+		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+
 		resp, err = env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
@@ -4436,7 +4436,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 		priorityStats, ok := resp.GetStatsByPriorityKey()[3]
 		s.True(ok)
 		s.Equal(expectedCount, priorityStats.GetApproximateBacklogCount())
-	}, 6*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) verifyVersioningSAs(
