@@ -416,7 +416,7 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
-          cache-key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}-${{ join(matrix.containers, '-') }}
+          cache: true
 
       - uses: actions/setup-go@v6
         with:

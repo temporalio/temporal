@@ -17,9 +17,9 @@ inputs:
   timeout-minutes:
     description: Timeout for each pull attempt.
     default: "1"
-  cache-key:
-    description: Cache key for Docker images. Leave empty to disable image caching.
-    default: ""
+  cache:
+    description: Set to "true" to cache Docker images.
+    default: "false"
   cache-path:
     description: Directory used to store the Docker image archive.
     default: ${{ runner.temp }}/docker-image-cache
@@ -32,16 +32,28 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Prepare Docker image cache
+      id: cache
+      if: ${{ inputs.cache == 'true' }}
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        compose_hash="$(shasum -a 256 "$COMPOSE_FILE" | awk '{print $1}')"
+        services_hash="$(printf '%s' "$SERVICES" | tr '[:space:]' '\n' | sed '/^$/d' | sort | shasum -a 256 | awk '{print $1}')"
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${compose_hash}-${services_hash}" >> "$GITHUB_OUTPUT"
+
     - name: Restore Docker image cache
       id: restore-cache
-      if: ${{ inputs.cache-key != '' }}
+      if: ${{ steps.cache.outputs.key != '' }}
       uses: actions/cache/restore@v5
       with:
         path: ${{ inputs['cache-path'] }}
-        key: ${{ inputs.cache-key }}
+        key: ${{ steps.cache.outputs.key }}
 
     - name: Load Docker images
-      if: ${{ inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
+      if: ${{ steps.cache.outputs.key != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -83,7 +95,7 @@ runs:
 
     - name: Save Docker images to archive
       id: archive
-      if: ${{ inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.cache.outputs.key != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -111,8 +123,8 @@ runs:
         echo "cacheable=true" >> "$GITHUB_OUTPUT"
 
     - name: Save Docker image cache
-      if: ${{ inputs.cache-key != '' && steps.archive.outputs.cacheable == 'true' }}
+      if: ${{ steps.cache.outputs.key != '' && steps.archive.outputs.cacheable == 'true' }}
       uses: actions/cache/save@v5
       with:
         path: ${{ inputs['cache-path'] }}
-        key: ${{ inputs.cache-key }}
+        key: ${{ steps.cache.outputs.key }}
