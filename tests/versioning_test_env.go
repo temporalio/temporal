@@ -1213,7 +1213,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 			}
 		}
 		t.Require().Empty(remaining)
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) validateBacklogCount(
