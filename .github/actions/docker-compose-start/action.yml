@@ -24,11 +24,6 @@ inputs:
     description: Directory used to store the Docker image archive.
     default: ${{ runner.temp }}/docker-image-cache
 
-outputs:
-  cache-hit:
-    description: Whether the Docker image cache found an exact cache hit.
-    value: ${{ steps.restore-cache.outputs.cache-hit }}
-
 runs:
   using: composite
   steps:
@@ -41,7 +36,7 @@ runs:
       run: |
         services_hash="$(printf '%s' "$SERVICES" | shasum -a 256 | cut -d ' ' -f 1)"
 
-        echo "services-hash=$services_hash" >> "$GITHUB_OUTPUT"
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${{ hashFiles(inputs['compose-file']) }}-${services_hash}" >> "$GITHUB_OUTPUT"
 
     - name: Restore Docker image cache
       id: restore-cache
@@ -49,7 +44,7 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: ${{ inputs['cache-path'] }}
-        key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(inputs['compose-file']) }}-${{ steps.cache.outputs.services-hash }}
+        key: ${{ steps.cache.outputs.key }}
 
     - name: Load Docker images
       if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit == 'true' }}
@@ -126,4 +121,4 @@ runs:
       uses: actions/cache/save@v5
       with:
         path: ${{ inputs['cache-path'] }}
-        key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(inputs['compose-file']) }}-${{ steps.cache.outputs.services-hash }}
+        key: ${{ steps.cache.outputs.key }}
