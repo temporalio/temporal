@@ -25,7 +25,7 @@ runs:
   using: composite
   steps:
     - name: Pull services
-      uses: nick-fields/retry@v3
+      uses: nick-fields/retry@v4
       env:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
@@ -42,7 +42,7 @@ runs:
           docker compose -f "$COMPOSE_FILE" pull $SERVICES
 
     - name: Start services
-      uses: hoverkraft-tech/compose-action@v2.0.1
+      uses: hoverkraft-tech/compose-action@v2.6.0
       with:
         compose-file: ${{ inputs['compose-file'] }}
         services: ${{ inputs.services }}

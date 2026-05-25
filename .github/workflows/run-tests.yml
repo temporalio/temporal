@@ -23,6 +23,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
 
@@ -404,7 +405,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
+      - uses: ScribeMD/docker-cache@0.5.0
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
