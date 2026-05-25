@@ -2313,7 +2313,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 				// Mode-specific validations
 				historyEvents := task.History.GetEvents()
 				if speculativeTask {
-					s.verifySpeculativeTask(env, execution)
+					s.verifySpeculativeTask(task)
 				} else if transientTask {
 					s.verifyTransientTask(task)
 					// Get events from server-side history, this includes transient events.
@@ -2857,9 +2857,8 @@ func (s *Versioning3Suite) triggerTransientWFT(env *testcore.TestEnv, tv *testva
 }
 
 // Verify this is a speculative task - events not yet in persisted history
-func (s *Versioning3Suite) verifySpeculativeTask(env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
-	events := env.GetHistory(env.Namespace().String(), execution)
-	s.EqualHistoryEvents(`
+func (s *Versioning3Suite) verifySpeculativeTask(task *workflowservice.PollWorkflowTaskQueueResponse) {
+	s.EqualHistory(`
 						1 WorkflowExecutionStarted
 						2 WorkflowTaskScheduled
 						3 WorkflowTaskStarted
@@ -2870,7 +2869,7 @@ func (s *Versioning3Suite) verifySpeculativeTask(env *testcore.TestEnv, executio
 						8 WorkflowTaskCompleted
 						9 WorkflowTaskScheduled
 						10 WorkflowTaskStarted
-					`, events)
+					`, task.History)
 }
 
 func (s *Versioning3Suite) verifyTransientTask(task *workflowservice.PollWorkflowTaskQueueResponse) {
