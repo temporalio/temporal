@@ -379,13 +379,8 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 	tv := env.Tv()
 
 	// create version v1 and make it current
-	idlePollerDone := make(chan struct{})
-	go func() {
-		s.idlePollWorkflow(env, s.Context(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-		close(idlePollerDone)
-	}()
+	s.pollUntilRegistered(env, tv)
 	s.setCurrentDeployment(env, tv)
-	env.WaitForChannel(idlePollerDone)
 
 	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(env, tv, false, wftCompleted,
@@ -399,14 +394,9 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 	s.verifyWorkflowVersioning(env, tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
 	// create version v2 and make it current which shall make v1 go from current -> draining/drained
-	idlePollerDone = make(chan struct{})
 	tv2 := tv.WithBuildIDNumber(2)
-	go func() {
-		s.idlePollWorkflow(env, s.Context(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-		close(idlePollerDone)
-	}()
+	s.pollUntilRegistered(env, tv2)
 	s.setCurrentDeployment(env, tv2)
-	env.WaitForChannel(idlePollerDone)
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
@@ -2567,7 +2557,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return respondEmptyWft(tv1, false, vbPinned), nil
 			})
-		s.idlePollWorkflow(env, s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+		s.pollUntilRegistered(env, tv2)
 		s.setRampingDeployment(env, tv2, 0, false)
 		s.waitForDeploymentDataPropagation(env, tv2, versionStatusRamping, false, tqTypeWf)
 		s.triggerNormalWFT(env, tv1, execution)
