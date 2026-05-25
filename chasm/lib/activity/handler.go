@@ -65,6 +65,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 	maxLinks := h.config.MaxLinksPerExecution(frontendReq.GetNamespace())
 
+	if len(frontendReq.GetLinks()) > maxLinks {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d links to an activity (%d links already attached)",
+			maxLinks,
+			0,
+		)
+	}
+
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
