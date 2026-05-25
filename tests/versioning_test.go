@@ -52,7 +52,6 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedClusters(t, testcore.DefaultSuiteClusterPoolSize())
 	parallelsuite.Run(t, &VersioningIntegSuite{})
 }
 
