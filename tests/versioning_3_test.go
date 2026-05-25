@@ -130,6 +130,7 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 
 		// Register the first version before starting a workflow pinned to it.
 		s.pollUntilRegistered(env, tv)
+		s.validatePinnedVersionExistsInTaskQueue(env, tv)
 
 		s.startWorkflow(env, tv, tv.VersioningOverridePinned())
 		s.idlePollWorkflow(env, s.Context(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
