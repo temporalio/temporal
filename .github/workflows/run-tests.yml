@@ -382,7 +382,7 @@ jobs:
           job-name: Integration test
           artifact-name-suffix: integration-test
 
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: ${{ always() }}
         uses: ./.github/actions/docker-compose
         with:
@@ -471,7 +471,7 @@ jobs:
           codecov-flag: functional-test
           debug-log-path: ${{ github.workspace }}/.testoutput/debug.log
 
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: ${{ always() && toJson(matrix.containers) != '[]' }}
         uses: ./.github/actions/docker-compose
         with:
@@ -539,7 +539,7 @@ jobs:
         if: always()
         run: cat .testoutput/mixedbrain_omes.log || true
 
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: always()
         uses: ./.github/actions/docker-compose
         with:

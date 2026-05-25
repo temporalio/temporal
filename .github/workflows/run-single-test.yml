@@ -151,7 +151,7 @@ jobs:
           TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"
 
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: ${{ always() && contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
         uses: ./.github/actions/docker-compose
         with:
