@@ -338,7 +338,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: |
@@ -402,37 +402,19 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
-      DOCKER_IMAGE_CACHE_PATH: ${{ runner.temp }}/docker-image-cache
     steps:
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Restore Docker image cache
-        id: docker-image-cache
-        if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-image-cache
-        with:
-          mode: restore
-          key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}-${{ join(matrix.containers, '-') }}
-          path: ${{ env.DOCKER_IMAGE_CACHE_PATH }}
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
-
-      - name: Save Docker image cache
-        if: ${{ toJson(matrix.containers) != '[]' && steps.docker-image-cache.outputs.cache-hit != 'true' }}
-        uses: ./.github/actions/docker-image-cache
-        with:
-          mode: save
-          key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}-${{ join(matrix.containers, '-') }}
-          path: ${{ env.DOCKER_IMAGE_CACHE_PATH }}
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          cache-key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}-${{ join(matrix.containers, '-') }}
 
       - uses: actions/setup-go@v6
         with:
@@ -502,7 +484,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql

@@ -1,0 +1,118 @@
+name: Docker Compose Start
+description: Restore Docker image cache, pull Docker Compose services with retries, then start them.
+
+inputs:
+  compose-file:
+    description: Docker Compose file to use.
+    required: true
+  services:
+    description: Whitespace-delimited list of services to pull.
+    required: true
+  attempts:
+    description: Number of pull attempts.
+    default: "5"
+  delay-seconds:
+    description: Delay between failed attempts.
+    default: "5"
+  timeout-minutes:
+    description: Timeout for each pull attempt.
+    default: "1"
+  cache-key:
+    description: Cache key for Docker images. Leave empty to disable image caching.
+    default: ""
+  cache-path:
+    description: Directory used to store the Docker image archive.
+    default: ${{ runner.temp }}/docker-image-cache
+
+outputs:
+  cache-hit:
+    description: Whether the Docker image cache found an exact cache hit.
+    value: ${{ steps.restore-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Docker image cache
+      id: restore-cache
+      if: ${{ inputs.cache-key != '' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ inputs['cache-path'] }}
+        key: ${{ inputs.cache-key }}
+
+    - name: Load Docker images
+      if: ${{ inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs['cache-path'] }}
+      run: |
+        if [[ -f "$CACHE_PATH/images.tar" ]]; then
+          docker load --input "$CACHE_PATH/images.tar"
+        else
+          echo "Docker image cache hit did not include images.tar."
+        fi
+
+    - name: Pull services
+      uses: nick-fields/retry@v4
+      env:
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        SERVICES: ${{ inputs.services }}
+      with:
+        max_attempts: ${{ inputs.attempts }}
+        retry_wait_seconds: ${{ inputs['delay-seconds'] }}
+        timeout_minutes: ${{ inputs['timeout-minutes'] }}
+        shell: bash
+        command: |
+          if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+            echo "No services configured for docker compose pull."
+            exit 0
+          fi
+          docker compose -f "$COMPOSE_FILE" pull $SERVICES
+
+    - name: Start services
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+          echo "No services configured for docker compose up."
+          exit 0
+        fi
+        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+
+    - name: Save Docker images to archive
+      id: archive
+      if: ${{ inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs['cache-path'] }}
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+      run: |
+        mkdir -p "$CACHE_PATH"
+        images_file="$CACHE_PATH/images.txt"
+        : > "$images_file"
+
+        while IFS= read -r image; do
+          if docker image inspect "$image" >/dev/null 2>&1; then
+            printf '%s\n' "$image" >> "$images_file"
+          fi
+        done < <(docker compose -f "$COMPOSE_FILE" config --images | sort -u)
+
+        if [[ ! -s "$images_file" ]]; then
+          echo "No Docker images are available to cache."
+          echo "cacheable=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Word splitting is intentional: Docker image references cannot contain whitespace.
+        # shellcheck disable=SC2046
+        docker save --output "$CACHE_PATH/images.tar" $(cat "$images_file")
+        echo "cacheable=true" >> "$GITHUB_OUTPUT"
+
+    - name: Save Docker image cache
+      if: ${{ inputs.cache-key != '' && steps.archive.outputs.cacheable == 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ inputs['cache-path'] }}
+        key: ${{ inputs.cache-key }}

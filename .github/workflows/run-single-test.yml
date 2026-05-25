@@ -133,7 +133,7 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
