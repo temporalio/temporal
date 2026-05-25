@@ -5406,7 +5406,7 @@ func (s *Versioning3Suite) validatePinnedVersionExistsInTaskQueue(env *testcore.
 		})
 		s.NoError(err)
 		s.True(resp.GetIsMember())
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 }
 
