@@ -338,7 +338,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        uses: ./.github/actions/docker-compose-start
+        uses: ./.github/actions/docker-compose
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: |
@@ -384,8 +384,11 @@ jobs:
 
       - name: Tear down docker compose
         if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+        uses: ./.github/actions/docker-compose
+        with:
+          action: stop
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          down-flags: -v
 
   # Root job name includes matrix details so it is unique per job variant.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
@@ -410,7 +413,7 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose-start
+        uses: ./.github/actions/docker-compose
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
@@ -470,8 +473,11 @@ jobs:
 
       - name: Tear down docker compose
         if: ${{ always() && toJson(matrix.containers) != '[]' }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+        uses: ./.github/actions/docker-compose
+        with:
+          action: stop
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          down-flags: -v
 
   mixed-brain-test:
     name: Mixed brain test
@@ -484,7 +490,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-start
+        uses: ./.github/actions/docker-compose
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
@@ -535,8 +541,11 @@ jobs:
 
       - name: Tear down docker compose
         if: always()
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+        uses: ./.github/actions/docker-compose
+        with:
+          action: stop
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          down-flags: -v
 
   test-status:
     if: always()
