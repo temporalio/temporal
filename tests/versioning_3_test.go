@@ -2566,7 +2566,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 				// Mode-specific validations
 				historyEvents := task.History.GetEvents()
 				if speculativeTask {
-					env.verifySpeculativeTask(s, execution)
+					env.verifySpeculativeTask(s, task)
 				} else if transientTask {
 					s.verifyTransientTask(task)
 					// Get events from server-side history, this includes transient events.

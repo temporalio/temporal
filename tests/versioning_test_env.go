@@ -343,9 +343,8 @@ func (env *VersioningTestEnv) triggerTransientWFT(s parallelsuite.Scope, tv *tes
 }
 
 // Verify this is a speculative task - events not yet in persisted history
-func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, execution *commonpb.WorkflowExecution) {
-	events := env.GetHistory(env.Namespace().String(), execution)
-	historyrequire.New(s.AssertionT()).EqualHistoryEvents(`
+func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, task *workflowservice.PollWorkflowTaskQueueResponse) {
+	historyrequire.New(s.AssertionT()).EqualHistory(`
 		1 WorkflowExecutionStarted
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
@@ -356,7 +355,7 @@ func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, execu
 		8 WorkflowTaskCompleted
 		9 WorkflowTaskScheduled
 		10 WorkflowTaskStarted
-	`, events)
+	`, task.History)
 }
 
 func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
