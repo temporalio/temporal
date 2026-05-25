@@ -40,14 +40,10 @@ runs:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
       run: |
-        # Normalize service order so equivalent service lists share a cache key.
-        services_file="$RUNNER_TEMP/docker-compose-services.txt"
-        printf '%s' "$SERVICES" | tr '[:space:]' '\n' | sed '/^$/d' | sort > "$services_file"
-
-        normalized_services="$(paste -sd '-' "$services_file")"
         compose_hash="$(shasum -a 256 "$COMPOSE_FILE" | cut -d ' ' -f 1)"
+        services_hash="$(printf '%s' "$SERVICES" | shasum -a 256 | cut -d ' ' -f 1)"
 
-        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${compose_hash}-${normalized_services}" >> "$GITHUB_OUTPUT"
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${compose_hash}-${services_hash}" >> "$GITHUB_OUTPUT"
 
     - name: Restore Docker image cache
       id: restore-cache
