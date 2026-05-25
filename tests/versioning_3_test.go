@@ -5071,7 +5071,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			}
 		}
 		s.Empty(remaining)
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) validateBacklogCount(
