@@ -1078,9 +1078,8 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			s.NoError(err)
 			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
 			// confirm that it's a new run
-			if caNRunID != run0.GetRunID() {
-				runIDBeforeRetry = caNRunID
-			}
+			s.NotEqual(run0.GetRunID(), caNRunID)
+			runIDBeforeRetry = caNRunID
 		}, 5*time.Second, 500*time.Millisecond)
 	}
 
