@@ -81,10 +81,8 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithNonZeroTokenConfig() {
 	s.True(handlerCalled)
 }
 
-// TestInterceptPropagatesCallerName ensures the interceptor copies the
-// caller-name and caller-type gRPC headers into the quotas.Request it hands
-// to the rate limiter; downstream priority functions (e.g. per-namespace
-// fairness) rely on Caller being populated.
+// Caller-name forwarding is required by per-namespace priority functions
+// such as the fairness limiter.
 func (s *rateLimitInterceptorSuite) TestInterceptPropagatesCallerName() {
 	methodName := "TEST/METHOD"
 	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, nil)

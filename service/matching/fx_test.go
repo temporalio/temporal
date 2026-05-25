@@ -1,15 +1,23 @@
 package matching
 
 import (
+	"context"
+	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.temporal.io/server/service/matching/configs"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -39,52 +47,40 @@ func req(api, caller, callerType string) quotas.Request {
 }
 
 func TestFairnessPriorityFn_MultipleCallers(t *testing.T) {
-	// namespaceA: 50% share, namespaceB: 20% share, namespaceC: fairness off.
 	nsFairShare := map[string]float64{
 		"namespaceA": 0.5,
 		"namespaceB": 0.2,
 	}
 	priorityFn, priorities := makeTestPriorityFn(t, 100, nsFairShare)
-	require.Equal(t, []int{0, 1, 2, 3, 4}, priorities)
+	require.Equal(t, []int{0, 1, 2, 3}, priorities)
 
-	// In-share callers keep their API priority.
 	require.Equal(t, 1, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI)))
 	require.Equal(t, 1, priorityFn(req(apiAddActivity, "namespaceB", headers.CallerTypeAPI)))
 	require.Equal(t, 1, priorityFn(req(apiAddActivity, "namespaceC", headers.CallerTypeAPI)))
 	require.Equal(t, 2, priorityFn(req(apiCancelPolls, "namespaceA", headers.CallerTypeAPI)))
 
-	// Drain namespaceA's bucket (share=50, burst=100).
 	for range 150 {
 		priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI))
 	}
-	// Over-share: every caller type except Preemptable collapses to band 3.
 	require.Equal(t, 3, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI)))
 	require.Equal(t, 3, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeOperator)))
+	require.Equal(t, 3, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypePreemptable)))
 	require.Equal(t, 3, priorityFn(req(apiCancelPolls, "namespaceA", headers.CallerTypeAPI)))
 	require.Equal(t, 3, priorityFn(req(apiUnknownMethod, "namespaceA", headers.CallerTypeAPI)))
 
-	// namespaceB has its own bucket, unaffected by namespaceA's demotion.
 	require.Equal(t, 1, priorityFn(req(apiAddActivity, "namespaceB", headers.CallerTypeAPI)))
 	require.Equal(t, 2, priorityFn(req(apiCancelPolls, "namespaceB", headers.CallerTypeAPI)))
 
-	// namespaceC has fairness off, never demoted.
 	for range 50 {
 		require.Equal(t, 1, priorityFn(req(apiAddActivity, "namespaceC", headers.CallerTypeAPI)))
 	}
 
-	// Preemptable sinks to band 4 only when fairness is active for the namespace.
-	for _, ns := range []string{"namespaceA", "namespaceB"} {
-		require.Equal(t, 4, priorityFn(req(apiAddActivity, ns, headers.CallerTypePreemptable)))
-	}
 	for _, ns := range []string{"namespaceC", "", headers.CallerNameSystem} {
 		require.Equal(t, 1, priorityFn(req(apiAddActivity, ns, headers.CallerTypePreemptable)))
-	}
-	for _, ns := range []string{"namespaceC", "", headers.CallerNameSystem} {
 		require.Equal(t, quotas.OperatorPriority,
 			priorityFn(req(apiAddActivity, ns, headers.CallerTypeOperator)))
 	}
 
-	// namespaceB demotes independently of namespaceA.
 	for range 100 {
 		priorityFn(req(apiAddActivity, "namespaceB", headers.CallerTypeAPI))
 	}
@@ -120,16 +116,11 @@ func TestFairnessPriorityFn_DisablingValues(t *testing.T) {
 
 func TestFairnessPriorityFn_PrioritiesIncludeAPIAndExtras(t *testing.T) {
 	_, priorities := makeTestPriorityFn(t, 100, nil)
-	require.Len(t, priorities, len(configs.APIPrioritiesOrdered)+2)
+	require.Len(t, priorities, len(configs.APIPrioritiesOrdered)+1)
 	require.Equal(t, configs.APIPrioritiesOrdered, priorities[:len(configs.APIPrioritiesOrdered)])
-	require.Equal(t, 3, priorities[len(priorities)-2])
-	require.Equal(t, 4, priorities[len(priorities)-1])
+	require.Equal(t, 3, priorities[len(priorities)-1])
 }
 
-// TestFairnessPriorityFn_DemotionMetric verifies the
-// service_requests_namespace_fairness_demoted counter fires once per
-// over-share demotion, never for the Preemptable sink path, and never for
-// namespaces where fairness is disabled.
 func TestFairnessPriorityFn_DemotionMetric(t *testing.T) {
 	mh := metricstest.NewCaptureHandler()
 	cfg := &Config{
@@ -141,18 +132,13 @@ func TestFairnessPriorityFn_DemotionMetric(t *testing.T) {
 	}
 	priorityFn, _ := getFairnessPriorityFn(cfg, mh)
 
-	const metricName = "service_requests_namespace_fairness_demoted"
-
-	// In-share: no demotion metric.
 	capture := mh.StartCapture()
 	for range 50 {
 		priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI))
 	}
-	require.Empty(t, capture.Snapshot()[metricName])
+	require.Empty(t, capture.Snapshot()[metrics.ServiceRequestsNamespaceFairnessDemoted.Name()])
 	mh.StopCapture(capture)
 
-	// Drain bucket, then count demotions: each subsequent in-share call should
-	// emit exactly one demoted sample tagged with namespace and caller_type.
 	for range 200 {
 		priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI))
 	}
@@ -161,7 +147,7 @@ func TestFairnessPriorityFn_DemotionMetric(t *testing.T) {
 	for range overShareCalls {
 		require.Equal(t, 3, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI)))
 	}
-	samples := capture.Snapshot()[metricName]
+	samples := capture.Snapshot()[metrics.ServiceRequestsNamespaceFairnessDemoted.Name()]
 	require.Len(t, samples, overShareCalls)
 	for _, s := range samples {
 		require.Equal(t, int64(1), s.Value)
@@ -170,19 +156,112 @@ func TestFairnessPriorityFn_DemotionMetric(t *testing.T) {
 	}
 	mh.StopCapture(capture)
 
-	// Preemptable sink does not emit (bucket is bypassed entirely).
-	capture = mh.StartCapture()
-	for range 10 {
-		require.Equal(t, 4, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypePreemptable)))
-	}
-	require.Empty(t, capture.Snapshot()[metricName])
-	mh.StopCapture(capture)
-
-	// Fairness-disabled namespace (no share) does not emit.
 	capture = mh.StartCapture()
 	for range 10 {
 		priorityFn(req(apiAddActivity, "namespaceB", headers.CallerTypeAPI))
 	}
-	require.Empty(t, capture.Snapshot()[metricName])
+	require.Empty(t, capture.Snapshot()[metrics.ServiceRequestsNamespaceFairnessDemoted.Name()])
 	mh.StopCapture(capture)
+}
+
+type testMatchingService struct {
+	matchingservice.UnimplementedMatchingServiceServer
+}
+
+func (testMatchingService) AddActivityTask(
+	context.Context,
+	*matchingservice.AddActivityTaskRequest,
+) (*matchingservice.AddActivityTaskResponse, error) {
+	return &matchingservice.AddActivityTaskResponse{}, nil
+}
+
+// TestRateLimitInterceptor_FairnessEndToEnd drives real gRPC requests through
+// the RateLimitInterceptor. Both namespaces share the same fair share;
+// hot bursts past its share, cold stays within. Asserts hot is throttled and cold is not.
+func TestRateLimitInterceptor_FairnessEndToEnd(t *testing.T) {
+	cfg := &Config{
+		RPS:                        func() int { return 100 },
+		NamespaceMatchingFairShare: func(string) float64 { return 0.1 },
+		OperatorRPSRatio:           dynamicconfig.GetFloatPropertyFn(0.2),
+	}
+	rl := RateLimitInterceptorProvider(cfg, metrics.NoopMetricsHandler)
+
+	server := grpc.NewServer(grpc.ChainUnaryInterceptor(rl.Intercept))
+	matchingservice.RegisterMatchingServiceServer(server, testMatchingService{})
+	pipe := nettest.NewPipe()
+	listener := nettest.NewListener(pipe)
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		_ = server.Serve(listener)
+	})
+	t.Cleanup(func() {
+		server.Stop()
+		wg.Wait()
+	})
+
+	conn, err := grpc.NewClient("localhost",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return pipe.Connect(ctx.Done())
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	conn.Connect()
+	client := matchingservice.NewMatchingServiceClient(conn)
+
+	callerCtx := func(name, callerType string) context.Context {
+		return metadata.AppendToOutgoingContext(context.Background(),
+			headers.CallerNameHeaderName, name,
+			headers.CallerTypeHeaderName, callerType,
+		)
+	}
+	send := func(ns, callerType string) error {
+		_, err := client.AddActivityTask(callerCtx(ns, callerType),
+			&matchingservice.AddActivityTaskRequest{})
+		return err
+	}
+
+	callerTypes := []string{
+		headers.CallerTypeOperator,
+		headers.CallerTypeAPI,
+		headers.CallerTypeBackgroundHigh,
+		headers.CallerTypeBackgroundLow,
+		headers.CallerTypePreemptable,
+	}
+
+	for _, ct := range callerTypes {
+		for range 60 {
+			_ = send("hot_namespace", ct)
+		}
+	}
+
+	type result struct {
+		ns         string
+		callerType string
+		err        error
+	}
+	var results []result
+	for range 2 {
+		for _, ct := range callerTypes {
+			results = append(results, result{"hot_namespace", ct, send("hot_namespace", ct)})
+			results = append(results, result{"cold_namespace", ct, send("cold_namespace", ct)})
+		}
+	}
+
+	var hotRejected, coldRejected int
+	for _, r := range results {
+		if r.err == nil {
+			continue
+		}
+		if r.ns == "hot_namespace" {
+			hotRejected++
+			continue
+		}
+		coldRejected++
+		t.Errorf("unexpected rejection from cold_namespace caller_type=%s: %v",
+			r.callerType, r.err)
+	}
+	require.Positive(t, hotRejected, "hot_namespace should be throttled")
+	require.Zero(t, coldRejected, "cold_namespace should not be throttled")
 }

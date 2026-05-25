@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -158,21 +157,17 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-// getFairnessPriorityFn returns a priority function that demotes over-share
-// requests to a band below the normal API priorities, and always sinks
-// Preemptable to the lowest band. share(ns) = MatchingRPS *
-// NamespaceMatchingFairShare(ns); values outside (0, 1) disable fairness
-// for that namespace.
+// getFairnessPriorityFn demotes requests from namespaces exceeding
+// share(ns) = MatchingRPS * NamespaceMatchingFairShare(ns) to an over-share
+// band below the normal API priorities. Values outside (0, 1) disable
+// fairness for that namespace.
 func getFairnessPriorityFn(
 	cfg *Config,
 	metricsHandler metrics.Handler,
 ) (quotas.RequestPriorityFn, []int) {
-	const (
-		overSharePriority   = 3
-		preemptablePriority = 4
-	)
+	const overSharePriority = 3
 	priorities := append([]int{}, configs.APIPrioritiesOrdered...)
-	priorities = append(priorities, overSharePriority, preemptablePriority)
+	priorities = append(priorities, overSharePriority)
 
 	share := func(ns string) float64 {
 		fs := cfg.NamespaceMatchingFairShare(ns)
@@ -198,9 +193,6 @@ func getFairnessPriorityFn(
 		}
 		if share(req.Caller) <= 0 {
 			return apiPri
-		}
-		if req.CallerType == headers.CallerTypePreemptable {
-			return preemptablePriority
 		}
 		if nsBuckets.Allow(time.Now().UTC(), req) {
 			return apiPri

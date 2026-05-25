@@ -1,15 +1,23 @@
 package history
 
 import (
+	"context"
+	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // stubScaler implements shard.OwnershipBasedQuotaScaler with a fixed
@@ -164,4 +172,121 @@ func TestFairnessPriorityFn_ScalerNotReady(t *testing.T) {
 		require.Equal(t, configs.CallerTypeToPriority[headers.CallerTypeAPI],
 			priorityFn(req("namespaceA", headers.CallerTypeAPI)))
 	}
+}
+
+type testHistoryService struct {
+	historyservice.UnimplementedHistoryServiceServer
+}
+
+func (testHistoryService) StartWorkflowExecution(
+	context.Context,
+	*historyservice.StartWorkflowExecutionRequest,
+) (*historyservice.StartWorkflowExecutionResponse, error) {
+	return &historyservice.StartWorkflowExecutionResponse{}, nil
+}
+
+// TestRateLimitInterceptor_FairnessEndToEnd drives real gRPC requests through
+// the production RateLimitInterceptor. Both namespaces share the same fair
+// share; hot bursts past its share, cold stays within. Asserts hot is
+// throttled and cold is not.
+func TestRateLimitInterceptor_FairnessEndToEnd(t *testing.T) {
+	lazy := shard.LazyLoadedOwnershipBasedQuotaScaler{Value: &atomic.Value{}}
+	lazy.Store(shard.OwnershipBasedQuotaScaler(stubScaler{factor: 1.0, ok: true}))
+	cfg := &configs.Config{
+		RPS:                          func() int { return 100 },
+		EnableNamespaceFairness:      func() bool { return true },
+		NamespaceFairShareMultiplier: func() float64 { return 1.0 },
+		FrontendGlobalNamespaceRPS:   func(string) int { return 10 },
+		OperatorRPSRatio:             func() float64 { return 0.2 },
+	}
+	rl := RateLimitInterceptorProvider(cfg, lazy, metrics.NoopMetricsHandler)
+
+	server := grpc.NewServer(grpc.ChainUnaryInterceptor(rl.Intercept))
+	historyservice.RegisterHistoryServiceServer(server, testHistoryService{})
+	pipe := nettest.NewPipe()
+	listener := nettest.NewListener(pipe)
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		_ = server.Serve(listener)
+	})
+	t.Cleanup(func() {
+		server.Stop()
+		wg.Wait()
+	})
+
+	conn, err := grpc.NewClient("localhost",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return pipe.Connect(ctx.Done())
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	conn.Connect()
+	client := historyservice.NewHistoryServiceClient(conn)
+
+	callerCtx := func(name, callerType string) context.Context {
+		return metadata.AppendToOutgoingContext(context.Background(),
+			headers.CallerNameHeaderName, name,
+			headers.CallerTypeHeaderName, callerType,
+		)
+	}
+	send := func(ns, callerType string) error {
+		_, err := client.StartWorkflowExecution(callerCtx(ns, callerType),
+			&historyservice.StartWorkflowExecutionRequest{})
+		return err
+	}
+
+	allCallerTypes := []string{
+		headers.CallerTypeOperator,
+		headers.CallerTypeAPI,
+		headers.CallerTypeBackgroundHigh,
+		headers.CallerTypeBackgroundLow,
+		headers.CallerTypePreemptable,
+	}
+	// Preemptable always lands in the bottom band globally in history's
+	// design, so excluded from cold's per-namespace isolation check.
+	coldCallerTypes := []string{
+		headers.CallerTypeOperator,
+		headers.CallerTypeAPI,
+		headers.CallerTypeBackgroundHigh,
+		headers.CallerTypeBackgroundLow,
+	}
+
+	for _, ct := range allCallerTypes {
+		for range 60 {
+			_ = send("hot_namespace", ct)
+		}
+	}
+
+	type result struct {
+		ns         string
+		callerType string
+		err        error
+	}
+	var results []result
+	for range 2 {
+		for _, ct := range allCallerTypes {
+			results = append(results, result{"hot_namespace", ct, send("hot_namespace", ct)})
+		}
+		for _, ct := range coldCallerTypes {
+			results = append(results, result{"cold_namespace", ct, send("cold_namespace", ct)})
+		}
+	}
+
+	var hotRejected, coldRejected int
+	for _, r := range results {
+		if r.err == nil {
+			continue
+		}
+		if r.ns == "hot_namespace" {
+			hotRejected++
+			continue
+		}
+		coldRejected++
+		t.Errorf("unexpected rejection from cold_namespace caller_type=%s: %v",
+			r.callerType, r.err)
+	}
+	require.Positive(t, hotRejected, "hot_namespace should be throttled")
+	require.Zero(t, coldRejected, "cold_namespace should not be throttled")
 }
