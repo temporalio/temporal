@@ -2750,7 +2750,7 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 
 		if !noRampingVersion {
 			// Register v2 poller before setting it as ramping
-			env.idlePollWorkflow(s, tv2, true, ver3MinPollTime, "should not get any tasks yet")
+			env.pollUntilRegistered(s, tv2)
 			// Set v2 as ramping at 0%: no workflows move via hash, only via UseRampingVersion CaN
 			env.setRampingDeployment(s, tv2, 0, false)
 			env.waitForDeploymentDataPropagation(s, tv2, versionStatusRamping, false, tqTypeWf)
