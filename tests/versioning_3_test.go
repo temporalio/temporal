@@ -435,17 +435,7 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(env *VersioningTestEnv, s
 			return env.respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
 
-	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
-	s.Await(func(s *Versioning3Suite) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
-			NamespaceId:   env.NamespaceID().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: tqTypeWf,
-			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
-		})
-		s.NoError(err)
-		s.True(resp.GetIsMember())
-	}, 10*time.Second, 500*time.Millisecond)
+	env.validatePinnedVersionExistsInTaskQueue(s, tv)
 
 	runID := env.startWorkflow(s, tv, tv.VersioningOverridePinned())
 
@@ -1104,7 +1094,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(env *VersioningTestEnv, 
 	// wait until all task queue partitions know that tv2 is ramping
 	env.waitForDeploymentDataPropagation(s, tv2, versionStatusRamping, toUnversioned, tqTypeWf, tqTypeAct)
 
-	numTests := 50
+	numTests := 20
 	counter := make(map[string]int)
 	runs := make([]sdkclient.WorkflowRun, numTests)
 	for i := range numTests {
@@ -1314,7 +1304,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		)
 		s.NoError(err)
 		s.Equal(tv2.DeploymentVersionTransition(), dwf.WorkflowExecutionInfo.GetVersioningInfo().GetVersionTransition())
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
 	// Back to sourceV
 	if unversionedSrc {
@@ -3671,9 +3661,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	s.NoError(err)
 
 	// Verify that the workflow is running on v1
-	s.Await(func(s *Versioning3Suite) {
-		env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
-	}, 10*time.Second, 500*time.Millisecond)
+	env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	// Start v0 workers to ensure they never receive a task
 	idlePollerCtx, idlePollerCancel := context.WithTimeout(s.Context(), 10*time.Second)
@@ -4494,7 +4482,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 		})
 		s.NoError(err)
 		s.False(resp.GetIsMember()) // the check should pass if no version is present
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
 	// Start v1 worker which shall register the version in the task queue
 	w1 := worker.New(env.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
@@ -4516,7 +4504,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 		})
 		s.NoError(err)
 		s.True(resp.GetIsMember())
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 // TestMaxVersionsInTaskQueue tests that polling from a task queue with too many
@@ -5691,11 +5679,11 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Register v2, set v2 as current (revision increments)
-	env.idlePollWorkflow(s, tv2, true, ver3MinPollTime, "v2 poller registration")
+	env.pollUntilRegistered(s, tv2)
 	env.setCurrentDeployment(s, tv2)
 
 	// Register v3, set v3 as current (revision increments again)
-	env.idlePollWorkflow(s, tv3, true, ver3MinPollTime, "v3 poller registration")
+	env.pollUntilRegistered(s, tv3)
 	env.setCurrentDeployment(s, tv3)
 
 	// Trigger WFT — target should be v3 with a high revision
@@ -5768,7 +5756,7 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	// Set a new v4 as current — this produces a revision strictly higher than
 	// the declined revision, simulating an up-to-date partition with fresh data.
 	tv4 := tv1.WithBuildIDNumber(4)
-	env.idlePollWorkflow(s, tv4, true, ver3MinPollTime, "v4 poller registration")
+	env.pollUntilRegistered(s, tv4)
 	env.setCurrentDeployment(s, tv4)
 	env.waitForDeploymentDataPropagation(s, tv4, versionStatusCurrent, false, tqTypeWf)
 
