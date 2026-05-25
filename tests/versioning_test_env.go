@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ const (
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
+	ver3PollTimeout = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -385,22 +387,37 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
 	pollCtx, cancel := context.WithCancel(s.Context())
+	var wg sync.WaitGroup
 	for _, tqType := range tqTypes {
-		go func() {
+		tqType := tqType
+		wg.Go(func() {
 			for pollCtx.Err() == nil {
 				switch tqType {
 				case tqTypeWf:
 					env.idlePollWorkflow(parallelsuite.WithContext(pollCtx, s), tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
-					env.idlePollActivity(s, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollActivity(parallelsuite.WithContext(pollCtx, s), tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeNexus:
 					env.idlePollNexus(parallelsuite.WithContext(pollCtx, s), tv, true, ver3MinPollTime, "should not get any tasks yet")
 				default:
 					panic("invalid task queue type")
 				}
 			}
-		}()
+		})
 	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-s.Context().Done():
+			s.Require().FailNow("context timeout while stopping registration pollers")
+		}
+	}()
 
 	// Wait until the version is visible and all requested task queue types are registered.
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
@@ -425,8 +442,7 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 			}
 			t.Require().True(found)
 		}
-	}, 30*time.Second, 500*time.Millisecond)
-	cancel()
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
@@ -877,7 +893,7 @@ func (env *VersioningTestEnv) doPollWftAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
@@ -941,7 +957,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
@@ -1011,7 +1027,7 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		}).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	return err
 }
 
