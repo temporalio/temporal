@@ -38,16 +38,41 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve action
+      id: mode
+      shell: bash
+      env:
+        ACTION: ${{ inputs.action }}
+      run: |
+        case "$ACTION" in
+          start|stop)
+            echo "name=$ACTION" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "Unsupported docker-compose action: $ACTION"
+            exit 1
+            ;;
+        esac
+
+    - name: Stop services
+      if: ${{ steps.mode.outputs.name == 'stop' }}
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        DOWN_FLAGS: ${{ inputs['down-flags'] }}
+      run: |
+        docker compose -f "$COMPOSE_FILE" down $DOWN_FLAGS
+
     - name: Restore Docker image cache
       id: restore-cache
-      if: ${{ inputs.action == 'start' && inputs.cache-key != '' }}
+      if: ${{ steps.mode.outputs.name == 'start' && inputs.cache-key != '' }}
       uses: actions/cache/restore@v5
       with:
         path: ${{ inputs['cache-path'] }}
         key: ${{ inputs.cache-key }}
 
     - name: Load Docker images
-      if: ${{ inputs.action == 'start' && inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
+      if: ${{ steps.mode.outputs.name == 'start' && inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -59,7 +84,7 @@ runs:
         fi
 
     - name: Pull services
-      if: ${{ inputs.action == 'start' }}
+      if: ${{ steps.mode.outputs.name == 'start' }}
       uses: nick-fields/retry@v4
       env:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
@@ -77,7 +102,7 @@ runs:
           docker compose -f "$COMPOSE_FILE" pull $SERVICES
 
     - name: Start services
-      if: ${{ inputs.action == 'start' }}
+      if: ${{ steps.mode.outputs.name == 'start' }}
       shell: bash
       env:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
@@ -91,7 +116,7 @@ runs:
 
     - name: Save Docker images to archive
       id: archive
-      if: ${{ inputs.action == 'start' && inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.mode.outputs.name == 'start' && inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -119,26 +144,8 @@ runs:
         echo "cacheable=true" >> "$GITHUB_OUTPUT"
 
     - name: Save Docker image cache
-      if: ${{ inputs.action == 'start' && inputs.cache-key != '' && steps.archive.outputs.cacheable == 'true' }}
+      if: ${{ steps.mode.outputs.name == 'start' && inputs.cache-key != '' && steps.archive.outputs.cacheable == 'true' }}
       uses: actions/cache/save@v5
       with:
         path: ${{ inputs['cache-path'] }}
         key: ${{ inputs.cache-key }}
-
-    - name: Stop services
-      if: ${{ inputs.action == 'stop' }}
-      shell: bash
-      env:
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
-        DOWN_FLAGS: ${{ inputs['down-flags'] }}
-      run: |
-        docker compose -f "$COMPOSE_FILE" down $DOWN_FLAGS
-
-    - name: Validate action
-      if: ${{ inputs.action != 'start' && inputs.action != 'stop' }}
-      shell: bash
-      env:
-        ACTION: ${{ inputs.action }}
-      run: |
-        echo "Unsupported docker-compose action: $ACTION"
-        exit 1
