@@ -128,15 +128,8 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 		tv2 := tv.WithBuildIDNumber(2)
 		go s.idlePollWorkflow(env, s.Context(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
 
-		// Start a versioned poller for the first version so that it registers the version in the task queue.
-		pollerCtx, cancelPoller := context.WithCancel(s.Context())
-		go s.idlePollWorkflow(env, pollerCtx, tv, true, ver3MinPollTime, "first deployment should not receive any task. It is just creating a version in the task queue.")
-
-		// Wait for the version to be present in the task queue
-		s.validatePinnedVersionExistsInTaskQueue(env, tv)
-
-		// Cancel the poller after condition is met
-		cancelPoller()
+		// Register the first version before starting a workflow pinned to it.
+		s.pollUntilRegistered(env, tv)
 
 		s.startWorkflow(env, tv, tv.VersioningOverridePinned())
 		s.idlePollWorkflow(env, s.Context(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
