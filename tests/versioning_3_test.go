@@ -2661,7 +2661,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return respondEmptyWft(tv1, false, vbPinned), nil
 			})
-		s.idlePollWorkflow(env, s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+		s.pollUntilRegistered(env, tv2)
 		s.setRampingDeployment(env, tv2, 0, false)
 		s.waitForDeploymentDataPropagation(env, tv2, versionStatusRamping, false, tqTypeWf)
 		s.triggerNormalWFT(env, tv1, execution)
