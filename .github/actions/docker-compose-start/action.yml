@@ -45,14 +45,14 @@ runs:
 
     - name: Restore Docker image cache
       id: restore-cache
-      if: ${{ steps.cache.outputs.services-hash != '' }}
+      if: ${{ inputs.cache == 'true' }}
       uses: actions/cache/restore@v5
       with:
         path: ${{ inputs['cache-path'] }}
         key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(inputs['compose-file']) }}-${{ steps.cache.outputs.services-hash }}
 
     - name: Load Docker images
-      if: ${{ steps.cache.outputs.services-hash != '' && steps.restore-cache.outputs.cache-hit == 'true' }}
+      if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit == 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -94,7 +94,7 @@ runs:
 
     - name: Save Docker images to archive
       id: archive
-      if: ${{ steps.cache.outputs.services-hash != '' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit != 'true' }}
       shell: bash
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
@@ -122,7 +122,7 @@ runs:
         echo "cacheable=true" >> "$GITHUB_OUTPUT"
 
     - name: Save Docker image cache
-      if: ${{ steps.cache.outputs.services-hash != '' && steps.archive.outputs.cacheable == 'true' }}
+      if: ${{ inputs.cache == 'true' && steps.archive.outputs.cacheable == 'true' }}
       uses: actions/cache/save@v5
       with:
         path: ${{ inputs['cache-path'] }}
