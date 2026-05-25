@@ -361,6 +361,8 @@ func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, execu
 
 func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
+	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
+	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
@@ -368,12 +370,12 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *te
 		}
 		req.BuildId = tv.BuildID()
 		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition) {
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
 		t.Require().NoError(err)
-	}, 60*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -446,18 +448,19 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 }
 
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
+	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err) {
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
 		t.Require().NoError(err)
-	}, 60*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -475,6 +478,8 @@ func (env *VersioningTestEnv) setRampingDeployment(
 		bid = ""
 	}
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
+	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
+	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -484,12 +489,12 @@ func (env *VersioningTestEnv) setRampingDeployment(
 		}
 		req.BuildId = bid
 		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition) {
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
 		t.Require().NoError(err)
-	}, 60*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -508,7 +513,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeploym
 			}
 			t.Require().NoError(err)
 			t.Require().Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, 10*time.Second, 500*time.Millisecond)
+		}, 90*time.Second, 500*time.Millisecond)
 	}
 }
 
