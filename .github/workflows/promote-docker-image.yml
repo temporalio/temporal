@@ -21,6 +21,9 @@ on:
       DOCKERHUB_TOKEN:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   validate-inputs:
     runs-on: ubuntu-latest
