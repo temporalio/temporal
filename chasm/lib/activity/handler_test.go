@@ -41,11 +41,11 @@ func TestStartActivityExecution_RejectsLinksOverExecutionLimit(t *testing.T) {
 	_, err := h.StartActivityExecution(context.Background(), &activitypb.StartActivityExecutionRequest{
 		NamespaceId: "test-namespace-id",
 		FrontendRequest: &workflowservice.StartActivityExecutionRequest{
-			Namespace:          "test-namespace",
-			ActivityId:         "test-activity-id",
-			IdReusePolicy:      enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			IdConflictPolicy:   enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
-			Links:              links,
+			Namespace:        "test-namespace",
+			ActivityId:       "test-activity-id",
+			IdReusePolicy:    enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			IdConflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
+			Links:            links,
 		},
 	})
 
