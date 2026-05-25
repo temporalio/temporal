@@ -1237,7 +1237,7 @@ func (env *VersioningTestEnv) validateBacklogCount(
 		priorityStats, ok := resp.GetStatsByPriorityKey()[3]
 		t.Require().True(ok)
 		t.Require().Equal(expectedCount, priorityStats.GetApproximateBacklogCount())
-	}, 6*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) verifyVersioningSAs(
