@@ -81,7 +81,7 @@ func (i *RateLimitInterceptor) Allow(
 	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
-		headerGetter.Get(headers.CallerNameHeaderName), // forwarded for per-namespace fairness routing
+		headerGetter.Get(headers.CallerNameHeaderName), // propagate caller name; downstream limiters may key on it
 		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation

@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/matching/configs"
 )
@@ -123,4 +124,65 @@ func TestFairnessPriorityFn_PrioritiesIncludeAPIAndExtras(t *testing.T) {
 	require.Equal(t, configs.APIPrioritiesOrdered, priorities[:len(configs.APIPrioritiesOrdered)])
 	require.Equal(t, 3, priorities[len(priorities)-2])
 	require.Equal(t, 4, priorities[len(priorities)-1])
+}
+
+// TestFairnessPriorityFn_DemotionMetric verifies the
+// service_requests_namespace_fairness_demoted counter fires once per
+// over-share demotion, never for the Preemptable sink path, and never for
+// namespaces where fairness is disabled.
+func TestFairnessPriorityFn_DemotionMetric(t *testing.T) {
+	mh := metricstest.NewCaptureHandler()
+	cfg := &Config{
+		RPS: func() int { return 100 },
+		NamespaceMatchingFairShare: func(ns string) float64 {
+			return map[string]float64{"namespaceA": 0.5}[ns]
+		},
+		OperatorRPSRatio: dynamicconfig.GetFloatPropertyFn(0.2),
+	}
+	priorityFn, _ := getFairnessPriorityFn(cfg, mh)
+
+	const metricName = "service_requests_namespace_fairness_demoted"
+
+	// In-share: no demotion metric.
+	capture := mh.StartCapture()
+	for range 50 {
+		priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI))
+	}
+	require.Empty(t, capture.Snapshot()[metricName])
+	mh.StopCapture(capture)
+
+	// Drain bucket, then count demotions: each subsequent in-share call should
+	// emit exactly one demoted sample tagged with namespace and caller_type.
+	for range 200 {
+		priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI))
+	}
+	capture = mh.StartCapture()
+	const overShareCalls = 5
+	for range overShareCalls {
+		require.Equal(t, 3, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypeAPI)))
+	}
+	samples := capture.Snapshot()[metricName]
+	require.Len(t, samples, overShareCalls)
+	for _, s := range samples {
+		require.Equal(t, int64(1), s.Value)
+		require.Equal(t, "namespaceA", s.Tags["namespace"])
+		require.Equal(t, headers.CallerTypeAPI, s.Tags["caller_type"])
+	}
+	mh.StopCapture(capture)
+
+	// Preemptable sink does not emit (bucket is bypassed entirely).
+	capture = mh.StartCapture()
+	for range 10 {
+		require.Equal(t, 4, priorityFn(req(apiAddActivity, "namespaceA", headers.CallerTypePreemptable)))
+	}
+	require.Empty(t, capture.Snapshot()[metricName])
+	mh.StopCapture(capture)
+
+	// Fairness-disabled namespace (no share) does not emit.
+	capture = mh.StartCapture()
+	for range 10 {
+		priorityFn(req(apiAddActivity, "namespaceB", headers.CallerTypeAPI))
+	}
+	require.Empty(t, capture.Snapshot()[metricName])
+	mh.StopCapture(capture)
 }

@@ -3,9 +3,11 @@ package interceptor
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -77,4 +79,32 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithNonZeroTokenConfig() {
 	_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: methodName}, handler)
 	s.NoError(err)
 	s.True(handlerCalled)
+}
+
+// TestInterceptPropagatesCallerName ensures the interceptor copies the
+// caller-name and caller-type gRPC headers into the quotas.Request it hands
+// to the rate limiter; downstream priority functions (e.g. per-namespace
+// fairness) rely on Caller being populated.
+func (s *rateLimitInterceptorSuite) TestInterceptPropagatesCallerName() {
+	methodName := "TEST/METHOD"
+	interceptor := NewRateLimitInterceptor(s.mockRateLimiter, nil)
+
+	var captured quotas.Request
+	s.mockRateLimiter.EXPECT().
+		Allow(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ time.Time, req quotas.Request) bool {
+			captured = req
+			return true
+		})
+
+	ctx := headers.SetCallerType(
+		headers.SetCallerName(context.Background(), "ns-a"),
+		headers.CallerTypeAPI,
+	)
+	handler := func(ctx context.Context, req any) (any, error) { return nil, nil }
+	_, err := interceptor.Intercept(ctx, nil, &grpc.UnaryServerInfo{FullMethod: methodName}, handler)
+	s.NoError(err)
+	s.Equal("ns-a", captured.Caller)
+	s.Equal(headers.CallerTypeAPI, captured.CallerType)
+	s.Equal(methodName, captured.API)
 }
