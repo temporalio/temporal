@@ -40,6 +40,7 @@ runs:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
       run: |
+        # Normalize service order so equivalent service lists share a cache key.
         services_file="$RUNNER_TEMP/docker-compose-services.txt"
         printf '%s' "$SERVICES" | tr '[:space:]' '\n' | sed '/^$/d' | sort > "$services_file"
 
@@ -109,6 +110,7 @@ runs:
         images_file="$CACHE_PATH/images.txt"
         : > "$images_file"
 
+        # Only cache images that were actually pulled for this job's services.
         while IFS= read -r image; do
           if docker image inspect "$image" >/dev/null 2>&1; then
             printf '%s\n' "$image" >> "$images_file"
