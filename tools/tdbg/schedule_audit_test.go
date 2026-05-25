@@ -538,7 +538,7 @@ func TestScheduleAuditor(t *testing.T) {
 		}
 		var schedules []scheduleEntry
 		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			id := fmt.Sprintf("s%d", i)
 			schedules = append(schedules, scheduleEntry{ID: id, Spec: spec, WorkflowType: "W"})
 			exec.byScheduleID[id] = nil // no executions -> all missed
@@ -1131,7 +1131,7 @@ func TestUnsupportedPolicyReason(t *testing.T) {
 
 // TestPostProcess_NotFoundRace exercises the race-handling branch where DescribeSchedule returns NotFound for a
 // schedule that ListSchedules saw moments earlier. The row should be silently dropped (no error returned).
-// TestDecodePayloads covers the skip-on-failure contract of decodeScheduledById and decodeNominalStartTime so the
+// TestDecodePayloads covers the skip-on-failure contract of decodeScheduledByID and decodeNominalStartTime so the
 // caller can drop visibility rows with malformed search-attribute payloads instead of grouping them under empty keys.
 func TestDecodePayloads(t *testing.T) {
 	makePayload := func(encoding string, data []byte) *commonpb.Payload {
@@ -1141,20 +1141,20 @@ func TestDecodePayloads(t *testing.T) {
 		}
 	}
 
-	t.Run("decodeScheduledById nil payload returns false", func(t *testing.T) {
-		_, ok := decodeScheduledById(nil)
+	t.Run("decodeScheduledByID nil payload returns false", func(t *testing.T) {
+		_, ok := decodeScheduledByID(nil)
 		require.False(t, ok)
 	})
-	t.Run("decodeScheduledById wrong encoding returns false", func(t *testing.T) {
-		_, ok := decodeScheduledById(makePayload("proto/binary", []byte("anything")))
+	t.Run("decodeScheduledByID wrong encoding returns false", func(t *testing.T) {
+		_, ok := decodeScheduledByID(makePayload("proto/binary", []byte("anything")))
 		require.False(t, ok)
 	})
-	t.Run("decodeScheduledById malformed json returns false", func(t *testing.T) {
-		_, ok := decodeScheduledById(makePayload("json/plain", []byte("not-json-quoted")))
+	t.Run("decodeScheduledByID malformed json returns false", func(t *testing.T) {
+		_, ok := decodeScheduledByID(makePayload("json/plain", []byte("not-json-quoted")))
 		require.False(t, ok)
 	})
-	t.Run("decodeScheduledById valid json returns the string", func(t *testing.T) {
-		actual, ok := decodeScheduledById(makePayload("json/plain", []byte(`"my-schedule-id"`)))
+	t.Run("decodeScheduledByID valid json returns the string", func(t *testing.T) {
+		actual, ok := decodeScheduledByID(makePayload("json/plain", []byte(`"my-schedule-id"`)))
 		require.True(t, ok)
 		require.Equal(t, "my-schedule-id", actual)
 	})

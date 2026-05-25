@@ -21,6 +21,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/codes"
@@ -53,11 +54,8 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	)
 	var wg sync.WaitGroup
 	for _, ns := range in.Namespaces {
-		ns := ns
-		wg.Add(1)
 		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 			// Bail early if a sibling already failed.
 			mu.Lock()
@@ -68,7 +66,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 			mu.Unlock()
 
 			nsStart := time.Now()
-			fmt.Fprintf(os.Stderr, "auditing %s...\n", ns)
+			_, _ = fmt.Fprintf(os.Stderr, "auditing %s...\n", ns)
 			auditor := &scheduleAuditor{
 				Namespace:   ns,
 				ScheduleID:  in.ScheduleID,
@@ -88,16 +86,16 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 				return
 			}
 			done++
-			fmt.Fprintf(os.Stderr, "[%d/%d] %s: %d schedule(s) flagged in %s\n",
+			_, _ = fmt.Fprintf(os.Stderr, "[%d/%d] %s: %d schedule(s) flagged in %s\n",
 				done, total, ns, len(results), time.Since(nsStart).Round(time.Second))
 			allResults = append(allResults, results...)
-		}()
+		})
 	}
 	wg.Wait()
 	if firstErr != nil {
 		return firstErr
 	}
-	fmt.Fprintf(os.Stderr, "audit complete: %d total flagged across %d namespaces in %s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "audit complete: %d total flagged across %d namespaces in %s\n",
 		len(allResults), total, time.Since(auditStart).Round(time.Second))
 	if in.OutputDir == "" {
 		// Stdout mode: one CSV stream, all rows, single header, no summary file.
@@ -188,7 +186,7 @@ func resolveNamespaces(c *cli.Context) ([]string, error) {
 			return nil, fmt.Errorf("--namespace-file: %w", err)
 		}
 		var out []string
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -229,7 +227,7 @@ func expectedFireTimes(spec *schedulepb.ScheduleSpec, jitterSeed string, start, 
 		cursor = res.Nominal
 		if len(out) > 100_000 {
 			// Defensive cap -- sub-minute schedules over very large windows could otherwise OOM. Caller should chunk windows.
-			return nil, fmt.Errorf("expected fire times exceeded cap (100k)")
+			return nil, errors.New("expected fire times exceeded cap (100k)")
 		}
 	}
 }
@@ -512,7 +510,7 @@ func (a *scheduleAuditor) checkRetention(ctx context.Context) (bool, error) {
 	if !a.WindowStart.Before(safeStart) {
 		return false, nil
 	}
-	fmt.Fprintf(a.Progress,
+	_, _ = fmt.Fprintf(a.Progress,
 		"    %s: SKIPPING - windowStart %s is past retention boundary (retention=%s, safe-start=%s)\n",
 		a.Namespace,
 		a.WindowStart.UTC().Format(time.RFC3339),
@@ -576,12 +574,9 @@ func (a *scheduleAuditor) analyzeAll(scheds []scheduleEntry, executions map[stri
 	)
 	var wg sync.WaitGroup
 	for _, s := range scheds {
-		s := s
 		entries := executions[s.ID]
-		wg.Add(1)
 		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 			res, err := a.analyzeSchedule(s, entries, a.WindowStart)
 			mu.Lock()
@@ -595,7 +590,7 @@ func (a *scheduleAuditor) analyzeAll(scheds []scheduleEntry, executions map[stri
 			if res != nil {
 				results = append(results, *res)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if firstErr != nil {
@@ -641,65 +636,77 @@ func (a *scheduleAuditor) postProcess(ctx context.Context, scheds []scheduleEntr
 			revised = append(revised, r)
 			continue
 		}
-		desc, err := a.Schedules.DescribeSchedule(ctx, a.Namespace, r.ScheduleID)
+		newR, err := a.reclassifyOne(ctx, r, schedByID, executions)
 		if err != nil {
-			// Race: ListSchedules saw this schedule but it was deleted before our post-process call. Drop the row -- we can't
-			// classify real_miss for a schedule that no longer exists.
-			if status.Code(err) == codes.NotFound {
-				fmt.Fprintf(a.Progress, "    %s: %s: deleted between list and describe, dropping row\n",
-					a.Namespace, r.ScheduleID)
-				continue
-			}
-			return nil, fmt.Errorf("describe %s: %w", r.ScheduleID, err)
+			return nil, err
 		}
-		// Record to help correlate real_miss, especially for short catch-ups
-		r.CatchupWindowSeconds = int64(desc.CatchupWindow.Seconds())
-		// Spec modified during window: current spec doesn't describe what was firing pre-modification, so unmatched fires
-		// can't be trusted as real_miss.
-		if !desc.UpdateTime.IsZero() && desc.UpdateTime.After(a.WindowStart) {
-			recategorize(&r, categoryRealMiss, categoryInconclusiveChanged)
-			revised = append(revised, r)
-			continue
+		if newR != nil {
+			revised = append(revised, *newR)
 		}
-		// Exhausted (limited_actions with remaining_actions==0): won't fire anymore even though spec still produces fire
-		// times. Drop.
-		if desc.Exhausted {
-			continue
-		}
-		// Unsupported policy/state: algorithm doesn't fully model these (keepOriginalWorkflowId, BUFFER_ALL, etc). Surface
-		// for manual review but don't claim the misses are real.
-		if desc.UnsupportedReason != "" {
-			recategorize(&r, categoryRealMiss, categoryUnsupportedPolicy)
-			r.UnsupportedReason = desc.UnsupportedReason
-			revised = append(revised, r)
-			continue
-		}
-		// Created after windowEnd: couldn't have fired during the window.
-		if !desc.CreateTime.IsZero() && !desc.CreateTime.Before(a.WindowEnd) {
-			continue
-		}
-		// Created mid-window: re-analyze with truncated expected.
-		if !desc.CreateTime.IsZero() && desc.CreateTime.After(a.WindowStart) {
-			s, ok := schedByID[r.ScheduleID]
-			if !ok {
-				revised = append(revised, r)
-				continue
-			}
-			entries := executions[r.ScheduleID]
-			newR, err := a.analyzeSchedule(s, entries, desc.CreateTime)
-			if err != nil {
-				return nil, fmt.Errorf("re-analyze %s: %w", r.ScheduleID, err)
-			}
-			if newR != nil {
-				newR.CatchupWindowSeconds = r.CatchupWindowSeconds
-				revised = append(revised, *newR)
-			}
-			continue
-		}
-		// Schedule unchanged and pre-existing: result stands.
-		revised = append(revised, r)
 	}
 	return revised, nil
+}
+
+// reclassifyOne applies the post-process rules to a single result with real_miss > 0. Returns (nil, nil) when the row
+// should be dropped (NotFound race, exhausted, or created after windowEnd) and (newRow, nil) when it should be kept
+// (possibly reclassified or re-analyzed against a truncated window).
+func (a *scheduleAuditor) reclassifyOne(ctx context.Context, r scheduleResult, schedByID map[string]scheduleEntry, executions map[string][]timelineEntry) (*scheduleResult, error) {
+	desc, err := a.Schedules.DescribeSchedule(ctx, a.Namespace, r.ScheduleID)
+	if err != nil {
+		// Race: ListSchedules saw this schedule but it was deleted before our post-process call. Drop the row -- we
+		// can't classify real_miss for a schedule that no longer exists.
+		if status.Code(err) == codes.NotFound {
+			_, _ = fmt.Fprintf(a.Progress, "    %s: %s: deleted between list and describe, dropping row\n",
+				a.Namespace, r.ScheduleID)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("describe %s: %w", r.ScheduleID, err)
+	}
+	// Record to help correlate real_miss, especially for short catch-ups
+	r.CatchupWindowSeconds = int64(desc.CatchupWindow.Seconds())
+
+	switch {
+	// Spec modified during window: current spec doesn't describe what was firing pre-modification.
+	case !desc.UpdateTime.IsZero() && desc.UpdateTime.After(a.WindowStart):
+		recategorize(&r, categoryRealMiss, categoryInconclusiveChanged)
+		return &r, nil
+	// Exhausted (limited_actions with remaining_actions==0): won't fire anymore even though spec still produces fire
+	// times. Drop.
+	case desc.Exhausted:
+		return nil, nil
+	// Unsupported policy/state: algorithm doesn't fully model these (keepOriginalWorkflowId, BUFFER_ALL, etc). Surface
+	// for manual review but don't claim the misses are real.
+	case desc.UnsupportedReason != "":
+		recategorize(&r, categoryRealMiss, categoryUnsupportedPolicy)
+		r.UnsupportedReason = desc.UnsupportedReason
+		return &r, nil
+	// Created after windowEnd: couldn't have fired during the window.
+	case !desc.CreateTime.IsZero() && !desc.CreateTime.Before(a.WindowEnd):
+		return nil, nil
+	// Created mid-window: re-analyze with truncated expected.
+	case !desc.CreateTime.IsZero() && desc.CreateTime.After(a.WindowStart):
+		return a.reanalyzeFromCreate(r, desc.CreateTime, schedByID, executions)
+	}
+	// Schedule unchanged and pre-existing: result stands.
+	return &r, nil
+}
+
+// reanalyzeFromCreate handles the "created mid-window" branch: re-runs the per-schedule analysis with expectedStart
+// advanced to the schedule's CreateTime, so phantom expected fires from before the schedule existed are dropped.
+func (a *scheduleAuditor) reanalyzeFromCreate(r scheduleResult, createTime time.Time, schedByID map[string]scheduleEntry, executions map[string][]timelineEntry) (*scheduleResult, error) {
+	s, ok := schedByID[r.ScheduleID]
+	if !ok {
+		return &r, nil
+	}
+	newR, err := a.analyzeSchedule(s, executions[r.ScheduleID], createTime)
+	if err != nil {
+		return nil, fmt.Errorf("re-analyze %s: %w", r.ScheduleID, err)
+	}
+	if newR == nil {
+		return nil, nil
+	}
+	newR.CatchupWindowSeconds = r.CatchupWindowSeconds
+	return newR, nil
 }
 
 // analyzeSchedule runs the audit for a single schedule entry against the pre-fetched timeline entries. expectedStart
@@ -761,7 +768,7 @@ const (
 // do executes f with retry-on-ResourceExhausted. Backoff is exponential with jitter.
 func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) error {
 	var err error
-	for attempt := 0; attempt < retryMaxAttempts; attempt++ {
+	for attempt := range retryMaxAttempts {
 		err = f()
 		if err == nil {
 			return nil
@@ -776,7 +783,7 @@ func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) err
 		// attempt is 0-indexed; this is the (attempt+1)-th retry about to start.
 		nextAttempt := attempt + 2
 		if t.log != nil && nextAttempt > retryLogAfterAttempt {
-			fmt.Fprintf(t.log, "    rate limited on %s; sleeping %s before retry %d/%d\n",
+			_, _ = fmt.Fprintf(t.log, "    rate limited on %s; sleeping %s before retry %d/%d\n",
 				opName, wait, nextAttempt, retryMaxAttempts)
 		}
 		select {
@@ -789,10 +796,7 @@ func (t *grpcRetrier) do(ctx context.Context, opName string, f func() error) err
 }
 
 func backoffForAttempt(attempt int) time.Duration {
-	wait := time.Duration(float64(retryInitialBackoff) * math.Pow(2, float64(attempt)))
-	if wait > retryMaxBackoff {
-		wait = retryMaxBackoff
-	}
+	wait := min(time.Duration(float64(retryInitialBackoff)*math.Pow(2, float64(attempt))), retryMaxBackoff)
 	jitter := (rand.Float64()*2 - 1) * retryBackoffJitter
 	return time.Duration(float64(wait) * (1 + jitter))
 }
@@ -956,6 +960,8 @@ func unsupportedPolicyReason(policies *schedulepb.SchedulePolicies) string {
 		// here because the skip_overlap labels were already computed before
 		// post-process and DescribeSchedule isn't called for skip-only rows.
 		reasons = append(reasons, "overlap_allow_all")
+	default:
+		// SKIP, BUFFER_ONE, and UNSPECIFIED are fully modeled; nothing to flag.
 	}
 	return strings.Join(reasons, ";")
 }
@@ -1009,56 +1015,16 @@ func (l *grpcExecutionLoader) paginate(ctx context.Context, namespace, scheduleI
 	var pageToken []byte
 	var page, total, skipped int
 	for {
-		var resp *workflowservice.ListWorkflowExecutionsResponse
-		err := l.retrier.do(ctx, opLabel, func() error {
-			var rpcErr error
-			resp, rpcErr = l.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace:     namespace,
-				Query:         query,
-				PageSize:      visibilityPageSize,
-				NextPageToken: pageToken,
-			})
-			return rpcErr
-		})
+		resp, err := l.fetchPage(ctx, namespace, query, pageToken, opLabel)
 		if err != nil {
 			return nil, err
 		}
 		page++
-		for _, exec := range resp.GetExecutions() {
-			sa := exec.GetSearchAttributes().GetIndexedFields()
-			scheduleID, ok := decodeScheduledById(sa["TemporalScheduledById"])
-			if !ok || scheduleID == "" {
-				skipped++
-				continue
-			}
-			entry := timelineEntry{
-				WorkflowID: exec.GetExecution().GetWorkflowId(),
-				RunID:      exec.GetExecution().GetRunId(),
-				Status:     exec.GetStatus(),
-			}
-			if st := exec.GetStartTime(); st != nil {
-				entry.StartTime = st.AsTime()
-			}
-			if ct := exec.GetCloseTime(); ct != nil {
-				t := ct.AsTime()
-				entry.CloseTime = &t
-			}
-			if nominal, ok := decodeNominalStartTime(sa["TemporalScheduledStartTime"]); ok {
-				entry.NominalTime = nominal
-			}
-			// Skip rows with neither nominal nor start time - nothing to match.
-			if entry.NominalTime.IsZero() && entry.StartTime.IsZero() {
-				skipped++
-				continue
-			}
-			if entry.NominalTime.IsZero() {
-				entry.NominalTime = entry.StartTime
-			}
-			out[scheduleID] = append(out[scheduleID], entry)
-			total++
-		}
+		added, skip := appendPageEntries(resp, out)
+		total += added
+		skipped += skip
 		if l.log != nil && page%pageProgressEvery == 0 {
-			fmt.Fprintf(l.log, "      %s (%s): page %d, %d entries (%d skipped) across %d schedules\n",
+			_, _ = fmt.Fprintf(l.log, "      %s (%s): page %d, %d entries (%d skipped) across %d schedules\n",
 				namespace, opTag, page, total, skipped, len(out))
 		}
 		if len(resp.GetNextPageToken()) == 0 {
@@ -1068,10 +1034,73 @@ func (l *grpcExecutionLoader) paginate(ctx context.Context, namespace, scheduleI
 	}
 }
 
-// decodeScheduledById extracts the schedule ID from a TemporalScheduledById search-attribute payload. Returns false if
+func (l *grpcExecutionLoader) fetchPage(ctx context.Context, namespace, query string, pageToken []byte, opLabel string) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	var resp *workflowservice.ListWorkflowExecutionsResponse
+	err := l.retrier.do(ctx, opLabel, func() error {
+		var rpcErr error
+		resp, rpcErr = l.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     namespace,
+			Query:         query,
+			PageSize:      visibilityPageSize,
+			NextPageToken: pageToken,
+		})
+		return rpcErr
+	})
+	return resp, err
+}
+
+// appendPageEntries parses each execution in resp into a timelineEntry and appends it under its TemporalScheduledById bucket
+// in out. Returns (added, skipped) counts for the page.
+func appendPageEntries(resp *workflowservice.ListWorkflowExecutionsResponse, out map[string][]timelineEntry) (added, skipped int) {
+	for _, exec := range resp.GetExecutions() {
+		sa := exec.GetSearchAttributes().GetIndexedFields()
+		scheduleID, ok := decodeScheduledByID(sa["TemporalScheduledById"])
+		if !ok || scheduleID == "" {
+			skipped++
+			continue
+		}
+		entry, ok := buildTimelineEntry(exec, sa)
+		if !ok {
+			skipped++
+			continue
+		}
+		out[scheduleID] = append(out[scheduleID], entry)
+		added++
+	}
+	return added, skipped
+}
+
+// buildTimelineEntry constructs a timelineEntry from one visibility execution. Returns ok=false if the row has neither
+// nominal nor start time, since there's nothing to match against.
+func buildTimelineEntry(exec *workflowpb.WorkflowExecutionInfo, sa map[string]*commonpb.Payload) (timelineEntry, bool) {
+	entry := timelineEntry{
+		WorkflowID: exec.GetExecution().GetWorkflowId(),
+		RunID:      exec.GetExecution().GetRunId(),
+		Status:     exec.GetStatus(),
+	}
+	if st := exec.GetStartTime(); st != nil {
+		entry.StartTime = st.AsTime()
+	}
+	if ct := exec.GetCloseTime(); ct != nil {
+		t := ct.AsTime()
+		entry.CloseTime = &t
+	}
+	if nominal, ok := decodeNominalStartTime(sa["TemporalScheduledStartTime"]); ok {
+		entry.NominalTime = nominal
+	}
+	if entry.NominalTime.IsZero() && entry.StartTime.IsZero() {
+		return timelineEntry{}, false
+	}
+	if entry.NominalTime.IsZero() {
+		entry.NominalTime = entry.StartTime
+	}
+	return entry, true
+}
+
+// decodeScheduledByID extracts the schedule ID from a TemporalScheduledById search-attribute payload. Returns false if
 // the payload is missing or in an unexpected encoding so the caller can skip the row instead of grouping it under an
 // empty key.
-func decodeScheduledById(payload *commonpb.Payload) (string, bool) {
+func decodeScheduledByID(payload *commonpb.Payload) (string, bool) {
 	if payload == nil {
 		return "", false
 	}
@@ -1218,22 +1247,28 @@ func writeOutput(dir string, results []scheduleResult) error {
 			return err
 		}
 		if err := writeFlatCSV(f, rs); err != nil {
-			f.Close()
+			_ = f.Close()
 			return err
 		}
-		f.Close()
+		if err := f.Close(); err != nil {
+			return err
+		}
 	}
 
 	return writeSummaryCSV(filepath.Join(dir, "summary.csv"), byNS)
 }
 
 // writeSummaryCSV emits one row per namespace with aggregated counts across the namespace's flagged schedules.
-func writeSummaryCSV(path string, byNS map[string][]scheduleResult) error {
+func writeSummaryCSV(path string, byNS map[string][]scheduleResult) (retErr error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 	cw := csv.NewWriter(f)
 	defer cw.Flush()
 	if err := cw.Write([]string{
