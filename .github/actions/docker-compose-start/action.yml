@@ -32,11 +32,12 @@ runs:
       if: ${{ inputs.cache == 'true' }}
       shell: bash
       env:
+        COMPOSE_HASH: ${{ hashFiles(inputs['compose-file']) }}
         SERVICES: ${{ inputs.services }}
       run: |
         services_hash="$(printf '%s' "$SERVICES" | shasum -a 256 | cut -d ' ' -f 1)"
 
-        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${{ hashFiles(inputs['compose-file']) }}-${services_hash}" >> "$GITHUB_OUTPUT"
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${COMPOSE_HASH}-${services_hash}" >> "$GITHUB_OUTPUT"
 
     - name: Restore Docker image cache
       id: restore-cache
