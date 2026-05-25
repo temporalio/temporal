@@ -40,9 +40,13 @@ runs:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
       run: |
-        compose_hash="$(shasum -a 256 "$COMPOSE_FILE" | awk '{print $1}')"
-        services_hash="$(printf '%s' "$SERVICES" | tr '[:space:]' '\n' | sed '/^$/d' | sort | shasum -a 256 | awk '{print $1}')"
-        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${compose_hash}-${services_hash}" >> "$GITHUB_OUTPUT"
+        services_file="$RUNNER_TEMP/docker-compose-services.txt"
+        printf '%s' "$SERVICES" | tr '[:space:]' '\n' | sed '/^$/d' | sort > "$services_file"
+
+        normalized_services="$(paste -sd '-' "$services_file")"
+        compose_hash="$(shasum -a 256 "$COMPOSE_FILE" | cut -d ' ' -f 1)"
+
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${compose_hash}-${normalized_services}" >> "$GITHUB_OUTPUT"
 
     - name: Restore Docker image cache
       id: restore-cache
@@ -117,9 +121,8 @@ runs:
           exit 0
         fi
 
-        # Word splitting is intentional: Docker image references cannot contain whitespace.
-        # shellcheck disable=SC2046
-        docker save --output "$CACHE_PATH/images.tar" $(cat "$images_file")
+        mapfile -t images < "$images_file"
+        docker save --output "$CACHE_PATH/images.tar" "${images[@]}"
         echo "cacheable=true" >> "$GITHUB_OUTPUT"
 
     - name: Save Docker image cache
