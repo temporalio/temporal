@@ -2,6 +2,7 @@ package backoff
 
 import (
 	"context"
+	"errors"
 	"math"
 	"time"
 
@@ -77,7 +78,8 @@ func ThrottleRetryContext(
 			return err
 		}
 
-		if _, ok := err.(*serviceerror.ResourceExhausted); ok {
+		var reErr *serviceerror.ResourceExhausted
+		if errors.As(err, &reErr) {
 			next = max(next, t.NextBackOff(err))
 		}
 
@@ -137,7 +139,8 @@ func ThrottleRetryContextWithReturn[T any](
 			return zero, err
 		}
 
-		if _, ok := err.(*serviceerror.ResourceExhausted); ok {
+		var reErr *serviceerror.ResourceExhausted
+		if errors.As(err, &reErr) {
 			next = max(next, t.NextBackOff(err))
 		}
 
