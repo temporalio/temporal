@@ -203,11 +203,8 @@ type ConditionalRetryPolicy struct {
 }
 
 // NewConditionalRetryPolicy returns a policy that delegates to whenTrue when
-// predicate(err) is true, and whenFalse otherwise. Panics if predicate is nil.
+// predicate(err) is true, and whenFalse otherwise.
 func NewConditionalRetryPolicy(predicate func(err error) bool, whenTrue, whenFalse RetryPolicy) *ConditionalRetryPolicy {
-	if predicate == nil {
-		panic("backoff: NewConditionalRetryPolicy predicate must not be nil")
-	}
 	return &ConditionalRetryPolicy{
 		predicate: predicate,
 		whenTrue:  whenTrue,
