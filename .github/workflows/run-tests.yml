@@ -471,7 +471,7 @@ jobs:
           debug-log-path: ${{ github.workspace }}/.testoutput/debug.log
 
       - name: Stop containerized dependencies
-        if: ${{ always() && toJson(matrix.containers) != '[]' }}
+        if: always()
         uses: ./.github/actions/docker-compose-stop
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
