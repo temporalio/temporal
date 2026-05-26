@@ -9,7 +9,6 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -277,9 +276,9 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 func TestTokenAuthHeader_PlaintextDialRejectedByCredentials(t *testing.T) {
 	t.Parallel()
 
-	creds := auth.NewTokenCredentials("authorization", func(context.Context) (string, time.Time, error) {
-		return "any-token", time.Time{}, nil
-	}, time.Second)
+	creds := auth.NewTokenCredentials("authorization", func(context.Context) (string, error) {
+		return "any-token", nil
+	})
 
 	_, err := grpc.NewClient(
 		"127.0.0.1:0",

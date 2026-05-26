@@ -648,9 +648,6 @@ type (
 	RemoteClusterAuth struct {
 		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
 		Require bool `yaml:"require"`
-		// GraceWindow controls how long before token expiry the credential refreshes proactively.
-		// Accepts a Go duration string (e.g. "30s", "5m"). Zero falls back to the 30s default.
-		GraceWindow time.Duration `yaml:"graceWindow"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

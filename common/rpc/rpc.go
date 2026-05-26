@@ -54,7 +54,6 @@ type RPCFactory struct {
 	tokenProvider            auth.TokenProvider
 	authHeaderName           string
 	requireRemoteClusterAuth bool
-	tokenGraceWindow         time.Duration
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
@@ -84,11 +83,9 @@ func NewFactory(
 ) *RPCFactory {
 	authHeaderName := "authorization"
 	requireRemoteClusterAuth := false
-	var tokenGraceWindow time.Duration
 	if cfg != nil {
 		authHeaderName = cmp.Or(cfg.Global.Authorization.AuthHeaderName, authHeaderName)
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
-		tokenGraceWindow = cfg.Global.Authorization.RemoteClusterAuth.GraceWindow
 	}
 	f := &RPCFactory{
 		config:                   cfg,
@@ -105,7 +102,6 @@ func NewFactory(
 		tokenProvider:            tokenProvider,
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
-		tokenGraceWindow:         tokenGraceWindow,
 		monitor:                  monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
@@ -245,22 +241,21 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	// rejects (require=true, tokenProvider=nil), but RPCFactory is also constructed in
 	// tests where the boot path doesn't run.
 	if d.tokenProvider != nil || d.requireRemoteClusterAuth {
-		fetch := func(ctx context.Context) (string, time.Time, error) {
+		fetch := func(ctx context.Context) (string, error) {
 			var token string
-			var expiresAt time.Time
 			if d.tokenProvider != nil {
-				t, exp, err := d.tokenProvider.GetToken(ctx, rpcAddress)
+				t, err := d.tokenProvider.GetToken(ctx, rpcAddress)
 				if err != nil {
-					return "", time.Time{}, err
+					return "", err
 				}
-				token, expiresAt = t, exp
+				token = t
 			}
 			if token == "" && d.requireRemoteClusterAuth {
-				return "", time.Time{}, status.Error(codes.Unauthenticated, "no auth token available for outbound remote-cluster RPC")
+				return "", status.Error(codes.Unauthenticated, "no auth token available for outbound remote-cluster RPC")
 			}
-			return token, expiresAt, nil
+			return token, nil
 		}
-		creds := auth.NewTokenCredentials(d.authHeaderName, fetch, d.tokenGraceWindow)
+		creds := auth.NewTokenCredentials(d.authHeaderName, fetch)
 		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
 	}
 

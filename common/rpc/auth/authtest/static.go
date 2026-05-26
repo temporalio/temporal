@@ -5,7 +5,6 @@ package authtest
 
 import (
 	"context"
-	"time"
 
 	"go.temporal.io/server/common/rpc/auth"
 )
@@ -17,6 +16,6 @@ type StaticTokenProvider string
 
 var _ auth.TokenProvider = StaticTokenProvider("")
 
-func (t StaticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
-	return string(t), time.Time{}, nil
+func (t StaticTokenProvider) GetToken(context.Context, string) (string, error) {
+	return string(t), nil
 }
