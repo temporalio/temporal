@@ -129,10 +129,11 @@ func (g *GeneratorTaskHandler) Execute(
 	// Schedule the next timer task. Three outcomes are possible:
 	// - isIdle: the schedule is done; arm the idle task to close it.
 	// - NextWakeupTime is set: arm the next generator tick.
-	// - Neither: Hold open without a task: this can happen when the schedule is paused and without
-	//   any schedule specified (e.g., manual-only), IdleTime is configured to zero, or a
-	//   backfill is pending. In each of those cases an external trigger (Patch.Unpause,
-	//   Update, or BackfillerTask's completion-time Generate call) revives us.
+	// - Neither: Hold open without a task. This requires both that
+	//   isHeldOpen is true (paused or backfill pending) AND that no spec
+	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
+	//   also lands here. An external trigger (Patch.Unpause, Update, or a
+	//   BackfillerTask's completion-time Generate call) revives us.
 	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
@@ -152,9 +153,7 @@ func (g *GeneratorTaskHandler) Execute(
 		// ProcessTimeRange).
 		generator.scheduleTask(ctx, result.NextWakeupTime)
 	} else {
-		// Hold open without a task: this can happen when the schedule is paused and without
-		// any schedule specified (e.g., manual-only), IdleTime is configured to zero, or a
-		// backfill is pending.
+		// Hold open without a task: see the comment block above.
 		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
 

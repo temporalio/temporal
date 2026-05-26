@@ -97,7 +97,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestBackfillBlocksIdleClose", func(t *testing.T) { t.Parallel(); testBackfillBlocksIdleClose(t, newContext) })
 	t.Run("TestBackfillOnPausedSchedule", func(t *testing.T) { t.Parallel(); testBackfillOnPausedSchedule(t, newContext) })
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { t.Parallel(); testPausedDropsCatchup(t, newContext) })
-	t.Run("TestManualOnlyUnpausedStaysOpen", func(t *testing.T) { t.Parallel(); testManualOnlyUnpausedStaysOpen(t, newContext) })
 	t.Run("TestPauseDuringIdleWindow", func(t *testing.T) { t.Parallel(); testPauseDuringIdleWindow(t, newContext) })
 	t.Run("TestUpdateDuringIdleWindow", func(t *testing.T) { t.Parallel(); testUpdateDuringIdleWindow(t, newContext) })
 	t.Run("TestRecentActionsAdvanceWhilePaused", func(t *testing.T) { t.Parallel(); testRecentActionsAdvanceWhilePaused(t, newContext) })
@@ -135,6 +134,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { t.Parallel(); testCHASMUnpauseResumesProcessing(t, newContext) })
 	t.Run("TestPausedScheduleNeverIdles", func(t *testing.T) { t.Parallel(); testPausedScheduleNeverIdles(t, newContext) })
 	t.Run("TestPausedEmptySpecStaysOpen", func(t *testing.T) { t.Parallel(); testPausedEmptySpecStaysOpen(t, newContext) })
+	t.Run("TestManualOnlyUnpausedClosesFromIdle", func(t *testing.T) { t.Parallel(); testManualOnlyUnpausedClosesFromIdle(t, newContext) })
 	t.Run("TestTriggerImmediatelyOnActiveSchedule", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyOnActiveSchedule(t, newContext) })
 	t.Run("TestTriggerImmediatelyOnPausedSchedule", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyOnPausedSchedule(t, newContext) })
 	t.Run("TestTriggerImmediatelyAfterActionsExhausted", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyAfterActionsExhausted(t, newContext) })
@@ -2780,13 +2780,17 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
 
+	// Phase is computed so the first tick lands ~10s after this point. Under
+	// parallel load CreateSchedule can take several seconds; if the first
+	// tick passes before the server materializes the schedule we'd wait a
+	// full 30s for the next one, exceeding the Eventually budget below.
+	phaseOffset := 10 * time.Second
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
 				{
 					Interval: durationpb.New(30 * time.Second),
-					// start within three seconds
-					Phase: durationpb.New(time.Duration((time.Now().Unix()+3)%30) * time.Second),
+					Phase:    durationpb.New(time.Duration((time.Now().Unix()+int64(phaseOffset/time.Second))%30) * time.Second),
 				},
 			},
 		},
@@ -2823,7 +2827,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 6*time.Second, 200*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 20*time.Second, 200*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
@@ -3516,8 +3520,11 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 	}, workflow.RegisterOptions{Name: wt})
 
 	// Single calendar entry a few seconds in the future. While paused, its
-	// time will pass.
-	fireAt := time.Now().Add(3 * time.Second).UTC()
+	// time will pass. Offset must exceed worst-case CreateSchedule latency
+	// under parallel load so the entry is still genuinely in the future when
+	// the server materializes the schedule - otherwise the test passes for
+	// the wrong reason (HWM already past the entry at create time).
+	fireAt := time.Now().Add(10 * time.Second).UTC()
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
@@ -4354,10 +4361,17 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 // All four variants exhaust work in different ways - by calendar dates, by
 // LimitedActions budget, or by IntervalSpec.EndTime - but the post-exhaustion
 // assertion (FutureActionTimes empty -> idle close) is identical.
+//
+// buildSpec receives the current time at the moment the schedule is created
+// so calendar/end-time-relative specs remain in the future even when env
+// spinup is slow under parallel load. Returning a static spec captured at
+// test-registration time would race: by the time the schedule reaches the
+// server, the calendar second may have already passed and the spec would
+// idle out immediately without firing.
 type scheduleClosesCase struct {
 	name         string
 	prefix       string
-	spec         *schedulepb.ScheduleSpec
+	buildSpec    func(now time.Time) *schedulepb.ScheduleSpec
 	state        *schedulepb.ScheduleState
 	expectedRuns int32
 	// strictRunCount asserts that runs == expectedRuns at the end (used for
@@ -4378,33 +4392,38 @@ func scheduleClosesFromIdleCases() []scheduleClosesCase {
 			Second:     fmt.Sprintf("%d", t.Second()),
 		}
 	}
-	now := time.Now().UTC()
 	return []scheduleClosesCase{
 		{
 			name:         "TestSingleDateScheduleCloses",
 			prefix:       "sched-single-date-closes",
 			expectedRuns: 1,
-			spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{calSpec(now.Add(5 * time.Second))},
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Calendar: []*schedulepb.CalendarSpec{calSpec(now.Add(5 * time.Second))},
+				}
 			},
 		},
 		{
 			name:         "TestMultiDateScheduleCloses",
 			prefix:       "sched-multi-date-closes",
 			expectedRuns: 2,
-			spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{
-					calSpec(now.Add(5 * time.Second)),
-					calSpec(now.Add(10 * time.Second)),
-				},
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Calendar: []*schedulepb.CalendarSpec{
+						calSpec(now.Add(5 * time.Second)),
+						calSpec(now.Add(10 * time.Second)),
+					},
+				}
 			},
 		},
 		{
 			name:         "TestLimitedActionsCloses",
 			prefix:       "sched-limited-actions-closes",
 			expectedRuns: 2,
-			spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+			buildSpec: func(_ time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+				}
 			},
 			state:          &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 2},
 			strictRunCount: true,
@@ -4413,9 +4432,11 @@ func scheduleClosesFromIdleCases() []scheduleClosesCase {
 			name:         "TestIntervalEndTimeCloses",
 			prefix:       "sched-interval-end-closes",
 			expectedRuns: 1,
-			spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
-				EndTime:  timestamppb.New(now.Add(10 * time.Second)),
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+					EndTime:  timestamppb.New(now.Add(10 * time.Second)),
+				}
 			},
 		},
 	}
@@ -4448,7 +4469,7 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory, c sched
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule: &schedulepb.Schedule{
-			Spec:  c.spec,
+			Spec:  c.buildSpec(time.Now().UTC()),
 			State: c.state,
 			Action: &schedulepb.ScheduleAction{
 				Action: &schedulepb.ScheduleAction_StartWorkflow{
@@ -4490,25 +4511,25 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory, c sched
 	}
 }
 
-// testManualOnlyUnpausedStaysOpen pins the manual-only carve-out in
-// getIdleExpiration: an unpaused empty-spec schedule must NOT auto-close after
-// IdleTime - it has no spec-driven event that would push lastEventTime out, so
-// the idle timer would otherwise silently kill a valid trigger-only schedule.
-func testManualOnlyUnpausedStaysOpen(t *testing.T, newContext contextFactory) {
+// testManualOnlyUnpausedClosesFromIdle verifies that an unpaused manual-only
+// (empty-spec) schedule closes after its idle/retention window elapses on both
+// V1 and CHASM. V1 advances lastEvent via RecentActions, V1 RetentionTime is
+// plumbed via WorkerSchedulerRetentionTime; CHASM uses IdleTime. The two
+// values are set to the same short window so the test is symmetric.
+func testManualOnlyUnpausedClosesFromIdle(t *testing.T, newContext contextFactory) {
 	shortIdleTime := 3 * time.Second
 	tweakables := chasmscheduler.DefaultTweakables
 	tweakables.IdleTime = shortIdleTime
 	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables),
+		testcore.WithDynamicConfig(dynamicconfig.WorkerSchedulerRetentionTime, shortIdleTime),
 	)...)
 
 	sid := testcore.RandomizeStr("sched-manual-only-unpaused")
 	wid := testcore.RandomizeStr("sched-manual-only-wf")
 	wt := testcore.RandomizeStr("sched-manual-only-wt")
 
-	var runs atomic.Int32
 	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
-		runs.Add(1)
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
@@ -4534,27 +4555,13 @@ func testManualOnlyUnpausedStaysOpen(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 
-	s.Never(func() bool {
+	s.Eventually(func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
 		return err != nil
-	}, 2*shortIdleTime, 200*time.Millisecond, "manual-only schedule must stay open past IdleTime")
-
-	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Patch: &schedulepb.SchedulePatch{
-			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-		},
-		Identity:  "test",
-		RequestId: uuid.NewString(),
-	})
-	s.NoError(err)
-
-	s.Eventually(func() bool { return runs.Load() >= 1 },
-		15*time.Second, 200*time.Millisecond, "manual trigger should fire one action")
+	}, 8*shortIdleTime, 200*time.Millisecond, "manual-only schedule should close after idle window")
 }
 
 // testPauseDuringIdleWindow exercises the held_open invalidation + re-arm path.

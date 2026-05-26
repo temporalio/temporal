@@ -120,10 +120,11 @@ func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
 	})
 }
 
-// Manual-only schedules (empty spec) must never auto-close: there is no
-// spec-driven event that would push the idle timer out, so the timer would
-// silently kill a valid trigger-only schedule.
-func TestIdleTask_Validate_ManualOnlyHeldOpen(t *testing.T) {
+// Manual-only schedules (empty spec) close from idle like any other: V1
+// applies RetentionTime to them, and lastEventTime is advanced by manual
+// triggers via recentActions, so the idle timer cannot silently kill a
+// schedule that customers are actively using.
+func TestIdleTask_Validate_ManualOnlyClosesFromIdle(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
 	runIdleValidateTestCase(t, env, &idleValidateTestCase{
@@ -134,7 +135,7 @@ func TestIdleTask_Validate_ManualOnlyHeldOpen(t *testing.T) {
 			anchorLastEventTo(sched, now.Add(-10*time.Minute))
 			sched.Schedule.Spec = &schedulepb.ScheduleSpec{}
 		},
-		expectedValid: false,
+		expectedValid: true,
 	})
 }
 

@@ -466,28 +466,16 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 // no current work. Paused: customer expects to resume. Pending backfill: must
 // drain (unlike V1's inline processing, CHASM backfillers are separate
 // task-driven components, so any pending backfill - not just ALLOW_ALL -
-// blocks idle). Manual-only: no spec wakeup would ever advance lastEventTime,
-// so an idle timer would silently close a valid trigger-only schedule.
-// Sentinels are exempt - they exist to reserve a schedule ID and must close.
+// blocks idle). Sentinels are exempt - they exist to reserve a schedule ID
+// and must close. Manual-only schedules (empty spec) idle out like any
+// other - matching V1's RetentionTime semantics, where lastEventTime is
+// advanced by manual triggers via recentActions.
 func (s *Scheduler) isHeldOpen() bool {
 	if s.IsSentinel() {
 		return false
 	}
 	return s.Schedule.GetState().GetPaused() ||
-		s.hasMoreBackfills() ||
-		s.isManualOnly()
-}
-
-// isManualOnly reports whether the spec has no wakeup-producing entries.
-//
-// MAINTAINER: adding a new wakeup source to ScheduleSpec requires updating
-// this check, or new spec formats will be incorrectly held open forever.
-func (s *Scheduler) isManualOnly() bool {
-	spec := s.Schedule.GetSpec()
-	return len(spec.GetStructuredCalendar()) == 0 &&
-		len(spec.GetCronString()) == 0 &&
-		len(spec.GetCalendar()) == 0 &&
-		len(spec.GetInterval()) == 0
+		s.hasMoreBackfills()
 }
 
 // idleDeadline returns when the schedule becomes eligible to close. Sentinels
