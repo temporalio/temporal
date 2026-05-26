@@ -1,7 +1,6 @@
 package testlogger_test
 
 import (
-	"bytes"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -9,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.uber.org/zap/zapcore"
 )
 
 // mockT wraps a testing.T such that we can know if a test is failed.
@@ -193,38 +191,4 @@ func TestTestLogger_Failed_NoMatch(t *testing.T) {
 
 	tl.Error("ignored")
 	require.Nil(t, tl.Failed())
-}
-
-// TestTestLogger_WithWriter verifies that WithWriter routes log output to the
-// supplied WriteSyncer instead of zaptest's TestingWriter.
-func TestTestLogger_WithWriter(t *testing.T) {
-	var buf bytes.Buffer
-	tl := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly,
-		testlogger.WithWriter(zapcore.AddSync(&buf)))
-
-	tl.Info("hello-with-writer")
-
-	require.Contains(t, buf.String(), "hello-with-writer")
-}
-
-// TestTestLogger_DontCloseOnCleanup verifies that with DontCloseOnCleanup set,
-// the logger continues to deliver logs after the original T's test (and its
-// Cleanup chain) has completed. Without the option the default Cleanup(tl.Close)
-// would flip state.closed and the post-cleanup Info call would be dropped.
-func TestTestLogger_DontCloseOnCleanup(t *testing.T) {
-	var buf bytes.Buffer
-
-	var tl *testlogger.TestLogger
-	t.Run("inner", func(inner *testing.T) {
-		tl = testlogger.NewTestLogger(inner, testlogger.FailOnExpectedErrorOnly,
-			testlogger.WithWriter(zapcore.AddSync(&buf)),
-			testlogger.WithoutCloseOnCleanup())
-		tl.Info("during-inner")
-	})
-	// inner's Cleanup has run by here. Without DontCloseOnCleanup tl would be closed.
-	tl.Info("after-inner")
-
-	out := buf.String()
-	require.Contains(t, out, "during-inner")
-	require.Contains(t, out, "after-inner")
 }

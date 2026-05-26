@@ -153,11 +153,9 @@ type Failure struct {
 // TestLogger is a log.Logger implementation that logs to the test's logger
 // _but_ will fail the test if log levels _above_ Warn are present
 type TestLogger struct {
-	wrapped            log.Logger
-	state              *sharedTestLoggerState
-	tags               []tag.Tag
-	userWriter         zapcore.WriteSyncer
-	dontCloseOnCleanup bool
+	wrapped log.Logger
+	state   *sharedTestLoggerState
+	tags    []tag.Tag
 }
 
 type LoggerOption func(*TestLogger)
@@ -202,22 +200,6 @@ func LogLevel(level zapcore.Level) LoggerOption {
 func WithoutCaller() LoggerOption {
 	return func(t *TestLogger) {
 		t.state.logCaller = false
-	}
-}
-
-// WithWriter replaces the default zaptest.NewTestingWriter with a caller-supplied
-// WriteSyncer. Used when the logger may outlive any single *testing.T.
-func WithWriter(w zapcore.WriteSyncer) LoggerOption {
-	return func(t *TestLogger) {
-		t.userWriter = w
-	}
-}
-
-// WithoutCloseOnCleanup skips the automatic Cleanup(tl.Close) registration.
-// Required for loggers whose lifetime exceeds any single test.
-func WithoutCloseOnCleanup() LoggerOption {
-	return func(t *TestLogger) {
-		t.dontCloseOnCleanup = true
 	}
 }
 
@@ -296,13 +278,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		opt(tl)
 	}
 	if tl.wrapped == nil {
-		writer := tl.userWriter
-		errorOutput := tl.userWriter
-		if writer == nil {
-			tw := zaptest.NewTestingWriter(t)
-			writer = tw
-			errorOutput = tw.WithMarkFailed(true)
-		}
+		writer := zaptest.NewTestingWriter(t)
 
 		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
 		var consoleEnc zapcore.Encoder
@@ -324,7 +300,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			getGlobalFileCore())
 
 		zapOptions := []zap.Option{
-			zap.ErrorOutput(errorOutput),
+			zap.ErrorOutput(writer.WithMarkFailed(true)),
 			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
 			zap.WithCaller(tl.state.logCaller),
 		}
@@ -334,7 +310,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	}
 
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
-	if ct, ok := t.(CleanupCapableT); ok && !tl.dontCloseOnCleanup {
+	if ct, ok := t.(CleanupCapableT); ok {
 		// NOTE(tim): We don't care about anything logged after the test completes. Sure, this is racy,
 		// but it reduces the likelihood that we see stupid errors due to testing.T.Logf race conditions...
 		ct.Cleanup(tl.Close)

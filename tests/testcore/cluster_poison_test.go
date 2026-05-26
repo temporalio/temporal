@@ -3,7 +3,6 @@ package testcore
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,30 +12,9 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 )
 
-// mockOwningT is the *testing.T that the TestLogger captures in state.t.
-// It overrides Fatalf/Errorf/Fail/FailNow so the logger's synchronous failTest
-// path does not propagate to the real outer test we're trying to observe.
-type mockOwningT struct {
-	*testing.T
-	failure atomic.Pointer[string]
-}
-
-func (m *mockOwningT) Errorf(format string, args ...any) {
-	s := fmt.Sprintf("ERROR: "+format, args...)
-	m.failure.Store(&s)
-}
-func (m *mockOwningT) Fail()             { s := "Fail() called"; m.failure.Store(&s) }
-func (m *mockOwningT) FailNow()          { s := "FailNow() called"; m.failure.Store(&s) }
-func (m *mockOwningT) Failed() bool      { return m.failure.Load() != nil }
-func (m *mockOwningT) Fatal(args ...any) { s := fmt.Sprint(args...); m.failure.Store(&s) }
-func (m *mockOwningT) Fatalf(format string, args ...any) {
-	s := fmt.Sprintf(format, args...)
-	m.failure.Store(&s)
-}
-
 // mockSubtestT stands in for an in-flight subtest passed to RegisterTest.
-// It captures Cleanup callbacks into a slice (instead of registering with the
-// testing framework) and captures Errorf so the test can assert on it.
+// Cleanup callbacks are queued so the test can drive them explicitly via finish().
+// Failure-signalling methods are absorbed to prevent the outer testing.T from being marked failed.
 type mockSubtestT struct {
 	*testing.T
 	mu       sync.Mutex
@@ -56,6 +34,9 @@ func (f *mockSubtestT) Errorf(format string, args ...any) {
 	f.errs = append(f.errs, fmt.Sprintf(format, args...))
 }
 
+func (f *mockSubtestT) Fail()    {}
+func (f *mockSubtestT) FailNow() {}
+
 // finish runs registered cleanups in LIFO order, mirroring *testing.T.
 func (f *mockSubtestT) finish() {
 	f.mu.Lock()
@@ -69,8 +50,7 @@ func (f *mockSubtestT) finish() {
 
 func TestSharedClusterPoison(t *testing.T) {
 	// Each phase represents one acquirer's lifetime: Acquire → optional log → finish.
-	// wantErrSubstring == "" asserts no errs were recorded; non-empty asserts at
-	// least one err containing the substring.
+	// wantErrSubstring asserts on RegisterTest's cleanup t.Errorf.
 	type phase struct {
 		log              func(log.Logger)
 		wantPoisoned     bool
@@ -118,10 +98,8 @@ func TestSharedClusterPoison(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &FunctionalTestBase{}
-			tl := testlogger.NewTestLogger(&mockOwningT{T: t}, testlogger.FailOnExpectedErrorOnly,
-				testlogger.WithWriter(&clusterLogWriter{s: s}),
-				testlogger.WithoutCloseOnCleanup(),
-			)
+			s.t = &sharedClusterT{name: t.Name()}
+			tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 			tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 			s.Logger = tl
 

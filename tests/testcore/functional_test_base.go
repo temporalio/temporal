@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"regexp"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,8 +69,7 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 
-		mu          sync.Mutex
-		activeTests []testlogger.TestingT // tests currently using this cluster
+		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -301,14 +299,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
-		// The writer routes log lines to the currently-registered test (see RegisterTest)
-		// and falls back to stderr when there is no single active test.
-		// WithoutCloseOnCleanup keeps the logger alive across tests for shared clusters.
-		tl := testlogger.NewTestLogger(s.T(),
-			testlogger.FailOnExpectedErrorOnly,
-			testlogger.WithWriter(&clusterLogWriter{s: s}),
-			testlogger.WithoutCloseOnCleanup(),
-		)
+		// The cluster outlives any single test and s.T() changes as different tests use it,
+		// but the proxy T's Name() must be stable, so this is never updated.
+		s.t = &sharedClusterT{name: s.T().Name()}
+		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 		s.Logger = tl
@@ -470,10 +464,22 @@ func (s *FunctionalTestBase) exportOTELTraces() {
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
+	s.Require().NoError(s.tearDownTestCluster())
+}
 
-	if s.testCluster != nil {
-		s.Require().NoError(s.testCluster.TearDownCluster())
+// tearDownTestCluster tears down the underlying TestCluster and runs the proxy
+// T's queued cleanups (notably tl.Close). Cleanups run via defer so they
+// execute even when teardown errors.
+func (s *FunctionalTestBase) tearDownTestCluster() error {
+	defer func() {
+		if s.t != nil {
+			s.t.doCleanups()
+		}
+	}()
+	if s.testCluster == nil {
+		return nil
 	}
+	return s.testCluster.TearDownCluster()
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
@@ -750,36 +756,23 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	return err
 }
 
-// RegisterTest registers t as currently using this cluster and fails t at
-// cleanup time if the cluster's logger has flipped Failed() during t's window.
-// RegisterTest records t as currently using this cluster. At t's Cleanup, it
-// fails t if the cluster's logger has flipped Failed() during t's window, and
-// tears the cluster down if t was the last active user of a poisoned cluster.
-// The pool's slot reference is replaced when poison is observed, so no new tests
-// will land on a poisoned cluster — it lives only as long as it has in-flight users.
+// RegisterTest records t as currently using this cluster. At t's Cleanup it
+// fails t if the cluster was poisoned during t's window, and tears the cluster
+// down if t was the last active user of a poisoned cluster. The pool's slot
+// reference is replaced when poison is observed, so no new tests will land on
+// a poisoned cluster.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
-	s.mu.Lock()
-	s.activeTests = append(s.activeTests, t)
-	s.mu.Unlock()
+	s.t.addTest(t)
 
 	t.Cleanup(func() {
-		s.mu.Lock()
 		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
 			if f := tl.Failed(); f != nil {
 				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
 			}
 		}
-		for i, x := range s.activeTests {
-			if x == t {
-				s.activeTests = append(s.activeTests[:i], s.activeTests[i+1:]...)
-				break
-			}
-		}
-		shouldTearDown := len(s.activeTests) == 0 && s.Poisoned() && s.testCluster != nil
-		s.mu.Unlock()
-
-		if shouldTearDown {
-			if err := s.testCluster.TearDownCluster(); err != nil {
+		wasLast := s.t.removeTest(t)
+		if wasLast && s.Poisoned() {
+			if err := s.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down poisoned cluster: %v", err)
 			}
 		}
@@ -788,16 +781,5 @@ func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 
 // Poisoned reports whether the cluster's logger has recorded a failing log.
 func (s *FunctionalTestBase) Poisoned() bool {
-	tl, ok := s.Logger.(*testlogger.TestLogger)
-	return ok && tl.Failed() != nil
-}
-
-// currentT returns the sole registered test, or nil if zero or many.
-func (s *FunctionalTestBase) currentT() testlogger.TestingT {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.activeTests) == 1 {
-		return s.activeTests[0]
-	}
-	return nil
+	return s.t != nil && s.t.Failed()
 }
