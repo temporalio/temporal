@@ -86,7 +86,7 @@ runs:
           echo "No services configured for docker compose up."
           exit 0
         fi
-        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+        docker compose -f "$COMPOSE_FILE" up -d --wait $SERVICES
 
     - name: Save Docker images to archive
       id: archive
