@@ -1964,18 +1964,28 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2.DeploymentVersionString()),
 		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
 		RevisionNumber:            2,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2.DeploymentVersion().GetBuildId(): {
-		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-	}}, []string{}, tqTypeWf)
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
+		tv2.DeploymentVersion().GetBuildId(): {
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+		},
+		tv1.DeploymentVersion().GetBuildId(): {
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+		},
+	}, []string{}, tqTypeWf)
 	s.pollUntilRegistered(env, tv1)
 	if crossTq {
 		s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tv2Child, &deploymentpb.RoutingConfig{
 			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2Child.DeploymentVersionString()),
 			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
 			RevisionNumber:            2,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2Child.DeploymentVersion().GetBuildId(): {
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf)
+		}, map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv2Child.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+			tv1Child.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			},
+		}, []string{}, tqTypeWf)
 		s.pollUntilRegistered(env, tv1Child)
 	}
 	currentChanged <- struct{}{}
