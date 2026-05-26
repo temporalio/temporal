@@ -54,8 +54,6 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
-	ver3TestTimeout = 4 * time.Minute
-	ver3VerifyWait  = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -376,7 +374,7 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *te
 			return
 		}
 		t.Require().NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -446,7 +444,7 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 			t.Require().NoError(err)
 			t.Require().True(resp.GetIsMember())
 		}
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
@@ -462,7 +460,7 @@ func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *
 			return
 		}
 		t.Require().NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -496,7 +494,7 @@ func (env *VersioningTestEnv) setRampingDeployment(
 			return
 		}
 		t.Require().NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(s, tv)
@@ -515,7 +513,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeploym
 			}
 			t.Require().NoError(err)
 			t.Require().Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, ver3VerifyWait, 500*time.Millisecond)
+		}, 90*time.Second, 500*time.Millisecond)
 	}
 }
 
@@ -816,7 +814,7 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 				versioningInfo.GetVersionTransition(),
 			))
 		}
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) startWorkflow(
@@ -1236,7 +1234,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 			}
 		}
 		t.Require().Empty(remaining)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) validateBacklogCount(
