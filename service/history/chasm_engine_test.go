@@ -1989,7 +1989,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncode(state)
+	blob, err := serialization.Encode(state, serialization.WithDeterministicProto3)
 	s.NoError(err)
 	return blob
 }
