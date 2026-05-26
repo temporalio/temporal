@@ -61,11 +61,6 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *VersioningTest
 }
 
 func setupVersioning3Env(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
-	versioning3EnvSlot <- struct{}{}
-	t.Cleanup(func() {
-		<-versioning3EnvSlot
-	})
-
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker deployment manager workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
