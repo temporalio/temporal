@@ -299,14 +299,15 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *VersioningTestEnv
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
 	}
 
-	env.WaitForChannel(actCompleted)
-	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
-
-	env.pollWftAndHandle(s, tv, sticky, nil,
+	finalWFTCompleted := make(chan struct{})
+	env.pollWftAndHandle(s, tv, sticky, finalWFTCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
+
+	env.WaitForChannel(actCompleted)
+	env.WaitForChannel(finalWFTCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 }
 
@@ -598,14 +599,15 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(env *VersioningTestEnv, sticky b
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
 	}
 
-	env.WaitForChannel(actCompleted)
-	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
-
-	env.pollWftAndHandle(s, tv, sticky, nil,
+	finalWFTCompleted := make(chan struct{})
+	env.pollWftAndHandle(s, tv, sticky, finalWFTCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
+
+	env.WaitForChannel(actCompleted)
+	env.WaitForChannel(finalWFTCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
 }
 
