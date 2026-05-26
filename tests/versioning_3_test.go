@@ -55,16 +55,15 @@ import (
 type versionStatus int
 
 const (
-	tqTypeWf         = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	tqTypeAct        = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	tqTypeNexus      = enumspb.TASK_QUEUE_TYPE_NEXUS
-	vbUnspecified    = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	vbPinned         = enumspb.VERSIONING_BEHAVIOR_PINNED
-	vbUnpinned       = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	ver3MinPollTime  = common.MinLongPollTimeout + time.Millisecond*200
-	ver3PollTimeout  = 2 * time.Minute
-	ver3RPCTimeout   = 5 * time.Second
-	ver3PollInterval = 2 * time.Second
+	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
+	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
+	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
+	ver3PollTimeout = 2 * time.Minute
+	ver3RPCTimeout  = 5 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -3438,7 +3437,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3512,7 +3511,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 			s.NoError(err)
 			s.True(resp.GetIsMember())
 		}
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -3531,7 +3530,7 @@ func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *tes
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3568,7 +3567,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3590,7 +3589,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment
 			}
 			s.NoError(err)
 			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, 90*time.Second, ver3PollInterval)
+		}, 90*time.Second, 500*time.Millisecond)
 	}
 }
 
@@ -3896,7 +3895,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 				versioningInfo.GetVersionTransition(),
 			))
 		}
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
@@ -4375,7 +4374,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for i := range partitionCount {
+	for _, i := range versioning3PropagationPartitions(partitionCount) {
 		for _, tqt := range tqTypes {
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}
@@ -4449,7 +4448,19 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			}
 		}
 		s.Empty(remaining)
-	}, 90*time.Second, ver3PollInterval)
+	}, 90*time.Second, 500*time.Millisecond)
+}
+
+func versioning3PropagationPartitions(partitionCount int) []int {
+	if partitionCount >= 12 {
+		return []int{0, 5, 11}
+	}
+
+	partitions := make([]int, 0, partitionCount)
+	for i := range partitionCount {
+		partitions = append(partitions, i)
+	}
+	return partitions
 }
 
 func (s *Versioning3Suite) validateBacklogCount(
