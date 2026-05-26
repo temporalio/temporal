@@ -137,7 +137,13 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
-          flags: --wait
+
+      - name: Wait for containerized dependencies to be healthy
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
 
       - uses: actions/setup-go@v6
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}

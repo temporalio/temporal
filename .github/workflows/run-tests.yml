@@ -345,7 +345,6 @@ jobs:
             cassandra
             mysql
             postgresql
-          flags: --wait
 
       - uses: actions/setup-go@v6
         with:
@@ -368,6 +367,10 @@ jobs:
         uses: ./.github/actions/docker-compose-healthy
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: |
+            cassandra
+            mysql
+            postgresql
 
       - name: Run integration test
         timeout-minutes: 15
@@ -415,7 +418,6 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
-          flags: --wait
           cache: true
 
       - uses: actions/setup-go@v6
@@ -492,7 +494,6 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
-          flags: --wait
 
       - uses: actions/setup-go@v6
         with:

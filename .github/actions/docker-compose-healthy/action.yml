@@ -6,7 +6,7 @@ inputs:
     description: Docker Compose file to use.
     required: true
   services:
-    description: Whitespace-delimited list of services to wait for. Defaults to running services.
+    description: Whitespace-delimited list of services to wait for.
     default: ""
 
 runs:
@@ -18,10 +18,6 @@ runs:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
       run: |
-        if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
-          SERVICES="$(docker compose -f "$COMPOSE_FILE" ps --services)"
-        fi
-
         if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
           echo "No services configured for docker compose healthy."
           exit 0
