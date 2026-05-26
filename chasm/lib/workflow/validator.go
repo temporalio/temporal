@@ -193,6 +193,19 @@ func (v *RequestValidator) ValidateSearchAttributes(searchAttributes *commonpb.S
 	return v.saValidator.ValidateSize(searchAttributes, namespaceName)
 }
 
+func (v *RequestValidator) ValidateWaitForExternalWorkflowRequest(request *workflowservice.WaitForExternalWorkflowRequest) error {
+	if request == nil {
+		return serviceerror.NewInvalidArgument("Request is empty")
+	}
+	if request.GetNamespace() == "" {
+		return serviceerror.NewInvalidArgument("Namespace is not set on request")
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return serviceerror.NewInvalidArgument("WorkflowId is not set on request")
+	}
+	return nil
+}
+
 func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservice.SignalWithStartWorkflowExecutionRequest) error {
 	if request == nil {
 		return serviceerror.NewInvalidArgument("request is empty")

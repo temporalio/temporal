@@ -2461,3 +2461,23 @@ func (mr *MockWorkflowServiceClientMockRecorder) ValidateWorkerDeploymentVersion
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateWorkerDeploymentVersionComputeConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ValidateWorkerDeploymentVersionComputeConfig), varargs...)
 }
+
+// WaitForExternalWorkflow mocks base method.
+func (m *MockWorkflowServiceClient) WaitForExternalWorkflow(ctx context.Context, in *workflowservice.WaitForExternalWorkflowRequest, opts ...grpc.CallOption) (*workflowservice.WaitForExternalWorkflowResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "WaitForExternalWorkflow", varargs...)
+	ret0, _ := ret[0].(*workflowservice.WaitForExternalWorkflowResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForExternalWorkflow indicates an expected call of WaitForExternalWorkflow.
+func (mr *MockWorkflowServiceClientMockRecorder) WaitForExternalWorkflow(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForExternalWorkflow", reflect.TypeOf((*MockWorkflowServiceClient)(nil).WaitForExternalWorkflow), varargs...)
+}

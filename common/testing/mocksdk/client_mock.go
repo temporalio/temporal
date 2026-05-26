@@ -114,6 +114,20 @@ func (mr *MockClientMockRecorder) CompleteActivityByActivityID(ctx, namespace, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteActivityByActivityID", reflect.TypeOf((*MockClient)(nil).CompleteActivityByActivityID), ctx, namespace, activityID, activityRunID, result, err)
 }
 
+// CompleteActivityByActivityIDWithOptions mocks base method.
+func (m *MockClient) CompleteActivityByActivityIDWithOptions(ctx context.Context, opts client.CompleteActivityByActivityIDOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteActivityByActivityIDWithOptions", ctx, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteActivityByActivityIDWithOptions indicates an expected call of CompleteActivityByActivityIDWithOptions.
+func (mr *MockClientMockRecorder) CompleteActivityByActivityIDWithOptions(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteActivityByActivityIDWithOptions", reflect.TypeOf((*MockClient)(nil).CompleteActivityByActivityIDWithOptions), ctx, opts)
+}
+
 // CompleteActivityByID mocks base method.
 func (m *MockClient) CompleteActivityByID(ctx context.Context, namespace, workflowID, runID, activityID string, result any, err error) error {
 	m.ctrl.T.Helper()
@@ -126,6 +140,34 @@ func (m *MockClient) CompleteActivityByID(ctx context.Context, namespace, workfl
 func (mr *MockClientMockRecorder) CompleteActivityByID(ctx, namespace, workflowID, runID, activityID, result, err any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteActivityByID", reflect.TypeOf((*MockClient)(nil).CompleteActivityByID), ctx, namespace, workflowID, runID, activityID, result, err)
+}
+
+// CompleteActivityByIDWithOptions mocks base method.
+func (m *MockClient) CompleteActivityByIDWithOptions(ctx context.Context, opts client.CompleteActivityByIDOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteActivityByIDWithOptions", ctx, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteActivityByIDWithOptions indicates an expected call of CompleteActivityByIDWithOptions.
+func (mr *MockClientMockRecorder) CompleteActivityByIDWithOptions(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteActivityByIDWithOptions", reflect.TypeOf((*MockClient)(nil).CompleteActivityByIDWithOptions), ctx, opts)
+}
+
+// CompleteActivityWithOptions mocks base method.
+func (m *MockClient) CompleteActivityWithOptions(ctx context.Context, opts client.CompleteActivityOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteActivityWithOptions", ctx, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteActivityWithOptions indicates an expected call of CompleteActivityWithOptions.
+func (mr *MockClientMockRecorder) CompleteActivityWithOptions(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteActivityWithOptions", reflect.TypeOf((*MockClient)(nil).CompleteActivityWithOptions), ctx, opts)
 }
 
 // CountActivities mocks base method.
@@ -567,6 +609,34 @@ func (mr *MockClientMockRecorder) RecordActivityHeartbeatByID(ctx, namespace, wo
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, namespace, workflowID, runID, activityID}, details...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordActivityHeartbeatByID", reflect.TypeOf((*MockClient)(nil).RecordActivityHeartbeatByID), varargs...)
+}
+
+// RecordActivityHeartbeatByIDWithOptions mocks base method.
+func (m *MockClient) RecordActivityHeartbeatByIDWithOptions(ctx context.Context, opts client.RecordActivityHeartbeatByIDOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordActivityHeartbeatByIDWithOptions", ctx, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordActivityHeartbeatByIDWithOptions indicates an expected call of RecordActivityHeartbeatByIDWithOptions.
+func (mr *MockClientMockRecorder) RecordActivityHeartbeatByIDWithOptions(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordActivityHeartbeatByIDWithOptions", reflect.TypeOf((*MockClient)(nil).RecordActivityHeartbeatByIDWithOptions), ctx, opts)
+}
+
+// RecordActivityHeartbeatWithOptions mocks base method.
+func (m *MockClient) RecordActivityHeartbeatWithOptions(ctx context.Context, opts client.RecordActivityHeartbeatOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordActivityHeartbeatWithOptions", ctx, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordActivityHeartbeatWithOptions indicates an expected call of RecordActivityHeartbeatWithOptions.
+func (mr *MockClientMockRecorder) RecordActivityHeartbeatWithOptions(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordActivityHeartbeatWithOptions", reflect.TypeOf((*MockClient)(nil).RecordActivityHeartbeatWithOptions), ctx, opts)
 }
 
 // ResetWorkflowExecution mocks base method.

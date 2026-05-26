@@ -24,6 +24,7 @@ var (
 	errTaskRangeNotSet                                    = serviceerror.NewInvalidArgument("Task range is not set")
 	errHistoryNotFound                                    = serviceerror.NewInvalidArgument("Requested workflow history not found, may have passed retention period.")
 	errNamespaceTooLong                                   = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
+	errWorkflowIDTooLong                                  = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 	errWorkflowTypeTooLong                                = serviceerror.NewInvalidArgument("WorkflowType length exceeds limit.")
 	errWorkflowIDTooLong                                  = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 	errWorkflowRuleIDTooLong                              = serviceerror.NewInvalidArgument("Workflow Rule Id length exceeds limit.")

@@ -7310,3 +7310,39 @@ func (wh *WorkflowHandler) UnpauseActivityExecution(context.Context, *workflowse
 func (wh *WorkflowHandler) UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions not implemented")
 }
+
+func (wh *WorkflowHandler) StartNexusOperationExecution(_ context.Context, _ *workflowservice.StartNexusOperationExecutionRequest) (_ *workflowservice.StartNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("StartNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) DescribeNexusOperationExecution(_ context.Context, _ *workflowservice.DescribeNexusOperationExecutionRequest) (_ *workflowservice.DescribeNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DescribeNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) PollNexusOperationExecution(_ context.Context, _ *workflowservice.PollNexusOperationExecutionRequest) (_ *workflowservice.PollNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("PollNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) ListNexusOperationExecutions(_ context.Context, _ *workflowservice.ListNexusOperationExecutionsRequest) (_ *workflowservice.ListNexusOperationExecutionsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("ListNexusOperationExecutions is not yet implemented")
+}
+
+func (wh *WorkflowHandler) CountNexusOperationExecutions(_ context.Context, _ *workflowservice.CountNexusOperationExecutionsRequest) (_ *workflowservice.CountNexusOperationExecutionsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("CountNexusOperationExecutions is not yet implemented")
+}
+
+func (wh *WorkflowHandler) RequestCancelNexusOperationExecution(_ context.Context, _ *workflowservice.RequestCancelNexusOperationExecutionRequest) (_ *workflowservice.RequestCancelNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("RequestCancelNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) TerminateNexusOperationExecution(_ context.Context, _ *workflowservice.TerminateNexusOperationExecutionRequest) (_ *workflowservice.TerminateNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TerminateNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) DeleteNexusOperationExecution(_ context.Context, _ *workflowservice.DeleteNexusOperationExecutionRequest) (_ *workflowservice.DeleteNexusOperationExecutionResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DeleteNexusOperationExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) WaitForExternalWorkflow(_ context.Context, _ *workflowservice.WaitForExternalWorkflowRequest) (_ *workflowservice.WaitForExternalWorkflowResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("WaitForExternalWorkflow gRPC endpoint is not yet implemented")
+}
