@@ -302,6 +302,20 @@ func (mr *MockExecutableTaskMockRecorder) SourceClusterName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SourceClusterName", reflect.TypeOf((*MockExecutableTask)(nil).SourceClusterName))
 }
 
+// SourceShardKey mocks base method.
+func (m *MockExecutableTask) SourceShardKey() ClusterShardKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SourceShardKey")
+	ret0, _ := ret[0].(ClusterShardKey)
+	return ret0
+}
+
+// SourceShardKey indicates an expected call of SourceShardKey.
+func (mr *MockExecutableTaskMockRecorder) SourceShardKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SourceShardKey", reflect.TypeOf((*MockExecutableTask)(nil).SourceShardKey))
+}
+
 // State mocks base method.
 func (m *MockExecutableTask) State() tasks.State {
 	m.ctrl.T.Helper()

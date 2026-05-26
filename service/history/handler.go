@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
@@ -2507,7 +2508,7 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := payloads.Encode(r.ValueAsAny())
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")

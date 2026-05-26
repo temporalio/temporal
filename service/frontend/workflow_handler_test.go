@@ -39,6 +39,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
@@ -181,6 +183,19 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			}
 		},
 	)
+	saValidator := searchattribute.NewValidator(
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesMapperProvider(),
+		config.SearchAttributesNumberOfKeysLimit,
+		config.SearchAttributesSizeOfValueLimit,
+		config.SearchAttributesTotalSizeLimit,
+		s.mockResource.GetVisibilityManager(),
+		visibility.AllowListForValidation(
+			s.mockResource.GetVisibilityManager().GetStoreNames(),
+			config.VisibilityAllowList,
+		),
+		config.SuppressErrorSetSystemSearchAttribute,
+	)
 	return NewWorkflowHandler(
 		cbValidator,
 		config,
@@ -200,6 +215,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetSearchAttributesMapperProvider(),
 		s.mockResource.GetSearchAttributesProvider(),
+		saValidator,
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
@@ -220,6 +236,11 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		),
 		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
+		workflow.NewValidator(
+			workflow.NewConfig(dc.NewNoopCollection()),
+			s.mockSearchAttributesMapperProvider,
+			saValidator,
+		),
 	)
 }
 
@@ -383,7 +404,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errWorkflowIDNotSet, err)
+	s.Equal(workflow.ErrWorkflowIDNotSet, err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
@@ -470,7 +491,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, errInvalidWorkflowExecutionTimeoutSeconds.Error())
+	s.ErrorContains(err, "An invalid WorkflowExecutionTimeoutSeconds is set on request")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeout() {
@@ -500,7 +521,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, errInvalidWorkflowRunTimeoutSeconds.Error())
+	s.ErrorContains(err, "An invalid WorkflowRunTimeoutSeconds is set on request")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolicyInitialized() {
@@ -582,7 +603,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, errInvalidWorkflowTaskTimeoutSeconds.Error())
+	s.ErrorContains(err, "An invalid WorkflowTaskTimeoutSeconds is set on request")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDelaySet() {
@@ -613,7 +634,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDel
 		WorkflowStartDelay: durationpb.New(10 * time.Second),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.ErrorIs(err, errCronAndStartDelaySet)
+	s.ErrorIs(err, workflow.ErrCronAndStartDelaySet)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDelay() {
@@ -646,7 +667,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, errInvalidWorkflowStartDelaySeconds.Error())
+	s.ErrorContains(err, workflow.ErrInvalidWorkflowStartDelaySeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
@@ -832,6 +853,47 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "batch job link must not have an empty job ID")
+
+	req.Links = []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_NexusOperation_{
+				NexusOperation: &commonpb.Link_NexusOperation{},
+			},
+		},
+	}
+
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "nexus operation link must not have an empty namespace field")
+
+	req.Links = []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_NexusOperation_{
+				NexusOperation: &commonpb.Link_NexusOperation{
+					Namespace: "present",
+				},
+			},
+		},
+	}
+
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "nexus operation link must not have an empty operation ID field")
+
+	req.Links = []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_NexusOperation_{
+				NexusOperation: &commonpb.Link_NexusOperation{
+					Namespace:   "present",
+					OperationId: "present",
+				},
+			},
+		},
+	}
+
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "nexus operation link must not have an empty run ID field")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
@@ -4121,7 +4183,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 			})
 
 			s.Nil(resp)
-			assertMultiOpsErr([]error{errWorkflowIDNotSet, errMultiOpAborted}, err)
+			assertMultiOpsErr([]error{workflow.ErrWorkflowIDNotSet, errMultiOpAborted}, err)
 		})
 
 		// unique to MultiOperation:

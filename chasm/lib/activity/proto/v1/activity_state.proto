@@ -155,6 +155,15 @@ message ActivityAttemptState {
   // The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
   // case of implicit retries.
   string start_request_id = 9;
+
+  // The name of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+  // `client-name` header on PollActivityTaskQueue). Overwritten on each new attempt. Empty if no worker has ever
+  // picked up this activity, or if the most recent worker did not send a client-name header.
+  string sdk_name = 10;
+
+  // The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+  // `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
+  string sdk_version = 11;
 }
 
 message ActivityHeartbeatState {

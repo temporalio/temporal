@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -218,6 +219,11 @@ type (
 		IsWorkflow() bool
 		GetNexusCompletion(
 			ctx context.Context,
+			requestID string,
+		) (nexusrpc.CompleteOperationOptions, error)
+		GetNexusUpdateCompletion(
+			ctx context.Context,
+			updateID string,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
@@ -777,6 +783,13 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
+// hasNewTransactionSideEffects returns true when the transaction has observable
+// effects that must be persisted regardless of whether data bytes changed:
+// new tasks scheduled on this node, or lifecycle termination.
+func (n *Node) hasNewTransactionSideEffects() bool {
+	return len(n.newTasks[n.value]) > 0 || n.terminated
+}
+
 // serialize sets or updates serializedValue field of the node n with serialized value.
 // It sets node's valueState to valueStateSynced and updates LastUpdateVersionedTransition.
 func (n *Node) serialize() error {
@@ -794,6 +807,10 @@ func (n *Node) serialize() error {
 	}
 }
 
+// serializeComponentNode serializes the component node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeComponentNode() error {
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -807,21 +824,33 @@ func (n *Node) serializeComponentNode() error {
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
 			var err error
-			if blob, err = serialization.ProtoEncode(field.val.Interface().(proto.Message)); err != nil {
+			if blob, err = encodeChasmBlob(field.val.Interface().(proto.Message)); err != nil {
 				return err
 			}
 		}
 
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+		n.serializedNode.Data = blob
+
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			rc, ok := n.registry.componentFor(n.value)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component type is not registered",
+					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			}
+			// TypeId mismatch on a brand new node indicates node reassignment.
+			existingTypeID := n.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
+			if existingTypeID != 0 && existingTypeID != rc.componentID {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component node TypeId changed on first serialization",
+					fmt.Errorf("existing: %d, new: %d", existingTypeID, rc.componentID),
+				)
+			}
+			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		}
 
-		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1155,6 +1184,10 @@ func (n *Node) deleteChildren(
 	return nil
 }
 
+// serializeDataNode serializes the data node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeDataNode() error {
 	protoValue, ok := n.value.(proto.Message)
 	if !ok {
@@ -1164,7 +1197,7 @@ func (n *Node) serializeDataNode() error {
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
 		var err error
-		if blob, err = serialization.ProtoEncode(protoValue); err != nil {
+		if blob, err = encodeChasmBlob(protoValue); err != nil {
 			return err
 		}
 	}
@@ -1175,6 +1208,10 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+// serializeCollectionNode serializes the collection node.
+// If this method is updated to modify serialized fields beyond
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
@@ -1703,8 +1740,34 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+
+		// Skip writing nodes whose serialized content hasn't changed. A nil
+		// LastUpdateVersionedTransition means the node is brand new and must be written.
+		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
+		// blob, leaving prevData pointing at the original for comparison.
+		prevVersionedTransition := common.CloneProto(
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+		)
+		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+			prevVersionedTransition != nil &&
+			!node.hasNewTransactionSideEffects()
+		var prevData *commonpb.DataBlob
+		if skipIfClean {
+			prevData = node.serializedNode.Data
+		}
+
 		if err := node.serialize(); err != nil {
 			return err
+		}
+
+		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
+		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
+			continue
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
@@ -1716,10 +1779,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 				fmt.Errorf("found at path %s", nodePath))
 		}
 
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
 		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,
@@ -2572,6 +2631,8 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// Only record the deletion if the node was previously persisted.
+	//
 	// TODO: consider remove entries from UpdatedNodes map as well
 	// if the same node is updated and then deleted in the same transaction.
 	//
@@ -2582,10 +2643,12 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
 	//   first with a deletion only mutation for tombstone nodes, and then an
 	//   update only mutation.
-	if isSystemDelete {
-		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
-	} else {
-		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		if isSystemDelete {
+			n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+		} else {
+			n.mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
 	}
 
 	n.cleanupCachedTasks()
@@ -3004,7 +3067,7 @@ func serializeTask(
 ) (*commonpb.DataBlob, error) {
 	protoValue, ok := taskValue.Interface().(proto.Message)
 	if ok {
-		return serialization.ProtoEncode(protoValue)
+		return encodeChasmBlob(protoValue)
 	}
 
 	taskGoType := registrableTask.goType
@@ -3017,10 +3080,7 @@ func serializeTask(
 
 	// Handle empty task struct.
 	if taskGoType.NumField() == 0 {
-		return &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}, nil
+		return encodeChasmBlob(nil)
 	}
 
 	// TODO: consider pre-calculating the proto field num when registring the task type.
@@ -3039,7 +3099,7 @@ func serializeTask(
 		protoMessageFound = true
 
 		var err error
-		blob, err = serialization.ProtoEncode(fieldV.Interface().(proto.Message))
+		blob, err = encodeChasmBlob(fieldV.Interface().(proto.Message))
 		if err != nil {
 			return nil, err
 		}
@@ -3427,4 +3487,10 @@ func makeValidationFn(
 		}
 		return nil
 	}
+}
+
+// encodeChasmBlob encodes CHASM data and task payloads through the env-aware
+// serializer while preserving deterministic proto3 bytes for byte comparisons.
+func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
+	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }

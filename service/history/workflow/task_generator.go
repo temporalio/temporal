@@ -271,7 +271,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTasks(closeTasks...)
 
-	return nil
+	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
+	return r.mutableState.GenerateActivityCancelCommandsForClose()
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.

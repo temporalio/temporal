@@ -1158,7 +1158,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1173,7 +1173,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 
 	// unset pinned override with boolean
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1195,7 +1195,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1210,7 +1210,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 
 	// unset pinned override with empty
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1231,7 +1231,7 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1258,7 +1258,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1312,7 +1312,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 
 	// now we unset the override and check that the base deployment/behavior is in effect
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -3942,7 +3942,7 @@ func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
 	if !found {
 		return []string{}
 	}
-	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	s.NoError(err)
 	buildIDs, ok := decoded.([]string)
 	s.True(ok)
@@ -3954,7 +3954,7 @@ func (s *mutableStateSuite) getUsedDeploymentVersionsFromMutableState() []string
 	if !found {
 		return []string{}
 	}
-	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	s.NoError(err)
 	usedDeploymentVersions, ok := decoded.([]string)
 	s.True(ok)
@@ -6631,6 +6631,7 @@ func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
 		s.True(hasPendingWork)
 		s.Equal("has pending request cancel external", reason)
 	})
+
 }
 
 func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
@@ -6748,6 +6749,15 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.True(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPaused", func() {
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 }
 
@@ -7605,6 +7615,185 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			} else {
 				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
 			}
+		})
+	}
+}
+
+func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
+	t.Parallel()
+
+	startedClock := &clockspb.VectorClock{ShardId: 1, Clock: 100}
+
+	testCases := []struct {
+		name            string
+		featureEnabled  bool
+		standby         bool // simulate running on a standby (non-active) cluster
+		activities      map[int64]*persistencespb.ActivityInfo
+		expectedQueues  map[string]int // controlQueue -> expected command count
+		expectedNoTasks bool
+	}{
+		{
+			name:           "activities with control queue and started clock",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedQueues: map[string]int{"control-queue-1": 1},
+		},
+		{
+			name:           "skips activities without control queue",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId: 1,
+					ActivityId:       "act-1",
+					ActivityType:     &commonpb.ActivityType{Name: "type1"},
+					StartedClock:     startedClock,
+					Attempt:          1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+		{
+			name:           "skips activities without started clock",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+		{
+			name:           "multiple activities batched by control queue",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "queue-A",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+				2: {
+					ScheduledEventId:       2,
+					ActivityId:             "act-2",
+					ActivityType:           &commonpb.ActivityType{Name: "type2"},
+					WorkerControlTaskQueue: "queue-A",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+				3: {
+					ScheduledEventId:       3,
+					ActivityId:             "act-3",
+					ActivityType:           &commonpb.ActivityType{Name: "type3"},
+					WorkerControlTaskQueue: "queue-B",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedQueues: map[string]int{"queue-A": 2, "queue-B": 1},
+		},
+		{
+			name:           "feature flag disabled - no tasks generated",
+			featureEnabled: false,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+		{
+			name:           "standby cluster - no tasks generated",
+			featureEnabled: true,
+			standby:        true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockEventsCache := events.NewMockCache(ctrl)
+			mockConfig := tests.NewDynamicConfig()
+			mockConfig.EnableCancelActivityWorkerCommand = dynamicconfig.GetBoolPropertyFn(tc.featureEnabled)
+
+			mockShard := shard.NewTestContext(
+				ctrl,
+				&persistencespb.ShardInfo{ShardId: 0, RangeId: 1},
+				mockConfig,
+			)
+			defer mockShard.StopForTest()
+			reg := hsm.NewRegistry()
+			require.NoError(t, RegisterStateMachine(reg))
+			require.NoError(t, callbacks.RegisterStateMachine(reg))
+			require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+			mockShard.SetStateMachineRegistry(reg)
+			mockShard.SetEventsCacheForTesting(mockEventsCache)
+
+			namespaceEntry := tests.GlobalNamespaceEntry
+			mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+			activeCluster := cluster.TestCurrentClusterName
+			if tc.standby {
+				activeCluster = cluster.TestAlternativeClusterName
+			}
+			mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), gomock.Any()).Return(activeCluster).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+
+			ms := NewMutableState(mockShard, mockEventsCache, log.NewTestLogger(), namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+			ms.pendingActivityInfoIDs = tc.activities
+
+			err := ms.GenerateActivityCancelCommandsForClose()
+			require.NoError(t, err)
+
+			if tc.expectedNoTasks {
+				require.Empty(t, ms.InsertTasks[tasks.CategoryOutbound])
+				return
+			}
+
+			// Verify tasks were generated by checking outbound task messages
+			var workerCommandTasks []*tasks.WorkerCommandsTask
+			for _, task := range ms.InsertTasks[tasks.CategoryOutbound] {
+				if wct, ok := task.(*tasks.WorkerCommandsTask); ok {
+					workerCommandTasks = append(workerCommandTasks, wct)
+				}
+			}
+
+			// Verify each expected queue got the right number of commands
+			tasksByQueue := make(map[string]int)
+			for _, wct := range workerCommandTasks {
+				tasksByQueue[wct.Destination] = len(wct.Commands)
+			}
+			require.Equal(t, tc.expectedQueues, tasksByQueue)
 		})
 	}
 }

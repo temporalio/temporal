@@ -380,7 +380,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        uses: hoverkraft-tech/compose-action@v2.0.1
+        uses: ./.github/actions/docker-compose-pull
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: |
@@ -499,7 +499,7 @@ jobs:
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: hoverkraft-tech/compose-action@v2.0.1
+        uses: ./.github/actions/docker-compose-pull
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
@@ -617,7 +617,7 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start PostgreSQL
-        uses: hoverkraft-tech/compose-action@v2.0.1
+        uses: ./.github/actions/docker-compose-pull
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
