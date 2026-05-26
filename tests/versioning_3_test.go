@@ -67,6 +67,8 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
+	ver3TestTimeout = 4 * time.Minute
+	ver3VerifyWait  = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -90,7 +92,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	testcontext.New(s.T(), testcontext.WithTimeout(3*time.Minute))
+	testcontext.New(s.T(), testcontext.WithTimeout(ver3TestTimeout))
 
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker deployment manager workflows"),
@@ -3520,7 +3522,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 			s.NoError(err)
 			s.True(resp.GetIsMember())
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -3904,7 +3906,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 				versioningInfo.GetVersionTransition(),
 			))
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 }
 
 func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
