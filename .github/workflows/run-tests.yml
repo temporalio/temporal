@@ -365,10 +365,9 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Wait for containerized dependencies to be healthy
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
 
       - name: Run integration test
         timeout-minutes: 15
@@ -441,10 +440,10 @@ jobs:
 
       - name: Wait for containerized dependencies to be healthy
         if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
