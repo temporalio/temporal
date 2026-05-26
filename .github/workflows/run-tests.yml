@@ -332,10 +332,7 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
-      CONTAINERS: |
-        cassandra
-        mysql
-        postgresql
+      CONTAINERS: cassandra mysql postgresql
     steps:
       - uses: actions/checkout@v6
         with:
@@ -406,7 +403,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
-      CONTAINERS: ${{ join(matrix.containers, '\n') }}
+      CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
       - uses: actions/checkout@v6
         with:
