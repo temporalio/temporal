@@ -170,6 +170,34 @@ FAIL`,
 			contains:    []string{"Error Trace:"},
 			notContains: []string{"FAIL"},
 		},
+		{
+			name: "keeps last await attempt without trailing logs",
+			data: `    report.go:54: attempt errors:
+  --- attempt 1 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	first failure
+
+  --- attempt 2 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	penultimate failure
+
+  --- attempt 3 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	last failure
+
+logger.go:146: network dial error connection refused
+--- FAIL: TestSuite/TestCase (92.93s)
+FAIL`,
+			contains: []string{
+				"--- attempt 3 ---",
+				"Error:      \tlast failure",
+				"--- FAIL: TestSuite/TestCase (92.93s)",
+			},
+			notContains: []string{"attempts omitted", "--- attempt 1 ---", "first failure", "--- attempt 2 ---", "penultimate failure", "logger.go", "connection refused"},
+		},
 	}
 
 	for _, tt := range tests {

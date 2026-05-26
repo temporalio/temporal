@@ -9,9 +9,12 @@ import (
 	"github.com/maruel/panicparse/v2/stack"
 )
 
-// noFailureDetails is returned by parseFailureDetails when no recognisable
-// failure block is found.
-const noFailureDetails = "(error details not found)"
+const (
+	// noFailureDetails is returned by parseFailureDetails when no recognisable
+	// failure block is found.
+	noFailureDetails     = "(error details not found)"
+	goTestFailLinePrefix = "--- FAIL:"
+)
 
 // parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
 func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
@@ -144,11 +147,11 @@ func parseAlerts(stdout string) []alert {
 }
 
 // extractTestNames tries to identify Go test function names from a log block.
-// It looks for fully-qualified names like pkg.TestXxx(...) and '--- FAIL: TestXxx' lines.
+// It looks for fully-qualified names like pkg.TestXxx(...) and Go test failure lines.
 func extractTestNames(block string) []string {
 	var tests []string
 	seen := make(map[string]struct{})
-	for _, line := range strings.Split(block, "\n") {
+	for line := range strings.SplitSeq(block, "\n") {
 		l := strings.TrimSpace(line)
 		if l == "" {
 			continue
@@ -177,18 +180,13 @@ func addUniqueTest(tests *[]string, seen map[string]struct{}, name string) {
 	*tests = append(*tests, name)
 }
 
-// parseTripleDashTestName parses lines like:
-// "--- FAIL: TestName (0.00s)" and returns the test name if present.
+// parseTripleDashTestName parses Go test failure lines and returns the test name if present.
 func parseTripleDashTestName(line string) (string, bool) {
-	if !strings.HasPrefix(line, "--- ") {
+	if !strings.HasPrefix(line, goTestFailLinePrefix) {
 		return "", false
 	}
-	parts := strings.Split(line, ":")
-	if len(parts) < 2 {
-		return "", false
-	}
-	name := strings.TrimSpace(parts[1])
-	name = strings.Split(name, " ")[0]
+	name := strings.TrimSpace(strings.TrimPrefix(line, goTestFailLinePrefix))
+	name, _, _ = strings.Cut(name, " ")
 	if !strings.HasPrefix(name, "Test") {
 		return "", false
 	}
@@ -304,17 +302,14 @@ func findRaceBlockStart(lines []string, i int) int {
 // collectBlock builds a block from start until the stop condition is met.
 func collectBlock(lines []string, start int, stop func(line string, idx, start int) bool) (string, int) {
 	var b strings.Builder
-	end := len(lines) - 1
 	for j := start; j < len(lines); j++ {
 		b.WriteString(lines[j])
 		b.WriteByte('\n')
 		if stop(lines[j], j, start) {
-			end = j
-			break
+			return b.String(), j
 		}
-		end = j
 	}
-	return b.String(), end
+	return b.String(), len(lines) - 1
 }
 
 func isRaceBoundary(line string) bool {
@@ -330,14 +325,14 @@ func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 }
 
 // parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
-// It looks for "--- FAIL: TestName" lines produced as tests complete, and is
+// It looks for Go test failure lines produced as tests complete, and is
 // used when the test binary was killed externally before producing a JUnit XML.
 func parseFailedTestsFromOutput(stdout string) []string {
 	var failed []string
 	seen := make(map[string]struct{})
-	for _, line := range strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "--- FAIL: ") {
+		if !strings.HasPrefix(line, goTestFailLinePrefix) {
 			continue
 		}
 		if name, ok := parseTripleDashTestName(line); ok {
@@ -351,10 +346,14 @@ func parseFailedTestsFromOutput(stdout string) []string {
 func parseFailureDetails(data string) string {
 	lines := normalizedFailureLines(data)
 
-	if start, end, ok := findTestifyFailureBlock(lines); ok {
-		return strings.Join(lines[start:end], "\n")
+	// Prefer assertion blocks because they contain the useful testify failure
+	// detail and can be selected from the end while ignoring trailing logs.
+	if block, ok := findLastAssertionFailureBlock(lines); ok {
+		return block
 	}
-	if start, end, ok := findLastFailureBlock(lines); ok {
+	// Some failures, such as gomock errors, do not include an Error Trace.
+	// Fall back to the last Go test output block in those cases.
+	if start, end, ok := findLastTestOutputFailureBlock(lines); ok {
 		return strings.Join(lines[start:end], "\n")
 	}
 	return noFailureDetails
@@ -372,39 +371,68 @@ func normalizedFailureLines(data string) []string {
 	return lines
 }
 
-func findTestifyFailureBlock(lines []string) (start, end int, ok bool) {
-	for i, line := range lines {
-		if !strings.Contains(line, "Error Trace:") {
+func findLastAssertionFailureBlock(lines []string) (string, bool) {
+	var failLine string
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if failLine == "" && strings.HasPrefix(line, goTestFailLinePrefix) {
+			// Keep the final Go test failure line because it carries the test duration.
+			failLine = line
 			continue
 		}
-		start = i
-		if i > 0 {
-			start = i - 1
+		if !strings.Contains(lines[i], "Error Trace:") {
+			continue
 		}
-		return start, endOfFailureBlock(lines, start+1), true
+
+		// Include the nearest preceding line when present. For testify this is
+		// the file header; for await failures this is the attempt marker.
+		start := i
+		for prev := i - 1; prev >= 0; prev-- {
+			if strings.TrimSpace(lines[prev]) != "" {
+				start = prev
+				break
+			}
+		}
+		out := append([]string{}, lines[start:endOfAssertionBlock(lines, i+1)]...)
+		if failLine != "" {
+			out = append(out, "", failLine)
+		}
+		return strings.Join(out, "\n"), true
+	}
+	return "", false
+}
+
+func endOfAssertionBlock(lines []string, start int) int {
+	sawTestLine := false
+	for i := start; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, goTestFailLinePrefix) {
+			return i
+		}
+		if strings.HasPrefix(line, "Test:") {
+			sawTestLine = true
+			continue
+		}
+		// Logs written after the Test line are not part of the assertion block.
+		if sawTestLine && isTestOutputLine(lines[i]) {
+			return i
+		}
+	}
+	return len(lines)
+}
+
+func findLastTestOutputFailureBlock(lines []string) (start, end int, ok bool) {
+	for start := len(lines) - 1; start >= 0; start-- {
+		if !isTestOutputLine(lines[start]) {
+			continue
+		}
+		end := start + 1
+		for end < len(lines) && !isTestOutputLine(lines[end]) && lines[end] != "" {
+			end++
+		}
+		return start, end, true
 	}
 	return 0, 0, false
-}
-
-func findLastFailureBlock(lines []string) (start, end int, ok bool) {
-	lastStart := -1
-	for i, line := range lines {
-		if isTestOutputLine(line) {
-			lastStart = i
-		}
-	}
-	if lastStart < 0 {
-		return 0, 0, false
-	}
-	return lastStart, endOfFailureBlock(lines, lastStart+1), true
-}
-
-func endOfFailureBlock(lines []string, start int) int {
-	end := start
-	for end < len(lines) && !isTestOutputLine(lines[end]) && lines[end] != "" {
-		end++
-	}
-	return end
 }
 
 // isTestOutputLine reports whether line is a Go test-framework output line,

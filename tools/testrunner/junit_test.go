@@ -125,7 +125,7 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	require.Contains(t, failureData, "Error Trace:")
 	require.Contains(t, failureData, "expected: 1")
 	require.NotContains(t, failureData, "=== RUN")
-	require.NotContains(t, failureData, "--- FAIL:")
+	require.Contains(t, failureData, "--- FAIL: TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
 	for _, tc := range suites[0].Testcases {
 		if tc.Failure != nil {
 			require.Equal(t, string(failureTypeFailed), tc.Failure.Type)
