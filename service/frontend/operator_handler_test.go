@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -80,7 +81,6 @@ func (s *operatorHandlerSuite) SetupTest() {
 		health.NewServer(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetClusterMetadataManager(),
-		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
 		s.mockResource.NamespaceCache,
@@ -1142,10 +1142,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
-	s.mockResource.MetadataMgr.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(
-		&persistence.ListNamespacesResponse{},
-		nil,
-	)
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -1158,10 +1155,7 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
-	s.mockResource.MetadataMgr.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(
-		&persistence.ListNamespacesResponse{},
-		nil,
-	)
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -1173,23 +1167,17 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
 	var clusterName = "cluster"
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
-	s.mockResource.MetadataMgr.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(
-		&persistence.ListNamespacesResponse{
-			Namespaces: []*persistence.GetNamespaceResponse{
-				{
-					IsGlobalNamespace: true,
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{Name: "global-ns"},
-						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-							Clusters: []string{"other", clusterName},
-						},
-					},
-				},
-			},
-		},
+	globalNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "global-ns"},
 		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			Clusters:          []string{"other", clusterName},
+		},
+		1,
 	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{globalNS})
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	var failedPrecondition *serviceerror.FailedPrecondition
@@ -1199,23 +1187,13 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_LocalNamespaceDoesNotBlock() {
 	var clusterName = "cluster"
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
-	s.mockResource.MetadataMgr.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(
-		&persistence.ListNamespacesResponse{
-			Namespaces: []*persistence.GetNamespaceResponse{
-				{
-					IsGlobalNamespace: false,
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{Name: "temporal-system"},
-						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-							Clusters: []string{clusterName},
-						},
-					},
-				},
-			},
-		},
+	localNS := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "temporal-system"},
 		nil,
+		clusterName,
 	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS})
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
