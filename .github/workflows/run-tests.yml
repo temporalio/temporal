@@ -441,7 +441,6 @@ jobs:
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
 
       - name: Wait for containerized dependencies to be healthy
-        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: ./.github/actions/docker-compose-healthy
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
