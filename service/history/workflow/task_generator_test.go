@@ -12,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1418,124 +1417,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 	}
 }
 
-// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer covers step (3)
-// of RegenerateTimerTasksForTimeSkipping: the elapsed-bound wake-up task regeneration.
-func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now().UTC()
-	boundTarget := now.Add(2 * time.Hour)
-
-	type wantTask struct {
-		visibilityTimestamp time.Time
-		eventID             int64
-	}
-
-	for _, tc := range []struct {
-		name             string
-		tsi              *persistencespb.TimeSkippingInfo
-		wantBoundTask    *wantTask
-		wantUserTimerLen int
-	}{
-		{
-			name: "bound configured and unreached emits task",
-			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
-					SourceEventId: 7,
-					HasReached:    false,
-				},
-			},
-			wantBoundTask: &wantTask{visibilityTimestamp: boundTarget, eventID: 7},
-		},
-		{
-			name: "HasReached=true skips task emission",
-			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
-					SourceEventId: 7,
-					HasReached:    true,
-				},
-			},
-		},
-		{
-			name: "Enabled=false skips task emission",
-			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: false,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
-					SourceEventId: 7,
-					HasReached:    false,
-				},
-			},
-		},
-		{
-			name: "no bound info does not emit bound task",
-			tsi: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-			},
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctrl := gomock.NewController(t)
-			mutableState := historyi.NewMockMutableState(ctrl)
-			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-				TimeSkippingInfo: tc.tsi,
-			}).AnyTimes()
-			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
-			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
-			// Step (4) is gated by HadOrHasWorkflowTask: true short-circuits and isolates step (3).
-			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
-
-			var captured []tasks.Task
-			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
-				captured = append(captured, ts...)
-			}).AnyTimes()
-
-			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
-
-			var boundTasks []*tasks.TimeSkippingTimerTask
-			for _, task := range captured {
-				if bt, ok := task.(*tasks.TimeSkippingTimerTask); ok {
-					boundTasks = append(boundTasks, bt)
-				}
-			}
-
-			if tc.wantBoundTask == nil {
-				require.Empty(t, boundTasks)
-				return
-			}
-
-			require.Len(t, boundTasks, 1)
-			bt := boundTasks[0]
-			require.Equal(t, tests.WorkflowKey, bt.WorkflowKey)
-			require.Equal(t, tc.wantBoundTask.visibilityTimestamp, bt.VisibilityTimestamp)
-			require.Equal(t, tc.wantBoundTask.eventID, bt.EventID)
-			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
-		})
-	}
-}
-
-// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer covers step (4)
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer covers step (3)
 // of RegenerateTimerTasksForTimeSkipping: the backoff-timer regeneration that supports
 // start-with-delay, cron, retry, and CaN-with-backoff.
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *testing.T) {

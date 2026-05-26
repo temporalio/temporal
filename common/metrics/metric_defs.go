@@ -596,7 +596,6 @@ const (
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
 	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
-	TaskTypeTimerActiveTaskTimeSkippingTimer              = "TimerActiveTaskTimeSkippingTimer"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -606,7 +605,6 @@ const (
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
 	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
-	TaskTypeTimerStandbyTaskTimeSkippingTimer             = "TimerStandbyTaskTimeSkippingTimer"
 )
 
 // Schedule action types

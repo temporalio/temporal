@@ -1089,22 +1089,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		})
 	}
 
-	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
-	// VisibilityTimestamp tracks the new accumulated skip.
-	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi.GetConfig().GetEnabled() {
-		boundInfo := tsi.GetCurrentElapsedDurationBound()
-		if boundInfo != nil && !boundInfo.GetHasReached() {
-			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
-				EventID:             boundInfo.GetSourceEventId(),
-			})
-		}
-	}
-
-	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// (3) start delays (start-with-delay, cron, retry in CAN, etc).
 	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
 	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
 	// no backoff has no real timer to regenerate.

@@ -339,7 +339,6 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 	twentyMin := durationpb.New(20 * time.Minute)
 	maxSkippedTen := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: tenMin}
 	maxSkippedTwenty := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: twentyMin}
-	maxElapsedTen := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: tenMin}
 
 	tcs := []struct {
 		name        string
@@ -359,11 +358,6 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 		{
 			name:   "enabled, no bound",
 			config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		},
-		{
-			name:        "MaxElapsedDuration bound is not validated here",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedTen},
-			accumulated: twentyMin,
 		},
 		{
 			name:   "MaxSkipped set, nil accumulated treated as zero",
@@ -414,7 +408,6 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 	oneHour := durationpb.New(time.Hour)
 	twoHours := durationpb.New(2 * time.Hour)
-	thirtyMin := durationpb.New(30 * time.Minute)
 
 	testCases := []struct {
 		name           string
@@ -443,29 +436,6 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: twoHours,
-				},
-			},
-		},
-		{
-			name: "change bound type to max_elapsed_duration preserves enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: oneHour,
-				},
-			},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-						MaxElapsedDuration: thirtyMin,
-					},
-				},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: thirtyMin,
 				},
 			},
 		},

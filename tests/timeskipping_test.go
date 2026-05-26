@@ -97,8 +97,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
-	inputBound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-		MaxElapsedDuration: durationpb.New(time.Hour),
+	inputBound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+		MaxSkippedDuration: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -182,7 +182,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 // lifecycle for TimeSkippingConfig:
 //  1. Start workflow with no time-skipping — assert mutable state has no config.
 //  2. First update: enable with MaxSkippedDuration bound — check MS and event 1 attributes.
-//  3. Second update: change bound to MaxElapsedDuration, add DisablePropagation — check MS and event 2 attributes.
+//  3. Second update: bump bound duration, add DisablePropagation — check MS and event 2 attributes.
 //  4. Third update: disable (Enabled=false) — check MS and event 3 attributes.
 //  5. Assert exactly 3 WorkflowExecutionOptionsUpdated events appear in history.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled() {
@@ -245,10 +245,10 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	s.Len(events, 1)
 	s.True(proto.Equal(config1, events[0].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
 
-	// Second update: change bound type, add DisablePropagation.
+	// Second update: bump bound duration, add DisablePropagation.
 	config2 := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(2 * time.Hour)},
 	}
 	updateOptions(config2)
 

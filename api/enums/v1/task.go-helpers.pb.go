@@ -59,7 +59,6 @@ var (
 		"Chasm":                              33,
 		"ReplicationDeleteExecution":         34,
 		"WorkerCommands":                     35,
-		"TimeskippingTimer":                  36,
 	}
 )
 

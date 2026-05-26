@@ -286,14 +286,5 @@ func mergeWorkflowExecutionOptions(
 		}
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
-		}
-	}
-
 	return mergeInto, nil
 }
