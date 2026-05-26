@@ -26,11 +26,13 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.uber.org/fx"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -90,6 +92,7 @@ type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
+	workerService            bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
@@ -138,13 +141,22 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 	}
 }
 
-// WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
-func WithWorkerService(reason string) TestOption {
+// WithFxOptions appends fx options to a specific service's fx graph. This
+// implies a dedicated cluster because custom fx options cannot be shared
+// across tests.
+func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
-		o.dedicatedReason = "worker service required: " + reason
+		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
+		o.dedicatedReason = "custom fx options used"
+	}
+}
+
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead.
+func WithWorkerService(_ string) TestOption {
+	return func(o *testOptions) {
+		o.workerService = true
 	}
 }
 
@@ -264,8 +276,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		}
 	}
 
-	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	// Obtain the test cluster from the pool.
+	base := testClusterPool.get(t, options.dedicatedCluster, options.workerService, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -354,7 +366,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
+		if e.isShared && !testClusterPool.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")

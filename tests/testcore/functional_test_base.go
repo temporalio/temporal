@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -268,8 +269,9 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Reserve a slot from the dedicated test cluster pool.
-	testClusterRouter.dedicated.reserveSlot(s.T())
+	// Acquire a slot from the dedicated test cluster pool.
+	params := ApplyTestClusterOptions(options)
+	testClusterPool.acquireDedicatedSlot(s.T(), params.EnableWorkerService)
 	s.setupCluster(options...)
 }
 
@@ -313,7 +315,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
 		s.isShared = true
 	}
 
@@ -342,14 +345,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
 	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
-}
-
-func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
-	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		return *persistencetests.GetSQLiteFileTestClusterOption()
-	}
-	return defaults
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -735,7 +730,7 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
 // fails t if the cluster was poisoned during t's window. This fails all active tests
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
-// The cluster pool's slot reference is replaced as soon as poison is observed.
+// The pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	if s.t != nil {
 		s.t.addTest(t)
