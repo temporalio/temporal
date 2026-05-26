@@ -54,6 +54,8 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
+	ver3TestTimeout = 4 * time.Minute
+	ver3VerifyWait  = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -444,7 +446,7 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 			t.Require().NoError(err)
 			t.Require().True(resp.GetIsMember())
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
@@ -814,7 +816,7 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 				versioningInfo.GetVersionTransition(),
 			))
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) startWorkflow(

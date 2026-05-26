@@ -62,7 +62,7 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *VersioningTest
 }
 
 func setupVersioning3Env(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
-	testcontext.New(t, testcontext.WithTimeout(3*time.Minute))
+	testcontext.New(t, testcontext.WithTimeout(ver3TestTimeout))
 
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker deployment manager workflows"),
