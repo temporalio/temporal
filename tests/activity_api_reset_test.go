@@ -146,7 +146,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
@@ -205,7 +205,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
@@ -279,7 +279,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
@@ -351,7 +351,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
@@ -472,7 +472,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo
@@ -582,7 +582,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 		if !activityWasReset.Load() {
 			return "", errors.New("bad-luck-please-retry")
 		}
-		s.WaitForChannel(ctx, activityCompleteCh)
+		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
@@ -661,7 +661,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityBlockCh)
+		s.WaitForChannel(ctx, activityBlockCh) //nolint:staticcheck
 		return "done!", nil
 	}
 
