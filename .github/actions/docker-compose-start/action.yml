@@ -60,6 +60,7 @@ runs:
         fi
 
     - name: Pull services
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
       uses: nick-fields/retry@v4
       env:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
@@ -95,6 +96,7 @@ runs:
       env:
         CACHE_PATH: ${{ inputs['cache-path'] }}
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        SERVICES: ${{ inputs.services }}
       run: |
         mkdir -p "$CACHE_PATH"
         images_file="$CACHE_PATH/images.txt"
@@ -105,7 +107,7 @@ runs:
           if docker image inspect "$image" >/dev/null 2>&1; then
             printf '%s\n' "$image" >> "$images_file"
           fi
-        done < <(docker compose -f "$COMPOSE_FILE" config --images | sort -u)
+        done < <(docker compose -f "$COMPOSE_FILE" config --images $SERVICES | sort -u)
 
         if [[ ! -s "$images_file" ]]; then
           echo "No Docker images are available to cache."
