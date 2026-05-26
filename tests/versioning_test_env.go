@@ -54,6 +54,7 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
+	ver3EnvSlots    = 4
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -65,7 +66,10 @@ const (
 	versioning3DeploymentWorkflowVersion = workerdeployment.VersionDataRevisionNumber
 )
 
-var _ = testhooks.MatchingIgnoreRoutingConfigRevisionCheck
+var (
+	_                  = testhooks.MatchingIgnoreRoutingConfigRevisionCheck
+	versioning3EnvSlot = make(chan struct{}, ver3EnvSlots)
+)
 
 type VersioningTestEnv struct {
 	*testcore.TestEnv
