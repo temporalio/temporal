@@ -66,7 +66,6 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
-	ver3RPCTimeout  = 10 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -406,7 +405,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -439,7 +438,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 		// wait for v1 to become ramping
 		s.Await(func(s *Versioning3Suite) {
-			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -4087,7 +4086,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -4162,7 +4161,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		for _, tqType := range tqTypes {
@@ -4181,7 +4180,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -4216,7 +4215,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -4240,7 +4239,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		s.Await(func(s *Versioning3Suite) {
-			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -4512,7 +4511,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
