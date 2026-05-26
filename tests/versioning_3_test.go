@@ -82,7 +82,7 @@ type Versioning3Suite struct {
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseSuiteScopedClusters(t, testcore.DefaultSuiteClusterPoolSize())
 	parallelsuite.Run(t, &Versioning3Suite{})
 }
 
