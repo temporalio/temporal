@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/common/worker_versioning"
@@ -61,6 +62,8 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *VersioningTest
 }
 
 func setupVersioning3Env(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
+	testcontext.New(t, testcontext.WithTimeout(3*time.Minute))
+
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker deployment manager workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
