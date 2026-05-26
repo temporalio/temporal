@@ -54,6 +54,7 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
+	ver3RPCTimeout  = 5 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -363,13 +364,16 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *te
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		req.BuildId = tv.BuildID()
-		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
+		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
@@ -434,8 +438,11 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		for _, tqType := range tqTypes {
-			resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(t.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 				NamespaceId:   env.NamespaceID().String(),
 				TaskQueue:     tv.TaskQueue().GetName(),
 				TaskQueueType: tqType,
@@ -450,12 +457,15 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
-		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, deploymentNotFound) {
+		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
@@ -482,14 +492,17 @@ func (env *VersioningTestEnv) setRampingDeployment(
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Percentage:     percentage,
 		}
 		req.BuildId = bid
-		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(t.Context(), req)
-		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
+		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
 			t.Require().NoError(err)
 			return
 		}
@@ -503,11 +516,14 @@ func (env *VersioningTestEnv) setRampingDeployment(
 func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		await.Require(s.Context(), s.TB(), func(t *await.T) {
-			resp, err := env.FrontendClient().DescribeWorkerDeployment(t.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+			ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+			defer cancel()
+
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
-			if env.shouldRetryWorkerDeploymentRPC(t.Context(), err) {
+			if env.shouldRetryWorkerDeploymentRPC(ctx, err) {
 				t.Require().NoError(err)
 				return
 			}
@@ -770,8 +786,11 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
-			t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: env.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: tv.WorkflowID(),
@@ -1170,13 +1189,16 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 	}
 	f, err := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tv.TaskQueue().GetName())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		for pt := range remaining {
 			t.Require().NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
-				t.Context(),
+				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
