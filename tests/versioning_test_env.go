@@ -948,7 +948,7 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleLegacyQuery(tv, handler)
+		).HandleLegacyQuery(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
