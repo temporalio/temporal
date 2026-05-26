@@ -2081,6 +2081,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 		Namespace: env.Namespace().String(),
 	})
 	s.NoError(err)
+	defer sdkClient.Close()
 
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -3072,6 +3073,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 		Namespace: env.Namespace().String(),
 	})
 	s.NoError(err)
+	defer sdkClient.Close()
 
 	if crossTq && expectPinnedInherit {
 		w1xtq := worker.New(sdkClient, canxTq, worker.Options{
