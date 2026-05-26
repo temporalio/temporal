@@ -406,6 +406,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      CONTAINERS: ${{ join(matrix.containers, '\n') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -416,7 +417,7 @@ jobs:
         uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
+          services: ${{ env.CONTAINERS }}
           cache: true
 
       - uses: actions/setup-go@v6
@@ -444,7 +445,7 @@ jobs:
         uses: ./.github/actions/docker-compose-healthy
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
+          services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
