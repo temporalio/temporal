@@ -1255,7 +1255,12 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func(s *WorkflowUpdateSuite) {
-			env := testcore.NewEnv(s.T())
+			// Cases in this table intentionally trigger soft asserts and then
+			// verify the resulting error; disable fail-on-error so those logs
+			// don't poison the cluster.
+			env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+			env.DontFailOnError()
+
 			mustStartWorkflow(env, env.Tv())
 
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {

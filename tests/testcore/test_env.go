@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -455,6 +456,26 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// DontFailOnError disables the test logger's behavior of failing the test when
+// an error log matches a registered expectation (e.g. soft-assert errors tagged
+// with tag.FailedAssertion). The previous value is restored on cleanup. Use for
+// tests that intentionally trigger and then verify soft-assert errors. Requires
+// a dedicated cluster, because FailOnError is a cluster wide property, and using
+// a shared cluster may hide failures in a concurrent test
+func (e *TestEnv) DontFailOnError() {
+	e.t.Helper()
+	if e.isShared {
+		e.t.Fatal("DontFailOnError cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("don't fail on soft-assert errors")
+	tl, ok := e.Logger.(*testlogger.TestLogger)
+	if !ok {
+		e.t.Fatalf("DontFailOnError requires a *testlogger.TestLogger logger, got %T", e.Logger)
+	}
+	prev := tl.FailOnError(false)
+	e.t.Cleanup(func() { tl.FailOnError(prev) })
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
