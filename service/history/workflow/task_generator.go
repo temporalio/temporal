@@ -1047,6 +1047,9 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	}
 
 	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
+	// WorkflowTask, Activity, HSM(only nexusoperations) timer tasks won't be regenerated
+	// because time skipping pauses when there are in-flight work.
+
 	// (1) user timers — regenerate one task per pending user timer. User timers
 	// are only one of the task types that may need regeneration, so continue to
 	// the timeout timers below even when none are pending.
@@ -1131,5 +1134,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			})
 		}
 	}
+	// todo@time-skipping: ChasmTaskPure is not supported yet.
 	return nil
 }
