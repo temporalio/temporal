@@ -1178,7 +1178,13 @@ type TimeSkippingInfo struct {
 	// Current time-skipping configuration applied to the workflow.
 	Config *v12.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
 	// Total skipped duration for the current workflow execution run, including any
+	// inherited skipped duration carried over from a preceding execution that started this run.
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
+	// Task regeneration status is used to track the status of the task regeneration.
+	// 0: Not set
+	// 1: Need to regenerate tasks
+	// 2: All tasks regenerated
+	TaskRegenerationStatus int32 `protobuf:"varint,4,opt,name=task_regeneration_status,json=taskRegenerationStatus,proto3" json:"task_regeneration_status,omitempty"`
 	// The current bound based on elapsed duration for time skipping.
 	CurrentElapsedDurationBound *TimeSkippingBoundInfo `protobuf:"bytes,3,opt,name=current_elapsed_duration_bound,json=currentElapsedDurationBound,proto3" json:"current_elapsed_duration_bound,omitempty"`
 	unknownFields               protoimpl.UnknownFields
@@ -1227,6 +1233,13 @@ func (x *TimeSkippingInfo) GetAccumulatedSkippedDuration() *durationpb.Duration 
 		return x.AccumulatedSkippedDuration
 	}
 	return nil
+}
+
+func (x *TimeSkippingInfo) GetTaskRegenerationStatus() int32 {
+	if x != nil {
+		return x.TaskRegenerationStatus
+	}
+	return 0
 }
 
 func (x *TimeSkippingInfo) GetCurrentElapsedDurationBound() *TimeSkippingBoundInfo {
@@ -5033,10 +5046,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xb5\x02\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xef\x02\n" +
 	"\x10TimeSkippingInfo\x12D\n" +
 	"\x06config\x18\x01 \x01(\v2,.temporal.api.workflow.v1.TimeSkippingConfigR\x06config\x12[\n" +
-	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12~\n" +
+	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x128\n" +
+	"\x18task_regeneration_status\x18\x04 \x01(\x05R\x16taskRegenerationStatus\x12~\n" +
 	"\x1ecurrent_elapsed_duration_bound\x18\x03 \x01(\v29.temporal.server.api.persistence.v1.TimeSkippingBoundInfoR\x1bcurrentElapsedDurationBound\"\x9d\x01\n" +
 	"\x15TimeSkippingBoundInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +

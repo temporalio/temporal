@@ -198,9 +198,16 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
-	return r.refreshTasksForSubStateMachines(
+	if err := r.refreshTasksForSubStateMachines(
 		mutableState,
 		minVersionedTransition,
+	); err != nil {
+		return err
+	}
+
+	return r.refreshTasksForTimeSkipping(
+		mutableState,
+		taskGenerator,
 	)
 }
 
@@ -439,8 +446,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
-	// if mutableState.ExecutionInfo.TimeSkippingInfo changed,
-	// we need to
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 
@@ -463,6 +468,17 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()
 	return err
+}
+
+func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
+	mutableState historyi.MutableState,
+	taskGenerator TaskGenerator,
+) error {
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
+	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
