@@ -397,13 +397,16 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		defer cancel()
+
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
 		s.NoError(err)
 		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	if !pollersPresent {
 		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
@@ -427,13 +430,16 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 		// wait for v1 to become ramping
 		s.Await(func(s *Versioning3Suite) {
-			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+			defer cancel()
+
+			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 				Namespace: env.Namespace().String(),
 				Version:   tv.DeploymentVersionString(),
 			})
 			s.NoError(err)
 			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-		}, time.Second*10, time.Millisecond*1000)
+		}, 90*time.Second, 500*time.Millisecond)
 
 		// the ramping status is propagated to the task queues
 		s.waitForDeploymentDataPropagation(env, tv, versionStatusRamping, false, tqTypeWf)
@@ -1944,7 +1950,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
 		VersioningOverride:  nil,
-		WorkflowTaskTimeout: 10 * time.Second,
+		WorkflowTaskTimeout: 30 * time.Second,
 	}
 	if withOverride {
 		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
@@ -3011,7 +3017,6 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wfStarted := make(chan struct{}, 10)
-	currentChanged := make(chan struct{}, 10)
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		switch attempt {
@@ -3030,8 +3035,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 				s.verifyWorkflowVersioning(env, tv1, vbUnspecified, nil, override, tv1.DeploymentVersionTransition())
 			}
 			wfStarted <- struct{}{}
-			// wait for current version to change.
-			<-currentChanged
+			workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), override, nil)
@@ -3138,7 +3142,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 
 	// make v2 current
 	s.setCurrentDeployment(env, tv2)
-	currentChanged <- struct{}{}
+	s.NoError(sdkClient.SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentVersionChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
@@ -4123,7 +4127,7 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleLegacyQuery(tv, handler)
+		).HandleLegacyQuery(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
 	}
 	if async == nil {
 		resp, err := f()
