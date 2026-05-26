@@ -807,7 +807,7 @@ func (c *TemporalImpl) newRPCFactory(
 			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
 		)
 	}
-	// Add replication stream recorder interceptor
+	// Add replication stream recorder injector
 	if c.replicationStreamRecorder != nil {
 		options = append(options,
 			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
@@ -950,6 +950,20 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 	} else if err = json.Unmarshal(b, &newCfg); err != nil {
 		panic("copy persistence config: " + err.Error())
 	}
+
+	// Preserve fault injection injectors after the JSON copy.
+	for name, dataStore := range cfg.DataStores {
+		if dataStore.FaultInjection == nil {
+			continue
+		}
+		newDataStore := newCfg.DataStores[name]
+		if newDataStore.FaultInjection == nil {
+			newDataStore.FaultInjection = &config.FaultInjection{}
+		}
+		newDataStore.FaultInjection.Injector = dataStore.FaultInjection.Injector
+		newCfg.DataStores[name] = newDataStore
+	}
+
 	return newCfg
 }
 

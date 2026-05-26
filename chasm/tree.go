@@ -807,14 +807,6 @@ func (n *Node) serialize() error {
 	}
 }
 
-// marshalDeterministic encodes a proto.Message to bytes using deterministic
-// serialization. Deterministic encoding sorts map keys before encoding, making
-// byte comparison a reliable equality check for any well-formed proto message.
-// For messages without map fields this is a no-op with no performance overhead.
-func marshalDeterministic(m proto.Message) ([]byte, error) {
-	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
-}
-
 // serializeComponentNode serializes the component node.
 // If this method is updated to modify serialized fields beyond Data and
 // LastUpdateVersionedTransition, the skip-if-clean revert logic in
@@ -831,11 +823,10 @@ func (n *Node) serializeComponentNode() error {
 
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
-			data, err := marshalDeterministic(field.val.Interface().(proto.Message))
-			if err != nil {
-				return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+			var err error
+			if blob, err = encodeChasmBlob(field.val.Interface().(proto.Message)); err != nil {
+				return err
 			}
-			blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 		}
 
 		n.serializedNode.Data = blob
@@ -1205,11 +1196,10 @@ func (n *Node) serializeDataNode() error {
 
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
-		data, err := marshalDeterministic(protoValue)
-		if err != nil {
-			return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		var err error
+		if blob, err = encodeChasmBlob(protoValue); err != nil {
+			return err
 		}
-		blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
@@ -3077,7 +3067,7 @@ func serializeTask(
 ) (*commonpb.DataBlob, error) {
 	protoValue, ok := taskValue.Interface().(proto.Message)
 	if ok {
-		return serialization.ProtoEncode(protoValue)
+		return encodeChasmBlob(protoValue)
 	}
 
 	taskGoType := registrableTask.goType
@@ -3090,10 +3080,7 @@ func serializeTask(
 
 	// Handle empty task struct.
 	if taskGoType.NumField() == 0 {
-		return &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}, nil
+		return encodeChasmBlob(nil)
 	}
 
 	// TODO: consider pre-calculating the proto field num when registring the task type.
@@ -3112,7 +3099,7 @@ func serializeTask(
 		protoMessageFound = true
 
 		var err error
-		blob, err = serialization.ProtoEncode(fieldV.Interface().(proto.Message))
+		blob, err = encodeChasmBlob(fieldV.Interface().(proto.Message))
 		if err != nil {
 			return nil, err
 		}
@@ -3500,4 +3487,10 @@ func makeValidationFn(
 		}
 		return nil
 	}
+}
+
+// encodeChasmBlob encodes CHASM data and task payloads through the env-aware
+// serializer while preserving deterministic proto3 bytes for byte comparisons.
+func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
+	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }

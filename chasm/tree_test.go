@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -252,6 +251,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	err := node.serialize()
 	s.NoError(err)
 	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal(enumspb.ENCODING_TYPE_PROTO3, node.serializedNode.GetData().GetEncodingType())
 	s.Equal([]byte{0xa, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
 	s.Equal(valueStateSynced, node.valueState)
 }
@@ -899,7 +899,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 
 func (s *nodeSuite) TestApplyMutation() {
 	mustEncode := func(m proto.Message) *commonpb.DataBlob {
-		taskBlob, err := serialization.ProtoEncode(m)
+		taskBlob, err := encodeChasmBlob(m)
 		s.NoError(err)
 		return taskBlob
 	}
@@ -1199,9 +1199,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 	// - a new node "SubComponent2" is added.
 
 	now := timestamppb.Now()
-	updatedRootData, err := serialization.ProtoEncode(&protoMessageType{
-		StartTime: now,
-	})
+	updatedRootData, err := encodeChasmBlob(&protoMessageType{StartTime: now})
 	s.NoError(err)
 	incomingSnapshot := NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
@@ -2098,7 +2096,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	expectedBlob, err := serialization.ProtoEncode(payload)
+	expectedBlob, err := encodeChasmBlob(payload)
 	s.NoError(err)
 
 	testCases := []struct {
@@ -2338,8 +2336,9 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncode(payload)
+	taskBlob, err := encodeChasmBlob(payload)
 	s.NoError(err)
+	emptyTaskBlob := s.emptyDataBlob()
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -2361,11 +2360,8 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 								TypeId:                    testOutboundSideEffectTaskTypeID,
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
-								Data: &commonpb.DataBlob{
-									Data:         nil,
-									EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-								},
-								PhysicalTaskStatus: physicalTaskStatusCreated,
+								Data:                      emptyTaskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
 							},
 						},
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
@@ -2457,7 +2453,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncode(payload)
+	taskBlob, err := encodeChasmBlob(payload)
 	s.NoError(err)
 
 	makeTask := func(typeID uint32, offset int64) *persistencespb.ChasmComponentAttributes_Task {
@@ -3186,7 +3182,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
 	mustEncode := func(m proto.Message) *commonpb.DataBlob {
-		taskBlob, err := serialization.ProtoEncode(m)
+		taskBlob, err := encodeChasmBlob(m)
 		s.NoError(err)
 		return taskBlob
 	}
@@ -3516,6 +3512,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		},
 	}
 
+	emptyTaskBlob := s.emptyDataBlob()
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
@@ -3526,10 +3523,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		Path:        []string{"SubComponent1"},
 		TypeId:      testSideEffectTaskTypeID,
 		ArchetypeId: testComponentTypeID,
-		Data: &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
+		Data:        emptyTaskBlob,
 	}
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
@@ -3666,6 +3660,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			primitives.NewUUID().String(),
 			primitives.NewUUID().String(),
 		)
+		emptyTaskBlob := s.emptyDataBlob()
 		chasmTask := &tasks.ChasmTask{
 			WorkflowKey:         workflowKey,
 			VisibilityTimestamp: s.timeSource.Now(),
@@ -3682,10 +3677,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 				Path:        []string{"SubComponent1"},
 				TypeId:      testDiscardableSideEffectTaskTypeID,
 				ArchetypeId: testComponentTypeID,
-				Data: &commonpb.DataBlob{
-					Data:         nil,
-					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				},
+				Data:        emptyTaskBlob,
 			},
 		}
 		executionKey := ExecutionKey{
@@ -3806,6 +3798,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
+	emptyTaskBlob := s.emptyDataBlob()
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount:          1,
@@ -3817,10 +3810,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		},
 		Path:   rootPath,
 		TypeId: testSideEffectTaskTypeID,
-		Data: &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
+		Data:   emptyTaskBlob,
 	}
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
@@ -3949,4 +3939,10 @@ func (s *nodeSuite) newTestTree(
 		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
 	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+}
+
+func (s *nodeSuite) emptyDataBlob() *commonpb.DataBlob {
+	blob, err := encodeChasmBlob(nil)
+	s.NoError(err)
+	return blob
 }

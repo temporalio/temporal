@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
@@ -198,6 +199,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		nsreplication.NewDefaultAdmitter(),
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockResource.GetLogger(),
+		testhooks.TestHooks{},
 	)
 	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()

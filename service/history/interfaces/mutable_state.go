@@ -309,6 +309,11 @@ type (
 		GetExternalPayloadCount() int64
 		AddExternalPayloadCount(count int64)
 
+		// AddTasks adds tasks to the mutable state.
+		// For scheduled tasks (any CategoryTypeScheduled — e.g. timer, archival), if time has been
+		// skipped (i.e. the virtual time of this mutable state is ahead of wall-clock time), the
+		// scheduled time of the task is adjusted to wall-clock time, as the dispatch queues run
+		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
@@ -316,6 +321,9 @@ type (
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
+		// SetSpeculativeWorkflowTaskTimeoutTask submits the task to the shard's in-memory
+		// scheduled queue, replacing any prior speculative timeout. VisibilityTimestamp must be
+		// in virtual time; it is converted to wall-clock before scheduling.
 		SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
 		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
@@ -405,8 +413,12 @@ type (
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
 
-		Now() time.Time // the time of a mutable state may be ahead of the wall-clock time because of time skipping
-
+		// Now returns the current time of the mutable state, which may be ahead of
+		// wall-clock time if time skipping has happened.
+		Now() time.Time
+		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
+		// adjusting for accumulated skipped duration which may have happened.
+		ToRealTime(virtualTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

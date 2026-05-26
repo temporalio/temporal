@@ -638,6 +638,9 @@ func (s *Scheduler) Describe(
 	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
 	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
 
+	executionInfo := ctx.ExecutionInfo()
+	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
+
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
 			Schedule:         schedule,
@@ -917,6 +920,7 @@ func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
+	executionInfo := ctx.ExecutionInfo()
 
 	// Clear fields that are too large/not useful for the list view.
 	spec.TimezoneData = nil
@@ -936,6 +940,7 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
+		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
 	}
 }
 

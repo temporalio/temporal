@@ -1906,11 +1906,7 @@ func (ms *MutableStateImpl) Now() time.Time {
 // (i.e. they may include skipped time); this offset is the amount to subtract to get real
 // wall-clock, used by AddTasks when persisting timer-category tasks.
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	info := ms.executionInfo.GetTimeSkippingInfo()
-	if info == nil || info.AccumulatedSkippedDuration == nil {
-		return 0
-	}
-	return info.AccumulatedSkippedDuration.AsDuration()
+	return ms.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // GetWorkflowCloseTime returns workflow closed time, returns a zero time for open workflow
@@ -7239,8 +7235,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
 ) {
-	now := ms.timeSource.Now()
-	skip := ms.accumulatedSkippedDuration()
+	now := ms.Now()
 	for _, task := range newTasks {
 		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
 			chasmTask.GetCategory() == tasks.CategoryVisibility &&
@@ -7249,19 +7244,23 @@ func (ms *MutableStateImpl) AddTasks(
 		}
 
 		category := task.GetCategory()
+		// Drop tasks scheduled too far in the future. VisibilityTime hasn't been
+		// shifted to wall-clock yet (the conversion runs below), so both sides are
+		// virtual here; the difference is frame-invariant (skip cancels). Keep
+		// `now` from ms.Now() so both stay in the same frame.
 		if category.Type() == tasks.CategoryTypeScheduled &&
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
 		}
 
-		// Timer tasks are produced with VisibilityTime in the workflow's virtual frame (i.e.
-		// possibly inflated by accumulated skipped duration). The timer queue dispatches against
+		// Scheduled tasks are produced with VisibilityTime in the workflow's virtual frame (i.e.
+		// possibly inflated by accumulated skipped duration). Their dispatch queues run against
 		// real wall-clock, so convert here — callers outside MutableState don't see the virtual
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
-		if skip > 0 && category == tasks.CategoryTimer {
-			task.SetVisibilityTime(task.GetVisibilityTime().Add(-skip))
+		if category.Type() == tasks.CategoryTypeScheduled {
+			task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7326,6 +7325,11 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 	task.TaskID = taskID
+	// Producer stamps VisibilityTimestamp in the workflow's virtual frame (it's derived from
+	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
+	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
+	// same boundary contract as AddTasks for persisted scheduled tasks.
+	task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -10228,4 +10232,11 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
 	return transition, nil
+}
+
+func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
+	if virtualTime.IsZero() {
+		return virtualTime
+	}
+	return virtualTime.Add(-ms.accumulatedSkippedDuration())
 }
