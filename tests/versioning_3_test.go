@@ -1897,7 +1897,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	currentChanged := make(chan struct{}, 1)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
-		s.verifyWorkflowVersioning(env, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1913,7 +1912,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(env, tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
 		return val1, nil
 	}
 
@@ -2001,6 +1999,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
 	s.Equal("v1", out)
+	s.verifyWorkflowVersioning(env, tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
+	s.verifyWorkflowVersioning(env, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_UnpinnedParent() {
