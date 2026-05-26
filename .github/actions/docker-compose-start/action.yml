@@ -17,6 +17,9 @@ inputs:
   timeout-minutes:
     description: Timeout for each pull attempt.
     default: "1"
+  up-flags:
+    description: Additional options to pass to docker compose up.
+    default: "--wait"
   cache:
     description: Set to "true" to cache Docker images.
     default: "false"
@@ -82,12 +85,13 @@ runs:
       env:
         COMPOSE_FILE: ${{ inputs['compose-file'] }}
         SERVICES: ${{ inputs.services }}
+        UP_FLAGS: ${{ inputs['up-flags'] }}
       run: |
         if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
           echo "No services configured for docker compose up."
           exit 0
         fi
-        docker compose -f "$COMPOSE_FILE" up -d --wait $SERVICES
+        docker compose -f "$COMPOSE_FILE" up -d $UP_FLAGS $SERVICES
 
     - name: Save Docker images to archive
       id: archive
