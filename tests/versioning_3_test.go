@@ -1776,7 +1776,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	currentChanged := make(chan struct{}, 1)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
-		env.verifyWorkflowVersioning(s, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1791,8 +1790,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		}), "child")
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
-
-		env.verifyWorkflowVersioning(s, tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
 		return val1, nil
 	}
 
@@ -1859,7 +1856,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 		},
 	}, []string{}, tqTypeWf)
-	s.pollUntilRegistered(env, tv1)
+	env.pollUntilRegistered(s, tv1)
 	if crossTq {
 		env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv2Child, &deploymentpb.RoutingConfig{
 			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2Child.DeploymentVersionString()),
@@ -1873,13 +1870,15 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 			},
 		}, []string{}, tqTypeWf)
-		s.pollUntilRegistered(env, tv1Child)
+		env.pollUntilRegistered(s, tv1Child)
 	}
 	currentChanged <- struct{}{}
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
 	s.Equal("v1", out)
+	env.verifyWorkflowVersioning(s, tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
+	env.verifyWorkflowVersioning(s, tv1Child, vbPinned, tv1Child.Deployment(), override, nil)
 }
 
 // TestChildWorkflowExplicitPinnedOverrideTakesPrecedence verifies that a pinned
