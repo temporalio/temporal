@@ -559,6 +559,30 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() 
 	s.Contains(err.Error(), "global-ns")
 }
 
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_DeletedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	deletedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name:  "deleted-ns",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+		},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			Clusters:          []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{deletedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_LocalNamespaceDoesNotBlock() {
 	var clusterName = "cluster"
 	localNS := namespace.NewLocalNamespaceForTest(
