@@ -51,10 +51,16 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:     newClusterPool(sharedSize, false, maxLeases),
-		dedicated:  newClusterPool(dedicatedSize, true, maxLeases),
-		eventsFile: eventsFile,
+		shared:          newClusterPool(sharedSize, false, maxLeases),
+		sharedWorker:    newClusterPool(sharedSize, false, maxLeases),
+		dedicated:       newClusterPool(dedicatedSize, true, maxLeases),
+		dedicatedWorker: newClusterPool(dedicatedSize, true, maxLeases),
+		eventsFile:      eventsFile,
 	}
+}
+
+func DefaultSuiteClusterPoolSize() int {
+	return max(1, runtime.GOMAXPROCS(0)/2)
 }
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
@@ -175,19 +181,27 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	s.leaseCount = 0
 }
 
+func (p *clusterPool) tearDown(t *testing.T) {
+	for _, slot := range p.allSlots {
+		slot.Lock()
+		slot.tearDownLocked(t)
+		slot.Unlock()
+	}
+}
+
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	suiteScoped sync.Map
+	shared          *clusterPool
+	sharedWorker    *clusterPool
+	dedicated       *clusterPool
+	dedicatedWorker *clusterPool
+	suiteScoped     sync.Map
 
 	eventsFile *os.File
 }
 
-// suiteScopedCluster owns one lazily created legacy suite cluster.
 type suiteScopedCluster struct {
-	once    sync.Once
-	cluster *FunctionalTestBase
+	pools map[bool]*clusterPool
 }
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
@@ -196,25 +210,42 @@ type suiteScopedCluster struct {
 // Deprecated: this only exists for backwards-compatibility with legacy sequential
 // suite execution.
 func UseSuiteScopedCluster(t *testing.T) {
+	UseSuiteScopedClusters(t, 1)
+}
+
+// UseSuiteScopedClusters makes NewEnv use suite-local cluster pools for all
+// tests under `t`. Clusters are created on first use and torn down when `t`
+// completes.
+func UseSuiteScopedClusters(t *testing.T, size int) {
 	t.Helper()
+	if size <= 0 {
+		t.Fatalf("suite-scoped cluster pool size must be positive, got %d", size)
+	}
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if t.Name() != rootName {
-		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
+		t.Fatalf("UseSuiteScopedClusters must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	suiteCluster := &suiteScopedCluster{
+		pools: map[bool]*clusterPool{
+			false: newClusterPool(size, false, 0),
+			true:  newClusterPool(size, false, 0),
+		},
+	}
+	actual, loaded := testClusterRouter.suiteScoped.LoadOrStore(rootName, suiteCluster)
+	if loaded {
+		suiteCluster = actual.(*suiteScopedCluster)
+	}
 
 	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
-		if ok {
-			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-			if suiteCluster.cluster != nil {
-				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
-					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
-				}
-			}
-		}
+		suiteCluster.tearDown(t)
 		testClusterRouter.suiteScoped.Delete(rootName)
 	})
+}
+
+func (s *suiteScopedCluster) tearDown(t *testing.T) {
+	for _, pool := range s.pools {
+		pool.tearDown(t)
+	}
 }
 
 // Cluster kinds recorded in creation events.
@@ -237,7 +268,7 @@ type clusterRequest struct {
 // mustBeFresh reports whether the request requires a brand-new cluster that
 // cannot be reused.
 func (r clusterRequest) mustBeFresh() bool {
-	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
@@ -299,15 +330,19 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTes
 	if req.needsDedicated() {
 		return p.getDedicated(t, req)
 	}
-	if cluster := p.getSuiteScoped(t); cluster != nil {
+	if cluster := p.getSuiteScoped(t, req.needWorkerService); cluster != nil {
 		return cluster
 	}
-	return p.getShared(t)
+	return p.getShared(t, req.needWorkerService)
 }
 
-func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
-	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
+func (p *clusterRouter) getShared(t *testing.T, workerService bool) *FunctionalTestBase {
+	pool := p.shared
+	if workerService {
+		pool = p.sharedWorker
+	}
+	return pool.get(t, func() *FunctionalTestBase {
+		return p.createCluster(t, clusterRequest{kind: clusterKindShared, needWorkerService: workerService})
 	})
 }
 
@@ -317,29 +352,27 @@ func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
 	return ok
 }
 
-func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
+func (p *clusterRouter) getSuiteScoped(t *testing.T, workerService bool) *FunctionalTestBase {
 	rootName, _, _ := strings.Cut(t.Name(), "/")
-	if _, ok := p.suiteScoped.Load(rootName); !ok {
+	suiteClusterAny, ok := p.suiteScoped.Load(rootName)
+	if !ok {
 		return nil
 	}
-
-	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
+	return suiteCluster.pools[workerService].get(t, func() *FunctionalTestBase {
+		return p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: workerService})
 	})
-	suiteCluster.cluster.SetT(t)
-	return suiteCluster.cluster
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	req.kind = clusterKindDedicated
+	pool := p.dedicated
+	if req.needWorkerService {
+		pool = p.dedicatedWorker
+	}
 	if req.mustBeFresh() {
 		// Custom config or fx options require a fresh cluster (can't reuse).
-		p.dedicated.reserveSlot(t)
+		pool.reserveSlot(t)
 		cluster := p.createCluster(t, req)
 
 		// Register cleanup to tear down the cluster when the test completes.
@@ -353,9 +386,17 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 	}
 
 	// If no custom config is provided, reuse an existing cluster.
-	return p.dedicated.get(t, func() *FunctionalTestBase {
+	return pool.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, req)
 	})
+}
+
+func (p *clusterRouter) acquireDedicatedSlot(t *testing.T, workerService bool) {
+	pool := p.dedicated
+	if workerService {
+		pool = p.dedicatedWorker
+	}
+	pool.reserveSlot(t)
 }
 
 func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
