@@ -331,6 +331,11 @@ jobs:
     name: Integration test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      CONTAINERS: |
+        cassandra
+        mysql
+        postgresql
     steps:
       - uses: actions/checkout@v6
         with:
@@ -341,10 +346,7 @@ jobs:
         uses: ./.github/actions/docker-compose-start
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: |
-            cassandra
-            mysql
-            postgresql
+          services: ${{ env.CONTAINERS }}
 
       - uses: actions/setup-go@v6
         with:
@@ -367,10 +369,7 @@ jobs:
         uses: ./.github/actions/docker-compose-healthy
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: |
-            cassandra
-            mysql
-            postgresql
+          services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
         timeout-minutes: 15
