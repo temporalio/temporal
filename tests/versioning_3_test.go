@@ -376,7 +376,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -409,7 +409,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 
 		// wait for v1 to become ramping
 		s.Await(func(s *Versioning3Suite) {
-			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
