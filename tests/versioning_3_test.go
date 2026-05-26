@@ -58,14 +58,15 @@ import (
 type versionStatus int
 
 const (
-	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
-	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
-	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
-	ver3PollTimeout = 2 * time.Minute
+	tqTypeWf             = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	tqTypeAct            = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus          = enumspb.TASK_QUEUE_TYPE_NEXUS
+	vbUnspecified        = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	vbPinned             = enumspb.VERSIONING_BEHAVIOR_PINNED
+	vbUnpinned           = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	ver3MinPollTime      = common.MinLongPollTimeout + time.Millisecond*200
+	ver3PollTimeout      = 2 * time.Minute
+	ver3RetryPollTimeout = 21 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -590,7 +591,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *testcor
 
 	// When the first activity poller arrives from this deployment, it registers the TQ in the
 	// deployment and that will trigger reevaluation of backlog queue.
-	s.pollActivityAndHandle(env, tv, nil,
+	s.pollActivityAndHandleEventually(env, tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondActivity(), nil
@@ -4199,6 +4200,17 @@ func (s *Versioning3Suite) pollActivityAndHandle(
 	s.doPollActivityAndHandle(env, tv, true, async, handler)
 }
 
+func (s *Versioning3Suite) pollActivityAndHandleEventually(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) {
+	s.Await(func(s *Versioning3Suite) {
+		err := s.doPollActivityAndHandleErrWithTimeout(env, tv, true, ver3RetryPollTimeout, handler)
+		s.NoError(err)
+	}, 90*time.Second, 500*time.Millisecond)
+}
+
 func (s *Versioning3Suite) pollActivityAndHandleErr(
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
@@ -4233,11 +4245,21 @@ func (s *Versioning3Suite) doPollActivityAndHandleErr(
 	versioned bool,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
+	return s.doPollActivityAndHandleErrWithTimeout(env, tv, versioned, ver3PollTimeout, handler)
+}
+
+func (s *Versioning3Suite) doPollActivityAndHandleErrWithTimeout(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	versioned bool,
+	timeout time.Duration,
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) error {
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
+		}).HandleTask(tv, handler, taskpoller.WithTimeout(timeout))
 	return err
 }
 
