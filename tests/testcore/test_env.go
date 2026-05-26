@@ -95,9 +95,9 @@ type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
+	workerService            bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
-	testVars                 func(*testvars.TestVars) *testvars.TestVars
 }
 
 type dynamicConfigOverride struct {
@@ -133,13 +133,6 @@ func WithSdkWorker() TestOption {
 	}
 }
 
-// WithTestVars customizes the default test variables for the environment.
-func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
-	return func(o *testOptions) {
-		o.testVars = fn
-	}
-}
-
 // WithFxOptions appends fx options to a specific service's fx graph. This
 // implies a dedicated cluster because custom fx options cannot be shared
 // across tests.
@@ -152,12 +145,10 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
-func WithWorkerService(reason string) TestOption {
+// default to avoid the worker overhead.
+func WithWorkerService(_ string) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
-		o.dedicatedReason = "worker service required: " + reason
+		o.workerService = true
 	}
 }
 
@@ -268,8 +259,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		}
 	}
 
-	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	// Obtain the test cluster from the pool.
+	base := testClusterPool.get(t, options.dedicatedCluster, options.workerService, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -286,11 +277,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
-	tv := testvars.New(t)
-	if options.testVars != nil {
-		tv = options.testVars(tv)
-	}
-
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -300,7 +286,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
-		tv:                 tv,
+		tv:                 testvars.New(t),
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
@@ -351,7 +337,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
+		if e.isShared && !testClusterPool.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
