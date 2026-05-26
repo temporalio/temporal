@@ -850,6 +850,8 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		if err := TransitionUnpausedToStarted.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
+	default:
+		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
 	return &activitypb.UnpauseActivityExecutionResponse{}, nil
 }
@@ -861,8 +863,9 @@ func (a *Activity) isPaused() bool {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (a *Activity) unpause(
