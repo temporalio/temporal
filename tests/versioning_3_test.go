@@ -544,7 +544,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *Version
 
 	// When the first activity poller arrives from this deployment, it registers the TQ in the
 	// deployment and that will trigger reevaluation of backlog queue.
-	env.pollActivityAndHandle(s, tv, nil,
+	env.pollActivityAndHandleEventually(s, tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return env.respondActivity(), nil

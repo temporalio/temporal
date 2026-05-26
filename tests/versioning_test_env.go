@@ -46,14 +46,15 @@ import (
 type versionStatus int
 
 const (
-	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
-	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
-	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
-	ver3PollTimeout = 2 * time.Minute
+	tqTypeWf             = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	tqTypeAct            = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus          = enumspb.TASK_QUEUE_TYPE_NEXUS
+	vbUnspecified        = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	vbPinned             = enumspb.VERSIONING_BEHAVIOR_PINNED
+	vbUnpinned           = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	ver3MinPollTime      = common.MinLongPollTimeout + time.Millisecond*200
+	ver3PollTimeout      = 2 * time.Minute
+	ver3RetryPollTimeout = 21 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -1020,6 +1021,16 @@ func (env *VersioningTestEnv) pollActivityAndHandleErr(
 	return env.doPollActivityAndHandleErr(s, tv, true, handler)
 }
 
+func (env *VersioningTestEnv) pollActivityAndHandleEventually(
+	s parallelsuite.Scope,
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) {
+	s.Require().Eventually(func() bool {
+		return env.doPollActivityAndHandleErrWithTimeout(s, tv, true, ver3RetryPollTimeout, handler) == nil
+	}, 90*time.Second, 500*time.Millisecond)
+}
+
 func (env *VersioningTestEnv) doPollActivityAndHandle(
 	s parallelsuite.Scope,
 	tv *testvars.TestVars,
@@ -1046,11 +1057,21 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 	versioned bool,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
+	return env.doPollActivityAndHandleErrWithTimeout(s, tv, versioned, ver3PollTimeout, handler)
+}
+
+func (env *VersioningTestEnv) doPollActivityAndHandleErrWithTimeout(
+	s parallelsuite.Scope,
+	tv *testvars.TestVars,
+	versioned bool,
+	timeout time.Duration,
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+) error {
 	poller := taskpoller.New(s.TB(), env.FrontendClient(), env.Namespace().String())
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(tv, handler, taskpoller.WithTimeout(ver3PollTimeout))
+		}).HandleTask(tv, handler, taskpoller.WithTimeout(timeout))
 	return err
 }
 
