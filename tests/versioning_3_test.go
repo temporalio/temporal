@@ -3448,7 +3448,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3541,7 +3541,7 @@ func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *tes
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3578,7 +3578,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3600,7 +3600,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment
 			}
 			s.NoError(err)
 			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, 90*time.Second, 500*time.Millisecond)
+		}, ver3VerifyWait, 500*time.Millisecond)
 	}
 }
 
@@ -4456,7 +4456,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			}
 		}
 		s.Empty(remaining)
-	}, 90*time.Second, 500*time.Millisecond)
+	}, ver3VerifyWait, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) validateBacklogCount(
