@@ -54,7 +54,6 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
-	ver3RPCTimeout  = 5 * time.Second
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -364,7 +363,7 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *te
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -438,7 +437,7 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		for _, tqType := range tqTypes {
@@ -457,7 +456,7 @@ func (env *VersioningTestEnv) waitForDeploymentVersionRegistration(s parallelsui
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -492,7 +491,7 @@ func (env *VersioningTestEnv) setRampingDeployment(
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -516,7 +515,7 @@ func (env *VersioningTestEnv) setRampingDeployment(
 func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		await.Require(s.Context(), s.TB(), func(t *await.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -786,7 +785,7 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
@@ -1182,23 +1181,20 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for _, i := range versioning3PropagationPartitions(partitionCount) {
+	for i := range partitionCount {
 		for _, tqt := range tqTypes {
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tv.TaskQueue().GetName())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
-		defer cancel()
-
 		for pt := range remaining {
 			t.Require().NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
-				ctx,
+				t.Context(),
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
@@ -1257,18 +1253,6 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 		}
 		t.Require().Empty(remaining)
 	}, 90*time.Second, 500*time.Millisecond)
-}
-
-func versioning3PropagationPartitions(partitionCount int) []int {
-	if partitionCount >= 12 {
-		return []int{0, 5, 11}
-	}
-
-	partitions := make([]int, 0, partitionCount)
-	for i := range partitionCount {
-		partitions = append(partitions, i)
-	}
-	return partitions
 }
 
 func (env *VersioningTestEnv) validateBacklogCount(
