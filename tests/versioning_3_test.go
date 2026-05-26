@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
@@ -67,8 +66,6 @@ const (
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout = 2 * time.Minute
-	ver3TestTimeout = 4 * time.Minute
-	ver3VerifyWait  = 2 * time.Minute
 
 	versionStatusNil      = versionStatus(0)
 	versionStatusInactive = versionStatus(1)
@@ -92,8 +89,6 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	testcontext.New(s.T(), testcontext.WithTimeout(ver3TestTimeout))
-
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker deployment manager workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
@@ -4099,7 +4094,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 			return
 		}
 		s.NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -4173,7 +4168,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 			s.NoError(err)
 			s.True(resp.GetIsMember())
 		}
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -4192,7 +4187,7 @@ func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *tes
 			return
 		}
 		s.NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -4229,7 +4224,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 			return
 		}
 		s.NoError(err)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -4251,7 +4246,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment
 			}
 			s.NoError(err)
 			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, ver3VerifyWait, 500*time.Millisecond)
+		}, 90*time.Second, 500*time.Millisecond)
 	}
 }
 
@@ -4557,7 +4552,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 				versioningInfo.GetVersionTransition(),
 			))
 		}
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
@@ -5107,7 +5102,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			}
 		}
 		s.Empty(remaining)
-	}, ver3VerifyWait, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) validateBacklogCount(
