@@ -104,6 +104,16 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	})
 }
 
+// RunSequential creates a sequential subtest. The callback receives a fresh copy
+// of the concrete suite type, initialized for the subtest's *testing.T.
+func (s *Suite[T]) RunSequential(name string, fn func(T)) bool {
+	pt := s.guardT.T // grab T before sealing
+	s.guardT.markHasSubtests()
+	return pt.Run(name, func(t *testing.T) {
+		fn(s.copySuite(t, false, nil, nil).(T))
+	})
+}
+
 // Await calls fn repeatedly until all assertions pass or timeout is reached.
 func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
 	s.Awaitf(fn, timeout, interval, "")
