@@ -1886,15 +1886,13 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	}
 
 	wfStarted := make(chan struct{}, 1)
-	currentChanged := make(chan struct{}, 1)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		return "v1", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
 		wfStarted <- struct{}{}
-		// wait for current version to change
-		<-currentChanged
+		workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
 
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
@@ -1956,6 +1954,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	// wait for it to start on v1
 	env.WaitForChannel(wfStarted)
 	close(wfStarted) // force panic if replayed
+	s.verifyWorkflowVersioning(env, tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tv2, &deploymentpb.RoutingConfig{
@@ -1986,7 +1985,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 		}, []string{}, tqTypeWf)
 		s.pollUntilRegistered(env, tv1Child)
 	}
-	currentChanged <- struct{}{}
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentVersionChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
@@ -2026,7 +2025,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	}
 
 	wfStarted := make(chan struct{}, 10)
-	currentChanged := make(chan struct{}, 10)
 
 	childv1 := func(ctx workflow.Context) (string, error) {
 		panic("child should not run on v1")
@@ -2036,8 +2034,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
 		wfStarted <- struct{}{}
-		// wait for current version to change
-		<-currentChanged
+		workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
 
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
@@ -2047,7 +2044,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(env, tv1, parentBehavior, tv1.Deployment(), nil, nil)
 		return val1, nil
 	}
 
@@ -2127,11 +2123,12 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	// wait for it to start on v1
 	env.WaitForChannel(wfStarted)
 	close(wfStarted)
+	s.verifyWorkflowVersioning(env, tv1, parentBehavior, tv1.Deployment(), nil, nil)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.setCurrentDeployment(env, tv2)
 
-	currentChanged <- struct{}{}
+	s.NoError(sdkClient.SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "currentVersionChanged", nil))
 
 	var out string
 	s.NoError(run.Get(s.Context(), &out))
