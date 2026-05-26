@@ -6923,14 +6923,25 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	}
 
 	prevPause := ai.Paused
+	prevAttempt := ai.Attempt
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 		prevPause = prev.Paused
+		prevAttempt = prev.Attempt
 	}
 
 	if err := updater(ai, ms); err != nil {
 		return err
+	}
+
+	// If the attempt count changed (e.g., reset to 1 via ResetActivity or UnpauseWithReset),
+	// recompute the reported-problems SA so that entries are cleared when retries no longer
+	// meet the threshold.
+	if prevAttempt != ai.Attempt {
+		if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
+			return err
+		}
 	}
 
 	if prevPause != ai.Paused {
@@ -7008,18 +7019,24 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	var reportedProblems []string
 
-	// Workflow task failure entries.
-	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
-		reportedProblems = append(reportedProblems,
-			"category=WorkflowTaskFailed",
-			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
-		)
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
-		reportedProblems = append(reportedProblems,
-			"category=WorkflowTaskTimedOut",
-			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
-		)
+	// Workflow task failure entries — only when WFT reporting is enabled (threshold > 0).
+	// Gating here ensures that if the config is set to 0 (disabled), any stale
+	// LastWorkflowTaskFailure state (e.g., left over from a previous config value) does
+	// not bleed into the search attribute.
+	wftThreshold := ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(ms.GetNamespaceEntry().Name().String())
+	if wftThreshold > 0 {
+		switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
+		case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+			reportedProblems = append(reportedProblems,
+				"category=WorkflowTaskFailed",
+				fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+			)
+		case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+			reportedProblems = append(reportedProblems,
+				"category=WorkflowTaskTimedOut",
+				fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+			)
+		}
 	}
 
 	// Activity retry failure entry: added when any pending activity has accumulated
