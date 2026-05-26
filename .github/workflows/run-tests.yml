@@ -345,6 +345,7 @@ jobs:
             cassandra
             mysql
             postgresql
+          up-flags: --wait
 
       - uses: actions/setup-go@v6
         with:
@@ -415,6 +416,7 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
+          up-flags: --wait
           cache: true
 
       - uses: actions/setup-go@v6
@@ -491,6 +493,7 @@ jobs:
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
+          up-flags: --wait
 
       - uses: actions/setup-go@v6
         with:

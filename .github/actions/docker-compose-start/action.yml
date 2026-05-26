@@ -19,7 +19,7 @@ inputs:
     default: "1"
   up-flags:
     description: Additional options to pass to docker compose up.
-    default: "--wait"
+    default: ""
   cache:
     description: Set to "true" to cache Docker images.
     default: "false"
