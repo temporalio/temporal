@@ -116,7 +116,8 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 
 func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*testcore.TestEnv, *Versioning3Suite), opts ...testcore.TestOption) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		s.Run(behavior.Name(), func(s *Versioning3Suite) {
+		behavior := behavior
+		s.RunSequential(behavior.Name(), func(s *Versioning3Suite) {
 			envOpts := append([]testcore.TestOption{}, opts...)
 			envOpts = append(envOpts, behavior.Options()...)
 			env := s.setupEnv(envOpts...)

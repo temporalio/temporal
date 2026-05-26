@@ -100,6 +100,15 @@ func (s *contextSuite) TestAwaitUsesSuiteContext() {
 	}, 100*time.Millisecond, time.Millisecond)
 }
 
+type sequentialSubtestSuite struct{ Suite[*sequentialSubtestSuite] }
+
+func (s *sequentialSubtestSuite) TestRunSequential() {
+	s.True(s.runParallel)
+	s.RunSequential("subtest", func(s *sequentialSubtestSuite) {
+		s.False(s.runParallel)
+	})
+}
+
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
 
 func (s *sealAfterRunSuite) TestAssertionAfterRun() {
@@ -132,6 +141,9 @@ func TestRun_AcceptsSuite(t *testing.T) {
 	})
 	t.Run("context", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &contextSuite{}) })
+	})
+	t.Run("sequential subtest", func(t *testing.T) {
+		require.NotPanics(t, func() { Run(t, &sequentialSubtestSuite{}) })
 	})
 }
 
