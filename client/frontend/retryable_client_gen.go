@@ -1825,18 +1825,3 @@ func (c *retryableClient) ValidateWorkerDeploymentVersionComputeConfig(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
-
-func (c *retryableClient) WaitForExternalWorkflow(
-	ctx context.Context,
-	request *workflowservice.WaitForExternalWorkflowRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.WaitForExternalWorkflowResponse, error) {
-	var resp *workflowservice.WaitForExternalWorkflowResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.WaitForExternalWorkflow(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}

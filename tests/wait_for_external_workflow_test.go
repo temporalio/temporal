@@ -9,36 +9,36 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflownexusservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 )
 
-type WaitForExternalWorkflowTestSuite struct {
+type GetWorkflowExecutionResultTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestWaitForExternalWorkflowTestSuite(t *testing.T) {
+func TestGetWorkflowExecutionResultTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WaitForExternalWorkflowTestSuite))
+	suite.Run(t, new(GetWorkflowExecutionResultTestSuite))
 }
 
-func (s *WaitForExternalWorkflowTestSuite) SetupSuite() {
+func (s *GetWorkflowExecutionResultTestSuite) SetupSuite() {
 	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 			dynamicconfig.EnableChasm.Key():          true,
 			dynamicconfig.EnableCHASMCallbacks.Key(): true,
-			nexusoperation.EnableChasmNexus.Key():    true,
+			// nexusoperation.EnableChasmNexusWorkflowOperations.Key(): true,
 		}),
 	)
 }
 
-func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow() {
+func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_TargetCompletesAfterStart() {
 	ctx := testcore.NewContext()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -64,7 +64,7 @@ func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow() {
 	s.NoError(err)
 	targetRunID := startResp.RunId
 
-	// Poll caller's first WFT and schedule WaitForExternalWorkflow as a nexus operation
+	// Poll caller's first WFT and schedule GetWorkflowExecutionResult as a nexus operation
 	// on the system endpoint.
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -82,8 +82,8 @@ func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow() {
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowService.WaitForExternalWorkflow.Name(),
-						Input: payloads.MustEncodeSingle(&workflowservice.WaitForExternalWorkflowRequest{
+						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,
@@ -113,7 +113,7 @@ func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow() {
 	})
 	s.NoError(err)
 
-	// Complete the target workflow. The callback registered by WaitForExternalWorkflow.Start
+	// Complete the target workflow. The callback registered by GetWorkflowExecutionResult.Start
 	// will fire and deliver the nexus operation result back to the caller.
 	targetPollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -163,11 +163,11 @@ NexusOperationStarted`, pollResp.History.Events)
 	s.NoError(callerRun.Get(ctx, nil))
 }
 
-// TestWaitForExternalWorkflow_AlreadyCompleted covers the synchronous path: the target workflow
-// is already completed when WaitForExternalWorkflow.Start() is called, so getTerminalState
+// TestGetWorkflowExecutionResult_AlreadyCompleted covers the synchronous path: the target workflow
+// is already completed when GetWorkflowExecutionResult.Start() is called, so getTerminalState
 // returns the result immediately and the nexus operation completes synchronously (no
 // NexusOperationStarted event — only NexusOperationCompleted).
-func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow_AlreadyCompleted() {
+func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_AlreadyCompleted() {
 	ctx := testcore.NewContext()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -216,7 +216,7 @@ func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow_AlreadyCo
 		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
 	})
 
-	// Poll caller's first WFT and schedule WaitForExternalWorkflow — the target is already done.
+	// Poll caller's first WFT and schedule GetWorkflowExecutionResult — the target is already done.
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -233,8 +233,8 @@ func (s *WaitForExternalWorkflowTestSuite) TestWaitForExternalWorkflow_AlreadyCo
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowService.WaitForExternalWorkflow.Name(),
-						Input: payloads.MustEncodeSingle(&workflowservice.WaitForExternalWorkflowRequest{
+						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,

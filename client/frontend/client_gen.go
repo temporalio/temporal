@@ -1218,13 +1218,3 @@ func (c *clientImpl) ValidateWorkerDeploymentVersionComputeConfig(
 	defer cancel()
 	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }
-
-func (c *clientImpl) WaitForExternalWorkflow(
-	ctx context.Context,
-	request *workflowservice.WaitForExternalWorkflowRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.WaitForExternalWorkflowResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.WaitForExternalWorkflow(ctx, request, opts...)
-}

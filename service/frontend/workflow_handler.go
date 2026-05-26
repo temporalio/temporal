@@ -27,6 +27,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflownexusservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -7343,6 +7344,6 @@ func (wh *WorkflowHandler) DeleteNexusOperationExecution(_ context.Context, _ *w
 	return nil, serviceerror.NewUnimplemented("DeleteNexusOperationExecution is not yet implemented")
 }
 
-func (wh *WorkflowHandler) WaitForExternalWorkflow(_ context.Context, _ *workflowservice.WaitForExternalWorkflowRequest) (_ *workflowservice.WaitForExternalWorkflowResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("WaitForExternalWorkflow gRPC endpoint is not yet implemented")
+func (wh *WorkflowHandler) GetWorkflowExecutionResult(_ context.Context, _ *workflownexusservice.GetWorkflowExecutionResultRequest) (_ *workflownexusservice.GetWorkflowExecutionResultResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("GetWorkflowExecutionResult gRPC endpoint is not yet implemented")
 }
