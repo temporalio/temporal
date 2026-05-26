@@ -66,8 +66,16 @@ func (ch *commandHandler) HandleScheduleCommand(
 			// Links are not needed for validation.
 		}, attrs.Service, attrs.Operation, attrs.Input)
 		if err != nil {
-			var handlerErr *nexus.HandlerError
-			if errors.As(err, &handlerErr) {
+			_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+			_, isInvalidArgument := errors.AsType[*serviceerror.InvalidArgument](err)
+			if isNotFound || isInvalidArgument {
+				return chasmworkflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: err.Error(),
+				}
+			}
+			handlerErr, isHandlerError := errors.AsType[*nexus.HandlerError](err)
+			if isHandlerError {
 				// nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
@@ -83,12 +91,12 @@ func (ch *commandHandler) HandleScheduleCommand(
 	} else {
 		endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
 		if err != nil {
-			if errors.As(err, new(*serviceerror.NotFound)) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				return chasmworkflow.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
 				}
-			} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
+			} else if _, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 				return chasmworkflow.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),

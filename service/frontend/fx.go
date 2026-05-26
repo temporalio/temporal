@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -43,7 +44,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -128,7 +129,9 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
+	chasmscheduler.Module,
 	chasmworkflow.Module,
+	callback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -794,6 +797,7 @@ func NamespaceDLQHandlerProvider(
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -801,6 +805,7 @@ func NamespaceDLQHandlerProvider(
 		namespaceDataMerger,
 		namespaceAdmitter,
 		logger,
+		testHooks,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,
@@ -843,26 +848,18 @@ func OperatorHandlerProvider(
 }
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
-// so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
-// TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
-// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
+// so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
 	return callback.NewValidator(
 		callback.MaxPerExecution.Get(dc),
 		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		func(ns string) callback.AddressMatchRules {
-			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
-			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
-			for i, r := range hsmRules.Rules {
-				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
-			}
-			return callback.AddressMatchRules{Rules: chasmRules}
-		},
+		callback.AllowedAddresses.Get(dc),
 	)
 }
 
 func HandlerProvider(
+	dc *dynamicconfig.Collection,
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
@@ -888,6 +885,7 @@ func HandlerProvider(
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	saValidator *searchattribute.Validator,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
@@ -925,6 +923,7 @@ func HandlerProvider(
 		namespaceRegistry,
 		saMapperProvider,
 		saProvider,
+		saValidator,
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
@@ -937,6 +936,11 @@ func HandlerProvider(
 		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
+		chasmworkflow.NewValidator(
+			chasmworkflow.NewConfig(dc),
+			saMapperProvider,
+			saValidator,
+		),
 	)
 	return wfHandler
 }

@@ -694,6 +694,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					"",  // identity
 					nil, // priority
 					nil, // timeSkippingConfig
+					nil, // workflowUpdateOptions
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},

@@ -34,6 +34,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -987,7 +988,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+		return workflow.ErrWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
@@ -1375,10 +1376,10 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, errExecutionNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	if request.GetEvents() == nil {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {

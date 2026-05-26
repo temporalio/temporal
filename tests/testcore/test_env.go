@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -121,6 +122,25 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
 		o.dedicatedReason = "custom fx options used"
+	}
+}
+
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
+func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
+		o.dedicatedReason = "fault injection config used"
 	}
 }
 

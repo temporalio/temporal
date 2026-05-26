@@ -26,6 +26,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -70,7 +71,7 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		// tests use external endpoints so we need to allow them
-		callbacks.AllowedAddresses.Key(): []any{map[string]any{
+		callback.AllowedAddresses.Key(): []any{map[string]any{
 			"Pattern": "*", "AllowInsecure": true,
 		}},
 		// Cap callback retry backoff to avoid long waits after failover.

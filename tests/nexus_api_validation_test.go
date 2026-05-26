@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -198,12 +197,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 
 		capture := env.StartNamespaceMetricCapture()
 
-		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
-			_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
-			var handlerErr *nexus.HandlerError
-			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
-		}, 10*time.Second, 1*time.Second)
+		_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -242,17 +236,10 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 		s.NoError(err)
-		var result *nexusrpc.ClientStartOperationResponse[string]
-
-		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
-			result, err = nexusrpc.StartOperation(env.Context(), client, op, input, nexus.StartOperationOptions{
-				CallbackURL: "http://localhost/callback",
-				RequestID:   "request-id",
-			})
-			var handlerErr *nexus.HandlerError
-			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
-		}, 10*time.Second, 500*time.Millisecond)
+		result, err := nexusrpc.StartOperation(env.Context(), client, op, input, nexus.StartOperationOptions{
+			CallbackURL: "http://localhost/callback",
+			RequestID:   "request-id",
+		})
 
 		s.Nil(result)
 		var handlerErr *nexus.HandlerError

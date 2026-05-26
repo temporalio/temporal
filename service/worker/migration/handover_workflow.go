@@ -98,6 +98,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	}
 	ctx2 := workflow.WithActivityOptions(ctx, ao2)
 	waitRequest := WaitReplicationRequest{
+		Namespace:           params.Namespace,
 		ShardCount:          metadataResp.ShardCount,
 		RemoteCluster:       params.RemoteCluster,
 		AllowedLagging:      time.Duration(params.AllowedLaggingSeconds) * time.Second,
