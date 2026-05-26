@@ -7836,15 +7836,14 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:              env.Namespace().String(),
-			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
-			Identity:               env.Tv().WorkerIdentity(),
-			Input:                  defaultInput,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout:    durationpb.New(1 * time.Second),
-			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
-			RequestId:              env.Tv().RequestID(),
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Second),
+			RequestId:           env.Tv().RequestID(),
 			RetryPolicy: &commonpb.RetryPolicy{
 				MaximumAttempts:    10,
 				InitialInterval:    durationpb.New(1 * time.Millisecond),
@@ -7883,9 +7882,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
-	// HeartbeatTimeoutWhilePauseRequested: as above but for the heartbeat timer. Without the
-	// validator accepting PAUSE_REQUESTED, the HeartbeatTimeoutTask is silently dropped and the
-	// activity never times out (only the longer ScheduleToCloseTimeout would catch it).
+	// HeartbeatTimeoutWhilePauseRequested: as StartToCloseTimeoutWhilePauseRequested but for the
+	// heartbeat timer.
 	t.Run("HeartbeatTimeoutWhilePauseRequested", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
 		defer cancel()
@@ -7899,7 +7897,6 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Identity:               env.Tv().WorkerIdentity(),
 			Input:                  defaultInput,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:       durationpb.New(1 * time.Second),
 			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
 			RequestId:              env.Tv().RequestID(),
