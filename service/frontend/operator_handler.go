@@ -757,6 +757,10 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
+	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()
 		large := remoteShardCount

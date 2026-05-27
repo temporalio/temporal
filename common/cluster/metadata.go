@@ -214,6 +214,10 @@ func (m *metadataImpl) Start() {
 	)
 	err := m.refreshClusterMetadata(ctx)
 	if err != nil {
+		// Crash rather than start with partial cluster metadata (e.g. an invalid
+		// or missing row in cluster_metadata): replication and failover routing
+		// would be incorrect. The Fatal forces operators to fix or remove the bad
+		// row before the next start can succeed.
 		m.logger.Fatal("Unable to initialize cluster metadata cache", tag.Error(err))
 	}
 	m.refresher = goro.NewHandle(ctx).Go(m.refreshLoop)
