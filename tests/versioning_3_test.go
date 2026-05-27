@@ -375,7 +375,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 	env.setCurrentDeployment(s, tv2)
 
 	// wait for v1 to become drained
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
@@ -383,9 +383,15 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		s.NoError(err)
-		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, 90*time.Second, 500*time.Millisecond)
+		s.NoError(err, "DescribeWorkerDeploymentVersion failed: version=%s rpc_ctx_err=%v await_ctx_err=%v",
+			tv.DeploymentVersionString(), ctx.Err(), s.Context().Err())
+		actual := resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus()
+		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, actual,
+			"worker deployment version drainage status mismatch: version=%s info=%v",
+			tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo())
+	}, 90*time.Second, 500*time.Millisecond,
+		"wait for worker deployment version to drain: namespace=%s version=%s workflow_id=%s",
+		env.Namespace(), tv.DeploymentVersionString(), tv.WorkflowID())
 
 	if !pollersPresent {
 		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
@@ -395,10 +401,14 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 		}
 
-		s.Await(func(s *Versioning3Suite) {
+		s.Awaitf(func(s *Versioning3Suite) {
 			_, err := env.queryWorkflow(s.Context(), tv)
-			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
-		}, 30*time.Second, 500*time.Millisecond)
+			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr),
+				"query did not return drained-version blackhole error: version=%s actual_err=%v await_ctx_err=%v",
+				versionStr, err, s.Context().Err())
+		}, 30*time.Second, 500*time.Millisecond,
+			"wait for pinned query to report drained version: namespace=%s workflow_id=%s version=%s",
+			env.Namespace(), tv.WorkflowID(), versionStr)
 	} else {
 		// since the version still has pollers, the query should succeed
 		env.pollAndQueryWorkflow(s, tv, false)
@@ -409,7 +419,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 		env.setRampingDeployment(s, tv, 50, false)
 
 		// wait for v1 to become ramping
-		s.Await(func(s *Versioning3Suite) {
+		s.Awaitf(func(s *Versioning3Suite) {
 			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 			defer cancel()
 
@@ -417,9 +427,15 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 				Namespace: env.Namespace().String(),
 				Version:   tv.DeploymentVersionString(),
 			})
-			s.NoError(err)
-			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-		}, 90*time.Second, 500*time.Millisecond)
+			s.NoError(err, "DescribeWorkerDeploymentVersion failed: version=%s rpc_ctx_err=%v await_ctx_err=%v",
+				tv.DeploymentVersionString(), ctx.Err(), s.Context().Err())
+			actual := resp.GetWorkerDeploymentVersionInfo().GetStatus()
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, actual,
+				"worker deployment version status mismatch: version=%s info=%v",
+				tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo())
+		}, 90*time.Second, 500*time.Millisecond,
+			"wait for worker deployment version to ramp: namespace=%s version=%s workflow_id=%s",
+			env.Namespace(), tv.DeploymentVersionString(), tv.WorkflowID())
 
 		// the ramping status is propagated to the task queues
 		env.waitForDeploymentDataPropagation(s, tv, versionStatusRamping, false, tqTypeWf)
