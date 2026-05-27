@@ -55,7 +55,11 @@ func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
 }
 
 func writeAttemptFailure(b *strings.Builder, f attemptFailure) {
-	fmt.Fprintf(b, "\n  attempt %d:", f.attempt)
+	fmt.Fprintf(b, "\n\n  --- attempt %d ---", f.attempt)
+	if len(f.errors) == 0 {
+		b.WriteString("\n    (attempt failed without recorded assertion output)")
+		return
+	}
 	for _, e := range f.errors {
 		for line := range strings.SplitSeq(e, "\n") {
 			b.WriteString("\n    ")
