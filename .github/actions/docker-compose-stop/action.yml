@@ -2,7 +2,7 @@ name: Docker Compose Stop
 description: Stop Docker Compose services.
 
 inputs:
-  compose-file:
+  compose_file:
     description: Docker Compose file to use.
     required: true
   flags:
@@ -15,7 +15,7 @@ runs:
     - name: Stop services
       shell: bash
       env:
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
         FLAGS: ${{ inputs.flags }}
       run: |
         docker compose -f "$COMPOSE_FILE" down $FLAGS

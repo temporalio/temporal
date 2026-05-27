@@ -136,14 +136,14 @@ jobs:
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
       - name: Wait for containerized dependencies to be healthy
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         uses: ./.github/actions/docker-compose-healthy
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
       - uses: actions/setup-go@v6
@@ -163,5 +163,5 @@ jobs:
         if: ${{ always() && contains(fromJSON(inputs.test_dbs), matrix.name) }}
         uses: ./.github/actions/docker-compose-stop
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v

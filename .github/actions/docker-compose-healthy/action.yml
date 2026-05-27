@@ -2,7 +2,7 @@ name: Docker Compose Healthy
 description: Wait for Docker Compose services to become healthy.
 
 inputs:
-  compose-file:
+  compose_file:
     description: Docker Compose file to use.
     required: true
   services:
@@ -15,7 +15,7 @@ runs:
     - name: Wait for services
       shell: bash
       env:
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
         SERVICES: ${{ inputs.services }}
       run: |
         if [[ -z "${SERVICES//[[:space:]]/}" ]]; then

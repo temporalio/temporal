@@ -342,7 +342,7 @@ jobs:
       - name: Start containerized dependencies
         uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
       - uses: actions/setup-go@v6
@@ -365,7 +365,7 @@ jobs:
       - name: Wait for containerized dependencies to be healthy
         uses: ./.github/actions/docker-compose-healthy
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
@@ -385,7 +385,7 @@ jobs:
         if: ${{ always() }}
         uses: ./.github/actions/docker-compose-stop
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
   # Root job name includes matrix details so it is unique per job variant.
@@ -413,7 +413,7 @@ jobs:
       - name: Start containerized dependencies
         uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
           cache: true
 
@@ -440,7 +440,7 @@ jobs:
       - name: Wait for containerized dependencies to be healthy
         uses: ./.github/actions/docker-compose-healthy
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
@@ -472,7 +472,7 @@ jobs:
         if: always()
         uses: ./.github/actions/docker-compose-stop
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
   mixed-brain-test:
@@ -488,7 +488,7 @@ jobs:
       - name: Start PostgreSQL
         uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
 
       - uses: actions/setup-go@v6
@@ -539,7 +539,7 @@ jobs:
         if: always()
         uses: ./.github/actions/docker-compose-stop
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
   test-status:

@@ -2,7 +2,7 @@ name: Docker Compose Start
 description: Restore Docker image cache, pull Docker Compose services with retries, then start them.
 
 inputs:
-  compose-file:
+  compose_file:
     description: Docker Compose file to use.
     required: true
   services:
@@ -11,10 +11,10 @@ inputs:
   attempts:
     description: Number of pull attempts.
     default: "5"
-  delay-seconds:
+  delay_seconds:
     description: Delay between failed attempts.
     default: "5"
-  timeout-minutes:
+  timeout_minutes:
     description: Timeout for each pull attempt.
     default: "1"
   flags:
@@ -23,7 +23,7 @@ inputs:
   cache:
     description: Set to "true" to cache Docker images.
     default: "false"
-  cache-path:
+  cache_path:
     description: Directory used to store the Docker image archive.
     default: ${{ runner.temp }}/docker-image-cache
 
@@ -35,7 +35,7 @@ runs:
       if: ${{ inputs.cache == 'true' }}
       shell: bash
       env:
-        COMPOSE_HASH: ${{ hashFiles(inputs['compose-file']) }}
+        COMPOSE_HASH: ${{ hashFiles(inputs.compose_file) }}
         SERVICES: ${{ inputs.services }}
       run: |
         services_hash="$(printf '%s' "$SERVICES" | shasum -a 256 | cut -d ' ' -f 1)"
@@ -47,14 +47,14 @@ runs:
       if: ${{ inputs.cache == 'true' }}
       uses: actions/cache/restore@v5
       with:
-        path: ${{ inputs['cache-path'] }}
+        path: ${{ inputs.cache_path }}
         key: ${{ steps.cache.outputs.key }}
 
     - name: Load Docker images
       if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit == 'true' }}
       shell: bash
       env:
-        CACHE_PATH: ${{ inputs['cache-path'] }}
+        CACHE_PATH: ${{ inputs.cache_path }}
       run: |
         if [[ -f "$CACHE_PATH/images.tar" ]]; then
           docker load --input "$CACHE_PATH/images.tar"
@@ -66,12 +66,12 @@ runs:
       if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
       uses: nick-fields/retry@v4
       env:
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
         SERVICES: ${{ inputs.services }}
       with:
         max_attempts: ${{ inputs.attempts }}
-        retry_wait_seconds: ${{ inputs['delay-seconds'] }}
-        timeout_minutes: ${{ inputs['timeout-minutes'] }}
+        retry_wait_seconds: ${{ inputs.delay_seconds }}
+        timeout_minutes: ${{ inputs.timeout_minutes }}
         shell: bash
         command: |
           if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
@@ -83,7 +83,7 @@ runs:
     - name: Start services
       shell: bash
       env:
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
         SERVICES: ${{ inputs.services }}
         FLAGS: ${{ inputs.flags }}
       run: |
@@ -98,8 +98,8 @@ runs:
       if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit != 'true' }}
       shell: bash
       env:
-        CACHE_PATH: ${{ inputs['cache-path'] }}
-        COMPOSE_FILE: ${{ inputs['compose-file'] }}
+        CACHE_PATH: ${{ inputs.cache_path }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
         SERVICES: ${{ inputs.services }}
       run: |
         mkdir -p "$CACHE_PATH"
@@ -127,5 +127,5 @@ runs:
       if: ${{ inputs.cache == 'true' && steps.archive.outputs.cacheable == 'true' }}
       uses: actions/cache/save@v5
       with:
-        path: ${{ inputs['cache-path'] }}
+        path: ${{ inputs.cache_path }}
         key: ${{ steps.cache.outputs.key }}
