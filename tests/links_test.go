@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -13,6 +14,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -42,6 +45,7 @@ func enableSignalBacklinkOpts() []testcore.TestOption {
 	return []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSignalWithStartFromWorkflow, true),
 	}
 }
 
@@ -60,7 +64,7 @@ func (s *LinksSuite) getWorkflowRunRequestInfo(
 	s.NoError(err, "error describing workflow")
 
 	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
-	s.Contains(requestIDInfos, wantRequestID, "No request with ID %s found in response", wantRequestID)
+	s.Contains(requestIDInfos, wantRequestID, "No request with ID %s found in workflow execution requestIdInfos", wantRequestID)
 
 	return requestIDInfos[wantRequestID]
 }
@@ -218,10 +222,20 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 		}
 
 		// Send a signal to the new or existing workflow, get its RunID.
-		signalWorkflowRequestID := uuid.NewString()
-		signalResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID, signalWorkflowRequestID)
+		signalResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID)
+		if signalExistingWorkflow {
+			ls.False(signalResp.Started)
+		} else {
+			ls.True(signalResp.Started)
+		}
+
 		targetWorkflowRunID := signalResp.GetRunId()
 		gotLink := signalResp.GetSignalLink()
+		ls.NotNil(gotLink, "no SignalLink in response")
+
+		// We don't know the RequestID for the StartWithSignal call until after it is made.
+		signalWorkflowRequestID := gotLink.GetWorkflowEvent().GetRequestIdRef().GetRequestId()
+		ls.NotEmpty(signalWorkflowRequestID, "didn't get RequestID from SignalWithStart response")
 
 		wantLink := &commonpb.Link{
 			Variant: &commonpb.Link_WorkflowEvent_{
@@ -240,32 +254,10 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 		}
 		protorequire.ProtoEqual(ls.T(), wantLink, gotLink)
 
-		// Call SignalWithStartWorkflow a SECOND time. We expect the dedupe path
-		// to be used like before with SignalWorkflow.
-		signalResp2 := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID, signalWorkflowRequestID)
-		protorequire.ProtoEqual(ls.T(), wantLink, signalResp2.GetSignalLink())
-
-		// Confirm no duplicate events in the Workflow's history.
-		history := env.SdkClient().GetWorkflowHistory(ctx, targetWorkflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-		foundEvent := false
-		foundDuplicatedEvent := false
-		var signaledEventID int64
-		for history.HasNext() {
-			event, err := history.Next()
-			ls.NoError(err)
-			if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-				continue
-			}
-			if foundEvent {
-				foundDuplicatedEvent = true
-			} else {
-				signaledEventID = event.GetEventId()
-			}
-			foundEvent = true
-			protorequire.ProtoSliceEqual(ls.T(), links, event.Links)
-		}
-		ls.True(foundEvent)
-		ls.False(foundDuplicatedEvent, "second signal with same RequestId should be deduped and not produce a second event")
+		// NOTE: Unlike the SignalWorkflow- version of this test, we do not verify
+		// any dedupe paths, because calling SignalWithStart twice via the Nexus
+		// endpoint will result in sending two signals to the workflow with no way
+		// to make the request idempotent. (Which is expected and by-design.)
 
 		// Verify the requestID is tracked and resolves to the correct event ID.
 		workflowEx := &commonpb.WorkflowExecution{
@@ -273,7 +265,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 		}
 		gotRequestInfo := ls.getWorkflowRunRequestInfo(ctx, env, workflowEx, signalWorkflowRequestID)
 		ls.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, gotRequestInfo.GetEventType())
-		ls.Equal(signaledEventID, gotRequestInfo.GetEventId())
+		ls.Positive(gotRequestInfo.GetEventId())
 	}
 
 	s.Run("SignalExistingWorkflow", func(ls *LinksSuite) {
@@ -395,8 +387,17 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 
 		// Signal the workflow. The signal will be included in the first WFT batch, so it will
 		// appear in history before the WFT completion event.
-		signalWithStartRequestID := uuid.NewString()
-		signalWithStartResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID, signalWithStartRequestID)
+		signalWithStartResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID)
+		if signalExistingWorkflow {
+			ls.False(signalWithStartResp.Started)
+		} else {
+			ls.True(signalWithStartResp.Started)
+		}
+
+		// We don't know the RequestID for the StartWithSignal call until after it is made.
+		ls.NotNil(signalWithStartResp.GetSignalLink())
+		signalWorkflowRequestID := signalWithStartResp.GetSignalLink().GetWorkflowEvent().GetRequestIdRef().GetRequestId()
+		ls.NotEmpty(signalWorkflowRequestID, "didn't get RequestID from SignalWithStart response")
 
 		if signalExistingWorkflow {
 			ls.False(signalWithStartResp.Started)
@@ -455,7 +456,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 			WorkflowId: targetWorkflowID,
 			RunId:      targetWorkflowRunID,
 		}
-		origSignalInfo := ls.getWorkflowRunRequestInfo(ctx, env, originalWorkflowEx, signalWithStartRequestID)
+		origSignalInfo := ls.getWorkflowRunRequestInfo(ctx, env, originalWorkflowEx, signalWorkflowRequestID)
 		ls.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, origSignalInfo.GetEventType())
 		ls.False(origSignalInfo.GetBuffered())
 
@@ -466,7 +467,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 			WorkflowId: targetWorkflowID,
 			RunId:      newRunID,
 		}
-		resetSignalInfo := ls.getWorkflowRunRequestInfo(ctx, env, resetWorkflowEx, signalWithStartRequestID)
+		resetSignalInfo := ls.getWorkflowRunRequestInfo(ctx, env, resetWorkflowEx, signalWorkflowRequestID)
 		ls.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, resetSignalInfo.GetEventType())
 		ls.Positive(resetSignalInfo.GetEventId(), "backlink event ID must be a real, non-buffered event ID in the new run's history")
 		ls.False(resetSignalInfo.GetBuffered())
@@ -569,16 +570,25 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BufferedDuringWorkflow
 
 		// Call SignalWithStart. This will result in the event getting buffered (if the workflow
 		// is already running), or simply starting as new workflow execution.
-		signalRequestID := uuid.NewString()
-		signalWithStartResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID, signalRequestID)
+		signalWithStartResp := signalTest.signalWithStartWorkflow(ctx, targetWorkflowID)
+		if signalExistingWorkflow {
+			ls.False(signalWithStartResp.Started)
+		} else {
+			ls.True(signalWithStartResp.Started)
+		}
+
+		ls.NotNil(signalWithStartResp.GetSignalLink())
 		targetWorkflowRunID := signalWithStartResp.GetRunId()
+
+		signalWorkflowRequestID := signalWithStartResp.GetSignalLink().GetWorkflowEvent().GetRequestIdRef().GetRequestId()
+		ls.NotEmpty(signalWorkflowRequestID, "didn't get RequestID from SignalWithStart response")
 
 		// Get the RequestIDInfos for the running workflow.
 		workflowEx := &commonpb.WorkflowExecution{
 			WorkflowId: targetWorkflowID,
 			RunId:      targetWorkflowRunID,
 		}
-		gotRequestInfo := ls.getWorkflowRunRequestInfo(ctx, env, workflowEx, signalRequestID)
+		gotRequestInfo := ls.getWorkflowRunRequestInfo(ctx, env, workflowEx, signalWorkflowRequestID)
 		ls.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, gotRequestInfo.GetEventType())
 
 		if signalExistingWorkflow {
@@ -594,7 +604,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BufferedDuringWorkflow
 			ls.NoError(err)
 
 			// After WFT completion the backlink must resolve to a real, non-buffered event.
-			gotRequestInfo2 := ls.getWorkflowRunRequestInfo(ctx, env, workflowEx, signalRequestID)
+			gotRequestInfo2 := ls.getWorkflowRunRequestInfo(ctx, env, workflowEx, signalWorkflowRequestID)
 			ls.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, gotRequestInfo2.GetEventType())
 			ls.False(gotRequestInfo2.GetBuffered(), "backlink must not be buffered after WFT completion")
 			ls.Positive(gotRequestInfo2.GetEventId(), "backlink must reference a real event ID after WFT completion")
@@ -806,20 +816,114 @@ func (swt *signalWorkflowTest) signalWorkflow(ctx context.Context, targetWorkflo
 	return resp
 }
 
-func (swt *signalWorkflowTest) signalWithStartWorkflow(ctx context.Context, targetWorkflowID, requestID string) *workflowservice.SignalWithStartWorkflowExecutionResponse {
+// signalWithStartWorkflow invokes the SignalWithStart handler using the System Nexus Endpoint,
+// and NOT the typical frontend API directly. This is a newer codepath that wraps the History
+// service's API within the Nexus machinery.
+//
+// IMPORTANT: The RequestID CANNOT be supplied when using the Nexus variant of the SignalWithStart
+// call, because the RequestID will be set when when doing the execution.
+func (swt *signalWorkflowTest) signalWithStartWorkflow(ctx context.Context, targetWorkflowID string) *workflowservice.SignalWithStartWorkflowExecutionResponse {
 	swt.s.T().Helper()
-	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	startWithSignalRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:    swt.env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: swt.workflowName},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: swt.taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		SignalName:   "dont care",
 		Identity:     "test",
-		Links:        links,
-		RequestId:    requestID,
+
+		// QUIRK: When using the system Nexus endpoint, we cannot suppply new links.
+		Links: nil,
+		// QUIRK: Must be left empty when making the call via Nexus.
+		RequestId: "",
 	}
-	resp, err := swt.env.FrontendClient().SignalWithStartWorkflowExecution(ctx, req)
+
+	// HERE BE DRAGONS
+	//
+	// To call the SignalWithStartWorkflowExecution found within the system Nexus endpoint, we start
+	// and wait on a trivial workflow which will actually make the call.
+	//
+	// ... HOWEVER, the go.temporal.io/sdk@v1.41.1 (and earlier) panics in workflow.NewNexusClient when
+	//  the endpoint name starts with the reserved "__temporal_" prefix. (Which is the case when trying
+	// to target the system Nexus endpoint.)
+	//
+	// So instead, we work around this by following after signal_with_start_from_workflow_test.go's
+	// TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary, which drives the workflow task manually
+	// sending the command.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION.
+	//
+	// We can remove this when the SDK allows creating a Nexus client which can target the system handler.
+	const nexusCallerTaskQueue = "totally-different-task-queue"
+
+	// Start a caller workflow to obtain an initial workflow task.
+	callerRun, err := swt.env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: nexusCallerTaskQueue,
+	}, "caller-workflow")
+	swt.s.NoError(err)
+	defer func() {
+		swt.env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+	}()
+
+	// Encode the SWS request as binary/protobuf. PreferProtoDataConverter places
+	// ProtoPayloadConverter first, so proto messages are marshalled to binary/protobuf
+	// rather than the JSON proto encoding that the SDK uses by default.
+	pls, err := sdkconverter.PreferProtoDataConverter.ToPayloads(startWithSignalRequest)
+	swt.s.NoError(err)
+	swt.s.Len(pls.Payloads, 1)
+
+	protoBinaryPayload := pls.Payloads[0]
+	swt.s.Equal("binary/protobuf", string(protoBinaryPayload.Metadata["encoding"]))
+
+	// First poll: respond with a ScheduleNexusOperation command carrying the proto binary input.
+	pollResp, err := swt.env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: swt.env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: nexusCallerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
 	swt.s.NoError(err)
 
-	return resp
+	_, err = swt.env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  commonnexus.SystemEndpoint,
+						Service:   "WorkflowService",
+						Operation: "SignalWithStartWorkflowExecution",
+						Input:     protoBinaryPayload,
+					},
+				},
+			},
+		},
+	})
+	swt.s.NoError(err)
+
+	// Second poll: wait for NexusOperationCompleted or NexusOperationFailed.
+	pollResp, err = swt.env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: swt.env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: nexusCallerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	swt.s.NoError(err)
+
+	// Pull the StartWithSignalWorkflowExecutionResponse from the history events.
+	var (
+		startWithSignalResponse workflowservice.SignalWithStartWorkflowExecutionResponse
+		found                   bool
+	)
+	for _, event := range pollResp.History.Events {
+		if attrs := event.GetNexusOperationCompletedEventAttributes(); attrs != nil {
+			found = true
+			convErr := sdkconverter.PreferProtoDataConverter.FromPayloads(
+				&commonpb.Payloads{Payloads: []*commonpb.Payload{attrs.Result}},
+				&startWithSignalResponse,
+			)
+			swt.s.NoError(convErr)
+		}
+		if attrs := event.GetNexusOperationFailedEventAttributes(); attrs != nil {
+			swt.s.Fail("expected NexusOperationCompleted but got NexusOperationFailed: " + attrs.Failure.GetMessage())
+		}
+	}
+	swt.s.True(found, "did not see Nexus operation complete in workflow events")
+
+	return &startWithSignalResponse
 }
