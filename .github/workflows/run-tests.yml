@@ -324,13 +324,15 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Unit test
-          artifact-name-suffix: unit-test
+          job_name: Unit test
+          artifact_name_suffix: unit-test
 
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      CONTAINERS: cassandra mysql postgresql
     steps:
       - uses: actions/checkout@v6
         with:
@@ -338,14 +340,10 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: |
-            cassandra
-            mysql
-            postgresql
-          down-flags: -v
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - uses: actions/setup-go@v6
         with:
@@ -365,10 +363,10 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Wait for containerized dependencies to be healthy
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
         timeout-minutes: 15
@@ -380,13 +378,15 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Integration test
-          artifact-name-suffix: integration-test
+          job_name: Integration test
+          artifact_name_suffix: integration-test
 
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   # Root job name includes matrix details so it is unique per job variant.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
@@ -403,23 +403,19 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
-          down-flags: -v
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
+          cache: true
 
       - uses: actions/setup-go@v6
         with:
@@ -442,11 +438,10 @@ jobs:
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
 
       - name: Wait for containerized dependencies to be healthy
-        if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
@@ -468,10 +463,17 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
-          artifact-name-suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          codecov-flag: functional-test
-          debug-log-path: ${{ github.workspace }}/.testoutput/debug.log
+          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
+          artifact_name_suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          codecov_flag: functional-test
+          debug_log_path: ${{ github.workspace }}/.testoutput/debug.log
+
+      - name: Stop containerized dependencies
+        if: always()
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   mixed-brain-test:
     name: Mixed brain test
@@ -484,11 +486,10 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
-          down-flags: -v
 
       - uses: actions/setup-go@v6
         with:
@@ -533,6 +534,13 @@ jobs:
       - name: Print Omes logs
         if: always()
         run: cat .testoutput/mixedbrain_omes.log || true
+
+      - name: Stop containerized dependencies
+        if: always()
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   test-status:
     if: always()

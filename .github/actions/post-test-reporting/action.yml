@@ -1,18 +1,18 @@
 name: Post Test Reporting
 description: Generate test reports and upload post-test artifacts
 inputs:
-  artifact-name-suffix:
+  artifact_name_suffix:
     description: Suffix to use for uploaded artifact names
     required: true
-  codecov-flag:
+  codecov_flag:
     description: Codecov flag for coverage and test result uploads
     required: false
     default: ""
-  debug-log-path:
+  debug_log_path:
     description: Optional debug log path to upload
     required: false
     default: ""
-  job-name:
+  job_name:
     description: Exact job name to resolve for artifact names
     required: true
 runs:
@@ -44,8 +44,8 @@ runs:
       if: ${{ !cancelled() }}
       shell: bash
       env:
-        CODECOV_FLAG: ${{ inputs.codecov-flag }}
-        ARTIFACT_NAME_SUFFIX: ${{ inputs.artifact-name-suffix }}
+        CODECOV_FLAG: ${{ inputs.codecov_flag }}
+        ARTIFACT_NAME_SUFFIX: ${{ inputs.artifact_name_suffix }}
       run: |
         flag="$CODECOV_FLAG"
         if [ -z "$flag" ]; then
@@ -74,7 +74,7 @@ runs:
       id: get_job_id
       uses: ./.github/actions/get-job-id
       with:
-        job_name: ${{ inputs.job-name }}
+        job_name: ${{ inputs.job_name }}
         run_id: ${{ github.run_id }}
 
     - name: Upload test results to GitHub
@@ -82,7 +82,7 @@ runs:
       uses: actions/upload-artifact@v6
       if: ${{ !cancelled() }}
       with:
-        name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact-name-suffix }}
+        name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
         path: ./.testoutput/junit.*.xml
         include-hidden-files: true
         retention-days: 28
@@ -91,16 +91,16 @@ runs:
       uses: actions/upload-artifact@v6
       if: ${{ !cancelled() }}
       with:
-        name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact-name-suffix }}
+        name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
         path: ./.testoutput/test-summary.json
         if-no-files-found: ignore
         retention-days: 28
 
     - name: Upload debug logs
       uses: actions/upload-artifact@v6
-      if: ${{ !cancelled() && inputs.debug-log-path != '' }}
+      if: ${{ !cancelled() && inputs.debug_log_path != '' }}
       with:
-        name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact-name-suffix }}
-        path: ${{ inputs.debug-log-path }}
+        name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
+        path: ${{ inputs.debug_log_path }}
         if-no-files-found: ignore
         retention-days: 14
