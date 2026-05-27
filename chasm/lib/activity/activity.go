@@ -873,7 +873,6 @@ func (a *Activity) unpause(
 	ctx chasm.MutableContext,
 	event unpauseEvent,
 ) {
-	a.PauseState = nil
 	attempt := a.LastAttempt.Get(ctx)
 	if event.req.GetResetAttempts() {
 		attempt.Count = 1
