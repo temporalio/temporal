@@ -1,7 +1,9 @@
 package await
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +22,53 @@ type attemptFailure struct {
 	errors  []string
 }
 
+type awaitStats struct {
+	attempts         []attemptTiming
+	sleeps           []time.Duration
+	failedAttempts   int
+	stoppedAttempts  int
+	deadlockAttempts int
+}
+
+type attemptTiming struct {
+	attempt  int
+	duration time.Duration
+}
+
+func (s *awaitStats) recordAttempt(attempt int, duration time.Duration, failed, stopped, deadlocked bool) {
+	s.attempts = append(s.attempts, attemptTiming{
+		attempt:  attempt,
+		duration: duration,
+	})
+	if failed {
+		s.failedAttempts++
+	}
+	if stopped {
+		s.stoppedAttempts++
+	}
+	if deadlocked {
+		s.deadlockAttempts++
+	}
+}
+
+func (s *awaitStats) recordSleep(duration time.Duration) {
+	s.sleeps = append(s.sleeps, duration)
+}
+
 // reportTimeout reports the timeout failure plus collected attempt errors.
-func reportTimeout(tb testing.TB, failures []attemptFailure, funcName, timeoutMsg string, effectiveTimeout time.Duration, polls int) {
+func reportTimeout(
+	tb testing.TB,
+	failures []attemptFailure,
+	stats awaitStats,
+	parentErr error,
+	awaitErr error,
+	deadlineRemaining time.Duration,
+	funcName string,
+	timeoutMsg string,
+	effectiveTimeout time.Duration,
+	polls int,
+) {
+	reportAwaitStats(tb, stats, parentErr, awaitErr, deadlineRemaining, polls)
 	reportFinalAttemptContext(tb, failures)
 	reportAttemptErrors(tb, failures)
 	if timeoutMsg != "" {
@@ -29,6 +76,18 @@ func reportTimeout(tb testing.TB, failures []attemptFailure, funcName, timeoutMs
 	} else {
 		tb.Fatalf("%s: condition not satisfied after %v (%d polls)", funcName, effectiveTimeout, polls)
 	}
+}
+
+func reportAwaitStats(tb testing.TB, stats awaitStats, parentErr error, awaitErr error, deadlineRemaining time.Duration, polls int) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "await stats: polls=%d failed_attempts=%d stopped_attempts=%d deadlock_attempts=%d",
+		polls, stats.failedAttempts, stats.stoppedAttempts, stats.deadlockAttempts)
+	writeDurationSummary(&b, "attempt_duration", attemptDurations(stats.attempts))
+	writeDurationSummary(&b, "sleep_duration", stats.sleeps)
+	writeSlowestAttempts(&b, stats.attempts)
+	fmt.Fprintf(&b, "\ncontext at timeout: parent_err=%v await_err=%v deadline_remaining=%v",
+		parentErr, awaitErr, deadlineRemaining)
+	tb.Errorf("%s", b.String())
 }
 
 func reportFinalAttemptContext(tb testing.TB, failures []attemptFailure) {
@@ -105,6 +164,47 @@ func isDeadlineOnlyFailure(f attemptFailure) bool {
 
 func attemptFailureText(f attemptFailure) string {
 	return strings.Join(f.errors, "\n")
+}
+
+func writeDurationSummary(b *strings.Builder, label string, durations []time.Duration) {
+	if len(durations) == 0 {
+		fmt.Fprintf(b, " %s=(none)", label)
+		return
+	}
+	minDuration, maxDuration, totalDuration := durations[0], durations[0], time.Duration(0)
+	for _, duration := range durations {
+		minDuration = min(minDuration, duration)
+		maxDuration = max(maxDuration, duration)
+		totalDuration += duration
+	}
+	fmt.Fprintf(b, " %s min=%v avg=%v max=%v last=%v",
+		label, minDuration, totalDuration/time.Duration(len(durations)), maxDuration, durations[len(durations)-1])
+}
+
+func writeSlowestAttempts(b *strings.Builder, timings []attemptTiming) {
+	if len(timings) == 0 {
+		b.WriteString("\nslowest attempts: (none)")
+		return
+	}
+	slowest := slices.Clone(timings)
+	slices.SortFunc(slowest, func(a, b attemptTiming) int {
+		return cmp.Compare(b.duration, a.duration)
+	})
+	if len(slowest) > 3 {
+		slowest = slowest[:3]
+	}
+	b.WriteString("\nslowest attempts:")
+	for _, timing := range slowest {
+		fmt.Fprintf(b, " #%d=%v", timing.attempt, timing.duration)
+	}
+}
+
+func attemptDurations(timings []attemptTiming) []time.Duration {
+	durations := make([]time.Duration, 0, len(timings))
+	for _, timing := range timings {
+		durations = append(durations, timing.duration)
+	}
+	return durations
 }
 
 func writeAttemptFailure(b *strings.Builder, f attemptFailure) {
