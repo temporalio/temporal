@@ -52,7 +52,7 @@ classDiagram
 
 The Generator component buffers automated actions according to the schedule's specification. This is driven through `GeneratorTask`, a timer task that fires, and re-schedules itself, on the schedule's interval until the schedule is complete. Generator is solely responsible for buffering automated actions, not driving those actions to execution; that work is handed off to the `Invoker`.
 
-The Generator runs continuously rather than stopping while paused: a paused fire still advances the high water mark but produces no `BufferedStart`s. This guarantees that an unpause never replays a backlog of dropped actions, and that `FutureActionTimes` stays accurate against the live spec (see `ProcessTimeRange` in [`spec_processor.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/spec_processor.go) for the drop semantics).
+The Generator runs continuously rather than stopping while paused: a paused fire still advances the high water mark but produces no `BufferedStart`s. This guarantees that `FutureActionTimes` remains accurate, including in visibility, even for paused schedules.
 
 The following high-level sequence diagram indicates the Generator's contribution towards firing an action:
 
@@ -351,6 +351,7 @@ The completion handler has several responsibilities:
 - Records the action's close time, to measure the latency between "last action completed" and "next action started" when multiple starts are buffered sequentially and pending execution.
 - Applies retention to keep only the most recent completed actions in `BufferedStarts`.
 - Schedules another `ProcessBufferTask`, as a completion may make a buffered start eligible for execution.
+- Schedules another `GeneratorTask`, to handle a potentially updated idle close time.
 
 Nexus completion callbacks are the only way that Scheduler can find out about an action's completion (there is no additional synchronous path). When the Invoker's `ProcessBufferTask` evaluates running workflow status, the computed view of running workflows (derived from `BufferedStarts` entries with `RunId` set but not completed) is used instead of making additional describe calls. 
 
