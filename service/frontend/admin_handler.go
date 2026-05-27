@@ -1218,6 +1218,20 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, err
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := cluster.ValidateClusterInformation(
+		resp.GetClusterName(),
+		cluster.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		adh.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid remote cluster metadata: %v", err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.clusterMetadataManager

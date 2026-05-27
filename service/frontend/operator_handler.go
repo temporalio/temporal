@@ -627,6 +627,20 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := clustermetadata.ValidateClusterInformation(
+		resp.GetClusterName(),
+		clustermetadata.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		h.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
