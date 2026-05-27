@@ -735,3 +735,69 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 }
+
+// TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState verifies the
+// self-heal path: a standby stuck at UNSPECIFIED gets State=NORMAL written from
+// the next failover task.
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState() {
+	id := uuid.NewString()
+	name := "some random namespace test name"
+	updateOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
+	updateState := enumspb.NAMESPACE_STATE_REGISTERED
+	updateClusterActive := "other random active cluster name"
+	updateClusterStandby := "other random standby cluster name"
+	existingConfigVersion := int64(1)
+	existingFailoverVersion := int64(10)
+	updateFailoverVersion := int64(59)
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: updateClusterActive},
+		{ClusterName: updateClusterStandby},
+	}
+	updateTask := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: updateOperation,
+		Id:                 id,
+		Info: &namespacepb.NamespaceInfo{
+			Name:  name,
+			State: updateState,
+		},
+		Config: &namespacepb.NamespaceConfig{},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: updateClusterActive,
+			Clusters:          updateClusters,
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+		ConfigVersion:   existingConfigVersion, // no config bump
+		FailoverVersion: updateFailoverVersion, // failover bump
+	}
+
+	s.namespaceReplicator.currentCluster = updateClusterStandby
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: name,
+	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{Id: id},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			State: enumspb.REPLICATION_STATE_UNSPECIFIED, // pre-fix stuck state
+		},
+		ConfigVersion:   existingConfigVersion,
+		FailoverVersion: existingFailoverVersion,
+	}}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: updateFailoverVersion,
+	}, nil).Times(1)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{Id: id},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: updateClusterActive,
+				State:             enumspb.REPLICATION_STATE_NORMAL,
+			},
+			ConfigVersion:               existingConfigVersion,
+			FailoverNotificationVersion: updateFailoverVersion,
+			FailoverVersion:             updateFailoverVersion,
+		},
+		IsGlobalNamespace:   false,
+		NotificationVersion: updateFailoverVersion,
+	})
+	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
+	s.NoError(err)
+}
