@@ -318,56 +318,14 @@ jobs:
         timeout-minutes: 20
         run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: unit-test
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: unit-test
-          report_type: test_results
-
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Unit test
-          run_id: ${{ github.run_id }}
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
+          job-name: Unit test
+          artifact-name-suffix: unit-test
 
   integration-test:
     name: Integration test
@@ -416,56 +374,14 @@ jobs:
         timeout-minutes: 15
         run: ./develop/github/monitor_test.sh make integration-test-coverage
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: integration-test
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: integration-test
-          report_type: test_results
-
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Integration test
-          run_id: ${{ github.run_id }}
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
+          job-name: Integration test
+          artifact-name-suffix: integration-test
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -522,13 +438,6 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
-          run_id: ${{ github.run_id }}
-
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
 
@@ -553,58 +462,16 @@ jobs:
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
         run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test
-          report_type: test_results
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
-
-      - name: Upload debug logs
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          path: ${{ github.workspace }}/.testoutput/debug.log
-          if-no-files-found: ignore
-          retention-days: 14
+          job-name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
+          artifact-name-suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          codecov-flag: functional-test
+          debug-log-path: ${{ github.workspace }}/.testoutput/debug.log
 
   mixed-brain-test:
     name: Mixed brain test
