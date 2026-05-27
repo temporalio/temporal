@@ -198,6 +198,53 @@ FAIL`,
 			},
 			notContains: []string{"attempts omitted", "--- attempt 1 ---", "first failure", "--- attempt 2 ---", "penultimate failure", "logger.go", "connection refused"},
 		},
+		{
+			name: "keeps full await timeout diagnostics",
+			data: `    require_ctx.go:243:
+        	Error Trace:	require_ctx.go:243
+        	Error:      	await stats: polls=3 failed_attempts=3 stopped_attempts=3 deadlock_attempts=0 attempt_duration min=1ms avg=2ms max=3ms last=3ms sleep_duration min=100ms avg=100ms max=100ms last=100ms
+        	            	slowest attempts: #3=3ms #2=2ms #1=1ms
+        	            	context at timeout: parent_err=<nil> await_err=context deadline exceeded deadline_remaining=-1ms
+        	            	
+        	            	last failed attempt before timeout:
+        	            	
+        	            	  --- attempt 3 ---
+        	            	    Error Trace:	versioning_3_test.go:10
+        	            	    Error:      	context deadline exceeded
+        	            	
+        	            	last non-deadline failed attempt:
+        	            	
+        	            	  --- attempt 1 ---
+        	            	    Error Trace:	versioning_3_test.go:10
+        	            	    Error:      	Worker Deployment Version not found
+        	            	
+        	            	attempt errors:
+        	            	
+        	            	  --- attempt 1 ---
+        	            	    Error Trace:	versioning_3_test.go:10
+        	            	    Error:      	Worker Deployment Version not found
+        	            	
+        	            	  --- attempt 2 ---
+        	            	    Error Trace:	versioning_3_test.go:10
+        	            	    Error:      	context deadline exceeded
+        	            	
+        	            	  --- attempt 3 ---
+        	            	    Error Trace:	versioning_3_test.go:10
+        	            	    Error:      	context deadline exceeded
+        	            	
+        	            	Requiref: deployment not ready (not satisfied after 90s, 3 polls)
+--- FAIL: TestSuite/TestCase (90.00s)
+FAIL`,
+			contains: []string{
+				"await stats: polls=3",
+				"last failed attempt before timeout:",
+				"last non-deadline failed attempt:",
+				"Worker Deployment Version not found",
+				"attempt errors:",
+				"Requiref: deployment not ready",
+				"--- FAIL: TestSuite/TestCase (90.00s)",
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -56,15 +56,21 @@ func (r timeoutReport) reportTimeout(
 	funcName string,
 	timeoutMsg string,
 ) {
-	reportAwaitStats(tb, r.stats, parentErr, awaitErr, deadlineRemaining, r.attempts)
-	reportFinalAttemptContext(tb, r.failures)
-	r.reportAttemptErrors(tb)
+	var sections []string
+	sections = append(sections, formatAwaitStats(r.stats, parentErr, awaitErr, deadlineRemaining, r.attempts))
+	if s := formatFinalAttemptContext(r.failures); s != "" {
+		sections = append(sections, s)
+	}
+	if s := formatAttemptErrors(r.failures); s != "" {
+		sections = append(sections, s)
+	}
+	diagnostics := strings.Join(sections, "\n\n")
 	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
 	if timeoutMsg != "" {
 		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.effectiveTimeout)
 	}
-	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
-		funcName, message, r.attempts, r.attemptTimeouts)
+	tb.Fatalf("%s\n\n%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
+		diagnostics, funcName, message, r.attempts, r.attemptTimeouts)
 }
 
 type awaitStats struct {
@@ -100,7 +106,7 @@ func (s *awaitStats) recordSleep(duration time.Duration) {
 	s.sleeps = append(s.sleeps, duration)
 }
 
-func reportAwaitStats(tb testing.TB, stats awaitStats, parentErr error, awaitErr error, deadlineRemaining time.Duration, polls int) {
+func formatAwaitStats(stats awaitStats, parentErr error, awaitErr error, deadlineRemaining time.Duration, polls int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "await stats: polls=%d failed_attempts=%d stopped_attempts=%d deadlock_attempts=%d",
 		polls, stats.failedAttempts, stats.stoppedAttempts, stats.deadlockAttempts)
@@ -109,12 +115,12 @@ func reportAwaitStats(tb testing.TB, stats awaitStats, parentErr error, awaitErr
 	writeSlowestAttempts(&b, stats.attempts)
 	fmt.Fprintf(&b, "\ncontext at timeout: parent_err=%v await_err=%v deadline_remaining=%v",
 		parentErr, awaitErr, deadlineRemaining)
-	tb.Errorf("%s", b.String())
+	return b.String()
 }
 
-func reportFinalAttemptContext(tb testing.TB, failures []attemptFailure) {
+func formatFinalAttemptContext(failures []attemptFailure) string {
 	if len(failures) == 0 {
-		return
+		return ""
 	}
 
 	var b strings.Builder
@@ -122,19 +128,28 @@ func reportFinalAttemptContext(tb testing.TB, failures []attemptFailure) {
 	b.WriteString("last failed attempt before timeout:")
 	writeAttemptFailure(&b, last)
 
-	if isDeadlineOnlyFailure(last) {
+	if previous, ok := previousNonDeadlineFailure(failures); ok && previous.attempt != last.attempt {
+		b.WriteString("\n\nlast non-deadline failed attempt:")
+		writeAttemptFailure(&b, previous)
+	} else if isDeadlineOnlyFailure(last) {
 		if previous, ok := previousDistinctFailure(failures, last); ok {
 			b.WriteString("\n\nprevious distinct failed attempt:")
 			writeAttemptFailure(&b, previous)
 		}
 	}
 
-	tb.Errorf("%s", b.String())
+	return b.String()
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
+	if s := formatAttemptErrors(failures); s != "" {
+		tb.Errorf("%s", s)
+	}
+}
+
+func formatAttemptErrors(failures []attemptFailure) string {
 	if len(failures) == 0 {
-		return
+		return ""
 	}
 
 	var b strings.Builder
@@ -153,7 +168,7 @@ func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
 			writeAttemptFailure(&b, f)
 		}
 	}
-	tb.Errorf("%s", b.String())
+	return b.String()
 }
 
 func previousDistinctFailure(failures []attemptFailure, last attemptFailure) (attemptFailure, bool) {
@@ -166,14 +181,21 @@ func previousDistinctFailure(failures []attemptFailure, last attemptFailure) (at
 	return attemptFailure{}, false
 }
 
+func previousNonDeadlineFailure(failures []attemptFailure) (attemptFailure, bool) {
+	for i := len(failures) - 1; i >= 0; i-- {
+		if !hasContextDeadlineFailure(failures[i]) {
+			return failures[i], true
+		}
+	}
+	return attemptFailure{}, false
+}
+
 func isDeadlineOnlyFailure(f attemptFailure) bool {
 	if len(f.errors) == 0 {
 		return false
 	}
 	text := strings.ToLower(attemptFailureText(f))
-	hasDeadline := strings.Contains(text, "context deadline exceeded") ||
-		strings.Contains(text, "context canceled")
-	if !hasDeadline {
+	if !hasContextDeadlineText(text) {
 		return false
 	}
 	withoutDeadline := strings.ReplaceAll(text, "context deadline exceeded", "")
@@ -182,6 +204,15 @@ func isDeadlineOnlyFailure(f attemptFailure) bool {
 	return withoutDeadline == "" ||
 		strings.Contains(withoutDeadline, "error trace:") ||
 		strings.Contains(withoutDeadline, "error:")
+}
+
+func hasContextDeadlineFailure(f attemptFailure) bool {
+	return hasContextDeadlineText(strings.ToLower(attemptFailureText(f)))
+}
+
+func hasContextDeadlineText(text string) bool {
+	return strings.Contains(text, "context deadline exceeded") ||
+		strings.Contains(text, "context canceled")
 }
 
 func attemptFailureText(f attemptFailure) string {
