@@ -734,7 +734,6 @@ func (s *Scheduler) Delete(
 		return nil, ErrSentinel
 	}
 	s.Closed = true
-	s.ClosedTime = timestamppb.New(ctx.Now(s))
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
 	}, nil
@@ -903,12 +902,10 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
-	if s.Closed {
-		if s.ClosedTime != nil {
-			out = append(out, chasm.SearchAttributeTemporalScheduleCloseTime.Value(s.ClosedTime.AsTime()))
+	if !s.Closed {
+		if gen := s.Generator.Get(ctx); gen != nil && len(gen.FutureActionTimes) > 0 {
+			out = append(out, chasm.SearchAttributeTemporalScheduleNextActionTime.Value(gen.FutureActionTimes[0].AsTime()))
 		}
-	} else if gen := s.Generator.Get(ctx); gen != nil && len(gen.FutureActionTimes) > 0 {
-		out = append(out, chasm.SearchAttributeTemporalScheduleNextFireTime.Value(gen.FutureActionTimes[0].AsTime()))
 	}
 	return out
 }

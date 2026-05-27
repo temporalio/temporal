@@ -45,7 +45,6 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
 	scheduler.Closed = true
-	scheduler.ClosedTime = timestamppb.New(ctx.Now(scheduler))
 	return nil
 }
 

@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -190,7 +189,6 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		schedulerRef,
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s.Closed = true
-			s.ClosedTime = timestamppb.New(ctx.Now(s))
 			s.WorkflowMigration = nil
 			return nil, nil
 		},
