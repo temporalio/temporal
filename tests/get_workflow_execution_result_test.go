@@ -5,11 +5,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/applicationservice/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflownexusservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
@@ -31,9 +31,9 @@ func TestGetWorkflowExecutionResultTestSuite(t *testing.T) {
 func (s *GetWorkflowExecutionResultTestSuite) SetupSuite() {
 	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():                       true,
-			dynamicconfig.EnableCHASMCallbacks.Key():              true,
-			dynamicconfig.EnableGetWorkflowExecutionResult.Key():  true,
+			dynamicconfig.EnableChasm.Key():                      true,
+			dynamicconfig.EnableCHASMCallbacks.Key():             true,
+			dynamicconfig.EnableGetWorkflowExecutionResult.Key(): true,
 		}),
 	)
 }
@@ -81,9 +81,9 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
-						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
+						Operation: workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&applicationservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,
@@ -222,9 +222,9 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
-						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
+						Operation: workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&applicationservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,
@@ -373,9 +373,9 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
-						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
+						Operation: workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&applicationservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,
@@ -552,9 +552,9 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Alr
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name(),
-						Input: payloads.MustEncodeSingle(&workflownexusservice.GetWorkflowExecutionResultRequest{
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
+						Operation: workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
+						Input: payloads.MustEncodeSingle(&applicationservice.GetWorkflowExecutionResultRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: targetWorkflowID,

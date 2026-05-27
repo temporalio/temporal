@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/applicationservice/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflownexusservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -194,7 +194,7 @@ func (v *RequestValidator) ValidateSearchAttributes(searchAttributes *commonpb.S
 	return v.saValidator.ValidateSize(searchAttributes, namespaceName)
 }
 
-func (v *RequestValidator) ValidateGetWorkflowExecutionResultRequest(request *workflownexusservice.GetWorkflowExecutionResultRequest) error {
+func (v *RequestValidator) ValidateGetWorkflowExecutionResultRequest(request *applicationservice.GetWorkflowExecutionResultRequest) error {
 	if request == nil {
 		return serviceerror.NewInvalidArgument("Request is empty")
 	}
