@@ -47,6 +47,14 @@ const (
 	// Used by scheduler workflow.
 	TemporalSchedulePaused = "TemporalSchedulePaused"
 
+	// Set on the Scheduler component itself. Holds the next scheduled fire time
+	// while the schedule is open. Unset once the schedule is closed.
+	TemporalScheduleNextFireTime = "TemporalScheduleNextFireTime"
+
+	// Set on the Scheduler component itself once it transitions to closed. Holds
+	// the timestamp of that transition. Unset while the schedule is open.
+	TemporalScheduleCloseTime = "TemporalScheduleCloseTime"
+
 	ReservedPrefix = "Temporal"
 
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
@@ -157,12 +165,14 @@ var (
 		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalScheduledStartTime:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalScheduleNextFireTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduleCloseTime:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalNamespaceDivision:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:     enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -178,6 +188,8 @@ var (
 		TemporalScheduledStartTime:           enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalScheduledById:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:               enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalScheduleNextFireTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduleCloseTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalNamespaceDivision:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalReportedProblems:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,

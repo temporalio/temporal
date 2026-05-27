@@ -90,7 +90,16 @@ func TestSentinelIdleTask_Execute(t *testing.T) {
 	})
 
 	require.False(t, sentinel.Closed)
+	require.Nil(t, sentinel.ClosedTime)
+
+	before := time.Now()
 	err := executor.Execute(ctx, sentinel, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
 	require.NoError(t, err)
+	after := time.Now()
+
 	require.True(t, sentinel.Closed)
+	require.NotNil(t, sentinel.ClosedTime)
+	stamped := sentinel.ClosedTime.AsTime()
+	require.False(t, stamped.Before(before.Add(-time.Second)), "ClosedTime %v is before test start %v", stamped, before)
+	require.False(t, stamped.After(after.Add(time.Second)), "ClosedTime %v is after test end %v", stamped, after)
 }

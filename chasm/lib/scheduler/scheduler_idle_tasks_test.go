@@ -75,13 +75,22 @@ func TestIdleTask_Execute(t *testing.T) {
 
 	// Verify scheduler starts open.
 	require.False(t, sched.Closed)
+	require.Nil(t, sched.ClosedTime)
+
+	// Advance the test time source to a distinct, recognizable moment so we can
+	// assert ClosedTime was stamped from ctx.Now(), not wall-clock fallback.
+	closeAt := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	env.TimeSource.Update(closeAt)
 
 	// Execute the idle task.
 	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
 	require.NoError(t, err)
 
-	// Verify scheduler is now closed.
+	// Verify scheduler is now closed and ClosedTime was stamped from ctx.Now().
 	require.True(t, sched.Closed)
+	require.NotNil(t, sched.ClosedTime)
+	require.True(t, closeAt.Equal(sched.ClosedTime.AsTime()),
+		"ClosedTime should equal ctx.Now() at close; want %v, got %v", closeAt, sched.ClosedTime.AsTime())
 }
 
 func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {

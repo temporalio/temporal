@@ -312,3 +312,147 @@ func TestContextMetadata(t *testing.T) {
 		require.Nil(t, md)
 	})
 }
+
+func TestSearchAttributes_NextFireTimeAndCloseTime(t *testing.T) {
+	const (
+		nextFireAlias = "TemporalScheduleNextFireTime"
+		closeAlias    = "TemporalScheduleCloseTime"
+	)
+
+	t.Run("open with future actions emits NextFireTime, not CloseTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		nextFire := time.Now().Add(15 * time.Minute).UTC().Truncate(time.Second)
+		later := nextFire.Add(time.Hour)
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = []*timestamppb.Timestamp{
+			timestamppb.New(nextFire),
+			timestamppb.New(later),
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, nextFireAlias)
+		require.True(t, ok, "expected %s to be present", nextFireAlias)
+		require.True(t, nextFire.Equal(val.(time.Time)), "want %v, got %v", nextFire, val)
+
+		_, hasClose := findSearchAttribute(t, sas, closeAlias)
+		require.False(t, hasClose, "expected %s to be absent while open", closeAlias)
+	})
+
+	t.Run("open with no future actions emits neither", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = nil
+
+		sas := sched.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, nextFireAlias)
+		require.False(t, hasNext, "expected %s to be absent when there is no upcoming action", nextFireAlias)
+		_, hasClose := findSearchAttribute(t, sas, closeAlias)
+		require.False(t, hasClose, "expected %s to be absent while open", closeAlias)
+	})
+
+	t.Run("closed emits CloseTime, not NextFireTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		closedAt := time.Now().Add(-5 * time.Minute).UTC().Truncate(time.Second)
+		sched.Closed = true
+		sched.ClosedTime = timestamppb.New(closedAt)
+		// Future action times left over from before close must not leak through.
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(time.Now().Add(time.Hour))}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, closeAlias)
+		require.True(t, ok, "expected %s to be present once closed", closeAlias)
+		require.True(t, closedAt.Equal(val.(time.Time)), "want %v, got %v", closedAt, val)
+
+		_, hasNext := findSearchAttribute(t, sas, nextFireAlias)
+		require.False(t, hasNext, "expected %s to be absent once closed", nextFireAlias)
+	})
+
+	t.Run("closed with no ClosedTime emits neither", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		sched.ClosedTime = nil
+
+		sas := sched.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, nextFireAlias)
+		require.False(t, hasNext)
+		_, hasClose := findSearchAttribute(t, sas, closeAlias)
+		require.False(t, hasClose, "expected %s to be absent when ClosedTime unset", closeAlias)
+	})
+
+	t.Run("sentinel emits neither", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, nextFireAlias)
+		require.False(t, hasNext)
+		_, hasClose := findSearchAttribute(t, sas, closeAlias)
+		require.False(t, hasClose)
+	})
+}
+
+func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
+	t.Helper()
+	for _, sa := range sas {
+		if sa.Alias == alias {
+			return sa.Value.Value(), true
+		}
+	}
+	return nil, false
+}
+
+func TestDelete_StampsClosedTime(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	require.False(t, sched.Closed)
+	require.Nil(t, sched.ClosedTime)
+
+	before := time.Now()
+	_, err := sched.Delete(ctx, &schedulerpb.DeleteScheduleRequest{
+		NamespaceId: "ns-id",
+	})
+	require.NoError(t, err)
+	after := time.Now()
+
+	require.True(t, sched.Closed)
+	require.NotNil(t, sched.ClosedTime)
+	stamped := sched.ClosedTime.AsTime()
+	require.False(t, stamped.Before(before.Add(-time.Second)),
+		"ClosedTime %v is before test start %v", stamped, before)
+	require.False(t, stamped.After(after.Add(time.Second)),
+		"ClosedTime %v is after test end %v", stamped, after)
+}
+
+// TestSearchAttributes_RoundTripThroughCloseTransaction verifies that the new
+// SAs survive registration/serialization by flowing through the same CHASM
+// pipeline that runs in production — closeTransactionForceUpdateVisibility,
+// which calls SearchAttributes() on the root component and snapshots the
+// result. If the new attributes were unregistered or had a bad value type, the
+// CloseTransaction call would error or panic.
+func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	nextFire := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	generator := sched.Generator.Get(ctx)
+	generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(nextFire)}
+
+	require.NoError(t, node.SetRootComponent(sched))
+	_, err := node.CloseTransaction()
+	require.NoError(t, err, "CloseTransaction should accept TemporalScheduleNextFireTime")
+
+	// Now flip to closed and ensure the close-time variant also survives a
+	// CloseTransaction.
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	sched.Closed = true
+	sched.ClosedTime = timestamppb.New(time.Now().UTC().Truncate(time.Second))
+	generator = sched.Generator.Get(ctx)
+	generator.FutureActionTimes = nil
+
+	require.NoError(t, node.SetRootComponent(sched))
+	_, err = node.CloseTransaction()
+	require.NoError(t, err, "CloseTransaction should accept TemporalScheduleCloseTime")
+}

@@ -36,6 +36,11 @@ message SchedulerState {
   // Set when a migration to workflow-backed scheduler (V1) is pending.
   // Unpause operations are blocked while this is set.
   WorkflowMigrationState workflow_migration = 11;
+
+  // Timestamp at which the scheduler transitioned to Closed. Used to populate
+  // the TemporalScheduleNextFireTime search attribute once the schedule is no
+  // longer firing.
+  google.protobuf.Timestamp closed_time = 12;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.
