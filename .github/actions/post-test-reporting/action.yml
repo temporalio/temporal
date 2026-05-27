@@ -1,0 +1,106 @@
+name: Post Test Reporting
+description: Generate test reports and upload post-test artifacts
+inputs:
+  artifact_name_suffix:
+    description: Suffix to use for uploaded artifact names
+    required: true
+  codecov_flag:
+    description: Codecov flag for coverage and test result uploads
+    required: false
+    default: ""
+  debug_log_path:
+    description: Optional debug log path to upload
+    required: false
+    default: ""
+  job_name:
+    description: Exact job name to resolve for artifact names
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Print memory snapshot
+      if: always()
+      shell: bash
+      run: cat /tmp/memory_snapshot.txt || true
+
+    - name: Generate crash report
+      if: failure()
+      shell: bash
+      run: |
+        [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+          CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
+
+    - name: Generate test summary
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        make -s generate-test-summary
+        if [ -s .testoutput/test-summary.md ]; then
+          cat .testoutput/test-summary.md > "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Resolve Codecov flag
+      id: codecov
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        CODECOV_FLAG: ${{ inputs.codecov_flag }}
+        ARTIFACT_NAME_SUFFIX: ${{ inputs.artifact_name_suffix }}
+      run: |
+        flag="$CODECOV_FLAG"
+        if [ -z "$flag" ]; then
+          flag="$ARTIFACT_NAME_SUFFIX"
+        fi
+        echo "flag=$flag" >> "$GITHUB_OUTPUT"
+
+    - name: Upload code coverage to Codecov
+      if: ${{ !failure() && !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ env.CODECOV_TOKEN }}
+        directory: ./.testoutput
+        flags: ${{ steps.codecov.outputs.flag }}
+
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ env.CODECOV_TOKEN }}
+        directory: ./.testoutput
+        flags: ${{ steps.codecov.outputs.flag }}
+        report_type: test_results
+
+    - name: Get job ID
+      id: get_job_id
+      uses: ./.github/actions/get-job-id
+      with:
+        job_name: ${{ inputs.job_name }}
+        run_id: ${{ github.run_id }}
+
+    - name: Upload test results to GitHub
+      # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
+      uses: actions/upload-artifact@v6
+      if: ${{ !cancelled() }}
+      with:
+        name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
+        path: ./.testoutput/junit.*.xml
+        include-hidden-files: true
+        retention-days: 28
+
+    - name: Upload test summary JSON to GitHub
+      uses: actions/upload-artifact@v6
+      if: ${{ !cancelled() }}
+      with:
+        name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
+        path: ./.testoutput/test-summary.json
+        if-no-files-found: ignore
+        retention-days: 28
+
+    - name: Upload debug logs
+      uses: actions/upload-artifact@v6
+      if: ${{ !cancelled() && inputs.debug_log_path != '' }}
+      with:
+        name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
+        path: ${{ inputs.debug_log_path }}
+        if-no-files-found: ignore
+        retention-days: 14

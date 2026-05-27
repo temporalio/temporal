@@ -318,61 +318,21 @@ jobs:
         timeout-minutes: 20
         run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: unit-test
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: unit-test
-          report_type: test_results
-
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           job_name: Unit test
-          run_id: ${{ github.run_id }}
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
+          artifact_name_suffix: unit-test
 
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      CONTAINERS: cassandra mysql postgresql
     steps:
       - uses: actions/checkout@v6
         with:
@@ -380,14 +340,10 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: |
-            cassandra
-            mysql
-            postgresql
-          down-flags: -v
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - uses: actions/setup-go@v6
         with:
@@ -407,70 +363,30 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Wait for containerized dependencies to be healthy
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
         timeout-minutes: 15
         run: ./develop/github/monitor_test.sh make integration-test-coverage
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: integration-test
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: integration-test
-          report_type: test_results
-
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           job_name: Integration test
-          run_id: ${{ github.run_id }}
+          artifact_name_suffix: integration-test
 
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
-
-      - name: Tear down docker compose
+      - name: Stop containerized dependencies
         if: ${{ always() }}
-        run: |
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   # Root job name includes matrix details so it is unique per job variant.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
@@ -487,23 +403,19 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: ScribeMD/docker-cache@0.3.7
-        with:
-          key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
-
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
-          down-flags: -v
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
+          cache: true
 
       - uses: actions/setup-go@v6
         with:
@@ -522,22 +434,14 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
-          run_id: ${{ github.run_id }}
-
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
 
       - name: Wait for containerized dependencies to be healthy
-        if: ${{ toJson(matrix.containers) != '[]' }}
-        run: |
-          # Word splitting is intentional here.
-          # shellcheck disable=SC2046
-          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
@@ -553,58 +457,23 @@ jobs:
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
         run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
 
-      - name: Print memory snapshot
+      - name: Post-test reporting
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
-
-      - name: Generate crash report
-        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-        run: |
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Write test summary
-        if: ${{ !cancelled() }}
-        run: |
-          summary="$(make -s print-test-summary)"
-          if [ -n "$summary" ]; then
-            printf '%s\n' "$summary" > "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test
+          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
+          artifact_name_suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          codecov_flag: functional-test
+          debug_log_path: ${{ github.workspace }}/.testoutput/debug.log
 
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+      - name: Stop containerized dependencies
+        if: always()
+        uses: ./.github/actions/docker-compose-stop
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test
-          report_type: test_results
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
-
-      - name: Upload debug logs
-        uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
-        with:
-          name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          path: ${{ github.workspace }}/.testoutput/debug.log
-          if-no-files-found: ignore
-          retention-days: 14
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   mixed-brain-test:
     name: Mixed brain test
@@ -617,11 +486,10 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-pull
+        uses: ./.github/actions/docker-compose-start
         with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
-          down-flags: -v
 
       - uses: actions/setup-go@v6
         with:
@@ -666,6 +534,13 @@ jobs:
       - name: Print Omes logs
         if: always()
         run: cat .testoutput/mixedbrain_omes.log || true
+
+      - name: Stop containerized dependencies
+        if: always()
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
 
   test-status:
     if: always()
