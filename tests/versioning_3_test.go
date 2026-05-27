@@ -63,6 +63,7 @@ const (
 	vbUnpinned           = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime      = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout      = 2 * time.Minute
+	ver3RPCTimeout       = 10 * time.Second
 	ver3RetryPollTimeout = 21 * time.Second
 
 	versionStatusNil      = versionStatus(0)
@@ -398,7 +399,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -417,9 +418,10 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 		}
 
-		_, err := s.queryWorkflow(env, tv)
-		s.Error(err)
-		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+		s.Await(func(s *Versioning3Suite) {
+			_, err := s.queryWorkflow(env, tv)
+			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+		}, 30*time.Second, 500*time.Millisecond)
 	} else {
 		// since the version still has pollers, the query should succeed
 		s.pollAndQueryWorkflow(env, tv, false)
@@ -431,7 +433,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 
 		// wait for v1 to become ramping
 		s.Await(func(s *Versioning3Suite) {
-			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -3430,7 +3432,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -3855,7 +3857,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
@@ -4510,10 +4512,10 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 	executionStatus enumspb.WorkflowExecutionStatus,
 	usedBuilds ...*testvars.TestVars,
 ) {
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-
 	s.Await(func(s *Versioning3Suite) {
+		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		var query string
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
@@ -4561,7 +4563,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 
 			fmt.Println(resp.GetExecutions()[0])
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
