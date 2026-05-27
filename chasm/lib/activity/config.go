@@ -46,13 +46,10 @@ type Config struct {
 	BlobSizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	Enabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	LinkMaxSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxLinksPerExecution        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxLinksPerRequest          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	StartDelayEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -65,14 +62,20 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:  dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		Enabled:                     Enabled.Get(dc),
-		LinkMaxSize:                 dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		LongPollBuffer:              LongPollBuffer.Get(dc),
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MaxLinksPerExecution:        MaxLinksPerExecution.Get(dc),
-		MaxLinksPerRequest:          dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 		StartDelayEnabled:           StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
+}
+
+// linkValidatorProvider builds the linkValidator from dynamic config.
+func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
+	return newLinkValidator(
+		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+		MaxLinksPerExecution.Get(dc),
+		dynamicconfig.FrontendLinkMaxSize.Get(dc),
+	)
 }

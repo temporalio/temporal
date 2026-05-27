@@ -68,12 +68,12 @@ func TestConvertLinkActivityToNexusLink(t *testing.T) {
 	require.Equal(t, nexus.Link{
 		URL: &url.URL{
 			Scheme:  "temporal",
-			Path:    "/namespaces/ns/activities/act-id/run-id",
-			RawPath: "/namespaces/ns/activities/act-id/run-id",
+			Path:    "/namespaces/ns/activities/act-id/run-id/details",
+			RawPath: "/namespaces/ns/activities/act-id/run-id/details",
 		},
 		Type: "temporal.api.common.v1.Link.Activity",
 	}, output)
-	require.Equal(t, "temporal:///namespaces/ns/activities/act-id/run-id", output.URL.String())
+	require.Equal(t, "temporal:///namespaces/ns/activities/act-id/run-id/details", output.URL.String())
 }
 
 func TestConvertNexusLinkToLinkActivity(t *testing.T) {
@@ -90,7 +90,7 @@ func TestConvertNexusLinkToLinkActivity(t *testing.T) {
 			input: nexus.Link{
 				URL: &url.URL{
 					Scheme: "temporal",
-					Path:   "/namespaces/ns/activities/act-id/run-id",
+					Path:   "/namespaces/ns/activities/act-id/run-id/details",
 				},
 				Type: "temporal.api.common.v1.Link.Activity",
 			},

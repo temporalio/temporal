@@ -46,7 +46,7 @@ const (
 	urlPathRunIDKey               = "runID"
 	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
 	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s"
-	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s"
+	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s/details"
 
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
@@ -66,7 +66,7 @@ var (
 		rePatternRunID,
 	))
 	urlPathActivityRE = regexp.MustCompile(fmt.Sprintf(
-		`^/namespaces/%s/activities/%s/%s$`,
+		`^/namespaces/%s/activities/%s/%s/details$`,
 		rePatternNamespace,
 		rePatternActivityID,
 		rePatternRunID,

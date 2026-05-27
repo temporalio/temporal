@@ -348,8 +348,9 @@ func (a *Activity) addCompletionCallbacks(
 
 // attachLinks appends the given links to the activity's request data, skipping any that are
 // proto-equal to a link already attached or to an earlier entry in the same batch. Returns an
-// error if the activity is closed or if attaching the deduplicated set would exceed maxLinks.
-func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, maxLinks int) error {
+// error if the activity is closed or if attaching the deduplicated set would exceed the
+// per-execution cap enforced by linkValidator.
+func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, validator *linkValidator, namespaceName string) error {
 	if len(links) == 0 {
 		return nil
 	}
@@ -368,12 +369,8 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if len(toAdd) == 0 {
 		return nil
 	}
-	if len(existing)+len(toAdd) > maxLinks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d links to an activity (%d links already attached)",
-			maxLinks,
-			len(existing),
-		)
+	if err := validator.ValidateExecutionTotal(namespaceName, len(existing), len(toAdd)); err != nil {
+		return err
 	}
 	requestData.Links = append(existing, toAdd...)
 	return nil

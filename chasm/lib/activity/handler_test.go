@@ -14,7 +14,7 @@ import (
 )
 
 // TestStartActivityExecution_RejectsLinksOverExecutionLimit verifies that the
-// initial-create path enforces MaxLinksPerExecution before persisting the
+// initial-create path enforces the per-execution link cap before persisting the
 // activity, preventing inconsistent state where later attachLinks calls would
 // fail because the activity was seeded with more links than the cap.
 func TestStartActivityExecution_RejectsLinksOverExecutionLimit(t *testing.T) {
@@ -22,8 +22,12 @@ func TestStartActivityExecution_RejectsLinksOverExecutionLimit(t *testing.T) {
 	h := &handler{
 		config: &Config{
 			MaxCallbacksPerExecution: func(string) int { return 10 },
-			MaxLinksPerExecution:     func(string) int { return maxLinks },
 		},
+		linkValidator: newLinkValidator(
+			func(string) int { return 100 },
+			func(string) int { return maxLinks },
+			func(string) int { return 4000 },
+		),
 	}
 
 	links := make([]*commonpb.Link, maxLinks+1)

@@ -32,14 +32,22 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(
+	config *Config,
+	linkValidator *linkValidator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+) *handler {
 	return &handler{
 		config:            config,
+		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -63,14 +71,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
-	maxLinks := h.config.MaxLinksPerExecution(frontendReq.GetNamespace())
 
-	if len(frontendReq.GetLinks()) > maxLinks {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d links to an activity (%d links already attached)",
-			maxLinks,
-			0,
-		)
+	if err := h.linkValidator.ValidateExecutionTotal(frontendReq.GetNamespace(), 0, len(frontendReq.GetLinks())); err != nil {
+		return nil, err
 	}
 
 	result, err := chasm.StartExecution(
@@ -132,7 +135,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 					}
 				}
 				if attachLinks {
-					if err := a.attachLinks(ctx, links, maxLinks); err != nil {
+					if err := a.attachLinks(ctx, links, h.linkValidator, frontendReq.GetNamespace()); err != nil {
 						return nil, err
 					}
 				}

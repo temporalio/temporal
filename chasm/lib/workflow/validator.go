@@ -123,13 +123,6 @@ func (v *RequestValidator) ValidateWorkflowIDReusePolicy(
 	return nil
 }
 
-func (v *RequestValidator) ValidateLinks(
-	ns string,
-	links []*commonpb.Link,
-) error {
-	return commonlinks.Validate(links, v.config.maxLinksPerRequest(ns), v.config.linkMaxSize(ns))
-}
-
 func (v *RequestValidator) UnaliasedSearchAttributesFrom(
 	attributes *commonpb.SearchAttributes,
 	namespaceName string,
@@ -224,5 +217,5 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return err
 	}
 
-	return v.ValidateLinks(request.GetNamespace(), request.GetLinks())
+	return commonlinks.Validate(request.GetLinks(), v.config.maxLinksPerRequest(request.GetNamespace()), v.config.linkMaxSize(request.GetNamespace()))
 }

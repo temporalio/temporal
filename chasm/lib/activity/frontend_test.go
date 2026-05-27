@@ -25,11 +25,14 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 		config: &Config{
 			BlobSizeLimitError:         defaultBlobSizeLimitError,
 			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
-			LinkMaxSize:                defaultLinkMaxSize,
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
-			MaxLinksPerRequest:         defaultMaxLinksPerRequest,
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
 		},
+		linkValidator: newLinkValidator(
+			defaultMaxLinksPerRequest,
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
 		logger: log.NewNoopLogger(),
 	}
 	nsID := namespace.ID("test-namespace-id")

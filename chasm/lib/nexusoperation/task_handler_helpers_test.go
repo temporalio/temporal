@@ -9,10 +9,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
-func TestConvertResponseLinks(t *testing.T) {
+func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	workflowEvent := nexus.Link{
@@ -26,7 +27,7 @@ func TestConvertResponseLinks(t *testing.T) {
 	activity := nexus.Link{
 		URL: &url.URL{
 			Scheme: "temporal",
-			Path:   "/namespaces/ns/activities/act-id/run-id",
+			Path:   "/namespaces/ns/activities/act-id/run-id/details",
 		},
 		Type: "temporal.api.common.v1.Link.Activity",
 	}
@@ -39,7 +40,7 @@ func TestConvertResponseLinks(t *testing.T) {
 		Type: "temporal.api.common.v1.Link.Activity",
 	}
 
-	out := convertResponseLinks([]nexus.Link{workflowEvent, activity, unsupported, malformedActivity}, logger)
+	out := commonnexus.ConvertNexusLinksToProtoLinks([]nexus.Link{workflowEvent, activity, unsupported, malformedActivity}, logger)
 	require.Len(t, out, 2)
 
 	expected := []*commonpb.Link{
