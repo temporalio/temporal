@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
@@ -99,6 +100,7 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(ServiceRefsHook),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,
@@ -430,6 +432,25 @@ func ChasmVisibilityManagerProvider(
 		nsRegistry,
 		visibilityManager,
 	)
+}
+
+type serviceRefsHookParams struct {
+	fx.In
+
+	ChasmEngine            chasm.Engine
+	ChasmVisibilityManager chasm.VisibilityManager
+	ChasmRegistry          *chasm.Registry
+	TestHooks              testhooks.TestHooks
+}
+
+func ServiceRefsHook(params serviceRefsHookParams) {
+	if hook, ok := testhooks.Get(params.TestHooks, testhooks.HistoryServiceRefsCreated, testhooks.GlobalScope); ok {
+		hook(testhooks.HistoryServiceRefs{
+			ChasmEngine:            params.ChasmEngine,
+			ChasmVisibilityManager: params.ChasmVisibilityManager,
+			ChasmRegistry:          params.ChasmRegistry,
+		})
+	}
 }
 
 func EventNotifierProvider(

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -60,6 +61,7 @@ type (
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
 		tokenProvider                   auth.TokenProvider
+		testHooks                       testhooks.TestHooks
 	}
 )
 

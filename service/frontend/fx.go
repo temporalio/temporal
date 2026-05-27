@@ -121,6 +121,7 @@ var Module = fx.Options(
 	fx.Invoke(RegisterNexusOperationHTTPHandler),
 	fx.Invoke(RegisterNexusCompletionHTTPHandler),
 	fx.Invoke(RegisterOpenAPIHTTPHandler),
+	fx.Invoke(ServiceRefsHook),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
@@ -207,6 +208,31 @@ func NamespaceCheckerProvider(registry namespace.Registry) authorization.Namespa
 	return &namespaceChecker{r: registry}
 }
 
+type serviceRefsHookParams struct {
+	fx.In
+
+	ServiceName     primitives.ServiceName
+	RPCFactory      common.RPCFactory
+	HistoryClient   resource.HistoryRawClient
+	MatchingClient  resource.MatchingRawClient
+	SchedulerClient schedulerpb.SchedulerServiceClient
+	TestHooks       testhooks.TestHooks
+}
+
+func ServiceRefsHook(params serviceRefsHookParams) {
+	if params.ServiceName != primitives.FrontendService {
+		return
+	}
+	if hook, ok := testhooks.Get(params.TestHooks, testhooks.FrontendServiceRefsCreated, testhooks.GlobalScope); ok {
+		hook(testhooks.FrontendServiceRefs{
+			RPCFactory:      params.RPCFactory,
+			HistoryClient:   params.HistoryClient,
+			MatchingClient:  params.MatchingClient,
+			SchedulerClient: params.SchedulerClient,
+		})
+	}
+}
+
 func (n *namespaceChecker) Exists(name namespace.Name) error {
 	// This will get called before the namespace state validation interceptor. We want to
 	// disable readthrough to avoid polluting the negative lookup cache, e.g. if this call is
@@ -246,7 +272,12 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) GrpcServerOptions {
+	if hook, ok := testhooks.Get(testHooks, testhooks.ServiceGrpcInterceptors, testhooks.GlobalScope); ok {
+		hook(serviceName, &customInterceptors, &customStreamInterceptors)
+	}
+
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),

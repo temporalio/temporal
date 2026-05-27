@@ -221,6 +221,7 @@ func SearchAttributeValidatorProvider(
 type NamespaceRegistryParams struct {
 	fx.In
 
+	ServiceName                primitives.ServiceName `optional:"true"`
 	Logger                     log.SnTaggedLogger
 	MetricsHandler             metrics.Handler
 	ClusterMetadata            cluster.Metadata
@@ -228,10 +229,11 @@ type NamespaceRegistryParams struct {
 	DynamicCollection          *dynamicconfig.Collection
 	ReplicationResolverFactory namespace.ReplicationResolverFactory
 	NamespaceStateChangedFn    namespace.NamespaceStateChangedFn
+	TestHooks                  testhooks.TestHooks `optional:"true"`
 }
 
 func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
-	return nsregistry.NewRegistry(
+	registry := nsregistry.NewRegistry(
 		params.MetadataManager,
 		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
 		params.ClusterMetadata.GetCurrentClusterName(),
@@ -242,6 +244,10 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 		params.ReplicationResolverFactory,
 		params.NamespaceStateChangedFn,
 	)
+	if hook, ok := testhooks.Get(params.TestHooks, testhooks.NamespaceRegistryCreated, testhooks.GlobalScope); ok {
+		hook(params.ServiceName, registry)
+	}
+	return registry
 }
 
 func ClientFactoryProvider(
@@ -399,13 +405,18 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 
 func PerServiceDialOptionsProvider(
 	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
 ) map[primitives.ServiceName][]grpc.DialOption {
 	trailerInterceptor := interceptor.TrailerToContextMetadataInterceptor(logger)
 	dialOpt := grpc.WithChainUnaryInterceptor(trailerInterceptor)
-	return map[primitives.ServiceName][]grpc.DialOption{
+	options := map[primitives.ServiceName][]grpc.DialOption{
 		primitives.HistoryService:  {dialOpt},
 		primitives.MatchingService: {dialOpt},
 	}
+	if hook, ok := testhooks.Get(testHooks, testhooks.ServiceClientDialOptions, testhooks.GlobalScope); ok {
+		hook(options)
+	}
+	return options
 }
 
 func RPCFactoryProvider(

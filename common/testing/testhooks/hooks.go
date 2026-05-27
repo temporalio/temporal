@@ -7,8 +7,26 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	historytasks "go.temporal.io/server/service/history/tasks"
+	"google.golang.org/grpc"
+)
+
+type (
+	FrontendServiceRefs struct {
+		RPCFactory      any
+		HistoryClient   any
+		MatchingClient  any
+		SchedulerClient any
+	}
+
+	HistoryServiceRefs struct {
+		ChasmEngine            any
+		ChasmVisibilityManager any
+		ChasmRegistry          any
+	}
 )
 
 // Test hook keys with their return type and scope.
@@ -28,6 +46,13 @@ var (
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
 	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	ServiceGrpcInterceptors                  = newKey[func(primitives.ServiceName, *[]grpc.UnaryServerInterceptor, *[]grpc.StreamServerInterceptor), global]()
+	ServiceClientDialOptions                 = newKey[func(map[primitives.ServiceName][]grpc.DialOption), global]()
+	NamespaceRegistryCreated                 = newKey[func(primitives.ServiceName, namespace.Registry), global]()
+	ChasmRegistryInitializer                 = newKey[func(any) error, global]()
+	FrontendServiceRefsCreated               = newKey[func(FrontendServiceRefs), global]()
+	HistoryServiceRefsCreated                = newKey[func(HistoryServiceRefs), global]()
+	PersistenceExecutionManagerWrapper       = newKey[func(any, log.Logger) any, global]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

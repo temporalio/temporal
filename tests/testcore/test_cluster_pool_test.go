@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -13,7 +14,9 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 
 	t.Run("create", func(t *testing.T) {
 		impl := newTemporal(t, &TemporalParams{
-			ClusterMetadataConfig: &cluster.Config{},
+			Config: &config.Config{
+				ClusterMetadata: &cluster.Config{},
+			},
 		})
 		dcClient = impl.dcClient
 	})
