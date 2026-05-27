@@ -64,6 +64,7 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
+		chasm.NewRegistrableComponent[*EventLog]("eventlog"),
 	}
 }
 
