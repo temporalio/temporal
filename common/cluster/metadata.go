@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -153,6 +154,7 @@ func NewMetadata(
 
 	versionToClusterName, err := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
 	if err != nil {
+		// nolint:forbidigo // matches the other startup-config panics in this constructor
 		panic(err.Error())
 	}
 	if _, ok := clusterInfo[currentClusterName]; !ok {
@@ -505,7 +507,7 @@ func ValidateClusterInformation(
 	failoverVersionIncrement int64,
 ) error {
 	if clusterName == "" {
-		return fmt.Errorf("cluster name must not be empty")
+		return errors.New("cluster name must not be empty")
 	}
 	if info.InitialFailoverVersion <= 0 {
 		return fmt.Errorf("cluster %q: InitialFailoverVersion must be > 0, got %d",

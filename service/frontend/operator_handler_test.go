@@ -1431,8 +1431,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Sha
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
 	s.Contains(err.Error(), "HistoryShardCount must be positive")
 }
 
@@ -1455,11 +1456,12 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Emp
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:                "",
-		EnableRemoteClusterConnection:  true,
+		FrontendAddress:               "",
+		EnableRemoteClusterConnection: true,
 	})
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
 	s.Contains(err.Error(), "RPCAddress must not be empty when Enabled=true")
 }
 
