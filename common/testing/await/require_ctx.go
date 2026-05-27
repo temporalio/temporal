@@ -4,11 +4,20 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
+
+const (
+	maxPollInterval       = 2 * time.Second
+	pollBackoffMultiplier = 2
+	pollJitterDivisor     = 5
+)
+
+var pollJitterCounter atomic.Uint64
 
 // softDeadlockTimeoutEnvVar overrides the default soft-deadlock timeout.
 // Parsed as a Go duration, e.g. "10s".
@@ -110,6 +119,7 @@ func run(
 
 	var failures []attemptFailure
 	polls := 0
+	pollBackoff := newPollBackoff(pollInterval)
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
@@ -171,8 +181,8 @@ func run(
 			return
 		}
 
-		// Wait for pollInterval, or context is canceled or deadline is reached.
-		sleep(awaitCtx, deadline, pollInterval)
+		// Wait using backoff, or until context is canceled or deadline is reached.
+		sleep(awaitCtx, deadline, pollBackoff.next())
 	}
 }
 
@@ -260,6 +270,43 @@ func runAttempt(
 	case <-hardTimer.C:
 		return attemptResult{deadlocked: true}
 	}
+}
+
+type pollBackoff struct {
+	current time.Duration
+	max     time.Duration
+}
+
+func newPollBackoff(initial time.Duration) pollBackoff {
+	maxInterval := maxPollInterval
+	if initial > maxInterval {
+		maxInterval = initial
+	}
+	return pollBackoff{
+		current: initial,
+		max:     maxInterval,
+	}
+}
+
+func (b *pollBackoff) next() time.Duration {
+	delay := addJitter(b.current, b.max)
+	if b.current < b.max {
+		b.current = min(b.current*pollBackoffMultiplier, b.max)
+	}
+	return delay
+}
+
+func addJitter(base, maxDelay time.Duration) time.Duration {
+	if base <= 0 {
+		return base
+	}
+	jitterRange := base / pollJitterDivisor
+	if jitterRange <= 0 {
+		return base
+	}
+	seed := uint64(time.Now().UnixNano()) ^ pollJitterCounter.Add(0x9e3779b97f4a7c15)
+	delay := base + time.Duration(seed%uint64(jitterRange+1))
+	return min(delay, maxDelay)
 }
 
 func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {

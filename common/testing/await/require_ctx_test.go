@@ -151,6 +151,39 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 	}
 }
 
+func TestRequire_PollIntervalBacksOff(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	var attemptStarts []time.Time
+	var attemptEnds []time.Time
+	attemptDuration := 10 * time.Millisecond
+	pollInterval := 20 * time.Millisecond
+
+	await.Require(t.Context(), t, func(t *await.T) {
+		attemptStarts = append(attemptStarts, time.Now())
+		defer func() { attemptEnds = append(attemptEnds, time.Now()) }()
+
+		time.Sleep(attemptDuration) //nolint:forbidigo // simulate attempt work to measure gap between attempts
+
+		if attempts.Add(1) < 4 {
+			t.Error("not ready")
+		}
+	}, time.Second, pollInterval)
+
+	require.Equal(t, int32(4), attempts.Load())
+	require.Len(t, attemptStarts, 4)
+	require.Len(t, attemptEnds, 4)
+
+	var gaps []time.Duration
+	for i := 1; i < len(attemptStarts); i++ {
+		gaps = append(gaps, attemptStarts[i].Sub(attemptEnds[i-1]))
+	}
+	require.GreaterOrEqual(t, gaps[0], pollInterval)
+	require.GreaterOrEqual(t, gaps[1], 2*pollInterval)
+	require.GreaterOrEqual(t, gaps[2], 4*pollInterval)
+}
+
 func TestRequire_FailureScenarios(t *testing.T) {
 	t.Parallel()
 
