@@ -8006,6 +8006,100 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
+	// ResetKeepPausedWhilePauseRequested: a reset with KeepPaused=true on a PAUSE_REQUESTED
+	// activity must defer the reset (via ActivityReset) and have it consumed by the next retry,
+	// landing the activity in PAUSED at attempt 1. Pins the contract between handleReset and
+	// TransitionAttemptFailedToPaused.
+	t.Run("ResetKeepPausedWhilePauseRequested", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Second),
+			RequestId:           env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Drive the activity to attempt 2 by polling then failing attempt 1.
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message: "fail attempt 1",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type: "TestFailure",
+				}},
+			},
+			Identity: env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Worker polls attempt 2 → STARTED at attempt 2.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 5*time.Second, 100*time.Millisecond)
+		_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Pause while STARTED at attempt 2 → PAUSE_REQUESTED.
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Reset with KeepPaused=true. Reset is deferred via ActivityReset; status stays PAUSE_REQUESTED.
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			KeepPaused: true,
+		})
+		require.NoError(t, err)
+
+		// Worker stops responding. StartToCloseTimeout fires → TransitionAttemptFailedToPaused
+		// consumes ActivityReset → PAUSED at attempt 1.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+			})
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
 	// PauseRequestValidation: validate that Pause rejects invalid request fields.
 	t.Run("PauseRequestValidation", func(t *testing.T) {
 		ctx := testcore.NewContext()
