@@ -1485,8 +1485,6 @@ var (
 	VerifyReplicationTaskFailed           = NewCounterDef("verify_replication_task_failed")
 	VerifyReplicationTasksLatency         = NewTimerDef("verify_replication_tasks_latency")
 	VerifyDescribeMutableStateLatency     = NewTimerDef("verify_describe_mutable_state_latency")
-	ForceReplicationWFQuarantinedCount    = NewCounterDef("force_replication_wf_quarantined_count")
-	ForceReplicationWFRecoveredCount      = NewCounterDef("force_replication_wf_recovered_count")
 	ForceReplicationShardQuarantinedCount = NewCounterDef("force_replication_shard_quarantined_count")
 	ForceReplicationShardRecoveredCount   = NewCounterDef("force_replication_shard_recovered_count")
 	ForceReplicationRPSIncreasedCount     = NewCounterDef("force_replication_rps_increased_count")

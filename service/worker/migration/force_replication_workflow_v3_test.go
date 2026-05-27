@@ -82,7 +82,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHappyPath() {
 	var status AdaptiveForceReplicationStatus
 	s.NoError(envValue.Get(&status))
 	s.Equal(int64(3), status.ReplicatedWorkflowCount)
-	s.Equal(0, status.QuarantinedWFIDCount)
 	s.Equal(0, status.QuarantinedShardCount)
 }
 
@@ -141,88 +140,14 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestInjectOnlyMode() {
 	s.NoError(envValue.Get(&status))
 	// Inject-only counts toward ReplicatedWorkflowCount via inject success.
 	s.Equal(int64(3), status.ReplicatedWorkflowCount)
-	s.Equal(0, status.QuarantinedWFIDCount)
 	s.Equal(0, status.QuarantinedShardCount)
 }
 
-// TestQuarantineAfterRepeatedPending drives V3 with a hot WF ID that keeps
-// returning as pending. After WFIDQuarantineThreshold pendings, that WF ID
-// is quarantined; subsequent retries call VerifyBatch alone (no inject)
-// until the hot exec finally verifies.
-func (s *ForceReplicationWorkflowV3TestSuite) TestQuarantineAfterRepeatedPending() {
-	testSuite := &testsuite.WorkflowTestSuite{}
-	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-
-	namespaceID := uuid.NewString()
-	var a *activities
-	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 1}, nil)
-	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
-
-	hotExec := &ExecutionInfo{BusinessID: "hot-wf", RunID: "run-1"}
-	listed := false
-	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		if listed {
-			return &listWorkflowsResponse{Executions: nil, NextPageToken: nil}, nil
-		}
-		listed = true
-		return &listWorkflowsResponse{
-			Executions:    []*ExecutionInfo{hotExec},
-			NextPageToken: nil,
-		}, nil
-	})
-
-	// InjectBatch always succeeds; the verify side is where the hot exec
-	// keeps coming back as pending until it eventually clears. Three
-	// pending observations (calls 1-3) trip the
-	// WFIDQuarantineThreshold of 3; the fourth call verifies cleanly.
-	// Times(1) asserts retry rounds re-verify without re-injecting: the
-	// initial dispatch injects once, then drainRetries calls VerifyBatch only.
-	// Times(4) on VerifyBatch asserts the precise retry round count:
-	// initial verify + three drainRetries rounds (round 2 trips quarantine
-	// → slow lane → final clean verify).
-	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
-	verifyCalls := 0
-	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, _ *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
-		verifyCalls++
-		if verifyCalls < 4 {
-			return &adaptiveVerifyBatchResponse{Verified: 0, Pending: []*ExecutionInfo{hotExec}}, nil
-		}
-		return &adaptiveVerifyBatchResponse{Verified: 1, Pending: nil}, nil
-	}).Times(4)
-
-	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
-
-	env.ExecuteWorkflow(ForceReplicationWorkflowV3, AdaptiveForceReplicationParams{
-		Namespace:                "test-ns",
-		Query:                    "",
-		ConcurrentActivityCount:  2,
-		OverallRps:               10,
-		ListWorkflowsPageSize:    1,
-		PageCountPerExecution:    10,
-		EnableVerification:       true,
-		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  3,
-		NoProgressTimeoutSeconds: 3600,
-	})
-
-	s.True(env.IsWorkflowCompleted())
-	s.Require().NoError(env.GetWorkflowError())
-
-	envValue, err := env.QueryWorkflow(adaptiveForceReplicationStatusQueryType)
-	s.NoError(err)
-	var status AdaptiveForceReplicationStatus
-	s.NoError(envValue.Get(&status))
-	s.Equal(1, status.QuarantinedWFIDCount)
-}
-
 // TestShardQuarantineRecovers drives V3 against a one-shard topology with
-// two distinct WF IDs both struggling, then both clearing. After two WF IDs
-// each generate two pendings, shardPending == 4 → shard goes into
-// quarantine. Then both WF IDs verify cleanly across a couple more rounds,
-// decaying shardPending back below the release threshold → quarantine
-// releases. WFIDQuarantineThreshold is set high so WF-ID quarantine doesn't
-// fire and steal the shard counter increments.
+// two distinct WF IDs that both pend once, tripping shard quarantine, then
+// both verify cleanly in the slow lane and the per-batch shard counter
+// decay brings the count back below the release threshold → quarantine
+// releases.
 func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
@@ -251,17 +176,17 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 	// dispatchVerifyOnly, never re-injecting.
 	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	// Verify outcomes by call:
-	//   1: both pending (initial batch) → shardPending = 2
-	//   2: both pending (drainRetries round 0, fast lane) → shardPending = 4 → shard quarantined
-	//   3: both clean (drainRetries round 1, slow lane) → shardPending decays → quarantine releases
+	//   1: both pending (initial fast batch) → shardPending = 2 → shard quarantined
+	//   2: both clean (drainRetries round 0, slow lane) → shardPending decays
+	//      to 1 → 1 <= releaseAt(1) → quarantine releases
 	verifyCalls := 0
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		verifyCalls++
-		if verifyCalls <= 2 {
+		if verifyCalls == 1 {
 			return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
 		}
 		return &adaptiveVerifyBatchResponse{Verified: int64(len(req.Executions)), Pending: nil}, nil
-	}).Times(3)
+	}).Times(2)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -274,8 +199,7 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		ShardQuarantineThreshold: 4,
-		WFIDQuarantineThreshold:  999,
+		ShardQuarantineThreshold: 2,
 		NoProgressTimeoutSeconds: 3600,
 	})
 
@@ -287,7 +211,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestShardQuarantineRecovers() {
 	var status AdaptiveForceReplicationStatus
 	s.NoError(envValue.Get(&status))
 	s.Equal(0, status.QuarantinedShardCount)
-	s.Equal(0, status.QuarantinedWFIDCount)
 }
 
 func TestPendingListMarshalUnmarshal(t *testing.T) {
@@ -406,8 +329,7 @@ func TestEstimateCANPayloadBytes(t *testing.T) {
 
 	// Marshal each CAN-serialized field independently and sum. The
 	// estimator covers exactly these two; shard-keyed state is bounded
-	// by shard count and WF-ID-keyed state is in-memory only — both
-	// intentionally excluded.
+	// by shard count and intentionally excluded.
 	fpBytes, err := json.Marshal(pendingList(s.fastPending))
 	require.NoError(t, err)
 	spBytes, err := json.Marshal(pendingList(s.slowPending))
@@ -421,31 +343,25 @@ func TestEstimateCANPayloadBytes(t *testing.T) {
 }
 
 // TestReclassifyPendingForRetry covers the two-direction routing in
-// reclassifyPendingForRetry: fast→slow when a BID is in quarantinedWF,
-// and slow→fast when its shard quarantine has since been released.
+// reclassifyPendingForRetry by shard quarantine: fast→slow when a BID's
+// hosting shard is now quarantined, slow→fast when it has been released.
 func TestReclassifyPendingForRetry(t *testing.T) {
 	t.Parallel()
 
-	newState := func(quarantinedWFIDs []string, quarantinedShards []int32) *adaptiveWorkflowState {
-		qWF := make(map[string]struct{}, len(quarantinedWFIDs))
-		for _, v := range quarantinedWFIDs {
-			qWF[v] = struct{}{}
-		}
+	newState := func(quarantinedShards []int32) *adaptiveWorkflowState {
 		return &adaptiveWorkflowState{
 			params: &AdaptiveForceReplicationParams{
 				NamespaceID:       "ns-1",
 				HistoryShardCount: 4,
 			},
-			quarantinedWF:    qWF,
 			quarantinedShard: sliceToInt32Set(quarantinedShards),
 		}
 	}
 
 	t.Run("slow entries move to fast when shard quarantine released", func(t *testing.T) {
 		// Shard quarantine has been released since these entries were
-		// originally routed to slow. With WFIDQuarantineThreshold never
-		// crossed for them, they should move back to fast.
-		s := newState(nil, nil)
+		// originally routed to slow, so they should move back to fast.
+		s := newState(nil)
 		s.slowPending = []*ExecutionInfo{
 			{BusinessID: "wf-a", RunID: "r1"},
 			{BusinessID: "wf-b", RunID: "r2"},
@@ -457,37 +373,9 @@ func TestReclassifyPendingForRetry(t *testing.T) {
 		require.Empty(t, s.slowPending)
 	})
 
-	t.Run("WF-ID quarantine keeps slow entry sticky", func(t *testing.T) {
-		// wf-hot is in quarantinedWF (sticky); wf-cool is not. After
-		// reclassify, wf-hot stays in slow, wf-cool moves to fast.
-		s := newState([]string{"wf-hot"}, nil)
-		s.slowPending = []*ExecutionInfo{
-			{BusinessID: "wf-hot", RunID: "r1"},
-			{BusinessID: "wf-cool", RunID: "r2"},
-		}
-		reFast, reSlow := s.reclassifyPendingForRetry()
-		require.Len(t, reFast, 1)
-		require.Equal(t, "wf-cool", reFast[0].BusinessID)
-		require.Len(t, reSlow, 1)
-		require.Equal(t, "wf-hot", reSlow[0].BusinessID)
-	})
-
-	t.Run("fast entries move to slow when WF-ID newly quarantined", func(t *testing.T) {
-		s := newState([]string{"wf-hot"}, nil)
-		s.fastPending = []*ExecutionInfo{
-			{BusinessID: "wf-hot", RunID: "r1"},
-			{BusinessID: "wf-cool", RunID: "r2"},
-		}
-		reFast, reSlow := s.reclassifyPendingForRetry()
-		require.Len(t, reFast, 1)
-		require.Equal(t, "wf-cool", reFast[0].BusinessID)
-		require.Len(t, reSlow, 1)
-		require.Equal(t, "wf-hot", reSlow[0].BusinessID)
-	})
-
 	t.Run("fast entry on quarantined shard moves to slow", func(t *testing.T) {
 		// Compute the shard wf-x hashes onto, then quarantine that shard.
-		s := newState(nil, nil)
+		s := newState(nil)
 		shard := s.shardOf("wf-x")
 		s.quarantinedShard[shard] = struct{}{}
 		s.fastPending = []*ExecutionInfo{{BusinessID: "wf-x", RunID: "r1"}}
@@ -495,22 +383,26 @@ func TestReclassifyPendingForRetry(t *testing.T) {
 		require.Empty(t, reFast)
 		require.Len(t, reSlow, 1)
 	})
+
+	t.Run("slow entry on still-quarantined shard stays slow", func(t *testing.T) {
+		s := newState(nil)
+		shard := s.shardOf("wf-x")
+		s.quarantinedShard[shard] = struct{}{}
+		s.slowPending = []*ExecutionInfo{{BusinessID: "wf-x", RunID: "r1"}}
+		reFast, reSlow := s.reclassifyPendingForRetry()
+		require.Empty(t, reFast)
+		require.Len(t, reSlow, 1)
+	})
 }
 
-// TestDecrementCleanCountersIgnoresInnocentBystanders pins the shard-counter
-// symmetry invariant: shardPending is incremented exactly once per BID on
-// its first pending appearance, so it must be decremented exactly once on
-// full recovery and never touched by clean BIDs that didn't contribute in
-// the first place. Without this, heavy clean default-track traffic on the
-// same shard as a burst of hot BIDs drowns out the burst's signal —
-// shardPending hovers near zero and shard quarantine never engages even
-// when a shard is obviously overloaded.
-//
-// The test pre-loads state to mid-burst (one shard sitting at threshold,
-// already quarantined) and runs decrementCleanCounters with BIDs that
-// never had any pending pressure. With the fix, shardPending and the
-// quarantine flag are untouched. Without it, both fall off.
-func TestDecrementCleanCountersIgnoresInnocentBystanders(t *testing.T) {
+// TestDecrementCleanCountersGatesOnPendingInBatch pins the drown-out
+// invariant: a shard's counter must NOT decay on batches where any of
+// its BIDs were pending, even if other BIDs on the same shard verified
+// cleanly in the same batch. Without this gate, a burst of cold
+// neighbours on a shard with one hot BID would erase the hot BID's
+// signal: shardPending hovers near zero and shard quarantine never
+// engages.
+func TestDecrementCleanCountersGatesOnPendingInBatch(t *testing.T) {
 	t.Parallel()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
@@ -526,27 +418,22 @@ func TestDecrementCleanCountersIgnoresInnocentBystanders(t *testing.T) {
 				Namespace:                "test-ns",
 				NamespaceID:              "test-ns-id",
 				HistoryShardCount:        1, // every BID hashes to the single shard
-				WFIDQuarantineThreshold:  999,
-				ShardQuarantineThreshold: 2,
+				ShardQuarantineThreshold: 4, // releaseAt = max(4/2, 1) = 2
 			},
-			wfIDPending:      map[string]int{},
 			shardPending:     map[int32]int{},
-			quarantinedWF:    map[string]struct{}{},
 			quarantinedShard: map[int32]struct{}{},
 		}
-		// Discover the shard ID via shardOf so the test stays correct
-		// regardless of the 0- vs 1-indexed scheme.
 		shard := state.shardOf("hot-a")
-		// Simulate a prior batch having tripped shard quarantine via
-		// two genuinely-pending hot BIDs.
-		state.shardPending[shard] = 2
+		state.shardPending[shard] = 4
 		state.quarantinedShard[shard] = struct{}{}
 
 		dispatched := []*ExecutionInfo{
-			{BusinessID: "innocent-1", RunID: "r1"},
-			{BusinessID: "innocent-2", RunID: "r2"},
+			{BusinessID: "cold-a", RunID: "r1"},
+			{BusinessID: "hot-a", RunID: "r2"},
 		}
-		state.decrementCleanCounters(ctx, dispatched, map[string]struct{}{})
+		pendingBIDs := map[string]struct{}{"hot-a": {}}
+		pendingShards := map[int32]struct{}{shard: {}}
+		state.decrementCleanCounters(ctx, dispatched, pendingBIDs, pendingShards)
 		_, quarantined := state.quarantinedShard[shard]
 		return result{
 			ShardPending:     state.shardPending[shard],
@@ -561,18 +448,17 @@ func TestDecrementCleanCountersIgnoresInnocentBystanders(t *testing.T) {
 
 	var got result
 	require.NoError(t, env.GetWorkflowResult(&got))
-	require.Equal(t, 2, got.ShardPending,
-		"clean BIDs that never had pending pressure must not decrement shardPending")
-	require.True(t, got.QuarantinedShard,
-		"shard quarantine must persist when no genuinely-contributing BID has recovered")
+	require.Equal(t, 4, got.ShardPending,
+		"counter must not decay on a batch that also produced pending on this shard")
+	require.True(t, got.QuarantinedShard, "shard quarantine must persist")
 }
 
-// TestDecrementCleanCountersReleasesOnRecovery verifies the other side
-// of the symmetry: when a BID that DID contribute to shardPending
-// finally goes clean (its pending counter reaches 0), shardPending
-// must decrement so quarantine can release. Pairs with the
-// "ignores innocent bystanders" case above.
-func TestDecrementCleanCountersReleasesOnRecovery(t *testing.T) {
+// TestDecrementCleanCountersDecaysOnFullyCleanBatch is the inverse of
+// the drown-out test: when a quarantined shard sees only clean traffic
+// in a batch (zero pending BIDs on it), the counter decays by exactly
+// one and quarantine releases once the counter crosses the
+// threshold/2 hysteresis floor.
+func TestDecrementCleanCountersDecaysOnFullyCleanBatch(t *testing.T) {
 	t.Parallel()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
@@ -580,7 +466,6 @@ func TestDecrementCleanCountersReleasesOnRecovery(t *testing.T) {
 	type result struct {
 		ShardPending     int
 		QuarantinedShard bool
-		WFIDPendingHotA  int
 	}
 
 	runWorkflow := func(ctx workflow.Context) (result, error) {
@@ -589,31 +474,25 @@ func TestDecrementCleanCountersReleasesOnRecovery(t *testing.T) {
 				Namespace:                "test-ns",
 				NamespaceID:              "test-ns-id",
 				HistoryShardCount:        1,
-				WFIDQuarantineThreshold:  999,
 				ShardQuarantineThreshold: 4, // releaseAt = max(4/2, 1) = 2
 			},
-			wfIDPending:      map[string]int{},
 			shardPending:     map[int32]int{},
-			quarantinedWF:    map[string]struct{}{},
 			quarantinedShard: map[int32]struct{}{},
 		}
-		shard := state.shardOf("hot-a")
-		// Hot-a previously contributed to shardPending (wfIDPending=1
-		// matches the one-time bump for first-pending). Now it's
-		// going clean.
-		state.wfIDPending["hot-a"] = 1
-		state.shardPending[shard] = 4
+		shard := state.shardOf("wf-x")
+		// Pre-load to (releaseAt + 1) so a single decay tips into release.
+		state.shardPending[shard] = 3
 		state.quarantinedShard[shard] = struct{}{}
 
 		dispatched := []*ExecutionInfo{
-			{BusinessID: "hot-a", RunID: "r1"},
+			{BusinessID: "wf-x", RunID: "r1"},
+			{BusinessID: "wf-y", RunID: "r2"},
 		}
-		state.decrementCleanCounters(ctx, dispatched, map[string]struct{}{})
+		state.decrementCleanCounters(ctx, dispatched, map[string]struct{}{}, map[int32]struct{}{})
 		_, quarantined := state.quarantinedShard[shard]
 		return result{
 			ShardPending:     state.shardPending[shard],
 			QuarantinedShard: quarantined,
-			WFIDPendingHotA:  state.wfIDPending["hot-a"],
 		}, nil
 	}
 
@@ -624,12 +503,9 @@ func TestDecrementCleanCountersReleasesOnRecovery(t *testing.T) {
 
 	var got result
 	require.NoError(t, env.GetWorkflowResult(&got))
-	require.Equal(t, 3, got.ShardPending,
-		"a recovering hot BID must decrement shardPending exactly once")
-	require.Equal(t, 0, got.WFIDPendingHotA,
-		"hot-a's wfIDPending should be cleared on full recovery")
-	require.True(t, got.QuarantinedShard,
-		"shardPending=3 is still above releaseAt=2, so quarantine persists")
+	require.Equal(t, 2, got.ShardPending, "counter must decay by exactly one per fully-clean batch")
+	require.False(t, got.QuarantinedShard,
+		"quarantine must release once counter hits the threshold/2 hysteresis floor")
 }
 
 // continueAsNewParams extracts the CAN input from the workflow's error or
@@ -678,8 +554,8 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestPendingCarriesAcrossCAN() {
 	// guards against accidental re-dispatch.
 	env.OnActivity(a.InjectBatch, mock.Anything, mock.Anything).Return(nil).Times(1)
 	// Both execs come back pending — they should land in params.FastPending
-	// (neither WF-ID nor shard quarantine fires since it's a single
-	// observation and thresholds are well above 1).
+	// (shard quarantine doesn't fire since the threshold is well above the
+	// two-BID observation).
 	env.OnActivity(a.VerifyBatch, mock.Anything, mock.Anything).Return(func(_ context.Context, req *adaptiveVerifyBatchRequest) (*adaptiveVerifyBatchResponse, error) {
 		return &adaptiveVerifyBatchResponse{Verified: 0, Pending: req.Executions}, nil
 	}).Times(1)
@@ -695,7 +571,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestPendingCarriesAcrossCAN() {
 		PageCountPerExecution:    1,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 	})
@@ -768,7 +643,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestEarlyCANOnPendingPressure() {
 		// Quarantine thresholds far above any per-shard / per-WF
 		// pending count we'll accumulate — keeps everything in the
 		// fast lane so we can observe early-CAN there specifically.
-		WFIDQuarantineThreshold:  1_000_000,
 		ShardQuarantineThreshold: 1_000_000,
 		NoProgressTimeoutSeconds: 3600,
 	})
@@ -835,7 +709,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestHardCapDrainsBeforeCAN() {
 		PageCountPerExecution:    100,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 		FastPending:              carry,
@@ -899,7 +772,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestDrainOnlySkipsListing() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 		DrainOnly:                true,
@@ -969,7 +841,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDIncreasesOnClean() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 	})
@@ -1029,7 +900,6 @@ func (s *ForceReplicationWorkflowV3TestSuite) TestAIMDDecreasesOnPending() {
 		PageCountPerExecution:    10,
 		EnableVerification:       true,
 		TargetClusterEndpoint:    "test-target",
-		WFIDQuarantineThreshold:  999,
 		ShardQuarantineThreshold: 999,
 		NoProgressTimeoutSeconds: 3600,
 	})
