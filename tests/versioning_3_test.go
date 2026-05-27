@@ -406,7 +406,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 	s.setCurrentDeployment(env, tv2)
 
 	// wait for v1 to become drained
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
@@ -414,9 +414,15 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		s.NoError(err)
-		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, 90*time.Second, 500*time.Millisecond)
+		s.NoError(err, "DescribeWorkerDeploymentVersion failed: version=%s rpc_ctx_err=%v await_ctx_err=%v",
+			tv.DeploymentVersionString(), ctx.Err(), s.Context().Err())
+		actual := resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus()
+		s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, actual,
+			"worker deployment version drainage status mismatch: version=%s info=%v",
+			tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo())
+	}, 90*time.Second, 500*time.Millisecond,
+		"wait for worker deployment version to drain: namespace=%s version=%s workflow_id=%s",
+		env.Namespace(), tv.DeploymentVersionString(), tv.WorkflowID())
 
 	if !pollersPresent {
 		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
@@ -426,10 +432,14 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 		}
 
-		s.Await(func(s *Versioning3Suite) {
+		s.Awaitf(func(s *Versioning3Suite) {
 			_, err := s.queryWorkflow(env, tv)
-			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
-		}, 30*time.Second, 500*time.Millisecond)
+			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr),
+				"query did not return drained-version blackhole error: version=%s actual_err=%v await_ctx_err=%v",
+				versionStr, err, s.Context().Err())
+		}, 30*time.Second, 500*time.Millisecond,
+			"wait for pinned query to report drained version: namespace=%s workflow_id=%s version=%s",
+			env.Namespace(), tv.WorkflowID(), versionStr)
 	} else {
 		// since the version still has pollers, the query should succeed
 		s.pollAndQueryWorkflow(env, tv, false)
@@ -440,7 +450,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 		s.setRampingDeployment(env, tv, 50, false)
 
 		// wait for v1 to become ramping
-		s.Await(func(s *Versioning3Suite) {
+		s.Awaitf(func(s *Versioning3Suite) {
 			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 			defer cancel()
 
@@ -448,9 +458,15 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 				Namespace: env.Namespace().String(),
 				Version:   tv.DeploymentVersionString(),
 			})
-			s.NoError(err)
-			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-		}, 90*time.Second, 500*time.Millisecond)
+			s.NoError(err, "DescribeWorkerDeploymentVersion failed: version=%s rpc_ctx_err=%v await_ctx_err=%v",
+				tv.DeploymentVersionString(), ctx.Err(), s.Context().Err())
+			actual := resp.GetWorkerDeploymentVersionInfo().GetStatus()
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, actual,
+				"worker deployment version status mismatch: version=%s info=%v",
+				tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo())
+		}, 90*time.Second, 500*time.Millisecond,
+			"wait for worker deployment version to ramp: namespace=%s version=%s workflow_id=%s",
+			env.Namespace(), tv.DeploymentVersionString(), tv.WorkflowID())
 
 		// the ramping status is propagated to the task queues
 		s.waitForDeploymentDataPropagation(env, tv, versionStatusRamping, false, tqTypeWf)
@@ -3439,7 +3455,7 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
@@ -3450,11 +3466,15 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 		req.BuildId = tv.BuildID()
 		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		if s.shouldRetryWorkerDeploymentRPC(env, err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
-			s.NoError(err)
+			s.NoError(err, "retryable SetWorkerDeploymentCurrentVersion failure: deployment=%s build_id=%s rpc_ctx_err=%v await_ctx_err=%v",
+				tv.DeploymentSeries(), tv.BuildID(), ctx.Err(), s.Context().Err())
 			return
 		}
-		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+		s.NoError(err, "SetWorkerDeploymentCurrentVersion failed: deployment=%s build_id=%s rpc_ctx_err=%v await_ctx_err=%v",
+			tv.DeploymentSeries(), tv.BuildID(), ctx.Err(), s.Context().Err())
+	}, 90*time.Second, 500*time.Millisecond,
+		"set current worker deployment: namespace=%s deployment=%s build_id=%s version=%s",
+		env.Namespace(), tv.DeploymentSeries(), tv.BuildID(), tv.DeploymentVersionString())
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3514,7 +3534,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 	if len(tqTypes) == 0 {
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
@@ -3525,15 +3545,20 @@ func (s *Versioning3Suite) waitForDeploymentVersionRegistration(env *testcore.Te
 				TaskQueueType: tqType,
 				Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
 			})
-			s.NoError(err)
-			s.True(resp.GetIsMember())
+			s.NoError(err, "CheckTaskQueueVersionMembership failed: task_queue=%s type=%s version=%s rpc_ctx_err=%v await_ctx_err=%v",
+				tv.TaskQueue().GetName(), tqType, tv.DeploymentVersionString(), ctx.Err(), s.Context().Err())
+			s.True(resp.GetIsMember(),
+				"task queue version membership not observed: task_queue=%s type=%s version=%s response=%v",
+				tv.TaskQueue().GetName(), tqType, tv.DeploymentVersionString(), resp)
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond,
+		"wait for deployment version registration: namespace=%s task_queue=%s version=%s tq_types=%v",
+		env.Namespace(), tv.TaskQueue().GetName(), tv.DeploymentVersionString(), tqTypes)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
@@ -3547,7 +3572,9 @@ func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *tes
 			return
 		}
 		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond,
+		"unset current worker deployment: namespace=%s deployment=%s version=%s",
+		env.Namespace(), tv.DeploymentSeries(), tv.DeploymentVersionString())
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3568,7 +3595,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 		defer cancel()
 
@@ -3580,11 +3607,15 @@ func (s *Versioning3Suite) setRampingDeployment(
 		req.BuildId = bid
 		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		if s.shouldRetryWorkerDeploymentRPC(env, err, failedPrecondition, buildIDNotFound, deploymentNotFound) {
-			s.NoError(err)
+			s.NoError(err, "retryable SetWorkerDeploymentRampingVersion failure: deployment=%s build_id=%s percentage=%v rpc_ctx_err=%v await_ctx_err=%v",
+				tv.DeploymentSeries(), bid, percentage, ctx.Err(), s.Context().Err())
 			return
 		}
-		s.NoError(err)
-	}, 90*time.Second, 500*time.Millisecond)
+		s.NoError(err, "SetWorkerDeploymentRampingVersion failed: deployment=%s build_id=%s percentage=%v rpc_ctx_err=%v await_ctx_err=%v",
+			tv.DeploymentSeries(), bid, percentage, ctx.Err(), s.Context().Err())
+	}, 90*time.Second, 500*time.Millisecond,
+		"set ramping worker deployment: namespace=%s deployment=%s build_id=%s version=%s percentage=%v ramp_unversioned=%v",
+		env.Namespace(), tv.DeploymentSeries(), bid, tv.DeploymentVersionString(), percentage, rampUnversioned)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(env, tv)
@@ -3592,7 +3623,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Await(func(s *Versioning3Suite) {
+		s.Awaitf(func(s *Versioning3Suite) {
 			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 			defer cancel()
 
@@ -3601,12 +3632,19 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment
 				DeploymentName: tv.DeploymentSeries(),
 			})
 			if s.shouldRetryWorkerDeploymentRPC(env, err) {
-				s.NoError(err)
+				s.NoError(err, "retryable DescribeWorkerDeployment failure: deployment=%s rpc_ctx_err=%v await_ctx_err=%v",
+					tv.DeploymentSeries(), ctx.Err(), s.Context().Err())
 				return
 			}
-			s.NoError(err)
-			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
-		}, 90*time.Second, 500*time.Millisecond)
+			s.NoError(err, "DescribeWorkerDeployment failed: deployment=%s rpc_ctx_err=%v await_ctx_err=%v",
+				tv.DeploymentSeries(), ctx.Err(), s.Context().Err())
+			actual := resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState()
+			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, actual,
+				"worker deployment routing config update not complete: deployment=%s info=%v",
+				tv.DeploymentSeries(), resp.GetWorkerDeploymentInfo())
+		}, 90*time.Second, 500*time.Millisecond,
+			"wait for worker deployment routing config propagation: namespace=%s deployment=%s version=%s",
+			env.Namespace(), tv.DeploymentSeries(), tv.DeploymentVersionString())
 	}
 }
 
@@ -3864,7 +3902,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 	override *workflowpb.VersioningOverride,
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
@@ -3875,10 +3913,13 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 					WorkflowId: tv.WorkflowID(),
 				},
 			})
-		s.NoError(err)
+		s.NoError(err, "DescribeWorkflowExecution failed: workflow_id=%s rpc_ctx_err=%v await_ctx_err=%v",
+			tv.WorkflowID(), ctx.Err(), s.Context().Err())
 
 		versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
-		s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
+		s.Equal(behavior.String(), versioningInfo.GetBehavior().String(),
+			"workflow versioning behavior mismatch: workflow_id=%s versioning_info=%v execution_info=%v",
+			tv.WorkflowID(), versioningInfo, dwf.WorkflowExecutionInfo)
 		var v *deploymentspb.WorkerDeploymentVersion
 		if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 			//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -3894,7 +3935,8 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 			s.Fail(fmt.Sprintf("deployment version mismatch. expected: {%s}, actual: {%s}",
 				deployment,
 				actualDeployment,
-			))
+			), "workflow_id=%s versioning_info=%v execution_info=%v",
+				tv.WorkflowID(), versioningInfo, dwf.WorkflowExecutionInfo)
 		}
 
 		// v0.32 override
@@ -3910,9 +3952,12 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(env *testcore.TestEnv,
 			s.Fail(fmt.Sprintf("version transition mismatch. expected: {%s}, actual: {%s}",
 				transition,
 				versioningInfo.GetVersionTransition(),
-			))
+			), "workflow_id=%s versioning_info=%v execution_info=%v",
+				tv.WorkflowID(), versioningInfo, dwf.WorkflowExecutionInfo)
 		}
-	}, 90*time.Second, 500*time.Millisecond)
+	}, 90*time.Second, 500*time.Millisecond,
+		"verify workflow versioning: namespace=%s workflow_id=%s expected_behavior=%s expected_deployment=%v expected_override=%v expected_transition=%v",
+		env.Namespace(), tv.WorkflowID(), behavior, deployment, override, transition)
 }
 
 func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
@@ -4418,9 +4463,11 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tv.TaskQueue().GetName())
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
+		observed := make(map[partAndType]string, len(remaining))
 		for pt := range remaining {
-			s.NoError(err)
+			s.NoError(err, "NewTaskQueueFamily failed: namespace_id=%s task_queue=%s",
+				env.NamespaceID(), tv.TaskQueue().GetName())
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -4431,11 +4478,14 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			s.NoError(err, "GetTaskQueueUserData failed: task_queue=%s partition=%d type=%s rpc_name=%s await_ctx_err=%v",
+				tv.TaskQueue().GetName(), pt.part, pt.tp, partition.RpcName(), s.Context().Err())
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
 				workerDeploymentData := deploymentsData[tv.DeploymentVersion().GetDeploymentName()]
+				observed[pt] = fmt.Sprintf("has_per_type=true worker_data=%v deployment_data=%v",
+					workerDeploymentData, perTypes[int32(pt.tp)].GetDeploymentData())
 
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
@@ -4480,10 +4530,16 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 						}
 					}
 				}
+			} else {
+				observed[pt] = "missing per-type deployment data"
 			}
 		}
-		s.Empty(remaining)
-	}, 90*time.Second, 500*time.Millisecond)
+		s.Empty(remaining,
+			"deployment data did not propagate: namespace=%s task_queue=%s version=%s expected_status=%v unversioned_ramp=%v remaining=%v observed=%v",
+			env.Namespace(), tv.TaskQueue().GetName(), tv.DeploymentVersionString(), status, unversionedRamp, remaining, observed)
+	}, 90*time.Second, 500*time.Millisecond,
+		"wait for task queue deployment data propagation: namespace=%s task_queue=%s version=%s expected_status=%v unversioned_ramp=%v tq_types=%v",
+		env.Namespace(), tv.TaskQueue().GetName(), tv.DeploymentVersionString(), status, unversionedRamp, tqTypes)
 }
 
 func (s *Versioning3Suite) validateBacklogCount(
@@ -4495,7 +4551,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 	var resp *workflowservice.DescribeTaskQueueResponse
 	var err error
 
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 		defer cancel()
 
@@ -4505,12 +4561,18 @@ func (s *Versioning3Suite) validateBacklogCount(
 			TaskQueueType: tqType,
 			ReportStats:   true,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
+		s.NoError(err, "DescribeTaskQueue failed: task_queue=%s type=%s rpc_ctx_err=%v await_ctx_err=%v",
+			tv.TaskQueue().GetName(), tqType, ctx.Err(), s.Context().Err())
+		s.NotNil(resp, "DescribeTaskQueue returned nil response: task_queue=%s type=%s", tv.TaskQueue().GetName(), tqType)
 		priorityStats, ok := resp.GetStatsByPriorityKey()[3]
-		s.True(ok)
-		s.Equal(expectedCount, priorityStats.GetApproximateBacklogCount())
-	}, 30*time.Second, 500*time.Millisecond)
+		s.True(ok, "DescribeTaskQueue response missing priority 3 stats: task_queue=%s type=%s stats=%v",
+			tv.TaskQueue().GetName(), tqType, resp.GetStatsByPriorityKey())
+		s.Equal(expectedCount, priorityStats.GetApproximateBacklogCount(),
+			"backlog count mismatch: task_queue=%s type=%s expected=%d stats=%v response=%v",
+			tv.TaskQueue().GetName(), tqType, expectedCount, priorityStats, resp)
+	}, 30*time.Second, 500*time.Millisecond,
+		"validate backlog count: namespace=%s task_queue=%s type=%s expected_count=%d",
+		env.Namespace(), tv.TaskQueue().GetName(), tqType, expectedCount)
 }
 
 func (s *Versioning3Suite) verifyVersioningSAs(
@@ -4520,7 +4582,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 	executionStatus enumspb.WorkflowExecutionStatus,
 	usedBuilds ...*testvars.TestVars,
 ) {
-	s.Await(func(s *Versioning3Suite) {
+	s.Awaitf(func(s *Versioning3Suite) {
 		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
@@ -4536,42 +4598,49 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			Namespace: env.Namespace().String(),
 			Query:     query,
 		})
-		s.NoError(err)
-		s.NotEmpty(resp.GetExecutions())
+		s.NoError(err, "ListWorkflowExecutions failed: query=%q rpc_ctx_err=%v await_ctx_err=%v",
+			query, ctx.Err(), s.Context().Err())
+		s.NotEmpty(resp.GetExecutions(), "visibility query returned no executions: query=%q response=%v", query, resp)
 		if len(resp.GetExecutions()) > 0 {
 			w := resp.GetExecutions()[0]
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
-				s.True(ok)
+				s.True(ok, "BuildIds search attribute missing: query=%q execution=%v", query, w)
 				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-				s.NoError(err)
+				s.NoError(err, "failed to decode BuildIds search attribute: query=%q execution=%v", query, w)
 				var searchAttr []string
 				if searchAttrAny != nil {
 					searchAttr = searchAttrAny.([]string)
 				}
 				if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-					s.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
+					s.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()),
+						"BuildIds search attribute mismatch: query=%q execution=%v search_attr=%v",
+						query, w, searchAttr)
 				}
 			}
 
 			if len(usedBuilds) > 0 {
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
-				s.True(ok)
+				s.True(ok, "TemporalUsedWorkerDeploymentVersions search attribute missing: query=%q execution=%v", query, w)
 				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-				s.NoError(err)
+				s.NoError(err, "failed to decode TemporalUsedWorkerDeploymentVersions search attribute: query=%q execution=%v", query, w)
 				var versionAttr []string
 				if versionAttrAny != nil {
 					versionAttr = versionAttrAny.([]string)
 				}
 				for _, b := range usedBuilds {
-					s.Contains(versionAttr, b.DeploymentVersionStringV32())
+					s.Contains(versionAttr, b.DeploymentVersionStringV32(),
+						"TemporalUsedWorkerDeploymentVersions mismatch: query=%q execution=%v version_attr=%v expected_used_build=%s",
+						query, w, versionAttr, b.DeploymentVersionStringV32())
 				}
 			}
 
 			fmt.Println(resp.GetExecutions()[0])
 		}
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond,
+		"verify versioning search attributes: namespace=%s workflow_id=%s behavior=%s execution_status=%s used_builds=%v",
+		env.Namespace(), tv.WorkflowID(), behavior, executionStatus, usedBuilds)
 }
 
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
