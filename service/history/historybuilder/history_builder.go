@@ -317,9 +317,9 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
 	ns namespace.Name,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
-	event, _ = b.EventStore.add(event)
+	event, batchID := b.EventStore.add(event)
 
 	if payloadSize := command.Input.Size(); payloadSize > 0 {
 		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
@@ -328,7 +328,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			metrics.NamespaceTag(ns.String()))
 	}
 
-	return event
+	return event, batchID
 }
 
 func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
@@ -425,11 +425,10 @@ func (b *HistoryBuilder) AddCompletedWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CompleteWorkflowExecutionCommandAttributes,
 	newExecutionRunID string,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
 
-	event, _ = b.EventStore.add(event)
-	return event
+	return b.EventStore.add(event)
 }
 
 func (b *HistoryBuilder) AddFailWorkflowEvent(
@@ -607,24 +606,22 @@ func (b *HistoryBuilder) AddWorkflowExecutionCancelRequestedEvent(
 func (b *HistoryBuilder) AddWorkflowExecutionCanceledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CancelWorkflowExecutionCommandAttributes,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, command)
-	event, _ = b.EventStore.add(event)
-	return event
+	return b.EventStore.add(event)
 }
 
 func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
 	)
-	event, _ = b.EventStore.add(event)
-	return event
+	return b.EventStore.add(event)
 }
 
 func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
@@ -671,14 +668,13 @@ func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
 	)
-	event, _ = b.EventStore.add(event)
-	return event
+	return b.EventStore.add(event)
 }
 
 func (b *HistoryBuilder) AddUpsertWorkflowSearchAttributesEvent(
@@ -780,7 +776,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	targetNamespaceID namespace.ID,
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 	initialSkippedDuration *durationpb.Duration,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
@@ -788,8 +784,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 		timeSkippingConfig,
 		initialSkippedDuration,
 	)
-	event, _ = b.EventStore.add(event)
-	return event
+	return b.EventStore.add(event)
 }
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionStartedEvent(
