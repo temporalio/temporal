@@ -1,7 +1,9 @@
 package await
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ type timeoutReport struct {
 	attempts         int
 	attemptTimeouts  int
 	failures         []attemptFailure
+	stats            awaitStats
 }
 
 func (r *timeoutReport) nextPoll() {
@@ -45,7 +48,15 @@ func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
 	reportAttemptErrors(tb, r.failures)
 }
 
-func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
+func (r timeoutReport) reportTimeout(
+	tb testing.TB,
+	parentErr error,
+	awaitErr error,
+	deadlineRemaining time.Duration,
+	funcName string,
+	timeoutMsg string,
+) {
+	reportAwaitStats(tb, r.stats, parentErr, awaitErr, deadlineRemaining, r.attempts)
 	reportFinalAttemptContext(tb, r.failures)
 	r.reportAttemptErrors(tb)
 	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
@@ -54,6 +65,51 @@ func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string)
 	}
 	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
 		funcName, message, r.attempts, r.attemptTimeouts)
+}
+
+type awaitStats struct {
+	attempts         []attemptTiming
+	sleeps           []time.Duration
+	failedAttempts   int
+	stoppedAttempts  int
+	deadlockAttempts int
+}
+
+type attemptTiming struct {
+	attempt  int
+	duration time.Duration
+}
+
+func (s *awaitStats) recordAttempt(attempt int, duration time.Duration, failed, stopped, deadlocked bool) {
+	s.attempts = append(s.attempts, attemptTiming{
+		attempt:  attempt,
+		duration: duration,
+	})
+	if failed {
+		s.failedAttempts++
+	}
+	if stopped {
+		s.stoppedAttempts++
+	}
+	if deadlocked {
+		s.deadlockAttempts++
+	}
+}
+
+func (s *awaitStats) recordSleep(duration time.Duration) {
+	s.sleeps = append(s.sleeps, duration)
+}
+
+func reportAwaitStats(tb testing.TB, stats awaitStats, parentErr error, awaitErr error, deadlineRemaining time.Duration, polls int) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "await stats: polls=%d failed_attempts=%d stopped_attempts=%d deadlock_attempts=%d",
+		polls, stats.failedAttempts, stats.stoppedAttempts, stats.deadlockAttempts)
+	writeDurationSummary(&b, "attempt_duration", attemptDurations(stats.attempts))
+	writeDurationSummary(&b, "sleep_duration", stats.sleeps)
+	writeSlowestAttempts(&b, stats.attempts)
+	fmt.Fprintf(&b, "\ncontext at timeout: parent_err=%v await_err=%v deadline_remaining=%v",
+		parentErr, awaitErr, deadlineRemaining)
+	tb.Errorf("%s", b.String())
 }
 
 func reportFinalAttemptContext(tb testing.TB, failures []attemptFailure) {
@@ -130,6 +186,47 @@ func isDeadlineOnlyFailure(f attemptFailure) bool {
 
 func attemptFailureText(f attemptFailure) string {
 	return strings.Join(f.errors, "\n")
+}
+
+func writeDurationSummary(b *strings.Builder, label string, durations []time.Duration) {
+	if len(durations) == 0 {
+		fmt.Fprintf(b, " %s=(none)", label)
+		return
+	}
+	minDuration, maxDuration, totalDuration := durations[0], durations[0], time.Duration(0)
+	for _, duration := range durations {
+		minDuration = min(minDuration, duration)
+		maxDuration = max(maxDuration, duration)
+		totalDuration += duration
+	}
+	fmt.Fprintf(b, " %s min=%v avg=%v max=%v last=%v",
+		label, minDuration, totalDuration/time.Duration(len(durations)), maxDuration, durations[len(durations)-1])
+}
+
+func writeSlowestAttempts(b *strings.Builder, timings []attemptTiming) {
+	if len(timings) == 0 {
+		b.WriteString("\nslowest attempts: (none)")
+		return
+	}
+	slowest := slices.Clone(timings)
+	slices.SortFunc(slowest, func(a, b attemptTiming) int {
+		return cmp.Compare(b.duration, a.duration)
+	})
+	if len(slowest) > 3 {
+		slowest = slowest[:3]
+	}
+	b.WriteString("\nslowest attempts:")
+	for _, timing := range slowest {
+		fmt.Fprintf(b, " #%d=%v", timing.attempt, timing.duration)
+	}
+}
+
+func attemptDurations(timings []attemptTiming) []time.Duration {
+	durations := make([]time.Duration, 0, len(timings))
+	for _, timing := range timings {
+		durations = append(durations, timing.duration)
+	}
+	return durations
 }
 
 func writeAttemptFailure(b *strings.Builder, f attemptFailure) {
