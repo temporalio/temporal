@@ -3631,7 +3631,7 @@ func TestSchedule_NextActionTimeVisibility_V2Only(t *testing.T) {
 
 	var v2Next time.Time
 	s.NoError(payload.Decode(v2Pl, &v2Next))
-	require.Equal(t, v2Next.Minute(), 23) // see the 'Phase' section of the spec
+	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
 	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
 	s.True(v2Next.After(createTime.Add(-time.Second)),
 		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
