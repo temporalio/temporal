@@ -480,7 +480,6 @@ var TransitionUnpausedToStarted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, event unpauseEvent) error {
-		a.emitOnUnpausedMetrics(event.metricsHandler)
 		return nil
 	},
 )

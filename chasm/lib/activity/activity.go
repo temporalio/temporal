@@ -853,6 +853,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
+	a.emitOnUnpausedMetrics(metricsHandler)
 	return &activitypb.UnpauseActivityExecutionResponse{}, nil
 }
 
@@ -896,7 +897,6 @@ func (a *Activity) unpause(
 		a,
 		chasm.TaskAttributes{ScheduledTime: scheduleTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
-	a.emitOnUnpausedMetrics(event.metricsHandler)
 }
 
 func (a *Activity) recordPauseState(
