@@ -135,8 +135,11 @@ func run(
 		t := &T{tb: tb, ctx: attemptCtx}
 
 		// Run attempt.
+		attemptStart := time.Now()
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
+		attemptDuration := time.Since(attemptStart)
 		attemptCancel()
+		report.stats.recordAttempt(report.attempts, attemptDuration, len(t.errors) > 0, res.stopped, res.deadlocked)
 		if res.panicVal != nil {
 			panic(res.panicVal) // propagate to caller
 		}
@@ -176,7 +179,7 @@ func run(
 
 		// Our deadline expired.
 		if deadlineReached(deadline) {
-			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
+			report.reportTimeout(tb, parentCtx.Err(), awaitCtx.Err(), time.Until(deadline), funcName, cfg.timeoutMsg)
 			return
 		}
 
@@ -186,7 +189,7 @@ func run(
 		}
 
 		// Wait using backoff, or until context is canceled or deadline is reached.
-		sleep(awaitCtx, deadline, pollBackoff.next())
+		report.stats.recordSleep(sleep(awaitCtx, deadline, pollBackoff.next()))
 	}
 }
 
@@ -317,12 +320,13 @@ func addJitter(base, maxDelay time.Duration) time.Duration {
 	return min(delay, maxDelay)
 }
 
-func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {
+func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) time.Duration {
 	remaining := time.Until(deadline)
 	if remaining < pollInterval {
 		pollInterval = remaining
 	}
 
+	start := time.Now()
 	timer := time.NewTimer(pollInterval)
 	defer timer.Stop()
 
@@ -330,6 +334,7 @@ func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) 
 	case <-ctx.Done():
 	case <-timer.C:
 	}
+	return time.Since(start)
 }
 
 func deadlineReached(deadline time.Time) bool {
