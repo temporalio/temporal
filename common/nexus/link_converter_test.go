@@ -47,13 +47,12 @@ func TestConvertLinkNexusOperationToNexusLink(t *testing.T) {
 	require.Equal(t, nexus.Link{
 		URL: &url.URL{
 			Scheme:   "temporal",
-			Path:     "/namespaces/ns/nexus-operations/op-id",
-			RawPath:  "/namespaces/ns/nexus-operations/op-id",
-			RawQuery: "runID=run-id",
+			Path:    "/namespaces/ns/nexus-operations/op-id/run-id/details",
+			RawPath: "/namespaces/ns/nexus-operations/op-id/run-id/details",
 		},
 		Type: "temporal.api.common.v1.Link.NexusOperation",
 	}, output)
-	require.Equal(t, "temporal:///namespaces/ns/nexus-operations/op-id?runID=run-id", output.URL.String())
+	require.Equal(t, "temporal:///namespaces/ns/nexus-operations/op-id/run-id/details", output.URL.String())
 }
 
 func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
