@@ -160,11 +160,11 @@ var (
 	// production workflows. Until then, this whitelist acts as a temporary allowance
 	// to ensure backward compatibility and avoid breaking existing use cases.
 	predefinedWhiteList = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:        enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalScheduledStartTime:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalScheduledById:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:       enumspb.INDEXED_VALUE_TYPE_BOOL,
