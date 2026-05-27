@@ -1416,7 +1416,7 @@ var (
 	)
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
-		WithDescription("The number of successful StartWorkflow RPCs issued by a schedule. Concurrent ExecuteTasks may produce duplicates that all succeed via RequestId dedupe; ScheduleInfo.ActionCount counts only the first commit (via the recordExecuteResult idempotency guard), so this counter and ActionCount can diverge under race - see schedule_invoker_execute_invalidated[reason=already_recorded]."),
+		WithDescription("The number of successful StartWorkflow RPCs issued by a schedule."),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
@@ -1444,7 +1444,7 @@ var (
 	)
 	ScheduleGeneratorPausedTicks = NewCounterDef(
 		"schedule_generator_paused_ticks",
-		WithDescription("The number of times a scheduler's generator task fired while the schedule was paused (HWM advanced, actions dropped)"),
+		WithDescription("The number of times a scheduler's generator task fired while the schedule was paused."),
 	)
 	SchedulerGeneratorLoopCompleted = NewCounterDef(
 		"scheduler_generator_loop_completed",
@@ -1456,7 +1456,7 @@ var (
 	)
 	ScheduleIdleTaskInvalidated = NewCounterDef(
 		"schedule_idle_task_invalidated",
-		WithDescription("The number of times a schedule's idle task was dropped by Validate without closing the component. Tagged with reason (held_open, expiration_shift, closed). Expect a low steady baseline of expiration_shift for actively-firing schedules; sustained spikes or other reasons warrant investigation."),
+		WithDescription("The number of times a schedule's idle task was dropped by Validate without closing the component."),
 	)
 	ScheduleInvokerProcessBufferFired = NewCounterDef(
 		"schedule_invoker_process_buffer_fired",
@@ -1464,7 +1464,7 @@ var (
 	)
 	ScheduleInvokerProcessBufferInvalidated = NewCounterDef(
 		"schedule_invoker_process_buffer_invalidated",
-		WithDescription("The number of times a scheduler's ProcessBuffer task was dropped by Validate. Tagged with reason (currently only stale_hwm). A nonzero rate indicates redundant task scheduling - a more recent ProcessBuffer already advanced LastProcessedTime past this task's scheduled time."),
+		WithDescription("The number of times a scheduler's ProcessBuffer task was dropped by Validate."),
 	)
 	ScheduleInvokerExecuteFired = NewCounterDef(
 		"schedule_invoker_execute_fired",
@@ -1472,7 +1472,7 @@ var (
 	)
 	ScheduleInvokerExecuteInvalidated = NewCounterDef(
 		"schedule_invoker_execute_invalidated",
-		WithDescription("The number of times a scheduler's Execute side-effect task's work was dropped. Tagged with reason: no_work (Validate dropped the whole task because nothing was eligible); already_recorded (recordExecuteResult skipped a CompletedStart because a concurrent ExecuteTask already wrote RunId). A nonzero rate is normal under concurrent scheduling - sustained or rising rates warrant investigation."),
+		WithDescription("The number of times a scheduler's Execute side-effect task's work was dropped."),
 	)
 	ScheduleBackfillerFired = NewCounterDef(
 		"schedule_backfiller_fired",
