@@ -232,11 +232,12 @@ func (w *getWorkflowExecutionResultHandler) Start(
 
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
-) *nexus.Service {
+) []*nexus.Service {
 	svc := nexus.NewService(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
 	svc.MustRegister(&signalWithStartHandler{h: handler})
-	svc.MustRegister(&getWorkflowExecutionResultHandler{h: handler})
-	return svc
+	appSvc := nexus.NewService(workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.ServiceName)
+	appSvc.MustRegister(&getWorkflowExecutionResultHandler{h: handler})
+	return []*nexus.Service{svc, appSvc}
 }
 
 func (h *workflowServiceNexusHandler) setHistoryHandler(handler historyservice.HistoryServiceServer) {
@@ -325,16 +326,19 @@ func NewWorkflowServiceNexusServiceProcessor(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-) *chasm.NexusServiceProcessor {
-	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
+) []*chasm.NexusServiceProcessor {
 	validator := NewValidator(config, saMapperProvider, saValidator)
-	sp.MustRegisterOperation(
+	
+	workflowSp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
+	workflowSp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{validator: validator}),
 	)
-	sp.MustRegisterOperation(
+	
+	applicationSp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.ServiceName)
+	applicationSp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(GetWorkflowExecutionResultProcessor{validator: validator}),
 	)
-	return sp
+	return []*chasm.NexusServiceProcessor{workflowSp, applicationSp}
 }

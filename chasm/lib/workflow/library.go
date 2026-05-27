@@ -81,16 +81,12 @@ func (l *library) NexusServices() []*nexus.Service {
 	if l.workflowServiceNexusHandler == nil {
 		return nil
 	}
-	return []*nexus.Service{
-		mustNewWorkflowServiceNexusHandler(l.workflowServiceNexusHandler),
-	}
+	return mustNewWorkflowServiceNexusHandler(l.workflowServiceNexusHandler)
 }
 
 func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 	if l.workflowServiceNexusHandler == nil {
 		return nil
 	}
-	return []*chasm.NexusServiceProcessor{
-		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator),
-	}
+	return NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator)
 }

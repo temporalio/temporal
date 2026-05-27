@@ -111,7 +111,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
-						Operation: "SignalWithStartWorkflowExecution",
+						Operation: workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
 				},
@@ -216,7 +216,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
-						Operation: "SignalWithStartWorkflowExecution",
+						Operation: workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input: payloads.MustEncodeSingle(&workflowservice.SignalWithStartWorkflowExecutionRequest{
 							WorkflowId: workflowID,
 							SignalName: "test-signal",
@@ -653,7 +653,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
-						Operation: "SignalWithStartWorkflowExecution",
+						Operation: workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
 				},
@@ -831,7 +831,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
-						Operation: "SignalWithStartWorkflowExecution",
+						Operation: workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input:     protoBinaryPayload,
 					},
 				},
