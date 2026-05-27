@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
@@ -94,7 +95,9 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions map[primitives.ServiceName][]fx.Option
+		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
+		TokenProvider     auth.TokenProvider
+		TLSConfigProvider *encryption.FixedTLSConfigProvider
 	}
 
 	TestClusterFactory interface {
@@ -314,7 +317,9 @@ func newClusterWithPersistenceTestBaseFactory(
 	}
 
 	var tlsConfigProvider *encryption.FixedTLSConfigProvider
-	if clusterConfig.EnableMTLS {
+	if clusterConfig.TLSConfigProvider != nil {
+		tlsConfigProvider = clusterConfig.TLSConfigProvider
+	} else if clusterConfig.EnableMTLS {
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}
@@ -349,6 +354,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
+		TokenProvider:                    clusterConfig.TokenProvider,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
