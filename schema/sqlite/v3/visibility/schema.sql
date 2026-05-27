@@ -38,6 +38,7 @@ CREATE TABLE executions_visibility (
   TemporalUsedWorkerDeploymentVersions TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalUsedWorkerDeploymentVersions"))              STORED,
   TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalExternalPayloadSizeBytes")) STORED,
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalExternalPayloadCount")) STORED,
+  TemporalScheduleNextActionTime TIMESTAMP GENERATED ALWAYS AS (STRFTIME('%Y-%m-%d %H:%M:%f+00:00', JSON_EXTRACT(search_attributes, "$.TemporalScheduleNextActionTime"))),
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
@@ -114,6 +115,7 @@ CREATE INDEX by_temporal_pause_info           ON executions_visibility (namespac
 CREATE INDEX by_temporal_worker_deployment_version ON executions_visibility (namespace_id, TemporalWorkerDeploymentVersion,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_workflow_versioning_behavior ON executions_visibility (namespace_id, TemporalWorkflowVersioningBehavior,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_worker_deployment    ON executions_visibility (namespace_id, TemporalWorkerDeployment,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_schedule_next_action_time ON executions_visibility (namespace_id, TemporalScheduleNextActionTime, (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
 -- Indexes for the pre-allocated custom search attributes
 CREATE INDEX by_bool_01     ON executions_visibility (namespace_id, Bool01,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);

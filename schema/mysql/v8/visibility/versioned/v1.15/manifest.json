@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.15",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalScheduleNextActionTime builtin search attribute",
+  "SchemaUpdateCqlFiles": [
+    "add_temporal_schedule_next_action_time_search_attribute.sql"
+  ]
+}

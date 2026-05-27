@@ -58,6 +58,7 @@ CREATE TABLE executions_visibility (
   TemporalUsedWorkerDeploymentVersions JSONB GENERATED ALWAYS AS (search_attributes->'TemporalUsedWorkerDeploymentVersions') STORED,
   TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS ((search_attributes->'TemporalExternalPayloadSizeBytes')::bigint) STORED,
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS ((search_attributes->'TemporalExternalPayloadCount')::bigint) STORED,
+  TemporalScheduleNextActionTime TIMESTAMP GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalScheduleNextActionTime')) STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
@@ -140,7 +141,8 @@ CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespac
 CREATE INDEX by_temporal_schedule_paused      ON executions_visibility (namespace_id, TemporalSchedulePaused,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_namespace_division   ON executions_visibility (namespace_id, TemporalNamespaceDivision,  (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_external_payload_size_bytes ON executions_visibility (namespace_id, TemporalExternalPayloadSizeBytes, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id); 
+CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_schedule_next_action_time ON executions_visibility (namespace_id, TemporalScheduleNextActionTime, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 
 -- Indexes for the pre-allocated custom search attributes
 CREATE INDEX by_bool_01         ON executions_visibility (namespace_id, Bool01,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
