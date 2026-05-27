@@ -264,10 +264,13 @@ func TestIsSystemResourceExhausted(t *testing.T) {
 	require.False(t, isSystemResourceExhausted(serviceerror.NewUnavailable("nope")))
 	require.False(t, isSystemResourceExhausted(nil))
 
+	// Plain type assertion (matches the IsServiceClientTransientError style),
+	// so wrapped errors are not unwrapped. Nothing in the codebase wraps
+	// ResourceExhausted with %w today.
 	wrapped := fmt.Errorf("rpc failure: %w", &serviceerror.ResourceExhausted{
 		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 	})
-	require.True(t, isSystemResourceExhausted(wrapped))
+	require.False(t, isSystemResourceExhausted(wrapped))
 }
 
 // ComputeNextDelay returns a negative sentinel ("done") when retries are

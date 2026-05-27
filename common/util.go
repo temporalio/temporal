@@ -200,8 +200,7 @@ func newClientRetryPolicy(initialInterval time.Duration, maxAttempts int, retryU
 }
 
 func isSystemResourceExhausted(err error) bool {
-	var re *serviceerror.ResourceExhausted
-	if errors.As(err, &re) {
+	if re, ok := err.(*serviceerror.ResourceExhausted); ok {
 		return re.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
 	}
 	return false
