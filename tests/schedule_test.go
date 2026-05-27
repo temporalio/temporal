@@ -92,7 +92,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
-	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testSchedule_NextActionTimeVisibility(t, newContext) })
+	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -3554,9 +3554,9 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
 }
 
-// testSchedule_NextActionTimeVisibility asserts that the
+// testScheduleNextActionTimeVisibility asserts that the
 // TemporalScheduleNextActionTime search attribute is published to visibility.
-func testSchedule_NextActionTimeVisibility(t *testing.T, newContext contextFactory) {
+func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
