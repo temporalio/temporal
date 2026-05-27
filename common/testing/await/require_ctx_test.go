@@ -301,7 +301,32 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error", tb.errors())
+		require.Contains(t, tb.errors(), "last failed attempt before timeout:\n\n  --- attempt 2 ---\n    last attempt error")
+		require.Contains(t, tb.errors(), "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error")
+		require.Equal(t, int32(2), attempts.Load())
+	})
+
+	t.Run("reports previous distinct attempt when last attempt is only deadline", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testcontext.New(t)
+		var attempts atomic.Int32
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				if attempts.Add(1) == 1 {
+					t.Error("observed state: version is still draining")
+					return
+				}
+				<-t.Context().Done()
+				t.Error("context deadline exceeded")
+			}, time.Second, 100*time.Millisecond)
+		})
+		require.True(t, tb.Failed())
+		require.Contains(t, tb.fatals(), "not satisfied after")
+		errs := tb.errors()
+		require.Contains(t, errs, "last failed attempt before timeout:\n\n  --- attempt 2 ---\n    context deadline exceeded")
+		require.Contains(t, errs, "previous distinct failed attempt:\n\n  --- attempt 1 ---\n    observed state: version is still draining")
 		require.Equal(t, int32(2), attempts.Load())
 	})
 
@@ -324,6 +349,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
 
 		errs := tb.errors()
+		require.Contains(t, errs, fmt.Sprintf("last failed attempt before timeout:\n\n  --- attempt %d ---\n    attempt %d failed", n, n))
 		require.Contains(t, errs, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
 		require.Contains(t, errs, fmt.Sprintf("... %d attempts omitted ...", n-4))
 		// Last three attempts present in order.
