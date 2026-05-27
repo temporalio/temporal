@@ -151,7 +151,7 @@ func (w *getWorkflowExecutionResultHandler) getTerminalState(
 }
 
 func (*getWorkflowExecutionResultHandler) Name() string {
-	return workflowservicenexus.WorkflowNexusService.ServiceName
+	return workflowservicenexus.WorkflowNexusService.GetWorkflowExecutionResult.Name()
 }
 
 func (w *getWorkflowExecutionResultHandler) Start(
@@ -159,7 +159,7 @@ func (w *getWorkflowExecutionResultHandler) Start(
 	req *workflownexusservice.GetWorkflowExecutionResultRequest,
 	opts nexus.StartOperationOptions,
 ) (nexus.HandlerStartOperationResult[*workflownexusservice.GetWorkflowExecutionResultResponse], error) {
-	if !w.h.config.enableSignalWithStartFromWorkflow(req.GetNamespace()) {
+	if !w.h.config.enableGetWorkflowExecutionResult(req.GetNamespace()) {
 		return nil, ErrGetWorkflowExecutionResultOperationDisabled
 	}
 
@@ -175,11 +175,11 @@ func (w *getWorkflowExecutionResultHandler) Start(
 	})
 
 	_, _, err = chasm.UpdateComponent(ctx, workflowBRef,
-		func(w *Workflow, mutableCtx chasm.MutableContext, _ any) (any, error) {
-			if !w.IsWorkflowExecutionRunning() {
+		func(wf *Workflow, mutableCtx chasm.MutableContext, _ any) (any, error) {
+			if !wf.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
-			return nil, w.AddCompletionCallbacks(
+			return nil, wf.AddCompletionCallbacks(
 				mutableCtx,
 				timestamppb.Now(),
 				opts.RequestID,
@@ -191,8 +191,7 @@ func (w *getWorkflowExecutionResultHandler) Start(
 						},
 					},
 				}}},
-				// o.h.config.MaxCallbacksPerWorkflow(),
-				2000,
+				w.h.config.maxCallbacksPerWorkflow(req.GetNamespace()),
 			)
 		}, nil,
 	)
