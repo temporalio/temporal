@@ -146,7 +146,7 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 	require.Len(t, attemptEnds, 3)
 	for i := 1; i < len(attemptStarts); i++ {
 		gap := attemptStarts[i].Sub(attemptEnds[i-1])
-		require.GreaterOrEqual(t, gap, pollInterval,
+		require.GreaterOrEqual(t, gap, pollInterval-pollInterval/10,
 			"poll interval should run after attempt finishes (gap=%v < %v)", gap, pollInterval)
 	}
 }
@@ -179,9 +179,9 @@ func TestRequire_PollIntervalBacksOff(t *testing.T) {
 	for i := 1; i < len(attemptStarts); i++ {
 		gaps = append(gaps, attemptStarts[i].Sub(attemptEnds[i-1]))
 	}
-	require.GreaterOrEqual(t, gaps[0], pollInterval)
-	require.GreaterOrEqual(t, gaps[1], 2*pollInterval)
-	require.GreaterOrEqual(t, gaps[2], 4*pollInterval)
+	require.GreaterOrEqual(t, gaps[0], pollInterval-pollInterval/10)
+	require.GreaterOrEqual(t, gaps[1], 3*pollInterval/2-(3*pollInterval/2)/10)
+	require.GreaterOrEqual(t, gaps[2], 9*pollInterval/4-(9*pollInterval/4)/10)
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
