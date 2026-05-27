@@ -100,27 +100,11 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt := a.LastAttempt.Get(ctx)
-		currentTime := ctx.Now(a)
-
-		// Apply deferred reset: set Count to 0 so the increment below produces 1.
-		if a.ActivityReset {
-			attempt.Count = 0
-			a.ActivityReset = false
-			if a.ResetHeartbeats {
-				a.ResetHeartbeats = false
-				a.clearHeartbeat(ctx)
-			}
-		}
-
-		attempt.Count++
-		attempt.Stamp++
-
-		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false)
-		if err != nil {
+		if err := a.applyFailedAttempt(ctx, event); err != nil {
 			return err
 		}
 
+		attempt := a.LastAttempt.Get(ctx)
 		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
@@ -493,22 +477,7 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt := a.LastAttempt.Get(ctx)
-		currentTime := ctx.Now(a)
-
-		if a.ActivityReset {
-			attempt.Count = 0
-			a.ActivityReset = false
-			if a.ResetHeartbeats {
-				a.ResetHeartbeats = false
-				a.clearHeartbeat(ctx)
-			}
-		}
-
-		attempt.Count++
-		attempt.Stamp++
-
-		return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false)
+		return a.applyFailedAttempt(ctx, event)
 	},
 )
 
