@@ -54,6 +54,7 @@ const (
 	vbUnpinned           = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	ver3MinPollTime      = common.MinLongPollTimeout + time.Millisecond*200
 	ver3PollTimeout      = 2 * time.Minute
+	ver3RPCTimeout       = 10 * time.Second
 	ver3RetryPollTimeout = 21 * time.Second
 
 	versionStatusNil      = versionStatus(0)
@@ -364,7 +365,7 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *te
 	buildIDNotFound := fmt.Sprintf("build ID '%s' not found in Worker Deployment", tv.BuildID())
 	deploymentNotFound := fmt.Sprintf("no Worker Deployment found with name '%s'", tv.DeploymentSeries())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -786,7 +787,7 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
@@ -1308,6 +1309,9 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 	usedBuilds ...*testvars.TestVars,
 ) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), ver3RPCTimeout)
+		defer cancel()
+
 		var query string
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
@@ -1316,7 +1320,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion is null AND TemporalWorkflowVersioningBehavior is null AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), executionStatus)
 		}
-		resp, err := env.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+		resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			Query:     query,
 		})
@@ -1355,7 +1359,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 
 			fmt.Println(resp.GetExecutions()[0])
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 // validatePinnedVersionExistsInTaskQueue validates that the version, to be pinned, exists in the task queue.

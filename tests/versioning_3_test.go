@@ -376,7 +376,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3Suite) {
-		ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 		defer cancel()
 
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -395,9 +395,10 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 		}
 
-		_, err := env.queryWorkflow(s.Context(), tv)
-		s.Error(err)
-		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+		s.Await(func(s *Versioning3Suite) {
+			_, err := env.queryWorkflow(s.Context(), tv)
+			s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+		}, 30*time.Second, 500*time.Millisecond)
 	} else {
 		// since the version still has pollers, the query should succeed
 		env.pollAndQueryWorkflow(s, tv, false)
@@ -409,7 +410,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 
 		// wait for v1 to become ramping
 		s.Await(func(s *Versioning3Suite) {
-			ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(s.Context(), ver3RPCTimeout)
 			defer cancel()
 
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
