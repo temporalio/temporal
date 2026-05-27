@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,24 +53,14 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
 	scheduler.Closed = true
-	newTaggedMetricsHandler(r.metricsHandler, scheduler).
-		Counter(metrics.ScheduleIdleTaskFired.Name()).
-		Record(1)
 	return nil
 }
 
-// Idle-task invalidation reasons. Limited cardinality for ReasonTag.
-const (
-	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
-	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
-	idleInvalidatedClosed          metrics.ReasonString = "closed"
-)
-
 // Validate returns true (fire) when the schedule should still close. False
-// drops (and emits ScheduleIdleTaskInvalidated) for: already-closed (idempotency),
-// held-open by state, or a deadline that shifted later than ScheduledTime
-// (the Generator will have re-armed at the new deadline). It deliberately
-// does not re-derive "is the spec exhausted" - that's an arm-time concern.
+// drops for: already-closed (idempotency), held-open by state, or a deadline
+// that shifted later than ScheduledTime (the Generator will have re-armed at
+// the new deadline). It deliberately does not re-derive "is the spec
+// exhausted" - that's an arm-time concern.
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
@@ -79,11 +68,9 @@ func (r *SchedulerIdleTaskHandler) Validate(
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
 	if scheduler.Closed {
-		r.recordInvalidated(scheduler, idleInvalidatedClosed, taskAttrs.ScheduledTime, time.Time{})
 		return false, nil
 	}
 	if scheduler.isHeldOpen() {
-		r.recordInvalidated(scheduler, idleInvalidatedHeldOpen, taskAttrs.ScheduledTime, time.Time{})
 		return false, nil
 	}
 
@@ -91,7 +78,6 @@ func (r *SchedulerIdleTaskHandler) Validate(
 	// that should still fire.
 	idleExpiration := scheduler.idleDeadline(ctx, task.IdleTimeTotal.AsDuration())
 	if idleExpiration.After(taskAttrs.ScheduledTime) {
-		r.recordInvalidated(scheduler, idleInvalidatedExpirationShift, taskAttrs.ScheduledTime, idleExpiration)
 		return false, nil
 	}
 
@@ -104,21 +90,6 @@ func (r *SchedulerIdleTaskHandler) Validate(
 			tag.NewTimeTag("scheduled-time", taskAttrs.ScheduledTime))
 	}
 	return true, nil
-}
-
-func (r *SchedulerIdleTaskHandler) recordInvalidated(
-	scheduler *Scheduler,
-	reason metrics.ReasonString,
-	scheduledTime time.Time,
-	recomputedDeadline time.Time,
-) {
-	newTaggedMetricsHandler(r.metricsHandler, scheduler).
-		Counter(metrics.ScheduleIdleTaskInvalidated.Name()).
-		Record(1, metrics.ReasonTag(reason))
-	newTaggedLogger(r.baseLogger, scheduler).Debug("idle task invalidated",
-		tag.NewStringTag("reason", string(reason)),
-		tag.NewTimeTag("scheduled-time", scheduledTime),
-		tag.NewTimeTag("recomputed-deadline", recomputedDeadline))
 }
 
 type SchedulerCallbacksTaskHandlerOptions struct {

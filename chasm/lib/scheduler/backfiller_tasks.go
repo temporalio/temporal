@@ -44,27 +44,13 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 	}
 }
 
-// BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
-const (
-	backfillerInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
-)
-
 func (b *BackfillerTaskHandler) Validate(
-	ctx chasm.Context,
+	_ chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
-	if err != nil {
-		return false, err
-	}
-	if !valid {
-		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
-			Counter(metrics.ScheduleBackfillerInvalidated.Name()).
-			Record(1, metrics.ReasonTag(backfillerInvalidatedStaleHWM))
-	}
-	return valid, nil
+	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
 }
 
 func (b *BackfillerTaskHandler) Execute(
@@ -77,8 +63,6 @@ func (b *BackfillerTaskHandler) Execute(
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
-	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleBackfillerFired.Name()).Record(1)
 
 	invoker := scheduler.Invoker.Get(ctx)
 
@@ -123,7 +107,6 @@ func (b *BackfillerTaskHandler) Execute(
 		logger.Debug("backfill complete, deleting Backfiller",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
-		metricsHandler.Counter(metrics.ScheduleBackfillerCompleted.Name()).Record(1)
 
 		// Revive the Generator so it can re-evaluate idle/close eligibility now
 		// that this backfiller is gone.
