@@ -324,8 +324,8 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Unit test
-          artifact-name-suffix: unit-test
+          job_name: Unit test
+          artifact_name_suffix: unit-test
 
   integration-test:
     name: Integration test
@@ -378,8 +378,8 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Integration test
-          artifact-name-suffix: integration-test
+          job_name: Integration test
+          artifact_name_suffix: integration-test
 
       - name: Stop containerized dependencies
         if: ${{ always() }}
@@ -463,10 +463,10 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          job-name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
-          artifact-name-suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
-          codecov-flag: functional-test
-          debug-log-path: ${{ github.workspace }}/.testoutput/debug.log
+          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
+          artifact_name_suffix: ${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          codecov_flag: functional-test
+          debug_log_path: ${{ github.workspace }}/.testoutput/debug.log
 
       - name: Stop containerized dependencies
         if: always()
