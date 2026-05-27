@@ -961,6 +961,14 @@ func (s *adaptiveWorkflowState) incrementPendingCounters(ctx workflow.Context, p
 // partial-clean BID doesn't decay the counter the increment loop just
 // bumped. Repeated reuse-bursts on the same BID could flap quarantine
 // on/off; accepted as unusual.
+//
+// shardPending is only decremented for BIDs that previously contributed
+// to it — that is, BIDs whose wfIDPending was positive before decay.
+// Clean BIDs that never had any pending pressure must not decrement
+// shardPending: doing so lets heavy clean default-track traffic on the
+// same shard as a burst of hot BIDs drown out the burst's signal, and
+// shard quarantine never engages even when a shard is obviously
+// overloaded.
 func (s *adaptiveWorkflowState) decrementCleanCounters(ctx workflow.Context, dispatched []*ExecutionInfo, pendingBIDs map[string]struct{}) {
 	shardReleaseAt := max(s.params.ShardQuarantineThreshold/2, 1)
 	wfReleaseAt := max(s.params.WFIDQuarantineThreshold/2, 1)
@@ -973,26 +981,35 @@ func (s *adaptiveWorkflowState) decrementCleanCounters(ctx workflow.Context, dis
 			continue
 		}
 		seenClean[ex.BusinessID] = struct{}{}
-		s.decayWFIDPending(ex.BusinessID)
+		wasContributor := s.decayWFIDPending(ex.BusinessID)
 		s.maybeReleaseWFQuarantine(ctx, ex.BusinessID, wfReleaseAt)
-		sh := s.shardOf(ex.BusinessID)
-		if s.shardPending[sh] > 0 {
-			s.shardPending[sh]--
+		if wasContributor {
+			sh := s.shardOf(ex.BusinessID)
+			if s.shardPending[sh] > 0 {
+				s.shardPending[sh]--
+			}
+			s.maybeReleaseShardQuarantine(ctx, sh, shardReleaseAt)
 		}
-		s.maybeReleaseShardQuarantine(ctx, sh, shardReleaseAt)
 	}
 }
 
-func (s *adaptiveWorkflowState) decayWFIDPending(bid string) {
+// decayWFIDPending decrements a BID's pending counter and reports
+// whether the BID had a positive counter before decay — i.e. whether
+// it previously contributed to shardPending. The caller gates the
+// shardPending decrement on this signal so that innocent BIDs (those
+// that never had pending pressure) can't decrement a counter they
+// never contributed to.
+func (s *adaptiveWorkflowState) decayWFIDPending(bid string) (wasContributor bool) {
 	c := s.wfIDPending[bid]
 	if c == 0 {
-		return
+		return false
 	}
 	if c == 1 {
 		delete(s.wfIDPending, bid)
-		return
+		return true
 	}
 	s.wfIDPending[bid] = c - 1
+	return true
 }
 
 func (s *adaptiveWorkflowState) maybeReleaseWFQuarantine(ctx workflow.Context, bid string, releaseAt int) {

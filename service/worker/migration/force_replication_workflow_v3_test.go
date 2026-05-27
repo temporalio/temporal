@@ -497,6 +497,141 @@ func TestReclassifyPendingForRetry(t *testing.T) {
 	})
 }
 
+// TestDecrementCleanCountersIgnoresInnocentBystanders pins the shard-counter
+// symmetry invariant: shardPending is incremented exactly once per BID on
+// its first pending appearance, so it must be decremented exactly once on
+// full recovery and never touched by clean BIDs that didn't contribute in
+// the first place. Without this, heavy clean default-track traffic on the
+// same shard as a burst of hot BIDs drowns out the burst's signal —
+// shardPending hovers near zero and shard quarantine never engages even
+// when a shard is obviously overloaded.
+//
+// The test pre-loads state to mid-burst (one shard sitting at threshold,
+// already quarantined) and runs decrementCleanCounters with BIDs that
+// never had any pending pressure. With the fix, shardPending and the
+// quarantine flag are untouched. Without it, both fall off.
+func TestDecrementCleanCountersIgnoresInnocentBystanders(t *testing.T) {
+	t.Parallel()
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	type result struct {
+		ShardPending     int
+		QuarantinedShard bool
+	}
+
+	runWorkflow := func(ctx workflow.Context) (result, error) {
+		state := &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				Namespace:                "test-ns",
+				NamespaceID:              "test-ns-id",
+				HistoryShardCount:        1, // every BID hashes to the single shard
+				WFIDQuarantineThreshold:  999,
+				ShardQuarantineThreshold: 2,
+			},
+			wfIDPending:      map[string]int{},
+			shardPending:     map[int32]int{},
+			quarantinedWF:    map[string]struct{}{},
+			quarantinedShard: map[int32]struct{}{},
+		}
+		// Discover the shard ID via shardOf so the test stays correct
+		// regardless of the 0- vs 1-indexed scheme.
+		shard := state.shardOf("hot-a")
+		// Simulate a prior batch having tripped shard quarantine via
+		// two genuinely-pending hot BIDs.
+		state.shardPending[shard] = 2
+		state.quarantinedShard[shard] = struct{}{}
+
+		dispatched := []*ExecutionInfo{
+			{BusinessID: "innocent-1", RunID: "r1"},
+			{BusinessID: "innocent-2", RunID: "r2"},
+		}
+		state.decrementCleanCounters(ctx, dispatched, map[string]struct{}{})
+		_, quarantined := state.quarantinedShard[shard]
+		return result{
+			ShardPending:     state.shardPending[shard],
+			QuarantinedShard: quarantined,
+		}, nil
+	}
+
+	env.RegisterWorkflow(runWorkflow)
+	env.ExecuteWorkflow(runWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var got result
+	require.NoError(t, env.GetWorkflowResult(&got))
+	require.Equal(t, 2, got.ShardPending,
+		"clean BIDs that never had pending pressure must not decrement shardPending")
+	require.True(t, got.QuarantinedShard,
+		"shard quarantine must persist when no genuinely-contributing BID has recovered")
+}
+
+// TestDecrementCleanCountersReleasesOnRecovery verifies the other side
+// of the symmetry: when a BID that DID contribute to shardPending
+// finally goes clean (its pending counter reaches 0), shardPending
+// must decrement so quarantine can release. Pairs with the
+// "ignores innocent bystanders" case above.
+func TestDecrementCleanCountersReleasesOnRecovery(t *testing.T) {
+	t.Parallel()
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	type result struct {
+		ShardPending     int
+		QuarantinedShard bool
+		WFIDPendingHotA  int
+	}
+
+	runWorkflow := func(ctx workflow.Context) (result, error) {
+		state := &adaptiveWorkflowState{
+			params: &AdaptiveForceReplicationParams{
+				Namespace:                "test-ns",
+				NamespaceID:              "test-ns-id",
+				HistoryShardCount:        1,
+				WFIDQuarantineThreshold:  999,
+				ShardQuarantineThreshold: 4, // releaseAt = max(4/2, 1) = 2
+			},
+			wfIDPending:      map[string]int{},
+			shardPending:     map[int32]int{},
+			quarantinedWF:    map[string]struct{}{},
+			quarantinedShard: map[int32]struct{}{},
+		}
+		shard := state.shardOf("hot-a")
+		// Hot-a previously contributed to shardPending (wfIDPending=1
+		// matches the one-time bump for first-pending). Now it's
+		// going clean.
+		state.wfIDPending["hot-a"] = 1
+		state.shardPending[shard] = 4
+		state.quarantinedShard[shard] = struct{}{}
+
+		dispatched := []*ExecutionInfo{
+			{BusinessID: "hot-a", RunID: "r1"},
+		}
+		state.decrementCleanCounters(ctx, dispatched, map[string]struct{}{})
+		_, quarantined := state.quarantinedShard[shard]
+		return result{
+			ShardPending:     state.shardPending[shard],
+			QuarantinedShard: quarantined,
+			WFIDPendingHotA:  state.wfIDPending["hot-a"],
+		}, nil
+	}
+
+	env.RegisterWorkflow(runWorkflow)
+	env.ExecuteWorkflow(runWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var got result
+	require.NoError(t, env.GetWorkflowResult(&got))
+	require.Equal(t, 3, got.ShardPending,
+		"a recovering hot BID must decrement shardPending exactly once")
+	require.Equal(t, 0, got.WFIDPendingHotA,
+		"hot-a's wfIDPending should be cleared on full recovery")
+	require.True(t, got.QuarantinedShard,
+		"shardPending=3 is still above releaseAt=2, so quarantine persists")
+}
+
 // continueAsNewParams extracts the CAN input from the workflow's error or
 // fails the test.
 func continueAsNewParams(t require.TestingT, err error) AdaptiveForceReplicationParams {
