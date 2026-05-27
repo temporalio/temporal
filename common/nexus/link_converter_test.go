@@ -46,7 +46,7 @@ func TestConvertLinkNexusOperationToNexusLink(t *testing.T) {
 	output := commonnexus.ConvertLinkNexusOperationToNexusLink(input)
 	require.Equal(t, nexus.Link{
 		URL: &url.URL{
-			Scheme:   "temporal",
+			Scheme:  "temporal",
 			Path:    "/namespaces/ns/nexus-operations/op-id/run-id/details",
 			RawPath: "/namespaces/ns/nexus-operations/op-id/run-id/details",
 		},
