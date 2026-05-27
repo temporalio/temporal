@@ -847,7 +847,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 			return nil, err
 		}
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		if err := TransitionUnpausedToStarted.Apply(a, ctx, event); err != nil {
+		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
 	default:
@@ -981,7 +981,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		}
 		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
 			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
-			if err := TransitionUnpausedToStarted.Apply(a, ctx, unpauseEvent{
+			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
 				req:            &workflowservice.UnpauseActivityExecutionRequest{},
 				metricsHandler: metricsHandler,
 			}); err != nil {
@@ -1085,13 +1085,13 @@ func (a *Activity) tryReschedule(
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
-		return true, TransitionAttemptFailedToPaused.Apply(a, ctx, event)
+		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
 	}
 	return true, TransitionRescheduled.Apply(a, ctx, event)
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
-	if !TransitionRescheduled.Possible(a) && !TransitionAttemptFailedToPaused.Possible(a) {
+	if !TransitionRescheduled.Possible(a) && !TransitionAttemptFailedWhilePauseRequested.Possible(a) {
 		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)

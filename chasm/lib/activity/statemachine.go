@@ -471,10 +471,10 @@ var TransitionUnpaused = chasm.NewTransition(
 	},
 )
 
-// TransitionUnpausedToStarted transitions PAUSE_REQUESTED → STARTED. The worker is still in charge
+// TransitionUnpausedWhilePauseRequested transitions PAUSE_REQUESTED → STARTED. The worker is still in charge
 // of the activity. Its task token is not invalidated by this transition, and there is no stamp bump
 // since StartToCloseTimeoutTask and HeartbeatTimeoutTask must stay valid.
-var TransitionUnpausedToStarted = chasm.NewTransition(
+var TransitionUnpausedWhilePauseRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 	},
@@ -484,10 +484,10 @@ var TransitionUnpausedToStarted = chasm.NewTransition(
 	},
 )
 
-// TransitionAttemptFailedToPaused transitions PAUSE_REQUESTED → PAUSED. It is performed instead of
+// TransitionAttemptFailedWhilePauseRequested transitions PAUSE_REQUESTED → PAUSED. It is performed instead of
 // TransitionReschedule, when the activity is in PAUSE_REQUESTED and the worker yields (failure or
 // timeout) with retries remaining. The failed attempt is recorded and Count is incremented.
-var TransitionAttemptFailedToPaused = chasm.NewTransition(
+var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 	},
