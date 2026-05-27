@@ -1047,7 +1047,7 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableC
 
 // applyFailedAttempt is the shared accounting performed when a worker yields with retries
 // remaining: it consumes any deferred reset, bumps the attempt count and stamp, and records the
-// failure. Both TransitionRescheduled (→ SCHEDULED) and TransitionAttemptFailedToPaused (→ PAUSED)
+// failure. Both TransitionRescheduled (→ SCHEDULED) and AttemptFailedWhilePauseRequested (→ PAUSED)
 // call it; they differ only in whether they additionally emit dispatch tasks.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)

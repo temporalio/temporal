@@ -8009,7 +8009,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 	// ResetKeepPausedWhilePauseRequested: a reset with KeepPaused=true on a PAUSE_REQUESTED
 	// activity must defer the reset (via ActivityReset) and have it consumed by the next retry,
 	// landing the activity in PAUSED at attempt 1. Pins the contract between handleReset and
-	// TransitionAttemptFailedToPaused.
+	// AttemptFailedWhilePauseRequested.
 	t.Run("ResetKeepPausedWhilePauseRequested", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
 		defer cancel()
@@ -8087,7 +8087,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Worker stops responding. StartToCloseTimeout fires → TransitionAttemptFailedToPaused
+		// Worker stops responding. StartToCloseTimeout fires → AttemptFailedWhilePauseRequested
 		// consumes ActivityReset → PAUSED at attempt 1.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
