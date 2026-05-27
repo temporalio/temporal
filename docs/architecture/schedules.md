@@ -88,7 +88,7 @@ sequenceDiagram
 #### Tasks
 `GeneratorTask`: Drives the automated actions loop. When a schedule is first created (or updated), a `GeneratorTask` is scheduled for immediate execution. `GeneratorTask` will reschedule itself for subsequent execution at the point in time where the next automated action is scheduled to fire. If the schedule has completed (by exceeding its lifetime, or action count), `GeneratorTask` won't reschedule itself, and will instead schedule the Scheduler's `IdleTask`. The idle task keeps the schedule open for a retention period before closing it, ensuring the schedule doesn't immediately disappear after completion.
 
-`GeneratorTask`'s primary responsibility is to call `EnqueueBufferedStarts` on the `Invoker`, handing off actions for execution (see also *Specification Processor* in this document). After processing, three terminal outcomes are possible: arm the idle task to close the schedule, reschedule for the next spec wakeup, or hold open without a task (manual-only, paused-no-spec, etc. - revived by external events like `Patch.Unpause` or `BackfillerTask` completion).
+`GeneratorTask`'s primary responsibility is to call `EnqueueBufferedStarts` on the `Invoker`, handing off actions for execution (see also *Specification Processor* in this document). After processing, three terminal outcomes are possible: arm the idle task to close the schedule, reschedule for the next spec wakeup, or hold open without a task (paused with no spec wakeup, or a paused schedule with a pending backfiller - revived by external events like `Patch.Unpause` or `BackfillerTask` completion).
 
 ```mermaid
 flowchart TD
@@ -360,10 +360,10 @@ Nexus completion callbacks are the only way that Scheduler can find out about an
 
 `Validate` enforces three drop conditions, each tagged with a `reason` for the `ScheduleIdleTaskInvalidated` counter:
 - `closed` - the schedule is already closed (idempotency guard).
-- `held_open` - the schedule transitioned into a state that disqualifies idle close: paused, has a pending backfiller, or is "manual-only" (a spec with no automated wakeup source, like a TriggerImmediately-only schedule).
+- `held_open` - the schedule transitioned into a state that disqualifies idle close: paused or has a pending backfiller.
 - `expiration_shift` - the recomputed idle deadline (anchor + `IdleTime`) has moved later than the task's `ScheduledTime`, meaning the Generator has since armed a new task at the correct deadline.
 
-The "manual-only" carve-out is necessary because such schedules have no spec-driven event that would push `lastEventTime` forward; without the carve-out, the idle timer would silently close a valid trigger-only schedule after `IdleTime`. Sentinels are exempt from `held_open` and anchor their idle deadline on `CreateTime` directly - they exist to reserve a schedule ID and must close regardless of their otherwise-paused/empty state.
+Manual-only schedules (no automated wakeup source, e.g. TriggerImmediately-only) idle out like any other schedule when unpaused - `lastEventTime` is advanced by manual triggers via `recentActions`, matching V1's `RetentionTime` semantics. Sentinels are exempt from `held_open` and anchor their idle deadline on `CreateTime` directly - they exist to reserve a schedule ID and must close regardless of their otherwise-paused/empty state.
 
 ### Specification Processor
 
