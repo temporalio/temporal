@@ -903,7 +903,7 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
 	if !s.Closed {
-		if gen := s.Generator.Get(ctx); gen != nil && len(gen.FutureActionTimes) > 0 {
+		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
 			out = append(out, chasm.SearchAttributeTemporalScheduleNextActionTime.Value(gen.FutureActionTimes[0].AsTime()))
 		}
 	}

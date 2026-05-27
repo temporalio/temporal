@@ -92,6 +92,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
+	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testSchedule_NextActionTimeVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -3553,9 +3554,9 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
 }
 
-// TestSchedule_NextActionTimeVisibility_V2Only asserts that the
+// testSchedule_NextActionTimeVisibility asserts that the
 // TemporalScheduleNextActionTime search attribute is published to visibility.
-func TestSchedule_NextActionTimeVisibility_V2Only(t *testing.T) {
+func testSchedule_NextActionTimeVisibility(t *testing.T, newContext contextFactory) {
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
@@ -3590,7 +3591,7 @@ func TestSchedule_NextActionTimeVisibility_V2Only(t *testing.T) {
 		}
 	}
 
-	v2Ctx := chasmContextFactory(s.Context())
+	v2Ctx := newContext(s.Context())
 	createTime := time.Now()
 
 	_, err := s.FrontendClient().CreateSchedule(v2Ctx, &workflowservice.CreateScheduleRequest{
