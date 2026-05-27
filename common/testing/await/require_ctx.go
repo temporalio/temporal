@@ -12,9 +12,10 @@ import (
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
 
 const (
-	maxPollInterval       = 2 * time.Second
-	pollBackoffMultiplier = 2
-	pollJitterDivisor     = 5
+	maxPollInterval          = time.Second
+	pollBackoffMultiplierNum = 3
+	pollBackoffMultiplierDen = 2
+	pollJitterDivisor        = 10
 )
 
 var pollJitterCounter atomic.Uint64
@@ -294,7 +295,7 @@ func newPollBackoff(initial time.Duration) pollBackoff {
 func (b *pollBackoff) next() time.Duration {
 	delay := addJitter(b.current, b.max)
 	if b.current < b.max {
-		b.current = min(b.current*pollBackoffMultiplier, b.max)
+		b.current = min(b.current*pollBackoffMultiplierNum/pollBackoffMultiplierDen, b.max)
 	}
 	return delay
 }
@@ -308,7 +309,11 @@ func addJitter(base, maxDelay time.Duration) time.Duration {
 		return base
 	}
 	seed := uint64(time.Now().UnixNano()) ^ pollJitterCounter.Add(0x9e3779b97f4a7c15)
-	delay := base + time.Duration(seed%uint64(jitterRange+1))
+	jitter := time.Duration(seed%uint64(2*jitterRange+1)) - jitterRange
+	delay := base + jitter
+	if delay <= 0 {
+		return base
+	}
 	return min(delay, maxDelay)
 }
 
