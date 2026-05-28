@@ -8,19 +8,20 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-// validateClusterNotInUseByNamespaces returns an error if any active global
-// namespace still references clusterName in its replication cluster list.
-// Local (non-global) namespaces are ignored because they do not replicate.
-// Namespaces in NAMESPACE_STATE_DELETED are ignored because the delete worker
-// is tearing them down and cluster connectivity is not required for that
-// teardown. The check reads from the in-memory namespace registry, which may
-// lag persistence by up to the configured refresh interval.
+// validateClusterNotInUseByNamespaces returns an error if any active
+// multi-cluster namespace still references clusterName in its replication
+// cluster list. Single-cluster namespaces (local, or global with only one
+// cluster) are ignored because they do not replicate. Namespaces in
+// NAMESPACE_STATE_DELETED are ignored because the delete worker is tearing
+// them down and cluster connectivity is not required for that teardown. The
+// check reads from the in-memory namespace registry, which may lag persistence
+// by up to the configured refresh interval.
 func validateClusterNotInUseByNamespaces(
 	namespaceRegistry namespace.Registry,
 	clusterName string,
 ) error {
 	for _, ns := range namespaceRegistry.GetAllNamespaces() {
-		if !ns.IsGlobalNamespace() {
+		if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
 			continue
 		}
 		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
