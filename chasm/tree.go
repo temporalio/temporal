@@ -2862,7 +2862,11 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	return n.isActiveStateDirty || len(n.mutation.UpdatedNodes) > 0 || len(n.mutation.DeletedNodes) > 0
+	return n.isActiveStateDirty ||
+		len(n.mutation.UpdatedNodes) > 0 ||
+		len(n.mutation.DeletedNodes) > 0 ||
+		len(n.pendingRequestLinks) > 0 ||
+		len(n.pendingUserMetadata) > 0
 }
 
 func (n *Node) IsStale(

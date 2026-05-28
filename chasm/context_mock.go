@@ -172,6 +172,9 @@ func (c *MockContext) withValue(key any, value any) Context {
 		GoCtx:                context.WithValue(c.goContext(), key, value),
 		HandleNamespaceEntry: c.HandleNamespaceEntry,
 		HandleEndpointByName: c.HandleEndpointByName,
+		HandleLinks:          c.HandleLinks,
+		HandleRequestLinks:   c.HandleRequestLinks,
+		HandleUserMetadata:   c.HandleUserMetadata,
 	}
 }
 

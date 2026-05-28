@@ -4097,6 +4097,40 @@ func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
 	s.Empty(root.pendingUserMetadata)
 }
 
+// TestSetComponentMetadata_MarksTreeDirty verifies that staging a
+// SetRequestLinks or SetUserMetadata write flips IsDirty()/IsStateDirty()
+// before CloseTransaction runs.
+func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.False(root.IsDirty(), "tree must be clean after the initial close")
+	s.False(root.IsStateDirty())
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}}))
+	s.True(root.IsStateDirty(), "staging SetRequestLinks must mark the tree dirty")
+	s.True(root.IsDirty())
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+	s.False(root.IsStateDirty(), "CloseTransaction must clear the dirty flag")
+
+	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("summary")},
+	}))
+	s.True(root.IsStateDirty(), "staging SetUserMetadata must mark the tree dirty")
+	s.True(root.IsDirty())
+}
+
 // TestCloseTransaction_DropsOrphanedComponentMetadata verifies that pending
 // SetRequestLinks/SetUserMetadata writes against a component value that is
 // not registered in the tree are silently dropped during CloseTransaction
