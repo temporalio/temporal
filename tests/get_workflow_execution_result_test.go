@@ -2,15 +2,16 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/applicationservice/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/applicationservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
@@ -113,6 +114,33 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 		TaskToken: pollResp.TaskToken,
 	})
 	s.NoError(err)
+
+	// At this point the callback is registered on the TARGET. Describing the target must surface a
+	// completion callback whose WorkflowEvent link points back to the CALLER (not the target
+	// itself) — this is the target -> caller discovery path that lets tooling answer "which
+	// workflows are waiting on this target?".
+	var callerLink *commonpb.Link_WorkflowEvent
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+		})
+		assert.NoError(t, descErr)
+		assert.NotEmpty(t, descResp.GetCallbacks(), "target should have a completion callback registered")
+		callerLink = nil
+		for _, cbInfo := range descResp.GetCallbacks() {
+			for _, link := range cbInfo.GetCallback().GetLinks() {
+				if we := link.GetWorkflowEvent(); we != nil {
+					callerLink = we
+				}
+			}
+		}
+		assert.NotNil(t, callerLink, "target's callback must carry a WorkflowEvent link identifying the caller")
+	}, 10*time.Second, 200*time.Millisecond)
+	s.Equal(callerRun.GetID(), callerLink.GetWorkflowId(), "callback link must identify the caller workflow")
+	s.Equal(callerRun.GetRunID(), callerLink.GetRunId(), "callback link must identify the caller run")
+	s.Equal(s.Namespace().String(), callerLink.GetNamespace())
+	s.NotEqual(targetWorkflowID, callerLink.GetWorkflowId(), "callback link must not point back at the target")
 
 	// Complete the target workflow. The callback registered by GetWorkflowExecutionResult.Start
 	// will fire and deliver the nexus operation result back to the caller.

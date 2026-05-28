@@ -191,6 +191,24 @@ func (w *getWorkflowExecutionResultHandler) Start(
 		RunID:       req.GetExecution().GetRunId(),
 	})
 
+	// The inbound Nexus links identify the caller workflow(s) that scheduled this
+	// operation (set as nexusLinks on the outbound request — see nexusoperation.operation).
+	// Persisting them on the completion callback lets the target surface, via
+	// DescribeWorkflowExecution, which workflows are awaiting its result — enabling
+	// target -> caller navigation in tooling/UI. Note: req.GetExecution() is the TARGET
+	// being awaited, so it must NOT be used here.
+	callerLinks := make([]*commonpb.Link, 0, len(opts.Links))
+	for _, l := range opts.Links {
+		we, convErr := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(l)
+		if convErr != nil {
+			// Skip links that aren't workflow-event links; they don't identify a caller workflow.
+			continue
+		}
+		callerLinks = append(callerLinks, &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: we},
+		})
+	}
+
 	_, _, err = chasm.UpdateComponent(ctx, workflowBRef,
 		func(wf *Workflow, mutableCtx chasm.MutableContext, _ any) (any, error) {
 			if !wf.IsWorkflowExecutionRunning() {
@@ -200,14 +218,19 @@ func (w *getWorkflowExecutionResultHandler) Start(
 				mutableCtx,
 				timestamppb.Now(),
 				opts.RequestID,
-				[]*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: opts.CallbackURL,
-						Header: map[string]string{
-							commonnexus.CallbackTokenHeader: opts.CallbackHeader[commonnexus.CallbackTokenHeader],
+				[]*commonpb.Callback{
+					{
+						Variant: &commonpb.Callback_Nexus_{
+							Nexus: &commonpb.Callback_Nexus{
+								Url: opts.CallbackURL,
+								Header: map[string]string{
+									commonnexus.CallbackTokenHeader: opts.CallbackHeader[commonnexus.CallbackTokenHeader],
+								},
+							},
 						},
+						Links: callerLinks,
 					},
-				}}},
+				},
 				w.h.config.maxCallbacksPerWorkflow(req.GetNamespace()),
 			)
 		}, nil,
@@ -328,13 +351,13 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saValidator *searchattribute.Validator,
 ) []*chasm.NexusServiceProcessor {
 	validator := NewValidator(config, saMapperProvider, saValidator)
-	
+
 	workflowSp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
 	workflowSp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{validator: validator}),
 	)
-	
+
 	applicationSp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.ServiceName)
 	applicationSp.MustRegisterOperation(
 		workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
