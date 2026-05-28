@@ -1,8 +1,14 @@
+# Reviews PRs from opted-in team members with Claude.
+#
+# Uses `pull_request_target` so the workflow has access to secrets even when
+# a PR is opened from a fork. This is safe ONLY because the `check-membership`
+# job gates the review job behind active membership in a trusted team — PR
+# code is never checked out or executed until that gate passes.
 name: Claude review for opted-in team PRs
 
 on:
-  pull_request:
-    types: [opened]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
 
 env:
   # Space- or newline-separated list of temporalio team slugs whose
@@ -10,15 +16,11 @@ env:
   REVIEW_TEAMS: |
     nexus
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  id-token: write
-
 jobs:
   check-membership:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     outputs:
       is_member: ${{ steps.check.outputs.is_member }}
     steps:
@@ -27,17 +29,22 @@ jobs:
           GH_TOKEN: ${{ secrets.TEAM_READ_TOKEN }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          set -e
+          set -euo pipefail
           is_member=false
           for team in $REVIEW_TEAMS; do
-            status=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/orgs/temporalio/teams/${team}/memberships/${AUTHOR}" \
-              --jq '.state' 2>/dev/null || echo "none")
-            if [ "$status" = "active" ]; then
-              echo "${AUTHOR} is an active member of temporalio/${team}"
-              is_member=true
-              break
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/teams/${team}/memberships/${AUTHOR}" 2>&1); then
+              if [ "$(echo "$response" | jq -r '.state')" = "active" ]; then
+                echo "${AUTHOR} is an active member of temporalio/${team}"
+                is_member=true
+                break
+              fi
+            elif echo "$response" | grep -q "HTTP 404"; then
+              : # author is not a member of this team; try the next one
+            else
+              echo "Unexpected error checking temporalio/${team} membership: ${response}" >&2
+              exit 1
             fi
           done
           echo "is_member=${is_member}" >> "$GITHUB_OUTPUT"
@@ -46,8 +53,18 @@ jobs:
     needs: check-membership
     if: needs.check-membership.outputs.is_member == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # pull_request_target defaults to the base ref; explicitly check out
+          # the PR head so the review sees the proposed changes. Safe here
+          # because the team-membership gate above limits this to trusted authors.
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
