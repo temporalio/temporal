@@ -61,31 +61,32 @@ const (
 	// Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
 	// transition to timed out status.
 	ACTIVITY_EXECUTION_STATUS_TIMED_OUT ActivityExecutionStatus = 8
-	// The activity has been paused while in the SCHEDULED state. No worker will be dispatched until
-	// the activity is unpaused. The activity's pause_state field is populated with the identity,
-	// reason, and time of the pause request.
-	//
-	// Note: pausing a STARTED activity does not transition to this status. Instead, the pause is
-	// delivered as a flag (pause_state is set, status stays STARTED) and the worker is notified
-	// via ActivityPaused=true on its next heartbeat. The external run state in that case is
-	// PAUSE_REQUESTED. If the worker fails and retries while the flag is set, the retry lands in
-	// SCHEDULED with pause_state still populated and the dispatch task is blocked until unpause.
+	// The activity is paused and no worker is currently executing the attempt. No dispatch task will
+	// be issued until the activity is unpaused. Reachable from SCHEDULED via an operator pause, and
+	// from PAUSE_REQUESTED when the worker yields due to failure with retries remaining, or due to
+	// timeout with retries remaining.
 	ACTIVITY_EXECUTION_STATUS_PAUSED ActivityExecutionStatus = 9
+	// An operator pause was received while the activity was STARTED. The worker is still executing
+	// under its existing task token. The worker will be notified via ActivityPaused=true on its next
+	// heartbeat response. When the worker yields due to failure with retries remaining, or due to
+	// timeout with retries remaining, the activity will transition to PAUSED.
+	ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ActivityExecutionStatus = 10
 )
 
 // Enum value maps for ActivityExecutionStatus.
 var (
 	ActivityExecutionStatus_name = map[int32]string{
-		0: "ACTIVITY_EXECUTION_STATUS_UNSPECIFIED",
-		1: "ACTIVITY_EXECUTION_STATUS_SCHEDULED",
-		2: "ACTIVITY_EXECUTION_STATUS_STARTED",
-		3: "ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED",
-		4: "ACTIVITY_EXECUTION_STATUS_COMPLETED",
-		5: "ACTIVITY_EXECUTION_STATUS_FAILED",
-		6: "ACTIVITY_EXECUTION_STATUS_CANCELED",
-		7: "ACTIVITY_EXECUTION_STATUS_TERMINATED",
-		8: "ACTIVITY_EXECUTION_STATUS_TIMED_OUT",
-		9: "ACTIVITY_EXECUTION_STATUS_PAUSED",
+		0:  "ACTIVITY_EXECUTION_STATUS_UNSPECIFIED",
+		1:  "ACTIVITY_EXECUTION_STATUS_SCHEDULED",
+		2:  "ACTIVITY_EXECUTION_STATUS_STARTED",
+		3:  "ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED",
+		4:  "ACTIVITY_EXECUTION_STATUS_COMPLETED",
+		5:  "ACTIVITY_EXECUTION_STATUS_FAILED",
+		6:  "ACTIVITY_EXECUTION_STATUS_CANCELED",
+		7:  "ACTIVITY_EXECUTION_STATUS_TERMINATED",
+		8:  "ACTIVITY_EXECUTION_STATUS_TIMED_OUT",
+		9:  "ACTIVITY_EXECUTION_STATUS_PAUSED",
+		10: "ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED",
 	}
 	ActivityExecutionStatus_value = map[string]int32{
 		"ACTIVITY_EXECUTION_STATUS_UNSPECIFIED":      0,
@@ -98,6 +99,7 @@ var (
 		"ACTIVITY_EXECUTION_STATUS_TERMINATED":       7,
 		"ACTIVITY_EXECUTION_STATUS_TIMED_OUT":        8,
 		"ACTIVITY_EXECUTION_STATUS_PAUSED":           9,
+		"ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED":  10,
 	}
 )
 
@@ -131,6 +133,8 @@ func (x ActivityExecutionStatus) String() string {
 		// Deprecated: Use ActivityExecutionStatus.Descriptor instead.
 	case ACTIVITY_EXECUTION_STATUS_PAUSED:
 		return "Paused"
+	case ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		return "PauseRequested"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -1114,7 +1118,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06output\x18\x01 \x01(\v2 .temporal.api.common.v1.PayloadsR\x06output\x1aD\n" +
 	"\x06Failed\x12:\n" +
 	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureB\t\n" +
-	"\avariant*\xb4\x03\n" +
+	"\avariant*\xe3\x03\n" +
 	"\x17ActivityExecutionStatus\x12)\n" +
 	"%ACTIVITY_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12'\n" +
 	"#ACTIVITY_EXECUTION_STATUS_SCHEDULED\x10\x01\x12%\n" +
@@ -1125,7 +1129,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\"ACTIVITY_EXECUTION_STATUS_CANCELED\x10\x06\x12(\n" +
 	"$ACTIVITY_EXECUTION_STATUS_TERMINATED\x10\a\x12'\n" +
 	"#ACTIVITY_EXECUTION_STATUS_TIMED_OUT\x10\b\x12$\n" +
-	" ACTIVITY_EXECUTION_STATUS_PAUSED\x10\tBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	" ACTIVITY_EXECUTION_STATUS_PAUSED\x10\t\x12-\n" +
+	")ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED\x10\n" +
+	"BDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce sync.Once

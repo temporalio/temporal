@@ -35,11 +35,7 @@ func (h *activityDispatchTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	// Do not dispatch while the activity has a pause flag set (SCHEDULED + PauseState from a retry
-	// while a STARTED activity was flag-paused). TransitionStarted.Possible already returns false for
-	// real PAUSED status activities (source must be SCHEDULED, and PAUSED → SCHEDULED via unpause).
 	return (TransitionStarted.Possible(activity) &&
-		activity.PauseState == nil &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
@@ -96,9 +92,7 @@ func (h *scheduleToStartTimeoutTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	// Do not time out a SCHEDULED activity that has the pause flag set (retry while paused).
 	return (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
-		activity.PauseState == nil &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
@@ -182,7 +176,8 @@ func (h *startToCloseTimeoutTaskHandler) Validate(
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
 	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
@@ -243,7 +238,8 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
 	// Execute function runs and we fail the attempt.
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.

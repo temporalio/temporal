@@ -272,7 +272,6 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 	testCases := []struct {
 		name          string
 		status        activitypb.ActivityExecutionStatus
-		pauseState    *activitypb.ActivityPauseState
 		activityReset bool
 		wantPaused    bool
 		wantReset     bool
@@ -292,15 +291,13 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			wantReset:     true,
 		},
 		{
-			name:       "pause set propagates ActivityPaused",
-			status:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			pauseState: &activitypb.ActivityPauseState{PauseTime: timestamppb.New(testTime)},
+			name:       "PAUSE_REQUESTED status propagates ActivityPaused",
+			status:     activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 			wantPaused: true,
 		},
 		{
 			name:          "pause and reset both propagate",
-			status:        activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			pauseState:    &activitypb.ActivityPauseState{PauseTime: timestamppb.New(testTime)},
+			status:        activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 			activityReset: true,
 			wantPaused:    true,
 			wantReset:     true,
@@ -333,7 +330,6 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 				ActivityState: &activitypb.ActivityState{
 					Status:           tc.status,
 					HeartbeatTimeout: durationpb.New(0),
-					PauseState:       tc.pauseState,
 					ActivityReset:    tc.activityReset,
 				},
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
