@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -34,9 +35,12 @@ const (
 	heartbeatInterval = 10 * time.Second
 	// scheduleListPageSize controls pagination of ListChasmExecutions inside
 	// ScanOverdueNextActionTime. Each page is also one unit of rate-limited progress.
-	scheduleListPageSize      = 100
-	scheduleIdleTimeAndBuffer = 14 * 24 * time.Hour
-	namespaceListPageSize     = 100
+	scheduleListPageSize             = 100
+	scheduleIdleTimeBufferMultiplier = 2
+	namespaceListPageSize            = 100
+	// the point at which the scanner gives up because either there's too many
+	// false positives or there's too many actual hits
+	overdueScheduleCap = 100
 )
 
 // Activities holds shared dependencies for all three schedule-invariants scanner activities.
@@ -87,7 +91,7 @@ func NewActivities(
 // policy with a prior workflow still running. Whatever remains is counted as an
 // anomaly per namespace and logged for triage.
 func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
-	return a.runForever(ctx, func(scanCtx context.Context) error {
+	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
 		threshold := a.timeSource.Now().UTC().Add(-a.overdueTolerance()).Format(time.RFC3339Nano)
 		query := fmt.Sprintf(
 			`TemporalScheduleNextActionTime < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
@@ -100,8 +104,8 @@ func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 // ScanStuckOpen is a long-running activity that periodically scans for schedules with
 // ExecutionStatus=Completed and CloseTime older than the configured buffer.
 func (a *Activities) ScanStuckOpen(ctx context.Context) error {
-	return a.runForever(ctx, func(scanCtx context.Context) error {
-		threshold := a.timeSource.Now().UTC().Add(-14 * scheduleIdleTimeAndBuffer).Format(time.RFC3339Nano)
+	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
+		threshold := a.timeSource.Now().UTC().Add(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier).Format(time.RFC3339Nano)
 		query := fmt.Sprintf(`ExecutionStatus = "Completed" AND CloseTime < "%s"`, threshold)
 		return a.runScan(scanCtx, "stuck_open", query, metrics.ScheduleInvariantsScannerStuckOpenCount.Name())
 	})
@@ -110,17 +114,17 @@ func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 // ScanUnknownState is a long-running activity that periodically scans for running,
 // unpaused schedules with no TemporalScheduleNextActionTime set.
 func (a *Activities) ScanUnknownState(ctx context.Context) error {
-	return a.runForever(ctx, func(scanCtx context.Context) error {
+	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
 		query := `TemporalScheduleNextActionTime IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`
 		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
 	})
 }
 
-// runForever runs scanFn immediately, then again on every tick of scanInterval, until
+// runForeverWithInterval runs scanFn immediately, then again on every tick of scanInterval, until
 // the activity context is canceled or scanFn returns an error. A background goroutine
 // emits heartbeats so the parent activity stays alive between scans. All timing flows
 // through the injected TimeSource so tests can drive the loop deterministically.
-func (a *Activities) runForever(ctx context.Context, scanFn func(context.Context) error) error {
+func (a *Activities) runForeverWithInterval(ctx context.Context, scanFn func(context.Context) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -336,8 +340,7 @@ func (a *Activities) forEachScheduleInNamespace(
 // scheduleIsExpectedNotToFire returns true when a schedule flagged as "overdue" in
 // visibility is actually in a state that legitimately explains the stale NextActionTime:
 // either the schedule is paused, or it's holding under BUFFER_ONE / BUFFER_ALL with a
-// prior workflow still running. On any DescribeSchedule error we conservatively return
-// false so the schedule still gets counted (better a false alert than a silent miss).
+// prior workflow still running.
 func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, scheduleID string) bool {
 	if err := a.rateLimiter.Wait(ctx); err != nil {
 		a.logger.Warn("rate-limiter wait failed during DescribeSchedule; counting schedule as anomaly",
@@ -349,7 +352,7 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 		ScheduleId: scheduleID,
 	})
 	if err != nil {
-		a.logger.Warn("DescribeSchedule failed; counting schedule as anomaly",
+		a.logger.Warn("DescribeSchedule failed",
 			tag.WorkflowNamespace(nsName), tag.NewStringTag("schedule_id", scheduleID), tag.Error(err))
 		return false
 	}
