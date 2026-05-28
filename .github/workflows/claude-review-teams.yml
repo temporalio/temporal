@@ -18,7 +18,7 @@ env:
 jobs:
   check-membership:
     if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {} # uses TEAM_READ_TOKEN, not GITHUB_TOKEN
     outputs:
@@ -52,7 +52,7 @@ jobs:
   review:
     needs: check-membership
     if: needs.check-membership.outputs.is_member == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
       contents: read
