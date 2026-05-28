@@ -1050,7 +1050,7 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.Executions, numExecutions)
-	}, testcore.WaitForESToSettle, 100*time.Millisecond)
+	}, await.WithTimeout(testcore.WaitForESToSettle), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	// Delete the namespace, which should trigger DeleteExecution for all CHASM executions.
 	_, err = s.OperatorClient().DeleteNamespace(testcore.NewContext(), &operatorservice.DeleteNamespaceRequest{
@@ -1067,11 +1067,10 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if errors.As(err, &notFound) {
-			return // namespace fully deleted is also acceptable
+			return
 		}
 		require.NoError(t, err)
 		require.Empty(t, resp.Executions)
-	}, 20*time.Second*debug.TimeoutMultiplier, time.Second)
-}
+	}, await.WithTimeout(20*time.Second*debug.TimeoutMultiplier), await.WithMinPollInterval(time.Second), await.WithMaxPollInterval(time.Second))
 
-// TODO: More tests here...
+}

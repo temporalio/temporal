@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -454,5 +455,5 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 			suite.Nil(callbackInfo.LastAttemptFailure)
 			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
-	}, 2*time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 }

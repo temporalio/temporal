@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
@@ -105,28 +104,18 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 }
 
 // Await calls fn repeatedly until all assertions pass or timeout is reached.
-func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
-	s.Awaitf(fn, timeout, interval, "")
-}
-
-// Awaitf is like [Await] but includes a format string appended to the failure message.
-func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
+func (s *Suite[T]) Await(fn func(T), opts ...await.Option) {
 	t := s.T()
-	await.Requiref(s.Context(), t, func(at *await.T) {
+	await.Require(s.Context(), t, func(at *await.T) {
 		fn(s.copySuite(t, false, at, at.Context()).(T))
-	}, timeout, interval, msg, args...)
+	}, opts...)
 }
 
 // AwaitTrue calls fn repeatedly until it returns true or timeout is reached.
 //
 // Use it for simple local predicates only. Do not use assertions or side effects; use [Await] instead.
-func (s *Suite[T]) AwaitTrue(fn func() bool, timeout, interval time.Duration) {
-	s.AwaitTruef(fn, timeout, interval, "")
-}
-
-// AwaitTruef is like [AwaitTrue] but includes a format string appended to the failure message.
-func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, msg string, args ...any) {
-	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
+func (s *Suite[T]) AwaitTrue(fn func() bool, opts ...await.Option) {
+	await.RequireTrue(s.T(), fn, opts...)
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.

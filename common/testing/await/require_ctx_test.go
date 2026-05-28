@@ -22,7 +22,7 @@ func TestRequire_ImmediateSuccess(t *testing.T) {
 
 	await.Require(t.Context(), t, func(t *await.T) {
 		attempts++
-	}, time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	require.Equal(t, 1, attempts, "condition should be called exactly once")
 }
@@ -74,7 +74,7 @@ func TestRequire_RetriesUntilAttemptPasses(t *testing.T) {
 					tc.fail(t, attempt)
 					continuedAfterFailure.Store(true)
 				}
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 			require.Equal(t, int32(3), attempts.Load())
 			require.Equal(t, !tc.stops, continuedAfterFailure.Load())
@@ -91,7 +91,7 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 	var got any
 	await.Require(ctx, t, func(t *await.T) {
 		got = t.Context().Value(contextKey{})
-	}, time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	require.Equal(t, "value", got)
 }
@@ -109,7 +109,7 @@ func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	var shortCtx context.Context
 	await.Require(longCtx, t, func(t *await.T) {
 		shortCtx = t.Context()
-	}, shortTimeout, 100*time.Millisecond)
+	}, await.WithTimeout(shortTimeout), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	require.NotNil(t, shortCtx)
 	require.NotSame(t, longCtx, shortCtx)
@@ -134,12 +134,12 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 		attemptStarts = append(attemptStarts, time.Now())
 		defer func() { attemptEnds = append(attemptEnds, time.Now()) }()
 
-		time.Sleep(attemptDuration) //nolint:forbidigo // simulate attempt work to distinguish poll-after-start vs poll-after-end
+		time.Sleep(attemptDuration)
 
 		if attempts.Add(1) < 3 {
 			t.Error("not ready")
 		}
-	}, time.Second, pollInterval)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(pollInterval), await.WithMaxPollInterval(pollInterval))
 
 	require.Equal(t, int32(3), attempts.Load())
 	require.Len(t, attemptStarts, 3)
@@ -152,6 +152,8 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
+	t.Parallel()
+
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
@@ -160,10 +162,13 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
 				t.Error("not ready")
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
+		require.Contains(t, tb.fatals(), "details:")
+		require.Contains(t, tb.fatals(), "poll interval")
 	})
 
 	t.Run("cancels attempt context on timeout", func(t *testing.T) {
@@ -177,19 +182,21 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				if t.Context().Err() != context.DeadlineExceeded {
 					t.Errorf("context error = %v", t.Context().Err())
 				}
-			}, 2*time.Second, time.Second)
+			}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(time.Second), await.WithMaxPollInterval(time.Second))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
 	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
+		t.Parallel()
+
 		const (
 			attemptTimeout = 50 * time.Millisecond
-			awaitTimeout   = time.Second
-			pollInterval   = 100 * time.Millisecond
+			awaitTimeout   = 250 * time.Millisecond
+			pollInterval   = 10 * time.Millisecond
 		)
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeout.String())
 
 		ctx := testcontext.New(t)
 		var attempts atomic.Int32
@@ -204,7 +211,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 					firstAttemptRemaining = time.Until(deadline)
 				}
 				<-t.Context().Done()
-			}, awaitTimeout, pollInterval)
+			}, await.WithTimeout(awaitTimeout), await.WithMinPollInterval(pollInterval), await.WithMaxPollInterval(pollInterval), await.WithAttemptTimeout(attemptTimeout))
 		})
 
 		require.True(t, tb.Failed())
@@ -224,8 +231,9 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
 				attempts.Add(1)
-				<-t.Context().Done() // block until timeout
-			}, time.Second, 100*time.Millisecond)
+				<-t.Context().Done()
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
@@ -252,7 +260,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				if t.Context().Err() != context.DeadlineExceeded {
 					t.Errorf("context error = %v", t.Context().Err())
 				}
-			}, 2*time.Second, time.Second)
+			}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(time.Second), await.WithMaxPollInterval(time.Second))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
@@ -271,7 +280,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				attempts.Add(1)
 				t.Error("not ready")
 				cancel()
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "context canceled before condition was satisfied")
@@ -293,7 +303,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				}
 				<-t.Context().Done()
 				t.Error("last attempt error")
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
@@ -311,7 +322,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 			await.Require(ctx, tb, func(t *await.T) {
 				n := attempts.Add(1)
 				t.Errorf("attempt %d failed", n)
-			}, 400*time.Millisecond, 50*time.Millisecond)
+			}, await.WithTimeout(400*time.Millisecond), await.WithMinPollInterval(50*time.Millisecond), await.WithMaxPollInterval(50*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
@@ -328,15 +340,15 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		}
 	})
 
-	t.Run("Requiref includes message on timeout", func(t *testing.T) {
+	t.Run("Require includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testcontext.New(t)
 		tb := newRecordingTB()
 		tb.run(func() {
-			await.Requiref(ctx, tb, func(t *await.T) {
+			await.Require(ctx, tb, func(t *await.T) {
 				t.Error("not ready")
-			}, time.Second, 100*time.Millisecond, "workflow %s not ready", "wf-123")
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond), await.WithMessagef("workflow %s not ready", "wf-123"))
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "workflow wf-123 not ready")
@@ -348,7 +360,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		require.PanicsWithValue(t, "unexpected nil pointer", func() {
 			await.Require(t.Context(), t, func(_ *await.T) {
 				panic("unexpected nil pointer")
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 	})
 
@@ -370,7 +383,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				tb.run(func() {
 					await.Require(ctx, tb, func(_ *await.T) {
 						tc.misuse(tb)
-					}, time.Second, 100*time.Millisecond)
+					}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 				})
 				require.True(t, tb.Failed())
 				require.Contains(t, tb.fatals(), "use the *await.T")
@@ -388,7 +402,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 			tb.Errorf("previous failure")
 			await.Require(ctx, tb, func(_ *await.T) {
 				conditionCalled = true
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Empty(t, tb.fatals())
@@ -409,8 +424,9 @@ func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
 	tb.run(func() {
 		// Await timeout is long so parent-cancel doesn't beat the soft timer.
 		await.Require(ctx, tb, func(t *await.T) {
-			<-t.Context().Done() // exits as soon as soft cancel fires
-		}, awaitTimeout, 100*time.Millisecond)
+			<-t.Context().Done()
+		}, await.WithTimeout(awaitTimeout), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 	})
 	elapsed := time.Since(start)
 	require.False(t, tb.Failed(), "soft deadlock + clean exit should succeed")
@@ -434,8 +450,9 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 	start := time.Now()
 	tb.run(func() {
 		await.Require(ctx, tb, func(*await.T) {
-			select {} // ignores t.Context()
-		}, awaitTimeout, 50*time.Millisecond)
+			select {}
+		}, await.WithTimeout(awaitTimeout), await.WithMinPollInterval(50*time.Millisecond), await.WithMaxPollInterval(50*time.Millisecond))
+
 	})
 	elapsed := time.Since(start)
 	require.True(t, tb.Failed())
@@ -456,7 +473,8 @@ func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
 		await.Require(ctx, tb, func(t *await.T) {
 			<-t.Context().Done()
 			finished.Store(true)
-		}, time.Second, time.Second)
+		}, await.WithTimeout(time.Second), await.WithMinPollInterval(time.Second), await.WithMaxPollInterval(time.Second))
+
 	})
 	require.True(t, tb.Failed())
 	require.Contains(t, tb.fatals(), "not satisfied after")

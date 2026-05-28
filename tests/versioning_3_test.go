@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -5602,10 +5603,10 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), "")
 		s.NoError(err)
 		s.Equal(tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
-	}, 10*time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(10*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	// Wait for first activity attempt to fail (should be on v1)
-	s.AwaitTrue(func() bool { return v1AttemptCount.Load() == 1 }, 10*time.Second, 100*time.Millisecond)
+	s.AwaitTrue(func() bool { return v1AttemptCount.Load() == 1 }, await.WithTimeout(10*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	// Now the activity is in retry backoff. Change the current deployment to v2
 	// while the activity is waiting to retry.

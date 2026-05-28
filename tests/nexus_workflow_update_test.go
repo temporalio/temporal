@@ -214,7 +214,8 @@ func (s *NexusWorkflowUpdateTestSuite) awaitUpdateAccepted(ctx context.Context, 
 			}
 		}
 		require.Fail(t, "update not yet accepted")
-	}, 10*time.Second, 500*time.Millisecond)
+	}, await.WithTimeout(10*time.Second), await.WithMinPollInterval(500*time.Millisecond), await.WithMaxPollInterval(500*time.Millisecond))
+
 }
 
 // startWorker creates a worker on the given task queue, registers wfs, starts it,
@@ -570,7 +571,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 		for _, cb := range desc.GetCallbacks() {
 			if cb.GetCallback().GetNexus().GetUrl() == callbackURL {
 				found = true
-				// Verify the trigger references the update.
+
 				trigger := cb.GetTrigger()
 				require.NotNil(t, trigger)
 				updateTrigger := trigger.GetUpdateWorkflowExecutionCompleted()
@@ -580,7 +581,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 			}
 		}
 		require.True(t, found, "expected to find callback with URL %s", callbackURL)
-	}, 10*time.Second, 500*time.Millisecond)
+	}, await.WithTimeout(10*time.Second), await.WithMinPollInterval(500*time.Millisecond), await.WithMaxPollInterval(500*time.Millisecond))
 
 	// Complete the update and stop the workflow.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "complete-update", nil))
@@ -833,7 +834,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 			}
 		}
 		require.Fail(t, "update not yet completed in new run")
-	}, 10*time.Second, 500*time.Millisecond)
+	}, await.WithTimeout(10*time.Second), await.WithMinPollInterval(500*time.Millisecond), await.WithMaxPollInterval(500*time.Millisecond))
 
 	// Second caller: sends a new nexus operation targeting the same update ID.
 	// Since the update is already completed in the new run, AttachCallbacks fires the callback.

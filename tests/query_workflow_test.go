@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
@@ -308,7 +309,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.AwaitTrue(func() bool {
 		// wait for workflow task to fail 3 times
 		return atomic.LoadInt32(&failures) >= 3
-	}, 10*time.Second, 50*time.Millisecond)
+	}, await.WithTimeout(10*time.Second), await.WithMinPollInterval(50*time.Millisecond), await.WithMaxPollInterval(50*time.Millisecond))
 
 	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)

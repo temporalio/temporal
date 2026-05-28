@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -92,7 +93,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// Without this wait there is a race: if the update hasn't been processed yet, the signal
 	// would only add event 8 (SignalReceived) with freshNextEventId=9, producing 8 events
 	// instead of the expected 9 and causing a false test failure.
-	s.Awaitf(func(s *PrematureEosTestSuite) {
+	s.Await(func(s *PrematureEosTestSuite) {
 		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: env.Namespace().String(),
@@ -101,7 +102,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 		s.NoError(descErr)
 		s.NotNil(desc)
 		s.NotNil(desc.GetPendingWorkflowTask())
-	}, 5*time.Second, 250*time.Millisecond, "speculative WFT should be scheduled after sending update")
+	}, await.WithTimeout(5*time.Second), await.WithMinPollInterval(250*time.Millisecond), await.WithMaxPollInterval(250*time.Millisecond), await.WithMessagef("speculative WFT should be scheduled after sending update"))
 
 	// Fetch page 1 via GetWorkflowExecutionHistory — mimicking what the SDK does when a
 	// workflow is evicted from its sticky cache and must replay history from scratch.

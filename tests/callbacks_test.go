@@ -375,7 +375,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 							callbackInfo.Trigger,
 						)
 						require.Equal(col, int32(attempt), callbackInfo.Attempt)
-						// Loose check to see that this is set.
+
 						require.Greater(
 							col,
 							callbackInfo.LastAttemptCompleteTime.AsTime(),
@@ -395,7 +395,8 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 						descCbs = append(descCbs, callbackInfo.Callback)
 					}
 					protoassert.ProtoElementsMatch(col, cbs, descCbs)
-				}, 2*time.Second, 100*time.Millisecond)
+				}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 			}
 		})
 	}
@@ -548,29 +549,25 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
 		}
 	}
 
-	await.Require(s.Context(), s.T(),
-		func(t *await.T) {
-			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
-			// state.
-			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
-			require.NoError(t, err)
-			require.Equal(
-				t,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				description.WorkflowExecutionInfo.Status,
-			)
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 
-			require.Len(t, description.Callbacks, len(cbs))
-			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
-			for _, callbackInfo := range description.Callbacks {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-				descCbs = append(descCbs, callbackInfo.Callback)
-			}
-			protoassert.ProtoElementsMatch(t, cbs, descCbs)
-		},
-		2*time.Second,
-		100*time.Millisecond,
-	)
+		description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
+		require.NoError(t, err)
+		require.Equal(
+			t,
+			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			description.WorkflowExecutionInfo.Status,
+		)
+
+		require.Len(t, description.Callbacks, len(cbs))
+		descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
+		for _, callbackInfo := range description.Callbacks {
+			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			descCbs = append(descCbs, callbackInfo.Callback)
+		}
+		protoassert.ProtoElementsMatch(t, cbs, descCbs)
+	}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 }
 
 func blockingWorkflow(ctx workflow.Context) error {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
@@ -59,7 +60,7 @@ func (s *awaitTrueSuite) TestAwaitTrue() {
 	s.AwaitTrue(func() bool {
 		attempts.Add(1)
 		return true
-	}, time.Second, time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 	s.Equal(int32(1), attempts.Load())
 }
 
@@ -67,14 +68,14 @@ func (s *awaitTrueSuite) TestAwaitTrueFalseRetry() {
 	var attempts atomic.Int32
 	s.AwaitTrue(func() bool {
 		return attempts.Add(1) == 2
-	}, time.Second, time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 	s.Equal(int32(2), attempts.Load())
 }
 
-func (s *awaitTrueSuite) TestAwaitTruef() {
-	s.AwaitTruef(func() bool {
+func (s *awaitTrueSuite) TestAwaitTrueMessage() {
+	s.AwaitTrue(func() bool {
 		return true
-	}, time.Second, time.Millisecond, "condition should pass")
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond), await.WithMessagef("condition should pass"))
 }
 
 type contextSuite struct{ Suite[*contextSuite] }
@@ -97,7 +98,7 @@ func (s *contextSuite) TestAwaitUsesSuiteContext() {
 		deadline, ok := s.Context().Deadline()
 		s.True(ok)
 		s.Less(time.Until(deadline), 200*time.Millisecond)
-	}, 100*time.Millisecond, time.Millisecond)
+	}, await.WithTimeout(100*time.Millisecond), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 }
 
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
