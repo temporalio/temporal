@@ -1,0 +1,44 @@
+name: Claude review for Nexus team PRs
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  check-membership:
+    runs-on: ubuntu-latest
+    outputs:
+      is_nexus: ${{ steps.check.outputs.is_nexus }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.NEXUS_TEAM_READ_TOKEN }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -e
+          status=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/orgs/temporalio/teams/nexus/memberships/${AUTHOR}" \
+            --jq '.state' 2>/dev/null || echo "none")
+          if [ "$status" = "active" ]; then
+            echo "is_nexus=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_nexus=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    needs: check-membership
+    if: needs.check-membership.outputs.is_nexus == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: review
