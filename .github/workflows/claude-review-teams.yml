@@ -8,6 +8,12 @@ name: Claude review for opted-in team PRs
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review (manual test trigger)
+        required: true
+        type: string
 
 env:
   # Space- or newline-separated list of temporalio team slugs whose
@@ -17,17 +23,40 @@ env:
 
 jobs:
   check-membership:
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
-    permissions: {} # uses TEAM_READ_TOKEN, not GITHUB_TOKEN
+    permissions:
+      pull-requests: read # GITHUB_TOKEN reads the PR for workflow_dispatch
     outputs:
       is_member: ${{ steps.check.outputs.is_member }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
     steps:
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            pr_json=$(gh api -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/pulls/${PR_NUMBER}")
+            author=$(echo "$pr_json" | jq -r '.user.login')
+            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+          else
+            author="$PR_AUTHOR"
+            head_sha="$PR_HEAD_SHA"
+          fi
+          echo "author=${author}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
       - id: check
         env:
           GH_TOKEN: ${{ secrets.TEAM_READ_TOKEN }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR: ${{ steps.resolve.outputs.author }}
         run: |
           set -euo pipefail
           is_member=false
@@ -64,7 +93,7 @@ jobs:
           # pull_request_target defaults to the base ref; explicitly check out
           # the PR head so the review sees the proposed changes. Safe here
           # because the team-membership gate above limits this to trusted authors.
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ needs.check-membership.outputs.head_sha }}
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
