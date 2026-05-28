@@ -57,14 +57,26 @@ func hardDeadlockTimeout() time.Duration {
 // test failure. Use t.Context() inside the callback to honor the timeout.
 func Require(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration) {
 	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, ""), "Require", requireMisuseHint, true)
+	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, ""), "Require", requireMisuseHint, true, false)
 }
 
 // Requiref is like [Require] but adds a formatted message to the timeout
 // failure.
 func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration, msg string, args ...any) {
 	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true)
+	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true, false)
+}
+
+// Require2 polls condition until it returns without assertion failures, or
+// until ctx is canceled or the configured total timeout expires.
+//
+// All knobs are optional - the common case is `await.Require2(ctx, t, fn)`.
+// Use [WithTimeout], [WithMinPollInterval], [WithMaxPollInterval],
+// [WithAttemptTimeout], [WithMessagef].
+func Require2(ctx context.Context, tb testing.TB, condition func(*T), opts ...Option) {
+	tb.Helper()
+	cfg := newConfig(opts)
+	run(ctx, tb, condition, cfg, "Require2", requireMisuseHint, true, false)
 }
 
 func run(
@@ -75,6 +87,7 @@ func run(
 	funcName string,
 	misuseHint string,
 	cancellable bool,
+	refreshTestContext bool,
 ) {
 	tb.Helper()
 
@@ -90,22 +103,35 @@ func run(
 	}
 
 	start := time.Now()
-	extendedDeadline, _ := testcontext.Extend(tb, cfg.totalTimeout)
+	extendedDeadline, granted := testcontext.Extend(tb, cfg.totalTimeout)
+	if refreshTestContext && !extendedDeadline.IsZero() {
+		parentCtx = testcontext.New(tb)
+	}
 	deadline := start.Add(cfg.totalTimeout)
 	if !extendedDeadline.IsZero() && extendedDeadline.Before(deadline) {
 		deadline = extendedDeadline
 	}
 
 	// Cap at the parent context's deadline if it's earlier than our timeout.
-	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
+	parentDeadline, hasParentDeadline := parentCtx.Deadline()
+	if hasParentDeadline && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
 	}
 
-	effectiveTimeout := max(0, time.Until(deadline))
+	report := timeoutReport{derivation: timeoutDerivation{
+		cfgTotalTimeout:   cfg.totalTimeout,
+		hasParentDeadline: hasParentDeadline,
+		parentRemaining:   max(0, time.Until(parentDeadline)),
+		hasTestCap:        !extendedDeadline.IsZero(),
+		testCapHit:        granted < cfg.totalTimeout,
+		testCapRemaining:  max(0, time.Until(extendedDeadline)),
+		effectiveTimeout:  max(0, time.Until(deadline)),
+		attemptTimeout:    cfg.attemptTimeout,
+		minPollInterval:   cfg.minPollInterval,
+		maxPollInterval:   cfg.maxPollInterval,
+	}}
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
-
-	report := timeoutReport{effectiveTimeout: effectiveTimeout}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
@@ -174,7 +200,7 @@ func run(
 		}
 
 		// Wait for pollInterval, or context is canceled or deadline is reached.
-		sleep(awaitCtx, deadline, cfg.pollInterval)
+		sleep(awaitCtx, deadline, cfg.nextPollInterval(report.attempts))
 	}
 }
 
@@ -265,9 +291,15 @@ func runAttempt(
 }
 
 func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {
+	if pollInterval <= 0 {
+		return
+	}
 	remaining := time.Until(deadline)
 	if remaining < pollInterval {
 		pollInterval = remaining
+	}
+	if pollInterval <= 0 {
+		return
 	}
 
 	timer := time.NewTimer(pollInterval)

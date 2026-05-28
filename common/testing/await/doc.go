@@ -1,6 +1,24 @@
 // Package await provides polling-based test assertions as a replacement
 // for testify's Eventually, EventuallyWithT, and their formatted variants.
 //
+// The legacy API is [Require], [Requiref], [RequireTrue], and [RequireTruef],
+// which accept positional timeout and poll interval arguments. The option-based
+// API is [Require2] and [RequireTrue2]; use [WithTimeout],
+// [WithMinPollInterval], [WithMaxPollInterval], [WithAttemptTimeout], and
+// [WithMessagef] to configure it.
+//
+// By default, the option-based API waits up to 30s total, caps each attempt at
+// 10s, starts polling at 500ms, and exponentially backs off to 2s. Set
+// TEMPORAL_TEST_TIMEOUT, TEMPORAL_AWAIT_ATTEMPT_TIMEOUT,
+// TEMPORAL_AWAIT_MIN_POLL_INTERVAL, or TEMPORAL_AWAIT_MAX_POLL_INTERVAL to
+// override the package defaults for a test environment, or pass per-call
+// options.
+//
+// Await also asks testcontext to extend the test-scoped context deadline by the
+// await timeout, subject to testcontext's cap. Existing contexts obtained before
+// the extension keep their original deadline; callers that need the extended
+// deadline should obtain a fresh context from testcontext.
+//
 // Improvements over testify's eventually functions:
 //
 //   - Misuse detection: accidentally using the real *testing.T (e.g. s.T() or
