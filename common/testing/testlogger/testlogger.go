@@ -569,8 +569,12 @@ func captureStack(skip int) string {
 
 	stackFrames := runtime.CallersFrames(pcs[:frameCount])
 	var stackTrace strings.Builder
-	for frame, more := stackFrames.Next(); more; frame, more = stackFrames.Next() {
+	for {
+		frame, more := stackFrames.Next()
 		fmt.Fprintf(&stackTrace, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
+		if !more {
+			break
+		}
 	}
 	return stackTrace.String()
 }
