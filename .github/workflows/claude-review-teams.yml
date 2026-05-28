@@ -2,8 +2,7 @@
 #
 # Uses `pull_request_target` so the workflow has access to secrets even when
 # a PR is opened from a fork. This is safe ONLY because the `check-membership`
-# job gates the review job behind active membership in a trusted team — PR
-# code is never checked out or executed until that gate passes.
+# job gates the review job behind active membership in a trusted team.
 name: Claude review for opted-in team PRs
 
 on:
@@ -21,6 +20,7 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions: {} # uses TEAM_READ_TOKEN, not GITHUB_TOKEN
     outputs:
       is_member: ${{ steps.check.outputs.is_member }}
     steps:
