@@ -101,7 +101,10 @@ func TestMixedBrain(t *testing.T) {
 		return
 	}
 
-	persistence := persistenceFromEnv()
+	persistence := devserver.PersistenceOptions{}
+	if driver := os.Getenv("PERSISTENCE_DRIVER"); driver != "" && driver != "sqlite" {
+		persistence.Driver = driver
+	}
 
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
@@ -252,16 +255,6 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		}
 		require.NoError(t, err, "Omes scenario failed, check %s", logPath)
 		return
-	}
-}
-
-func persistenceFromEnv() devserver.PersistenceOptions {
-	driver := os.Getenv("PERSISTENCE_DRIVER")
-	if driver == "" || driver == "sqlite" {
-		return devserver.PersistenceOptions{} // default sqlite
-	}
-	return devserver.PersistenceOptions{
-		Driver: driver,
 	}
 }
 
