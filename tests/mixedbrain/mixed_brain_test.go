@@ -102,12 +102,6 @@ func TestMixedBrain(t *testing.T) {
 	}
 
 	persistence := persistenceFromEnv()
-	// postgres' cluster_membership.rpc_port is SMALLINT (max 32767); ephemeral
-	// ports overflow. Pin two non-overlapping low bases when not on sqlite.
-	currentBase, releaseBase := 0, 0
-	if persistence.Driver != "" && persistence.Driver != "sqlite" {
-		currentBase, releaseBase = 7230, 7240
-	}
 
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
@@ -115,10 +109,8 @@ func TestMixedBrain(t *testing.T) {
 	t.Cleanup(func() { _ = currentLog.Close() })
 	currentSrv, err := devserver.Start(t.Context(), devserver.Options{
 		SourceDir:   sourceRoot(),
-		PortBase:    currentBase,
 		Persistence: persistence,
-		Stdout:      currentLog,
-		Stderr:      currentLog,
+		Output:      currentLog,
 		Logger:      currentLogger,
 	})
 	require.NoError(t, err, "start current server")
@@ -143,13 +135,11 @@ func TestMixedBrain(t *testing.T) {
 	t.Cleanup(func() { _ = releaseLog.Close() })
 	releaseSrv, err := devserver.Start(t.Context(), devserver.Options{
 		Ref:         releaseTag,
-		PortBase:    releaseBase,
 		Persistence: persistence,
 		ClusterEndpoint: devserver.ClusterEndpoint{
 			RPCAddress: currentSrv.FrontendHostPort(),
 		},
-		Stdout: releaseLog,
-		Stderr: releaseLog,
+		Output: releaseLog,
 		Logger: releaseLogger,
 	})
 	require.NoError(t, err, "start release server")
@@ -271,10 +261,7 @@ func persistenceFromEnv() devserver.PersistenceOptions {
 		return devserver.PersistenceOptions{} // default sqlite
 	}
 	return devserver.PersistenceOptions{
-		Driver:      driver,
-		ConnectAddr: "127.0.0.1:5432",
-		User:        "temporal",
-		Password:    "temporal",
+		Driver: driver,
 	}
 }
 
