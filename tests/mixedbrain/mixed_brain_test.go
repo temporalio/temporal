@@ -156,8 +156,7 @@ func TestMixedBrain(t *testing.T) {
 	var proxy *frontendProxy
 
 	t.Run("form cluster", func(st *testing.T) {
-		// Two physical servers, each running frontend/history/matching/worker.
-		waitForClusterFormation(st, conn, 90*time.Second, 2)
+		waitForClusterFormation(st, conn, 90*time.Second, releaseSrv.Ports())
 	})
 	if t.Failed() {
 		return

@@ -2,11 +2,13 @@ package mixedbrain
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/temporalio/omes/devserver"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -63,41 +65,18 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 }
 
 // waitForClusterFormation waits until the server's reachable members include
-// expected membership ports, confirming the servers discovered each other.
-// We can't enumerate ports per service (devserver chooses them dynamically),
-// so we just wait until both servers see at least minMembers reachable members.
-func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, minMembers int) {
+// another devserver, confirming the servers discovered each other.
+func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, expected devserver.Ports) {
 	t.Helper()
 
 	client := adminservice.NewAdminServiceClient(conn)
+	want := net.JoinHostPort(expected.Host, strconv.Itoa(expected.FrontendMembership))
 
 	require.Eventually(t, func() bool {
 		resp, err := client.DescribeCluster(t.Context(), &adminservice.DescribeClusterRequest{})
 		if err != nil {
 			return false
 		}
-		membership := resp.GetMembershipInfo()
-		if membership == nil {
-			return false
-		}
-
-		// Count unique reachable members by host:port to avoid duplicate
-		// service-level entries.
-		seen := map[string]bool{}
-		for _, member := range membership.GetReachableMembers() {
-			host, portStr, err := net.SplitHostPort(member)
-			if err != nil {
-				continue
-			}
-			if _, err := strconv.Atoi(portStr); err != nil {
-				continue
-			}
-			seen[host+":"+portStr] = true
-		}
-		if len(seen) < minMembers {
-			t.Logf("Waiting for cluster formation: %d/%d members visible", len(seen), minMembers)
-			return false
-		}
-		return true
+		return slices.Contains(resp.GetMembershipInfo().GetReachableMembers(), want)
 	}, timeout, time.Second, "cluster did not form within %v", timeout)
 }
