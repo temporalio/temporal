@@ -506,6 +506,8 @@ const (
 	VisibilityArchiverScope = "VisibilityArchiver"
 	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
 	HistoryScavengerScope = "HistoryScavenger"
+	// ScheduleInvariantsScannerScope is scope used by metrics emitted by the schedule-invariants scanner
+	ScheduleInvariantsScannerScope = "ScheduleInvariantsScanner"
 	// ArchiverDeleteHistoryActivityScope is scope used by all metrics emitted by archiver.DeleteHistoryActivity
 	ArchiverDeleteHistoryActivityScope = "ArchiverDeleteHistoryActivity"
 	// ArchiverUploadHistoryActivityScope is scope used by all metrics emitted by archiver.UploadHistoryActivity
@@ -1334,6 +1336,10 @@ var (
 	HistoryScavengerSuccessCount                    = NewCounterDef("scavenger_success")
 	HistoryScavengerErrorCount                      = NewCounterDef("scavenger_errors")
 	HistoryScavengerSkipCount                       = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerStuckOpenCount             = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount          = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                 = NewCounterDef("schedule_invariants_scanner_errors")
 	ExecutionsOutstandingCount                      = NewGaugeDef("executions_outstanding")
 	ScavengerValidationRequestsCount                = NewCounterDef("scavenger_validation_requests")
 	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")

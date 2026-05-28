@@ -604,6 +604,49 @@ is currently processing a task.
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
 	)
 
+	ScheduleInvariantsScannerOverdueNextActionTimeEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerOverdueNextActionTimeEnabled",
+		false,
+		`ScheduleInvariantsScannerOverdueNextActionTimeEnabled enables flagging schedules whose
+TemporalScheduleNextActionTime lies further in the past than the tolerance.`,
+	)
+	ScheduleInvariantsScannerStuckOpenEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerStuckOpenEnabled",
+		false,
+		`ScheduleInvariantsScannerStuckOpenEnabled enables flagging schedules that appear stuck open
+long after their CloseTime.`,
+	)
+	ScheduleInvariantsScannerUnknownStateEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerUnknownStateEnabled",
+		false,
+		`ScheduleInvariantsScannerUnknownStateEnabled enables flagging running, unpaused schedules with
+no TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known to be
+backfilled on legacy schedules.`,
+	)
+	ScheduleInvariantsScannerOverdueNextActionTimeTolerance = NewGlobalDurationSetting(
+		"worker.scheduleInvariantsScannerOverdueNextActionTimeTolerance",
+		10*time.Minute,
+		`ScheduleInvariantsScannerOverdueNextActionTimeTolerance is how far in the past
+TemporalScheduleNextActionTime must be before the schedule is flagged.`,
+	)
+	ScheduleInvariantsScannerStuckOpenBuffer = NewGlobalDurationSetting(
+		"worker.scheduleInvariantsScannerStuckOpenBuffer",
+		14*24*time.Hour,
+		`ScheduleInvariantsScannerStuckOpenBuffer is the minimum age of CloseTime before a completed
+schedule is flagged as stuck open.`,
+	)
+	ScheduleInvariantsScannerNamespaceListPageSize = NewGlobalIntSetting(
+		"worker.scheduleInvariantsScannerNamespaceListPageSize",
+		100,
+		`ScheduleInvariantsScannerNamespaceListPageSize controls pagination of ListNamespaces.`,
+	)
+	ScheduleInvariantsScannerVisibilityRPS = NewGlobalFloatSetting(
+		"worker.scheduleInvariantsScannerVisibilityRPS",
+		1.0,
+		`ScheduleInvariantsScannerVisibilityRPS rate-limits visibility calls from the
+schedule-invariants scanner.`,
+	)
+
 	// keys for frontend
 	FrontendAllowedExperiments = NewNamespaceTypedSetting(
 		"frontend.allowedExperiments",

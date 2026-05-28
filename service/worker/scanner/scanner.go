@@ -26,8 +26,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"go.temporal.io/server/service/worker/scanner/schedule_invariants"
 )
 
 type (
@@ -71,6 +73,16 @@ type (
 		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
 		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
+
+		// Schedule-invariants scanners. Each runs as an independent cron workflow; all three
+		// require advanced (Elasticsearch) visibility to be configured (otherwise they're skipped).
+		ScheduleInvariantsScannerOverdueNextActionTimeEnabled   dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerStuckOpenEnabled               dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerUnknownStateEnabled            dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerOverdueNextActionTimeTolerance dynamicconfig.DurationPropertyFn
+		ScheduleInvariantsScannerStuckOpenBuffer                dynamicconfig.DurationPropertyFn
+		ScheduleInvariantsScannerNamespaceListPageSize          dynamicconfig.IntPropertyFn
+		ScheduleInvariantsScannerVisibilityRPS                  dynamicconfig.FloatPropertyFn
 	}
 
 	// scannerContext is the context object that gets
@@ -206,6 +218,66 @@ func (s *Scanner) Start() error {
 		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {
 			return err
+		}
+	}
+
+	scheduleInvariantsAnyEnabled := s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() ||
+		s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() ||
+		s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled()
+	if scheduleInvariantsAnyEnabled && !s.context.visibilityManager.HasStoreName(elasticsearch.PersistenceName) {
+		s.context.logger.Info("schedule-invariants scanners are enabled but advanced (Elasticsearch) visibility is not configured; skipping")
+	} else if scheduleInvariantsAnyEnabled {
+		scheduleActivities := schedule_invariants.NewActivities(
+			s.context.logger,
+			s.context.metricsHandler,
+			s.context.metadataManager,
+			s.context.visibilityManager,
+			s.context.namespaceRegistry,
+			s.context.currentClusterName,
+			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
+			s.context.cfg.ScheduleInvariantsScannerStuckOpenBuffer,
+			s.context.cfg.ScheduleInvariantsScannerNamespaceListPageSize,
+			s.context.cfg.ScheduleInvariantsScannerVisibilityRPS,
+		)
+
+		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, schedule_invariants.OverdueNextActionTimeWFStartOptions, schedule_invariants.OverdueNextActionTimeWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.OverdueNextActionTimeTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(schedule_invariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: schedule_invariants.OverdueNextActionTimeWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: schedule_invariants.OverdueNextActionTimeActivityName})
+
+			// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+			if err := work.Start(); err != nil {
+				return err
+			}
+		}
+
+		if s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, schedule_invariants.StuckOpenWFStartOptions, schedule_invariants.StuckOpenWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.StuckOpenTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(schedule_invariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: schedule_invariants.StuckOpenWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: schedule_invariants.StuckOpenActivityName})
+
+			if err := work.Start(); err != nil {
+				return err
+			}
+		}
+
+		if s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled() {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, schedule_invariants.UnknownStateWFStartOptions, schedule_invariants.UnknownStateWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.UnknownStateTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(schedule_invariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: schedule_invariants.UnknownStateWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: schedule_invariants.UnknownStateActivityName})
+
+			if err := work.Start(); err != nil {
+				return err
+			}
 		}
 	}
 
