@@ -684,6 +684,10 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
 	}
 
+	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, request.GetClusterName()); err != nil {
+		return nil, err
+	}
+
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
