@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
-	"go.temporal.io/server/service/worker/scanner/schedule_invariants"
+	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
 )
 
 type (
@@ -226,7 +226,7 @@ func (s *Scanner) Start() error {
 	if scheduleInvariantsAnyEnabled && !s.context.visibilityManager.HasStoreName(elasticsearch.PersistenceName) {
 		s.context.logger.Info("schedule-invariants scanners are enabled but advanced (Elasticsearch) visibility is not configured; skipping")
 	} else if scheduleInvariantsAnyEnabled {
-		scheduleActivities := schedule_invariants.NewActivities(
+		scheduleActivities := scheduleinvariants.NewActivities(
 			s.context.logger,
 			s.context.metricsHandler,
 			s.context.metadataManager,
@@ -241,11 +241,11 @@ func (s *Scanner) Start() error {
 
 		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, schedule_invariants.OverdueNextActionTimeWFStartOptions, schedule_invariants.OverdueNextActionTimeWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.OverdueNextActionTimeWFStartOptions, scheduleinvariants.OverdueNextActionTimeWorkflowName)
 
-			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.OverdueNextActionTimeTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(schedule_invariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: schedule_invariants.OverdueNextActionTimeWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: schedule_invariants.OverdueNextActionTimeActivityName})
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.OverdueNextActionTimeTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeActivityName})
 
 			// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 			if err := work.Start(); err != nil {
@@ -255,11 +255,11 @@ func (s *Scanner) Start() error {
 
 		if s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, schedule_invariants.StuckOpenWFStartOptions, schedule_invariants.StuckOpenWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StuckOpenWFStartOptions, scheduleinvariants.StuckOpenWorkflowName)
 
-			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.StuckOpenTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(schedule_invariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: schedule_invariants.StuckOpenWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: schedule_invariants.StuckOpenActivityName})
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.StuckOpenTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.StuckOpenWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: scheduleinvariants.StuckOpenActivityName})
 
 			if err := work.Start(); err != nil {
 				return err
@@ -268,11 +268,11 @@ func (s *Scanner) Start() error {
 
 		if s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled() {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, schedule_invariants.UnknownStateWFStartOptions, schedule_invariants.UnknownStateWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.UnknownStateWFStartOptions, scheduleinvariants.UnknownStateWorkflowName)
 
-			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), schedule_invariants.UnknownStateTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(schedule_invariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: schedule_invariants.UnknownStateWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: schedule_invariants.UnknownStateActivityName})
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.UnknownStateTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.UnknownStateWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: scheduleinvariants.UnknownStateActivityName})
 
 			if err := work.Start(); err != nil {
 				return err

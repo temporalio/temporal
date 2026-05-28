@@ -1,4 +1,4 @@
-package schedule_invariants
+package scheduleinvariants
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
-	chasmpb "go.temporal.io/server/api/chasm/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -200,8 +200,8 @@ func TestForEachNamespace_PropagatesVisibilityError(t *testing.T) {
 	require.False(t, called, "callback should not fire on error")
 }
 
-func chasmExec(id string) *chasmpb.VisibilityExecutionInfo {
-	return &chasmpb.VisibilityExecutionInfo{BusinessId: id}
+func chasmExec(id string) *chasmspb.VisibilityExecutionInfo {
+	return &chasmspb.VisibilityExecutionInfo{BusinessId: id}
 }
 
 func TestForEachScheduleInNamespace_PaginatesAndVisitsEachSchedule(t *testing.T) {
@@ -217,7 +217,7 @@ func TestForEachScheduleInNamespace_PaginatesAndVisitsEachSchedule(t *testing.T)
 		PageSize:      scheduleListPageSize,
 		NextPageToken: nil,
 	}).Return(&visibilityservice.ListChasmExecutionsResponse{
-		Executions:    []*chasmpb.VisibilityExecutionInfo{chasmExec("sched-1"), chasmExec("sched-2")},
+		Executions:    []*chasmspb.VisibilityExecutionInfo{chasmExec("sched-1"), chasmExec("sched-2")},
 		NextPageToken: []byte("p2"),
 	}, nil)
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), &visibilityservice.ListChasmExecutionsRequest{
@@ -228,7 +228,7 @@ func TestForEachScheduleInNamespace_PaginatesAndVisitsEachSchedule(t *testing.T)
 		PageSize:      scheduleListPageSize,
 		NextPageToken: []byte("p2"),
 	}).Return(&visibilityservice.ListChasmExecutionsResponse{
-		Executions:    []*chasmpb.VisibilityExecutionInfo{chasmExec("sched-3")},
+		Executions:    []*chasmspb.VisibilityExecutionInfo{chasmExec("sched-3")},
 		NextPageToken: nil,
 	}, nil)
 
@@ -335,7 +335,7 @@ func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testin
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
 
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).Return(&visibilityservice.ListChasmExecutionsResponse{
-		Executions: []*chasmpb.VisibilityExecutionInfo{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
 			chasmExec("sched-paused"),
 			chasmExec("sched-buffer-waiting"),
 			chasmExec("sched-actually-overdue"),
@@ -377,7 +377,7 @@ func TestRunOverdueScan_ContinuesPastPerNamespaceErrors(t *testing.T) {
 				return nil, errors.New("list failed")
 			}
 			return &visibilityservice.ListChasmExecutionsResponse{
-				Executions:    []*chasmpb.VisibilityExecutionInfo{chasmExec("sched-1")},
+				Executions:    []*chasmspb.VisibilityExecutionInfo{chasmExec("sched-1")},
 				NextPageToken: nil,
 			}, nil
 		}).AnyTimes()

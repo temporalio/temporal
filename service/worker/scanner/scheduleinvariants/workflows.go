@@ -1,4 +1,4 @@
-package schedule_invariants
+package scheduleinvariants
 
 import (
 	"time"
@@ -94,8 +94,9 @@ func runScanActivity(ctx workflow.Context, activityName string, wfFn any) error 
 		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy:         retryPolicy,
 	})
-	// ignore errors intentionally, this will fail heartbeat on worker restart and be restarted normally
-	// and this is expected
-	workflow.ExecuteActivity(activityCtx, activityName).Get(ctx, nil)
+	// Ignore the activity result intentionally: the activity is expected to exit
+	// eventually (heartbeat timeout on worker restart, retry budget exhausted, etc.),
+	// and we want to continue-as-new and rebirth the scan loop in every case.
+	_ = workflow.ExecuteActivity(activityCtx, activityName).Get(ctx, nil)
 	return workflow.NewContinueAsNewError(ctx, wfFn)
 }

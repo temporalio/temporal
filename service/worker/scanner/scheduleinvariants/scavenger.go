@@ -1,4 +1,4 @@
-package schedule_invariants
+package scheduleinvariants
 
 import (
 	"context"
