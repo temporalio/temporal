@@ -152,8 +152,6 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
-	t.Parallel()
-
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
@@ -183,6 +181,37 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
+	})
+
+	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
+		const (
+			attemptTimeout = 50 * time.Millisecond
+			awaitTimeout   = time.Second
+			pollInterval   = 100 * time.Millisecond
+		)
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeout.String())
+
+		ctx := testcontext.New(t)
+		var attempts atomic.Int32
+		var firstAttemptRemaining time.Duration
+
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				if attempts.Add(1) == 1 {
+					deadline, ok := t.Context().Deadline()
+					require.True(t, ok)
+					firstAttemptRemaining = time.Until(deadline)
+				}
+				<-t.Context().Done()
+			}, awaitTimeout, pollInterval)
+		})
+
+		require.True(t, tb.Failed())
+		require.Contains(t, tb.fatals(), "not satisfied after")
+		require.Positive(t, firstAttemptRemaining)
+		require.LessOrEqual(t, firstAttemptRemaining, attemptTimeout)
+		require.Greater(t, attempts.Load(), int32(1))
 	})
 
 	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
