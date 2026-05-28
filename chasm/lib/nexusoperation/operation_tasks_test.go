@@ -267,7 +267,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				if protoLinks[1].GetType() != "temporal.api.common.v1.Link.NexusOperation" {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected nexus operation link type: %v", protoLinks[1].GetType())
 				}
-				if protoLinks[1].GetUrl() != "temporal:///namespaces/ns-name/nexus-operations/wf-id?runID=run-id" {
+				if protoLinks[1].GetUrl() != "temporal:///namespaces/ns-name/nexus-operations/wf-id/run-id/details" {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected nexus operation link URL: %v", protoLinks[1].GetUrl())
 				}
 				nexus.AddHandlerLinks(ctx, handlerNexusLink)
