@@ -979,9 +979,6 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		if frontendReq.GetResetHeartbeat() {
-			a.ResetHeartbeats = true
-		}
 		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
 			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
 			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
@@ -1069,14 +1066,6 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableC
 // applyFailedAttempt mutates activity state when a worker yields with retries remaining.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
-	if a.ActivityReset {
-		attempt.Count = 0
-		a.ActivityReset = false
-		if a.ResetHeartbeats {
-			a.ResetHeartbeats = false
-			a.clearHeartbeat(ctx)
-		}
-	}
 	attempt.Count++
 	attempt.Stamp++
 	return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false)
@@ -1128,13 +1117,21 @@ func (a *Activity) tryReschedule(
 		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
 	}
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		// keepPaused=true on a paused activity preserves PauseState across the reset; yield must
+		// land in PAUSED rather than SCHEDULED so the activity stays paused until unpaused.
+		if a.PauseState != nil {
+			return true, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+		}
 		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
 	}
 	return true, TransitionRescheduled.Apply(a, ctx, event)
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
-	if !TransitionRescheduled.Possible(a) && !TransitionAttemptFailedWhilePauseRequested.Possible(a) && !TransitionResetAttemptFailedToScheduled.Possible(a) {
+	if !TransitionRescheduled.Possible(a) &&
+		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
+		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
+		!TransitionResetAttemptFailedToPaused.Possible(a) {
 		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
@@ -1229,7 +1226,7 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED1,
+		ActivityPaused:  (a.PauseState != nil || a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED) && a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		ActivityReset:   a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 	}, nil
 }
