@@ -41,16 +41,16 @@ enum ActivityExecutionStatus {
   // Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
   // transition to timed out status.
   ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 8;
-  // The activity is paused and no worker is currently executing the attempt. No dispatch task
-  // will be issued until the activity is unpaused. Reachable from SCHEDULED via an operator pause,
-  // and from PAUSE_REQUESTED when the worker yields (failure with retries remaining, or timeout
-  // with retries remaining).
+  // The activity is paused and no worker is currently executing the attempt. No dispatch task will
+  // be issued until the activity is unpaused. Reachable from SCHEDULED via an operator pause, and
+  // from PAUSE_REQUESTED when the worker yields due to failure with retries remaining, or due to
+  // timeout with retries remaining.
   ACTIVITY_EXECUTION_STATUS_PAUSED = 9;
 
   // An operator pause was received while the activity was STARTED. The worker is still executing
   // under its existing task token. The worker will be notified via ActivityPaused=true on its next
-  // heartbeat response. When the worker yields (failure with retries remaining, or timeout with
-  // retries remaining), the activity will transition to PAUSED.
+  // heartbeat response. When the worker yields due to failure with retries remaining, or due to
+  // timeout with retries remaining, the activity will transition to PAUSED.
   ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 10;
 }
 
