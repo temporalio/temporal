@@ -64,7 +64,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -849,6 +851,309 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
+// TestPollActivityTaskQueues_DroppedTaskMetric exercises every error path from
+// recordActivityTaskStarted that causes matching to drop the task, and asserts that
+// tasks_dropped is emitted with the right `reason` tag for each.
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
+	cases := []struct {
+		name       string
+		err        error
+		wantReason string
+		expectLog  bool // Internal/DataLoss log at Error level via nonRetryableErrorsDropTask
+	}{
+		{"Internal", serviceerror.NewInternal("boom"), metrics.DroppedTaskReasonInternalTag.Value, true},
+		{"DataLoss", serviceerror.NewDataLoss("boom"), metrics.DroppedTaskReasonDataLossTag.Value, true},
+		{"NotFound", serviceerror.NewNotFound("gone"), metrics.DroppedTaskReasonNotFoundTag.Value, false},
+		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("activity"), metrics.DroppedTaskReasonAlreadyStartedTag.Value, false},
+		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonObsoleteBuildIDTag.Value, false},
+		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonObsoleteMatchingTaskTag.Value, false},
+		{"ActivityStartDuringTransition", serviceerrors.NewActivityStartDuringTransition(), metrics.DroppedTaskReasonActivityStartDuringTransitionTag.Value, false},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			if tc.expectLog {
+				s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
+			}
+
+			namespaceID := uuid.NewString()
+			taskQueue := &taskqueuepb.TaskQueue{Name: "queue-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+			_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+				NamespaceId:            namespaceID,
+				Execution:              &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: uuid.NewString()},
+				ScheduledEventId:       int64(5),
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+			})
+			s.NoError(err)
+
+			s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nil, tc.err).Times(1)
+
+			capture := metricstest.NewCaptureHandler()
+			c := capture.StartCapture()
+
+			resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+				NamespaceId: namespaceID,
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  "identity",
+				},
+			}, capture)
+			protorequire.ProtoEqual(s.T(), emptyPollActivityTaskQueueResponse, resp)
+			s.NoError(err)
+
+			recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
+			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			capture.StopCapture(c)
+		})
+	}
+}
+
+// TestPollWorkflowTaskQueues_DroppedTaskMetric mirrors the activity-side test for
+// PollWorkflowTaskQueue. Covers all six drop arms on the workflow path; the
+// ActivityStartDuringTransition error is activity-only and not exercised here.
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
+	cases := []struct {
+		name       string
+		err        error
+		wantReason string
+		expectLog  bool
+	}{
+		{"Internal", serviceerror.NewInternal("boom"), metrics.DroppedTaskReasonInternalTag.Value, true},
+		{"DataLoss", serviceerror.NewDataLoss("boom"), metrics.DroppedTaskReasonDataLossTag.Value, true},
+		{"NotFound", serviceerror.NewNotFound("gone"), metrics.DroppedTaskReasonNotFoundTag.Value, false},
+		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("workflow"), metrics.DroppedTaskReasonAlreadyStartedTag.Value, false},
+		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonObsoleteBuildIDTag.Value, false},
+		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonObsoleteMatchingTaskTag.Value, false},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			if tc.expectLog {
+				s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
+			}
+
+			taskQueue := &taskqueuepb.TaskQueue{Name: "wf-queue-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			wfExecution := &commonpb.WorkflowExecution{WorkflowId: "wf-" + tc.name, RunId: uuid.NewString()}
+			s.addWorkflowTask(wfExecution, taskQueue)
+
+			s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nil, tc.err).Times(1)
+
+			capture := metricstest.NewCaptureHandler()
+			c := capture.StartCapture()
+
+			resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				NamespaceId: namespaceID,
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  "identity",
+				},
+			}, capture)
+			protorequire.ProtoEqual(s.T(), emptyPollWorkflowTaskQueueResponse, resp)
+			s.NoError(err)
+
+			recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
+			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			capture.StopCapture(c)
+		})
+	}
+}
+
+// TestPollActivityTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors locks
+// down the contract that errors which are propagated back to the caller (i.e.
+// the task is not silently dropped) do NOT increment tasks_dropped:
+//   - ResourceExhausted: returned to the worker for back-off.
+//   - ErrNamespaceHandover: returned to stop further polling during failover.
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors() {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"ResourceExhausted", serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "throttled")},
+		{"NamespaceHandover", common.ErrNamespaceHandover},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			namespaceID := uuid.NewString()
+			taskQueue := &taskqueuepb.TaskQueue{Name: "queue-noemit-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+			_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+				NamespaceId:            namespaceID,
+				Execution:              &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: uuid.NewString()},
+				ScheduledEventId:       int64(5),
+				TaskQueue:              taskQueue,
+				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+			})
+			s.NoError(err)
+
+			s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nil, tc.err).Times(1)
+
+			capture := metricstest.NewCaptureHandler()
+			c := capture.StartCapture()
+
+			_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+				NamespaceId: namespaceID,
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  "identity",
+				},
+			}, capture)
+			s.Error(err, "%s should be propagated to the caller", tc.name)
+
+			recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
+			capture.StopCapture(c)
+		})
+	}
+}
+
+// TestPollActivityTaskQueues_DroppedTaskMetric_OtherReason exercises the default
+// arm of the error switch: an unrecognised service error type falls through to
+// `reason=other`. Unlike the typed arms (which call task.finish(nil, false) and
+// silently ack the task), the default arm calls task.finish(err, false) which
+// re-queues the task for retry, so the poll loop may try again. AnyTimes() +
+// await.RequireTruef + an explicit cancel keep the test bounded.
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_OtherReason() {
+	namespaceID := uuid.NewString()
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue-other-reason", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceID,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: uuid.NewString()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	})
+	s.NoError(err)
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnavailable("custom")).AnyTimes()
+
+	capture := metricstest.NewCaptureHandler()
+	c := capture.StartCapture()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = s.matchingEngine.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, capture)
+	}()
+
+	await.RequireTruef(s.T(), func() bool {
+		return len(c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]) >= 1
+	}, 2*time.Second, 10*time.Millisecond, "expected at least one tasks_dropped emission with reason=other")
+
+	cancel()
+	<-done
+
+	recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+	s.GreaterOrEqual(len(recordings), 1)
+	s.Equal(metrics.DroppedTaskReasonOtherTag.Value, recordings[0].Tags["reason"])
+	capture.StopCapture(c)
+}
+
+// TestPollWorkflowTaskQueues_DroppedTaskMetric_OtherReason mirrors the activity
+// other-reason test on the workflow path. The default arm of the error switch
+// in PollWorkflowTaskQueue re-queues the task for retry via task.finish(err,
+// false), so we mock with AnyTimes() and bound the test with a deadline + an
+// await.RequireTruef polling loop.
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_OtherReason() {
+	taskQueue := &taskqueuepb.TaskQueue{Name: "wf-queue-other-reason", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: uuid.NewString()}
+	s.addWorkflowTask(wfExecution, taskQueue)
+
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnavailable("custom")).AnyTimes()
+
+	capture := metricstest.NewCaptureHandler()
+	c := capture.StartCapture()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: namespaceID,
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: taskQueue,
+				Identity:  "identity",
+			},
+		}, capture)
+	}()
+
+	await.RequireTruef(s.T(), func() bool {
+		return len(c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]) >= 1
+	}, 2*time.Second, 10*time.Millisecond, "expected at least one tasks_dropped emission with reason=other")
+
+	cancel()
+	<-done
+
+	recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+	s.GreaterOrEqual(len(recordings), 1)
+	s.Equal(metrics.DroppedTaskReasonOtherTag.Value, recordings[0].Tags["reason"])
+	capture.StopCapture(c)
+}
+
+// TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors locks
+// down the contract that errors which are propagated back to the caller (i.e.
+// the task is not silently dropped) do NOT increment tasks_dropped on the
+// workflow path:
+//   - ResourceExhausted: returned to the worker for back-off.
+//   - ErrNamespaceHandover: returned to stop further polling during failover.
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors() {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"ResourceExhausted", serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "throttled")},
+		{"NamespaceHandover", common.ErrNamespaceHandover},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			taskQueue := &taskqueuepb.TaskQueue{Name: "wf-queue-noemit-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			wfExecution := &commonpb.WorkflowExecution{WorkflowId: "wf-" + tc.name, RunId: uuid.NewString()}
+			s.addWorkflowTask(wfExecution, taskQueue)
+
+			s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nil, tc.err).Times(1)
+
+			capture := metricstest.NewCaptureHandler()
+			c := capture.StartCapture()
+
+			_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				NamespaceId: namespaceID,
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  "identity",
+				},
+			}, capture)
+			s.Error(err, "%s should be propagated to the caller", tc.name)
+
+			recordings := c.Snapshot()[metrics.DroppedTasksPerTaskQueueCounter.Name()]
+			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
+			capture.StopCapture(c)
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {

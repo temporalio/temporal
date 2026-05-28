@@ -1244,6 +1244,10 @@ var (
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
 	)
+	DroppedTasksPerTaskQueueCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Tasks dropped by matching after a Record(Workflow|Activity)TaskStarted call to history failed. Per-task-queue, tagged with `reason` identifying the failure mode."),
+	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
 		WithDescription("Count of tasks that were completed after being dropped from the matcher"),
