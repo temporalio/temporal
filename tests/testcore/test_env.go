@@ -90,10 +90,11 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
-	dedicatedCluster      bool
-	dedicatedReason       string
-	dynamicConfigSettings []dynamicConfigOverride
-	clusterOptions        []TestClusterOption
+	dedicatedCluster         bool
+	dedicatedReason          string
+	disableTestloggerFailure bool
+	dynamicConfigSettings    []dynamicConfigOverride
+	clusterOptions           []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -106,6 +107,20 @@ type dynamicConfigOverride struct {
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithDisableTestloggerFailure disables the test logger's behavior of failing
+// the test when an error log matches a registered expectation (e.g. soft-assert
+// errors tagged with tag.FailedAssertion). Use for tests that intentionally
+// trigger and then verify soft-assert errors. Implies WithDedicatedCluster,
+// because FailOnError is cluster-wide and disabling it on a shared cluster may
+// hide failures in concurrent tests.
+func WithDisableTestloggerFailure() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.disableTestloggerFailure = true
+		o.dedicatedReason = "testlogger failures disabled"
 	}
 }
 
@@ -246,6 +261,15 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			t.Fatal(err)
 		}
 	})
+
+	if options.disableTestloggerFailure {
+		tl, ok := base.Logger.(*testlogger.TestLogger)
+		if !ok {
+			t.Fatalf("WithDisableTestloggerFailure requires a *testlogger.TestLogger logger, got %T", base.Logger)
+		}
+		prev := tl.FailOnError(false)
+		t.Cleanup(func() { tl.FailOnError(prev) })
+	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
@@ -456,26 +480,6 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
-}
-
-// DontFailOnError disables the test logger's behavior of failing the test when
-// an error log matches a registered expectation (e.g. soft-assert errors tagged
-// with tag.FailedAssertion). The previous value is restored on cleanup. Use for
-// tests that intentionally trigger and then verify soft-assert errors. Requires
-// a dedicated cluster, because FailOnError is a cluster wide property, and using
-// a shared cluster may hide failures in a concurrent test
-func (e *TestEnv) DontFailOnError() {
-	e.t.Helper()
-	if e.isShared {
-		e.t.Fatal("DontFailOnError cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
-	e.dedicatedGuard.record("don't fail on soft-assert errors")
-	tl, ok := e.Logger.(*testlogger.TestLogger)
-	if !ok {
-		e.t.Fatalf("DontFailOnError requires a *testlogger.TestLogger logger, got %T", e.Logger)
-	}
-	prev := tl.FailOnError(false)
-	e.t.Cleanup(func() { tl.FailOnError(prev) })
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.

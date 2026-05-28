@@ -94,7 +94,9 @@ func (s *sharedClusterT) Fail() {
 
 // FailNow does not forward to the underlying tests, since we do not know what test
 // we are targetting or what goroutine we are calling FailNow from.
-func (s *sharedClusterT) FailNow() { s.failed.Store(true) }
+func (s *sharedClusterT) FailNow() {
+	s.failed.Store(true)
+}
 
 // Fatalf does not forward to the underlying tests, since we do not know what test
 // we are targetting or what goroutine we are calling Fatalf from.
@@ -110,11 +112,15 @@ func (s *sharedClusterT) Fatal(args ...any) {
 	fmt.Fprintln(os.Stderr, append([]any{"FATAL:"}, args...)...)
 }
 
-func (s *sharedClusterT) Failed() bool { return s.failed.Load() }
+func (s *sharedClusterT) Failed() bool {
+	return s.failed.Load()
+}
 
 func (s *sharedClusterT) Helper() {}
 
-func (s *sharedClusterT) Name() string { return s.name }
+func (s *sharedClusterT) Name() string {
+	return s.name
+}
 
 func (s *sharedClusterT) Cleanup(fn func()) {
 	s.mu.Lock()

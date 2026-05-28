@@ -757,16 +757,15 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 }
 
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
-// fails t if the cluster was poisoned during t's window, and tears the cluster
-// down if t was the last active user of a poisoned cluster. The pool's slot
-// reference is replaced when poison is observed, so no new tests will land on
-// a poisoned cluster.
+// fails t if the cluster was poisoned during t's window. This fails all active tests
+// currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
+// The pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	s.t.addTest(t)
 
 	t.Cleanup(func() {
 		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
-			if f := tl.Failed(); f != nil {
+			if f := tl.Failure(); f != nil {
 				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
 			}
 		}

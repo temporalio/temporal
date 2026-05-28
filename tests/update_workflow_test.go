@@ -1258,8 +1258,7 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 			// Cases in this table intentionally trigger soft asserts and then
 			// verify the resulting error; disable fail-on-error so those logs
 			// don't poison the cluster.
-			env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-			env.DontFailOnError()
+			env := testcore.NewEnv(s.T(), testcore.WithDisableTestloggerFailure())
 
 			mustStartWorkflow(env, env.Tv())
 

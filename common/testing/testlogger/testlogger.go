@@ -389,9 +389,9 @@ func (tl *TestLogger) FailOnFatal(b bool) bool {
 	return tl.state.failOnFatal.Swap(b)
 }
 
-// Failed returns the first Failure that shouldFailTest considered a test-failing
+// Failure returns the first Failure that shouldFailTest considered a test-failing
 // log, or nil if no such log has been observed. Sticky: first failure wins.
-func (tl *TestLogger) Failed() *Failure {
+func (tl *TestLogger) Failure() *Failure {
 	return tl.state.failure.Load()
 }
 
