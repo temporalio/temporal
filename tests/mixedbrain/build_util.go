@@ -110,6 +110,6 @@ func downloadAndBuildOmes(t *testing.T, workDir, outputPath string) {
 	t.Logf("Building omes into %s...", outputPath)
 	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", outputPath, "./cmd")
 	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
+	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, "build omes failed:\n%s", out)
 }
