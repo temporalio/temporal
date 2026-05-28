@@ -217,8 +217,6 @@ func NewConfig(
 			ScheduleInvariantsScannerStuckOpenEnabled:               dynamicconfig.ScheduleInvariantsScannerStuckOpenEnabled.Get(dc),
 			ScheduleInvariantsScannerUnknownStateEnabled:            dynamicconfig.ScheduleInvariantsScannerUnknownStateEnabled.Get(dc),
 			ScheduleInvariantsScannerOverdueNextActionTimeTolerance: dynamicconfig.ScheduleInvariantsScannerOverdueNextActionTimeTolerance.Get(dc),
-			ScheduleInvariantsScannerStuckOpenBuffer:                dynamicconfig.ScheduleInvariantsScannerStuckOpenBuffer.Get(dc),
-			ScheduleInvariantsScannerNamespaceListPageSize:          dynamicconfig.ScheduleInvariantsScannerNamespaceListPageSize.Get(dc),
 			ScheduleInvariantsScannerVisibilityRPS:                  dynamicconfig.ScheduleInvariantsScannerVisibilityRPS.Get(dc),
 		},
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -80,8 +81,6 @@ type (
 		ScheduleInvariantsScannerStuckOpenEnabled               dynamicconfig.BoolPropertyFn
 		ScheduleInvariantsScannerUnknownStateEnabled            dynamicconfig.BoolPropertyFn
 		ScheduleInvariantsScannerOverdueNextActionTimeTolerance dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerStuckOpenBuffer                dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerNamespaceListPageSize          dynamicconfig.IntPropertyFn
 		ScheduleInvariantsScannerVisibilityRPS                  dynamicconfig.FloatPropertyFn
 	}
 
@@ -233,11 +232,11 @@ func (s *Scanner) Start() error {
 			s.context.metadataManager,
 			s.context.visibilityManager,
 			s.context.namespaceRegistry,
+			s.context.sdkClientFactory,
 			s.context.currentClusterName,
-			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
-			s.context.cfg.ScheduleInvariantsScannerStuckOpenBuffer,
-			s.context.cfg.ScheduleInvariantsScannerNamespaceListPageSize,
+			clock.NewRealTimeSource(),
 			s.context.cfg.ScheduleInvariantsScannerVisibilityRPS,
+			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
 		)
 
 		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {

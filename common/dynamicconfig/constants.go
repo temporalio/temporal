@@ -629,17 +629,6 @@ backfilled on legacy schedules.`,
 		`ScheduleInvariantsScannerOverdueNextActionTimeTolerance is how far in the past
 TemporalScheduleNextActionTime must be before the schedule is flagged.`,
 	)
-	ScheduleInvariantsScannerStuckOpenBuffer = NewGlobalDurationSetting(
-		"worker.scheduleInvariantsScannerStuckOpenBuffer",
-		14*24*time.Hour,
-		`ScheduleInvariantsScannerStuckOpenBuffer is the minimum age of CloseTime before a completed
-schedule is flagged as stuck open.`,
-	)
-	ScheduleInvariantsScannerNamespaceListPageSize = NewGlobalIntSetting(
-		"worker.scheduleInvariantsScannerNamespaceListPageSize",
-		100,
-		`ScheduleInvariantsScannerNamespaceListPageSize controls pagination of ListNamespaces.`,
-	)
 	ScheduleInvariantsScannerVisibilityRPS = NewGlobalFloatSetting(
 		"worker.scheduleInvariantsScannerVisibilityRPS",
 		1.0,

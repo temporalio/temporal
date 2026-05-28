@@ -183,10 +183,10 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
-					MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentActivityExecutionSize:                    dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskExecutionSize:                dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentActivityTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
 					HistoryScannerEnabled:                                 dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
 					BuildIdScavengerEnabled:                               dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
 					ExecutionsScannerEnabled:                              dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
@@ -266,10 +266,10 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	scanner := New(
 		logger,
 		&Config{
-			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityExecutionSize:                    dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskExecutionSize:                dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
 			HistoryScannerEnabled:                                 dynamicconfig.GetBoolPropertyFn(true),
 			ExecutionsScannerEnabled:                              dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                               dynamicconfig.GetBoolPropertyFn(false),

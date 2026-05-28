@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -18,10 +20,24 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
 )
 
 // totalNamespaceTag is the value used on the cluster-wide aggregate metric emission.
 const totalNamespaceTag = "__total__"
+
+const (
+	// scanInterval is how often each scanner activity kicks off a fresh scan pass.
+	scanInterval = 15 * time.Minute
+	// heartbeatInterval is how often the background heartbeat goroutine pings the
+	// activity. It must be comfortably below the activity's HeartbeatTimeout.
+	heartbeatInterval = 10 * time.Second
+	// scheduleListPageSize controls pagination of ListChasmExecutions inside
+	// ScanOverdueNextActionTime. Each page is also one unit of rate-limited progress.
+	scheduleListPageSize      = 100
+	scheduleIdleTimeAndBuffer = 14 * 24 * time.Hour
+	namespaceListPageSize     = 100
+)
 
 // Activities holds shared dependencies for all three schedule-invariants scanner activities.
 type Activities struct {
@@ -30,12 +46,12 @@ type Activities struct {
 	metadataManager    persistence.MetadataManager
 	visibilityManager  manager.VisibilityManager
 	namespaceRegistry  namespace.Registry
+	sdkClientFactory   sdk.ClientFactory
 	currentClusterName string
+	timeSource         clock.TimeSource
 
-	overdueTolerance      dynamicconfig.DurationPropertyFn
-	stuckOpenBuffer       dynamicconfig.DurationPropertyFn
-	namespaceListPageSize dynamicconfig.IntPropertyFn
-	visibilityRPS         dynamicconfig.FloatPropertyFn
+	overdueTolerance dynamicconfig.DurationPropertyFn
+	rateLimiter      quotas.RateLimiter
 }
 
 func NewActivities(
@@ -44,85 +60,179 @@ func NewActivities(
 	metadataManager persistence.MetadataManager,
 	visibilityManager manager.VisibilityManager,
 	namespaceRegistry namespace.Registry,
+	sdkClientFactory sdk.ClientFactory,
 	currentClusterName string,
-	overdueTolerance dynamicconfig.DurationPropertyFn,
-	stuckOpenBuffer dynamicconfig.DurationPropertyFn,
-	namespaceListPageSize dynamicconfig.IntPropertyFn,
+	timeSource clock.TimeSource,
 	visibilityRPS dynamicconfig.FloatPropertyFn,
+	overdueTolerance dynamicconfig.DurationPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:                logger,
-		metricsHandler:        metricsHandler.WithTags(metrics.OperationTag(metrics.ScheduleInvariantsScannerScope)),
-		metadataManager:       metadataManager,
-		visibilityManager:     visibilityManager,
-		namespaceRegistry:     namespaceRegistry,
-		currentClusterName:    currentClusterName,
-		overdueTolerance:      overdueTolerance,
-		stuckOpenBuffer:       stuckOpenBuffer,
-		namespaceListPageSize: namespaceListPageSize,
-		visibilityRPS:         visibilityRPS,
+		logger:             logger,
+		metricsHandler:     metricsHandler.WithTags(metrics.OperationTag(metrics.ScheduleInvariantsScannerScope)),
+		metadataManager:    metadataManager,
+		visibilityManager:  visibilityManager,
+		namespaceRegistry:  namespaceRegistry,
+		sdkClientFactory:   sdkClientFactory,
+		currentClusterName: currentClusterName,
+		timeSource:         timeSource,
+		overdueTolerance:   overdueTolerance,
+		rateLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(visibilityRPS)),
 	}
 }
 
-type heartbeatDetails struct {
-	NamespaceNextPageToken []byte
-}
-
-// ScanOverdueNextActionTime flags schedules whose TemporalScheduleNextActionTime is in the
-// past beyond the configured tolerance. Schedules with BUFFER_ONE / BUFFER_ALL overlap
-// policy whose prior workflow is still running may show up as false positives; the
-// tolerance buffer is the primary defense against that until per-candidate DescribeSchedule
-// filtering or a new overlap-policy search attribute is added.
+// ScanOverdueNextActionTime is a long-running activity that periodically lists
+// schedules whose TemporalScheduleNextActionTime is in the past beyond the configured
+// tolerance, calls DescribeSchedule on each candidate, and filters out schedules that
+// are paused or legitimately blocked from firing by a BUFFER_ONE / BUFFER_ALL overlap
+// policy with a prior workflow still running. Whatever remains is counted as an
+// anomaly per namespace and logged for triage.
 func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
-	threshold := time.Now().Add(-a.overdueTolerance()).UTC().Format(time.RFC3339Nano)
-	query := fmt.Sprintf(
-		`TemporalScheduleNextActionTime < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
-		threshold,
-	)
-	return a.scan(ctx, "overdue_next_action_time", query, metrics.ScheduleInvariantsScannerOverdueNextActionTimeCount.Name())
+	return a.runForever(ctx, func(scanCtx context.Context) error {
+		threshold := a.timeSource.Now().UTC().Add(-a.overdueTolerance()).Format(time.RFC3339Nano)
+		query := fmt.Sprintf(
+			`TemporalScheduleNextActionTime < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
+			threshold,
+		)
+		return a.runOverdueScan(scanCtx, query)
+	})
 }
 
-// ScanStuckOpen flags schedules with ExecutionStatus=Completed and CloseTime older than
-// the configured buffer.
+// ScanStuckOpen is a long-running activity that periodically scans for schedules with
+// ExecutionStatus=Completed and CloseTime older than the configured buffer.
 func (a *Activities) ScanStuckOpen(ctx context.Context) error {
-	threshold := time.Now().Add(-a.stuckOpenBuffer()).UTC().Format(time.RFC3339Nano)
-	query := fmt.Sprintf(`ExecutionStatus = "Completed" AND CloseTime < "%s"`, threshold)
-	return a.scan(ctx, "stuck_open", query, metrics.ScheduleInvariantsScannerStuckOpenCount.Name())
+	return a.runForever(ctx, func(scanCtx context.Context) error {
+		threshold := a.timeSource.Now().UTC().Add(-14 * scheduleIdleTimeAndBuffer).Format(time.RFC3339Nano)
+		query := fmt.Sprintf(`ExecutionStatus = "Completed" AND CloseTime < "%s"`, threshold)
+		return a.runScan(scanCtx, "stuck_open", query, metrics.ScheduleInvariantsScannerStuckOpenCount.Name())
+	})
 }
 
-// ScanUnknownState flags running, unpaused schedules that have no
-// TemporalScheduleNextActionTime set.
+// ScanUnknownState is a long-running activity that periodically scans for running,
+// unpaused schedules with no TemporalScheduleNextActionTime set.
 func (a *Activities) ScanUnknownState(ctx context.Context) error {
-	query := `TemporalScheduleNextActionTime IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`
-	return a.scan(ctx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
+	return a.runForever(ctx, func(scanCtx context.Context) error {
+		query := `TemporalScheduleNextActionTime IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`
+		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
+	})
 }
 
-// scan walks every active namespace in this cluster, issues one CountChasmExecutions
-// per namespace scoped to the Scheduler archetype, and emits per-namespace + cluster
-// aggregate counter metrics. The visibility call is rate-limited.
-func (a *Activities) scan(ctx context.Context, subScanner, query, metricName string) error {
-	var heartbeat heartbeatDetails
-	if activity.HasHeartbeatDetails(ctx) {
-		if err := activity.GetHeartbeatDetails(ctx, &heartbeat); err != nil {
-			return temporal.NewNonRetryableApplicationError(
-				"failed to load previous heartbeat details", "TypeError", err)
+// runForever runs scanFn immediately, then again on every tick of scanInterval, until
+// the activity context is canceled or scanFn returns an error. A background goroutine
+// emits heartbeats so the parent activity stays alive between scans. All timing flows
+// through the injected TimeSource so tests can drive the loop deterministically.
+func (a *Activities) runForever(ctx context.Context, scanFn func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go a.heartbeatLoop(ctx)
+
+	if err := scanFn(ctx); err != nil {
+		return err
+	}
+
+	ch, timer := a.timeSource.NewTimer(scanInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ch:
+			if err := scanFn(ctx); err != nil {
+				return err
+			}
+			timer.Reset(scanInterval)
 		}
 	}
+}
 
-	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(a.visibilityRPS))
-	pageSize := a.namespaceListPageSize()
+func (a *Activities) heartbeatLoop(ctx context.Context) {
+	ch, timer := a.timeSource.NewTimer(heartbeatInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+			activity.RecordHeartbeat(ctx)
+			timer.Reset(heartbeatInterval)
+		}
+	}
+}
+
+// runScan ties the per-scanner pieces together: list namespaces, fan out a single
+// visibility query per namespace, accumulate the total, and emit metrics.
+// Used by the count-only scanners (StuckOpen, UnknownState).
+func (a *Activities) runScan(ctx context.Context, subScanner, query, metricName string) error {
+	namespaces, err := a.ListAllNamespaces(ctx)
+	if err != nil {
+		return err
+	}
+
 	var total int64
+	for _, nsName := range namespaces {
+		err := a.forEachNamespace(ctx, nsName, query, func(count int64) {
+			a.emitCount(metricName, nsName, count)
+			total += count
+		})
+		if err != nil {
+			a.recordScanError(nsName, subScanner, err)
+			continue
+		}
+	}
+	a.emitCount(metricName, totalNamespaceTag, total)
+	return nil
+}
 
+// runOverdueScan lists individual matching schedules per namespace, calls
+// DescribeSchedule on each, and filters out schedules that are paused or
+// expected to not be able to fire (BUFFER_ONE / BUFFER_ALL waiting on a prior
+// running workflow). What remains is counted as an anomaly.
+func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
+	const subScanner = "overdue_next_action_time"
+	metricName := metrics.ScheduleInvariantsScannerOverdueNextActionTimeCount.Name()
+
+	namespaces, err := a.ListAllNamespaces(ctx)
+	if err != nil {
+		return err
+	}
+
+	var total int64
+	for _, nsName := range namespaces {
+		var nsAnomalies int64
+		err := a.forEachScheduleInNamespace(ctx, nsName, query, func(scheduleID string) {
+			if a.scheduleIsExpectedNotToFire(ctx, nsName, scheduleID) {
+				return
+			}
+			nsAnomalies++
+			a.logger.Warn("schedule-invariants - the schedule was expected to fire but doesn't appear to have done so",
+				tag.WorkflowNamespace(nsName),
+				tag.ScheduleID(scheduleID))
+		})
+		if err != nil {
+			a.recordScanError(nsName, subScanner, err)
+			continue
+		}
+		a.emitCount(metricName, nsName, nsAnomalies)
+		total += nsAnomalies
+	}
+	a.emitCount(metricName, totalNamespaceTag, total)
+	return nil
+}
+
+// ListAllNamespaces returns the names of every namespace that exists in the cluster
+// metadata store and is active in the current cluster. Pagination is handled internally.
+func (a *Activities) ListAllNamespaces(ctx context.Context) ([]string, error) {
+	var names []string
+	var pageToken []byte
 	for {
 		nsResp, err := a.metadataManager.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
-			PageSize:       pageSize,
-			NextPageToken:  heartbeat.NamespaceNextPageToken,
+			PageSize:       namespaceListPageSize,
+			NextPageToken:  pageToken,
 			IncludeDeleted: false,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-
 		for _, ns := range nsResp.Namespaces {
 			nsEntry, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(ns.Namespace.Info.Id))
 			if err != nil {
@@ -135,51 +245,124 @@ func (a *Activities) scan(ctx context.Context, subScanner, query, metricName str
 			if !nsEntry.ActiveInCluster(a.currentClusterName) {
 				continue
 			}
-
-			count, err := a.countWithLimit(ctx, rateLimiter, nsEntry, query)
-			if err != nil {
-				a.recordScanError(nsEntry, subScanner, err)
-				continue
-			}
-			a.emitCount(metricName, nsEntry.Name().String(), count)
-			total += count
-
-			activity.RecordHeartbeat(ctx, heartbeat)
+			names = append(names, nsEntry.Name().String())
 		}
-
-		heartbeat.NamespaceNextPageToken = nsResp.NextPageToken
-		if len(heartbeat.NamespaceNextPageToken) == 0 {
+		pageToken = nsResp.NextPageToken
+		if len(pageToken) == 0 {
 			break
 		}
-		activity.RecordHeartbeat(ctx, heartbeat)
 	}
-
-	a.emitCount(metricName, totalNamespaceTag, total)
-	return nil
+	return names, nil
 }
 
-func (a *Activities) countWithLimit(
+// forEachNamespace runs `query` against one namespace (scoped to the Scheduler archetype)
+// and passes the resulting count to resultsFilter. Rate-limited by the shared limiter.
+// Intended to be called once per namespace returned by ListAllNamespaces.
+//
+// Note: the parameter is named `nsName` rather than `namespace` to avoid shadowing the
+// imported `namespace` package used internally.
+func (a *Activities) forEachNamespace(
 	ctx context.Context,
-	rateLimiter quotas.RateLimiter,
-	ns *namespace.Namespace,
+	nsName string,
 	query string,
-) (int64, error) {
-	if err := rateLimiter.Wait(ctx); err != nil {
+	resultsFilter func(count int64),
+) error {
+	if err := a.rateLimiter.Wait(ctx); err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
-			return 0, context.DeadlineExceeded
+			return context.DeadlineExceeded
 		}
-		return 0, err
+		return err
+	}
+	nsID, err := a.namespaceRegistry.GetNamespaceID(namespace.Name(nsName))
+	if err != nil {
+		return err
 	}
 	resp, err := a.visibilityManager.CountChasmExecutions(ctx, &visibilityservice.CountChasmExecutionsRequest{
 		ArchetypeId: chasm.SchedulerArchetypeID,
-		NamespaceId: ns.ID().String(),
-		Namespace:   ns.Name().String(),
+		NamespaceId: nsID.String(),
+		Namespace:   nsName,
 		Query:       query,
 	})
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return resp.GetCount(), nil
+	resultsFilter(resp.GetCount())
+	return nil
+}
+
+// forEachScheduleInNamespace paginates ListChasmExecutions for the given namespace
+// (scoped to the Scheduler archetype) and invokes visit for every schedule entity in
+// the result. The rate limiter is consumed per page.
+func (a *Activities) forEachScheduleInNamespace(
+	ctx context.Context,
+	nsName string,
+	query string,
+	visit func(scheduleID string),
+) error {
+	nsID, err := a.namespaceRegistry.GetNamespaceID(namespace.Name(nsName))
+	if err != nil {
+		return err
+	}
+
+	var pageToken []byte
+	for {
+		if err := a.rateLimiter.Wait(ctx); err != nil {
+			if common.IsContextDeadlineExceededErr(err) {
+				return context.DeadlineExceeded
+			}
+			return err
+		}
+		resp, err := a.visibilityManager.ListChasmExecutions(ctx, &visibilityservice.ListChasmExecutionsRequest{
+			ArchetypeId:   chasm.SchedulerArchetypeID,
+			NamespaceId:   nsID.String(),
+			Namespace:     nsName,
+			Query:         query,
+			PageSize:      scheduleListPageSize,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return err
+		}
+		for _, exec := range resp.GetExecutions() {
+			visit(exec.GetBusinessId())
+		}
+		pageToken = resp.GetNextPageToken()
+		if len(pageToken) == 0 {
+			return nil
+		}
+	}
+}
+
+// scheduleIsExpectedNotToFire returns true when a schedule flagged as "overdue" in
+// visibility is actually in a state that legitimately explains the stale NextActionTime:
+// either the schedule is paused, or it's holding under BUFFER_ONE / BUFFER_ALL with a
+// prior workflow still running. On any DescribeSchedule error we conservatively return
+// false so the schedule still gets counted (better a false alert than a silent miss).
+func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, scheduleID string) bool {
+	if err := a.rateLimiter.Wait(ctx); err != nil {
+		a.logger.Warn("rate-limiter wait failed during DescribeSchedule; counting schedule as anomaly",
+			tag.WorkflowNamespace(nsName), tag.NewStringTag("schedule_id", scheduleID), tag.Error(err))
+		return false
+	}
+	desc, err := a.sdkClientFactory.GetSystemClient().WorkflowService().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: scheduleID,
+	})
+	if err != nil {
+		a.logger.Warn("DescribeSchedule failed; counting schedule as anomaly",
+			tag.WorkflowNamespace(nsName), tag.NewStringTag("schedule_id", scheduleID), tag.Error(err))
+		return false
+	}
+
+	if desc.GetSchedule().GetState().GetPaused() {
+		return true
+	}
+	overlap := desc.GetSchedule().GetPolicies().GetOverlapPolicy()
+	if (overlap == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE || overlap == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL) &&
+		len(desc.GetInfo().GetRunningWorkflows()) > 0 {
+		return true
+	}
+	return false
 }
 
 func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64) {
@@ -192,13 +375,13 @@ func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64
 		Record(count)
 }
 
-func (a *Activities) recordScanError(ns *namespace.Namespace, subScanner string, err error) {
+func (a *Activities) recordScanError(nsName, subScanner string, err error) {
 	a.logger.Warn("schedule-invariants scan failed for namespace",
-		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowNamespace(nsName),
 		tag.NewStringTag("sub_scanner", subScanner),
 		tag.Error(err))
 	metrics.ScheduleInvariantsScannerErrorCount.With(a.metricsHandler.WithTags(
-		metrics.NamespaceTag(ns.Name().String()),
+		metrics.NamespaceTag(nsName),
 		metrics.StringTag("sub_scanner", subScanner),
 	)).Record(1)
 }
