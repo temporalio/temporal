@@ -35,8 +35,8 @@ import (
 // target workflow. It is used by TestBothWorkflowsVisibleAfterSWSFromWorkflow to verify
 // end-to-end SDK serialization against the real server.
 func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest) (string, error) {
-	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.WorkflowService.ServiceName)
-	fut := nc.ExecuteOperation(ctx, workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution,
+	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
+	fut := nc.ExecuteOperation(ctx, workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution,
 		req,
 		workflow.NexusOperationOptions{})
 	var result workflowservice.SignalWithStartWorkflowExecutionResponse
