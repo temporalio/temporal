@@ -1,0 +1,54 @@
+name: Claude review for opted-in team PRs
+
+on:
+  pull_request:
+    types: [opened]
+
+env:
+  # Space- or newline-separated list of temporalio team slugs whose
+  # members' PRs should receive an automated Claude review.
+  REVIEW_TEAMS: |
+    nexus
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  check-membership:
+    runs-on: ubuntu-latest
+    outputs:
+      is_member: ${{ steps.check.outputs.is_member }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.TEAM_READ_TOKEN }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -e
+          is_member=false
+          for team in $REVIEW_TEAMS; do
+            status=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/orgs/temporalio/teams/${team}/memberships/${AUTHOR}" \
+              --jq '.state' 2>/dev/null || echo "none")
+            if [ "$status" = "active" ]; then
+              echo "${AUTHOR} is an active member of temporalio/${team}"
+              is_member=true
+              break
+            fi
+          done
+          echo "is_member=${is_member}" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: check-membership
+    if: needs.check-membership.outputs.is_member == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          mode: review
