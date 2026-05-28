@@ -2,6 +2,7 @@ package testcontext
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 )
 
 const defaultTimeout = 90 * time.Second
+const defaultMaxTestTimeout = 2 * time.Minute
 
 type contextStore struct {
 	sync.Mutex
@@ -79,11 +81,15 @@ func WithContextDecorator[K comparable](key K, decorator func(context.Context) c
 }
 
 type contextState struct {
-	mu         sync.Mutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-	timeout    time.Duration
-	decorators map[any]struct{}
+	mu                      sync.Mutex
+	ctx                     context.Context
+	cancels                 []context.CancelFunc
+	testStart               time.Time
+	originalTimeout         time.Duration
+	decorators              map[any]struct{}
+	orderedDecorators       []contextDecorator
+	extensionCapHit         bool
+	extensionRequestedTotal time.Duration
 }
 
 func getContextState(tb testing.TB, timeout time.Duration) *contextState {
@@ -96,25 +102,77 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		return st
 	}
 
-	ctx, cancel := context.WithTimeout(tb.Context(), timeout)
+	testStart := time.Now()
+	ctx, cancel := context.WithDeadline(tb.Context(), testStart.Add(timeout))
 	st := &contextState{
-		ctx:        ctx,
-		cancel:     cancel,
-		timeout:    timeout,
-		decorators: make(map[any]struct{}),
+		ctx:             ctx,
+		cancels:         []context.CancelFunc{cancel},
+		testStart:       testStart,
+		originalTimeout: timeout,
+		decorators:      make(map[any]struct{}),
 	}
 	testContexts.byTest[tb] = st
 
 	tb.Cleanup(func() {
+		err := st.err()
 		st.cancel()
 		testContexts.Lock()
 		delete(testContexts.byTest, tb)
 		testContexts.Unlock()
-		if st.err() == context.DeadlineExceeded {
-			tb.Errorf("Test exceeded timeout of %v", st.timeout)
+		if err == context.DeadlineExceeded {
+			tb.Errorf("%s", st.timeoutExceededMessage())
 		}
 	})
 	return st
+}
+
+// Extend extends the test-scoped context's deadline by d, capped so the total
+// test timeout never exceeds max(maxTestTimeout, configuredTimeout). It returns
+// the new deadline and the amount actually granted. If tb has no test context
+// created by this package, Extend is a no-op.
+//
+// Existing context values returned by earlier calls to New keep their original
+// deadline; call New again after Extend to observe the extended deadline.
+func Extend(tb testing.TB, d time.Duration) (newDeadline time.Time, granted time.Duration) {
+	tb.Helper()
+	if d <= 0 {
+		return time.Time{}, 0
+	}
+
+	testContexts.Lock()
+	st, ok := testContexts.byTest[tb]
+	testContexts.Unlock()
+	if !ok {
+		return time.Time{}, 0
+	}
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	currentDeadline, ok := st.ctx.Deadline()
+	if !ok {
+		return time.Time{}, 0
+	}
+
+	st.extensionRequestedTotal += d
+	target := currentDeadline.Add(d)
+	capDeadline := st.testStart.Add(max(maxTestTimeout(), st.originalTimeout))
+	if capDeadline.Before(target) {
+		target = capDeadline
+		st.extensionCapHit = true
+	}
+	granted = target.Sub(currentDeadline)
+	if granted <= 0 {
+		return currentDeadline, 0
+	}
+
+	ctx, cancel := context.WithDeadline(tb.Context(), target)
+	for _, decorator := range st.orderedDecorators {
+		ctx = decorator.decorate(ctx)
+	}
+	st.ctx = ctx
+	st.cancels = append(st.cancels, cancel)
+	return target, granted
 }
 
 func (s *contextState) configure(tb testing.TB, cfg config) {
@@ -123,8 +181,8 @@ func (s *contextState) configure(tb testing.TB, cfg config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if cfg.timeoutSet && cfg.timeout != s.timeout {
-		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.timeout, cfg.timeout)
+	if cfg.timeoutSet && cfg.timeout != s.originalTimeout {
+		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.originalTimeout, cfg.timeout)
 	}
 
 	// Decorators may be registered by independent helpers, so apply each keyed
@@ -141,6 +199,7 @@ func (s *contextState) configure(tb testing.TB, cfg config) {
 		}
 		s.ctx = decorator.decorate(s.ctx)
 		s.decorators[decorator.key] = struct{}{}
+		s.orderedDecorators = append(s.orderedDecorators, decorator)
 	}
 }
 
@@ -154,6 +213,44 @@ func (s *contextState) err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ctx.Err()
+}
+
+func (s *contextState) cancel() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.cancels) - 1; i >= 0; i-- {
+		s.cancels[i]()
+	}
+}
+
+func (s *contextState) timeoutExceededMessage() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.timeoutExtended() {
+		return fmt.Sprintf("Test exceeded timeout of %v", s.originalTimeout)
+	}
+	if s.extensionCapHit {
+		return fmt.Sprintf(
+			"Test exceeded %v cap (originally %v, extensions requested total %v)",
+			maxTestTimeout(),
+			s.originalTimeout,
+			s.extensionRequestedTotal,
+		)
+	}
+	return fmt.Sprintf("Test exceeded extended timeout of %v (originally %v)", s.currentTimeout(), s.originalTimeout)
+}
+
+func (s *contextState) timeoutExtended() bool {
+	return s.currentTimeout() > s.originalTimeout
+}
+
+func (s *contextState) currentTimeout() time.Duration {
+	deadline, ok := s.ctx.Deadline()
+	if !ok {
+		return s.originalTimeout
+	}
+	return deadline.Sub(s.testStart)
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
@@ -176,4 +273,8 @@ func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
 
 	// 3. Default 90 seconds.
 	return defaultTimeout
+}
+
+func maxTestTimeout() time.Duration {
+	return defaultMaxTestTimeout * debug.TimeoutMultiplier
 }
