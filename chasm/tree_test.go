@@ -2128,11 +2128,11 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 		{
 			name: "StructWithProtoField",
 			task: &TestPureTask{
-				Payload: payload,
+				Data: payload.Data,
 			},
 			expectedData: expectedBlob.GetData(),
 			equalFn: func(t1, t2 any) {
-				protorequire.ProtoEqual(s.T(), t1.(*TestPureTask).Payload, t2.(*TestPureTask).Payload)
+				protorequire.ProtoEqual(s.T(), t1.(*TestPureTask), t2.(*TestPureTask))
 			},
 		},
 	}
@@ -2330,6 +2330,95 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+}
+
+func (s *nodeSuite) TestCloseTransaction_CleanupTasksAfterInvalidTask() {
+	now := s.timeSource.Now().UTC()
+
+	task1Attributes := TaskAttributes{}
+	task1 := &TestPureTask{
+		Data: []byte("some-random-data"),
+	}
+	task2 := &TestPureTask{
+		Data: []byte("more-random-data"),
+	}
+	task1Blob, err := encodeChasmBlob(task1)
+	s.NoError(err)
+	task2Blob, err := encodeChasmBlob(task2)
+	s.NoError(err)
+
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								Data:                      task1Blob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(1 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								Data:                      task2Blob,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+	s.NotNil(root)
+
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(task1Attributes), gomock.Eq(task1)).
+		Return(false, nil).
+		Times(1)
+	executed, err := root.ExecutePureTask(s.T().Context(), task1Attributes, task1)
+	s.NoError(err)
+	s.False(executed)
+	s.Equal(valueStateSynced, root.valueState)
+
+	nextTransitionCount := int64(1)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), protoEq(task1)).
+		Return(false, nil).
+		Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), protoEq(task2)).
+		Return(true, nil).
+		Times(1)
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.Equal(now.Add(1*time.Minute), s.nodeBackend.LastDeletePureTaskCall())
+
+	s.Len(mutation.UpdatedNodes, 1)
+	for _, updatedNode := range mutation.UpdatedNodes {
+		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount)
+	}
+	s.Empty(mutation.DeletedNodes)
+
+	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+	s.Len(componentAttr.PureTasks, 1)
+	s.Equal(testPureTaskTypeID, componentAttr.PureTasks[0].GetTypeId())
+	s.ProtoEqual(task2Blob, componentAttr.PureTasks[0].GetData())
+	s.Equal(1, s.nodeBackend.NumTasksAdded()) // physical task is generated for the second pure task
 }
 
 func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
@@ -2719,9 +2808,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
-				Data: []byte("valid-pure-task"),
-			},
+			Data: []byte("valid-pure-task"),
 		},
 	)
 
@@ -2733,9 +2820,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
-				Data: []byte("invalid-pure-task"),
-			},
+			Data: []byte("invalid-pure-task"),
 		},
 	)
 
@@ -3141,7 +3226,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		testComponent,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+			Data: []byte("root-task-payload"),
 		},
 	)
 
@@ -3151,7 +3236,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		sc1,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("sc1-task-payload")},
+			Data: []byte("sc1-task-payload"),
 		},
 	)
 
@@ -3319,11 +3404,11 @@ func (s *nodeSuite) TestEachPureTask() {
 		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
-		processedTaskData = append(processedTaskData, testPureTask.Payload.Data)
+		processedTaskData = append(processedTaskData, testPureTask.Data)
 
 		// When processing root component task, delete SubComponent2 to verify its task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Data,
 			[]byte("some-random-data-root"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -3335,7 +3420,7 @@ func (s *nodeSuite) TestEachPureTask() {
 
 		// When processing task for SubComponent11, delete its parent SubComponent1 so that the remaining task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Data,
 			[]byte("some-random-data-sc11-2"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -3372,9 +3457,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
-			Data: []byte("some-random-data"),
-		},
+		Data: []byte("some-random-data"),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -3394,7 +3477,9 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	expectValidate := func(retValue bool, errValue error) {
 		s.testLibrary.mockPureTaskHandler.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).
+			Return(retValue, errValue).
+			Times(1)
 	}
 
 	// Succeed task execution and validation (happy case).
@@ -3422,7 +3507,8 @@ func (s *nodeSuite) TestExecutePureTask() {
 	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.False(executed)
-	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
+	s.Equal(valueStateSynced, root.valueState)
+	s.True(root.isActiveStateDirty)
 
 	// Error during task validation (no execution occurs).
 	root.setValueState(valueStateSynced)
@@ -3435,9 +3521,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 func (s *nodeSuite) TestValidatePureTask() {
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
-			Data: []byte("some-random-data"),
-		},
+		Data: []byte("some-random-data"),
 	}
 
 	root := s.testComponentTree()
@@ -3945,4 +4029,23 @@ func (s *nodeSuite) emptyDataBlob() *commonpb.DataBlob {
 	blob, err := encodeChasmBlob(nil)
 	s.NoError(err)
 	return blob
+}
+
+type protoMatcher struct {
+	x proto.Message
+}
+
+func (e protoMatcher) Matches(x any) bool {
+	if xx, ok := x.(proto.Message); ok {
+		return proto.Equal(e.x, xx)
+	}
+	return false
+}
+
+func (e protoMatcher) String() string {
+	return fmt.Sprintf("is proto equal to %s (%T)", e.x, e.x)
+}
+
+func protoEq(x proto.Message) gomock.Matcher {
+	return protoMatcher{x: x}
 }

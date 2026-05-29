@@ -69,10 +69,13 @@ func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInj
 
 // generate returns a fault from the first injector that chooses to inject one.
 // When this method returns nil, the persistence layer uses the real implementation.
-func (d *storeFaultInjector) generate(methodName string) *fault {
+func (d *storeFaultInjector) generate(methodName string, requests ...any) *fault {
 	target := config.FaultInjectionTarget{
 		Store:  d.storeName,
 		Method: methodName,
+	}
+	if len(requests) > 0 {
+		target.Request = requests[0]
 	}
 	for _, injector := range d.injectors {
 		if f := injector(target); f != nil {
