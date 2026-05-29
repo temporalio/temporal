@@ -17,6 +17,9 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -274,6 +277,50 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
 	require.NoError(t, err)
+}
+
+func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	infra := setupTestInfra(t, newRealSpecProcessor(ctrl, testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)))
+	ctx := chasm.NewMutableContext(context.Background(), infra.node)
+
+	req := &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: namespaceID,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState: &schedulerpb.SchedulerState{
+				Schedule:      defaultSchedule(),
+				Info:          &schedulepb.ScheduleInfo{},
+				Namespace:     namespace,
+				NamespaceId:   namespaceID,
+				ScheduleId:    scheduleID,
+				ConflictToken: 1,
+			},
+			GeneratorState: &schedulerpb.GeneratorState{
+				LastProcessedTime: timestamppb.New(time.Now().Add(-time.Hour)),
+			},
+			InvokerState: &schedulerpb.InvokerState{},
+		},
+	}
+
+	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
+	require.NoError(t, err)
+	require.NoError(t, infra.node.SetRootComponent(sched))
+	_, err = infra.node.CloseTransaction()
+	require.NoError(t, err)
+
+	hasGeneratorTask := false
+outer:
+	for _, taskList := range infra.nodeBackend.TasksByCategory {
+		for _, task := range taskList {
+			chasmTask, ok := task.(*tasks.ChasmTask)
+			if ok && chasmTask.GetVisibilityTime().Equal(chasm.TaskScheduledTimeImmediate) {
+				hasGeneratorTask = true
+				break outer
+			}
+		}
+	}
+	require.True(t, hasGeneratorTask,
+		"expected an immediate GeneratorTask after migration with no running workflows")
 }
 
 func TestContextMetadata(t *testing.T) {

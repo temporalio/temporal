@@ -20,11 +20,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -1836,4 +1838,83 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	// under SKIP overlap policy.
 	require.Equal(t, int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
 		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
+}
+
+func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
+	// Use a very short idle time so the schedule closes quickly once the generator
+	// determines there's nothing to do (empty spec → no next wakeup time → idle).
+	shortIdleTime := 500 * time.Millisecond
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.IdleTime = shortIdleTime
+
+	env := testcore.NewEnv(
+		t,
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-no-running")
+	wid := testcore.RandomizeStr("sched-migrate-no-running-wf")
+	wt := testcore.RandomizeStr("sched-migrate-no-running-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	_, err := env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State: &schedulerpb.SchedulerMigrationState{
+				SchedulerState: &schedulerpb.SchedulerState{
+					Namespace:   nsName,
+					NamespaceId: nsID,
+					ScheduleId:  sid,
+					// Empty spec: the generator runs, finds no future actions,
+					// and schedules an idle task.
+					Schedule: &schedulepb.Schedule{
+						Spec: &schedulepb.ScheduleSpec{},
+						Action: &schedulepb.ScheduleAction{
+							Action: &schedulepb.ScheduleAction_StartWorkflow{
+								StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+									WorkflowId:   wid,
+									WorkflowType: &commonpb.WorkflowType{Name: wt},
+									TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+								},
+							},
+						},
+					},
+					Info:          &schedulepb.ScheduleInfo{},
+					ConflictToken: scheduler.InitialConflictToken,
+				},
+				GeneratorState: &schedulerpb.GeneratorState{
+					LastProcessedTime: timestamppb.Now(),
+				},
+				// No BufferedStarts: the common migration scenario — schedule was idle.
+				InvokerState: &schedulerpb.InvokerState{},
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	descReq := &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     nsID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+	}
+
+	// Confirm the schedule is live on the CHASM stack before polling for closure.
+	await.Require(testcore.NewContext(), t, func(t *await.T) {
+		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
+		require.NoError(t, err)
+	}, 6*time.Second, 100*time.Millisecond)
+
+	// If generator.Generate() was never called, the idle task is never scheduled
+	// and the schedule stays open indefinitely. Closing proves the generator ran.
+	var closedErr *serviceerror.FailedPrecondition
+	await.Require(testcore.NewContext(), t, func(t *await.T) {
+		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
+		require.ErrorAs(t, err, &closedErr)
+	}, 6*time.Second, 100*time.Millisecond)
 }

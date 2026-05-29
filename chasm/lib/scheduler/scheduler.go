@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -282,9 +283,13 @@ func CreateSchedulerFromMigration(
 	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
 	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
-	// Schedule a callbacks task to attach Nexus callbacks to any migrated
-	// running workflows. The task self-invalidates if there's no work to do.
-	ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
+	// state; if there are none, generate directly.
+	if slices.ContainsFunc(state.GetInvokerState().GetBufferedStarts(), needsCallback) {
+		ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	} else {
+		sched.Generator.Get(ctx).Generate(ctx)
+	}
 
 	return sched, nil
 }
