@@ -798,7 +798,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 	}
 	if a.isPaused() {
 		newReqID := req.GetFrontendRequest().GetRequestId()
-		existingReqID := a.PauseState.GetRequestId()
+		existingReqID := a.LastPauseState.GetRequestId()
 		if newReqID != "" && existingReqID == newReqID {
 			return &activitypb.PauseActivityExecutionResponse{}, nil
 		}
@@ -903,7 +903,7 @@ func (a *Activity) recordPauseState(
 	ctx chasm.MutableContext,
 	event pauseEvent,
 ) {
-	a.PauseState = &activitypb.ActivityPauseState{
+	a.LastPauseState = &activitypb.ActivityPauseState{
 		PauseTime: timestamppb.New(ctx.Now(a)),
 		Identity:  event.req.GetIdentity(),
 		Reason:    event.req.GetReason(),
@@ -994,11 +994,10 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		if frontendReq.GetResetHeartbeat() {
 			a.ResetHeartbeats = true
 		}
-		if !keepPaused {
-			// Clear PauseState now so the deferred reset can dispatch on retry without being
-			// blocked by the validator (which drops dispatch tasks when PauseState != nil).
-			a.PauseState = nil
-		}
+		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
+		// yields the activity lands back in PAUSED rather than SCHEDULED. Recorded as an explicit
+		// flag so no logic has to gate on the descriptive LastPauseState field.
+		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
 		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
 			req:          frontendReq,
 			scheduleTime: scheduleTime,
@@ -1098,11 +1097,10 @@ func (a *Activity) recordFailedAttempt(
 }
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible. When the activity has PauseState set (flag-based pause from STARTED),
-// the retry transitions to SCHEDULED normally but the dispatch task is blocked by the pause flag
-// until the activity is unpaused. If a reset request has been received then the retry transitions
+// if retry is not possible. If a reset request has been received then the retry transitions
 // through TransitionResetAttemptFailedToScheduled which applies the deferred reset (attempt count
-// goes back to 1).
+// goes back to 1), unless the reset was issued with keepPaused (ResetKeepPaused), in which case it
+// transitions through TransitionResetAttemptFailedToPaused and the activity stays paused.
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	overridingRetryInterval time.Duration,
@@ -1117,9 +1115,9 @@ func (a *Activity) tryReschedule(
 		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
 	}
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
-		// keepPaused=true on a paused activity preserves PauseState across the reset; yield must
-		// land in PAUSED rather than SCHEDULED so the activity stays paused until unpaused.
-		if a.PauseState != nil {
+		// keepPaused=true on a paused activity (ResetKeepPaused) requires the yield to land in
+		// PAUSED rather than SCHEDULED so the activity stays paused until unpaused.
+		if a.ResetKeepPaused {
 			return true, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
 		}
 		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
@@ -1226,7 +1224,7 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		ActivityPaused:  (a.PauseState != nil || a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED) && a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED || (a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED && a.ResetKeepPaused),
 		ActivityReset:   a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 	}, nil
 }

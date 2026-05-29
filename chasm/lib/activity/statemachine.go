@@ -189,7 +189,6 @@ var TransitionCompleted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			a.PauseState = nil
 			a.ResetHeartbeats = false
 
 			req := event.req.GetCompleteRequest()
@@ -228,7 +227,6 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
-			a.PauseState = nil
 			a.ResetHeartbeats = false
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
@@ -272,7 +270,6 @@ var TransitionTerminated = chasm.NewTransition(
 			a.TerminateState = &activitypb.ActivityTerminateState{
 				RequestId: event.request.RequestID,
 			}
-			a.PauseState = nil
 			a.ResetHeartbeats = false
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
@@ -348,7 +345,6 @@ var TransitionCanceled = chasm.NewTransition(
 					Failure: failure,
 				},
 			}
-			a.PauseState = nil
 			a.ResetHeartbeats = false
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
@@ -397,7 +393,6 @@ var TransitionTimedOut = chasm.NewTransition(
 				return err
 			}
 
-			a.PauseState = nil
 			a.ResetHeartbeats = false
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
@@ -510,9 +505,9 @@ var TransitionReset = chasm.NewTransition(
 )
 
 // TransitionResetRequested transitions a STARTED or PAUSE_REQUESTED activity to RESET_REQUESTED.
-// PAUSE_REQUESTED is allowed when the operator issues reset with keepPaused=true: PauseState is
-// preserved across the transition so the activity lands back in PAUSED (not SCHEDULED) when the
-// worker yields. The worker is still in charge of the activity; it will be notified via
+// PAUSE_REQUESTED is allowed when the operator issues reset with keepPaused=true: ResetKeepPaused is
+// set so the activity lands back in PAUSED (not SCHEDULED) when the worker yields. The worker is
+// still in charge of the activity; it will be notified via
 // ActivityReset=true on its next heartbeat response, its task token is not invalidated by this
 // transition, and there is no stamp bump since StartToCloseTimeoutTask and HeartbeatTimeoutTask
 // must stay valid.
@@ -528,7 +523,7 @@ var TransitionResetRequested = chasm.NewTransition(
 )
 
 // TransitionResetAttemptFailedToPaused transitions RESET_REQUESTED → PAUSED. It is performed
-// when the worker yields in RESET_REQUESTED with PauseState still set (i.e. reset was issued with
+// when the worker yields in RESET_REQUESTED with ResetKeepPaused set (i.e. reset was issued with
 // keepPaused=true while the activity was in PAUSE_REQUESTED). The failed attempt is recorded, the
 // attempt count is reset to 1, and no dispatch task is emitted — the activity stays paused until
 // an explicit unpause.
@@ -539,6 +534,7 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
+		a.ResetKeepPaused = false
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)
@@ -563,6 +559,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 
+		a.ResetKeepPaused = false
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)

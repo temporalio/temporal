@@ -270,12 +270,12 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name       string
-		status     activitypb.ActivityExecutionStatus
-		pauseState *activitypb.ActivityPauseState
-		wantPaused bool
-		wantReset  bool
-		wantCancel bool
+		name            string
+		status          activitypb.ActivityExecutionStatus
+		resetKeepPaused bool
+		wantPaused      bool
+		wantReset       bool
+		wantCancel      bool
 	}{
 		{
 			name:   "no pause or reset returns zero flags",
@@ -295,11 +295,13 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			wantPaused: true,
 		},
 		{
-			name:       "pause and reset both propagate",
-			status:     activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-			pauseState: &activitypb.ActivityPauseState{PauseTime: timestamppb.New(testTime)},
-			wantPaused: true,
-			wantReset:  true,
+			// A reset issued with keepPaused on a paused activity sets ResetKeepPaused; the worker
+			// must be told it is both paused and being reset.
+			name:            "reset with keep-paused propagates both paused and reset",
+			status:          activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			resetKeepPaused: true,
+			wantPaused:      true,
+			wantReset:       true,
 		},
 		{
 			name:       "cancel requested status propagates CancelRequested",
@@ -327,7 +329,7 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 				ActivityState: &activitypb.ActivityState{
 					Status:           tc.status,
 					HeartbeatTimeout: durationpb.New(0),
-					PauseState:       tc.pauseState,
+					ResetKeepPaused:  tc.resetKeepPaused,
 				},
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
 			}

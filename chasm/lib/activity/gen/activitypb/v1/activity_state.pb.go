@@ -222,12 +222,19 @@ type ActivityState struct {
 	// and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
 	// is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
 	ScheduleToCloseStamp int32 `protobuf:"varint,15,opt,name=schedule_to_close_stamp,json=scheduleToCloseStamp,proto3" json:"schedule_to_close_stamp,omitempty"`
-	// Set if the activity was paused.
-	PauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=pause_state,json=pauseState,proto3" json:"pause_state,omitempty"`
+	// The most recent pause request, if the activity has ever been paused. Like cancel_state and
+	// terminate_state this is never cleared; unlike them it may be non-current (the activity may have
+	// since been unpaused), hence the "last" prefix. No logic gates on this field — it is descriptive
+	// metadata only.
+	LastPauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=last_pause_state,json=lastPauseState,proto3" json:"last_pause_state,omitempty"`
 	// Set when reset was requested while the activity was STARTED and the operator asked for
 	// heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
 	// activity transitions out of RESET_REQUESTED.
 	ResetHeartbeats bool `protobuf:"varint,17,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
+	// Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
+	// that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
+	// when the activity transitions out of RESET_REQUESTED.
+	ResetKeepPaused bool `protobuf:"varint,18,opt,name=reset_keep_paused,json=resetKeepPaused,proto3" json:"reset_keep_paused,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -367,9 +374,9 @@ func (x *ActivityState) GetScheduleToCloseStamp() int32 {
 	return 0
 }
 
-func (x *ActivityState) GetPauseState() *ActivityPauseState {
+func (x *ActivityState) GetLastPauseState() *ActivityPauseState {
 	if x != nil {
-		return x.PauseState
+		return x.LastPauseState
 	}
 	return nil
 }
@@ -377,6 +384,13 @@ func (x *ActivityState) GetPauseState() *ActivityPauseState {
 func (x *ActivityState) GetResetHeartbeats() bool {
 	if x != nil {
 		return x.ResetHeartbeats
+	}
+	return false
+}
+
+func (x *ActivityState) GetResetKeepPaused() bool {
+	if x != nil {
+		return x.ResetKeepPaused
 	}
 	return false
 }
@@ -1048,7 +1062,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xb1\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xe6\n" +
 	"\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
@@ -1068,10 +1082,10 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\vstart_delay\x18\r \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"startDelay\x12T\n" +
 	"\x10original_options\x18\x0e \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0foriginalOptions\x125\n" +
-	"\x17schedule_to_close_stamp\x18\x0f \x01(\x05R\x14scheduleToCloseStamp\x12`\n" +
-	"\vpause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\n" +
-	"pauseState\x12)\n" +
-	"\x10reset_heartbeats\x18\x11 \x01(\bR\x0fresetHeartbeats\"\xa7\x01\n" +
+	"\x17schedule_to_close_stamp\x18\x0f \x01(\x05R\x14scheduleToCloseStamp\x12i\n" +
+	"\x10last_pause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\x0elastPauseState\x12)\n" +
+	"\x10reset_heartbeats\x18\x11 \x01(\bR\x0fresetHeartbeats\x12*\n" +
+	"\x11reset_keep_paused\x18\x12 \x01(\bR\x0fresetKeepPaused\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
@@ -1190,7 +1204,7 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	3,  // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityState.terminate_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
 	14, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_delay:type_name -> google.protobuf.Duration
 	18, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityState.original_options:type_name -> temporal.api.activity.v1.ActivityOptions
-	4,  // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityState.pause_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
+	4,  // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityState.last_pause_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
 	16, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
 	16, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState.pause_time:type_name -> google.protobuf.Timestamp
 	14, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration

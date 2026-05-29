@@ -7218,7 +7218,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetActivityPaused())
 
-		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
+		// Describe should show PAUSE_REQUESTED: a pause was requested while the worker was running.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -7313,7 +7313,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
+		// Describe should show PAUSE_REQUESTED: a pause was requested while the worker was running.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -8376,7 +8376,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// After unpause of a STARTED+PauseState activity, the status stays STARTED (the worker's
+		// After unpause of a PAUSE_REQUESTED activity, the status goes back to STARTED (the worker's
 		// token is still valid — no stamp bump). Verify via describe that the activity is no longer paused.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -9498,8 +9498,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 	})
 
 	t.Run("ScheduledWithPauseStateKeepPausedFalse", func(t *testing.T) {
-		// SCHEDULED status with non-nil PauseState (RunState=PAUSED), reset with keepPaused=false.
-		// Verify: PauseState is cleared, attempt count reset to 1, activity dispatches.
+		// PAUSED activity (SCHEDULED status), reset with keepPaused=false.
+		// Verify: attempt count reset to 1 and the activity dispatches (does not stay paused).
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -9513,11 +9513,11 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		failRetryable(ctx, t, pollResp1.TaskToken, 0)
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_SCHEDULED)
 
-		// Pause → PAUSED (SCHEDULED status + non-nil PauseState).
+		// Pause → PAUSED.
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
 
-		// Reset with keepPaused=false — should clear PauseState and dispatch at attempt 1.
+		// Reset with keepPaused=false — should dispatch at attempt 1 (not stay paused).
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -9544,8 +9544,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 	})
 
 	t.Run("StartedWithPauseStateKeepPausedFalse", func(t *testing.T) {
-		// STARTED status with non-nil PauseState (RunState=PAUSE_REQUESTED), reset with keepPaused=false.
-		// Reset is deferred; PauseState must be cleared eagerly so the next retry dispatches.
+		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=false.
+		// Reset is deferred; without ResetKeepPaused the next retry dispatches instead of pausing.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -9556,11 +9556,11 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.EqualValues(t, 1, pollResp1.Attempt)
 
-		// Pause while STARTED → PauseState set, status remains STARTED (PAUSE_REQUESTED).
+		// Pause while STARTED → status becomes PAUSE_REQUESTED (worker still running).
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=false — deferred; must also clear PauseState so dispatch isn't blocked.
+		// Reset with keepPaused=false — deferred; ResetKeepPaused stays false so dispatch isn't blocked.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -9591,8 +9591,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 	})
 
 	t.Run("StartedWithPauseStateKeepPausedTrue", func(t *testing.T) {
-		// STARTED status with non-nil PauseState (RunState=PAUSE_REQUESTED), reset with keepPaused=true.
-		// Reset is deferred; PauseState is preserved so after the retry the activity stays paused.
+		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=true.
+		// Reset is deferred; ResetKeepPaused is set so after the retry the activity stays paused.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -9607,7 +9607,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=true — deferred; PauseState should be preserved.
+		// Reset with keepPaused=true — deferred; ResetKeepPaused should be set.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,

@@ -122,13 +122,21 @@ message ActivityState {
   // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
   int32 schedule_to_close_stamp = 15;
 
-  // Set if the activity was paused.
-  ActivityPauseState pause_state = 16;
+  // The most recent pause request, if the activity has ever been paused. Like cancel_state and
+  // terminate_state this is never cleared; unlike them it may be non-current (the activity may have
+  // since been unpaused), hence the "last" prefix. No logic gates on this field — it is descriptive
+  // metadata only.
+  ActivityPauseState last_pause_state = 16;
 
   // Set when reset was requested while the activity was STARTED and the operator asked for
   // heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
   // activity transitions out of RESET_REQUESTED.
   bool reset_heartbeats = 17;
+
+  // Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
+  // that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
+  // when the activity transitions out of RESET_REQUESTED.
+  bool reset_keep_paused = 18;
 }
 
 message ActivityCancelState {
