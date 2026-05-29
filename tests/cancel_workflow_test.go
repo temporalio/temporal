@@ -54,7 +54,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	}
 
 	// cancellation to non exist workflow will lead to error
-	_, err := env.FrontendClient().RequestCancelWorkflowExecution(env.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err := env.FrontendClient().RequestCancelWorkflowExecution(s.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -63,7 +63,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, "workflow not found for ID: "+id)
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -88,7 +88,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	_, err = env.FrontendClient().RequestCancelWorkflowExecution(env.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err = env.FrontendClient().RequestCancelWorkflowExecution(s.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -97,7 +97,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RequestCancelWorkflowExecution(env.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err = env.FrontendClient().RequestCancelWorkflowExecution(s.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -150,7 +150,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -165,7 +165,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), externalRequest)
+	we2, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), externalRequest)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution on external namespace", tag.WorkflowNamespace(env.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
@@ -291,7 +291,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -306,7 +306,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), externalRequest)
+	we2, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), externalRequest)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution on external namespace", tag.WorkflowNamespace(env.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
@@ -428,7 +428,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -510,11 +510,11 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	_, err := env.FrontendClient().RequestCancelWorkflowExecution(env.Context(),
+	_, err := env.FrontendClient().RequestCancelWorkflowExecution(s.Context(),
 		&workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -654,7 +654,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		WorkflowId: id,
 	}))
 
-	_, err = env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
