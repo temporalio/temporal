@@ -21,10 +21,24 @@ type attemptFailure struct {
 }
 
 type timeoutReport struct {
-	effectiveTimeout time.Duration
-	attempts         int
-	attemptTimeouts  int
-	failures         []attemptFailure
+	attempts   int
+	failures   []attemptFailure
+	derivation timeoutDerivation
+}
+
+type timeoutDerivation struct {
+	cfgTotalTimeout   time.Duration
+	hasParentDeadline bool
+	parentRemaining   time.Duration
+	hasTestCap        bool
+	testCapHit        bool
+	testCapRemaining  time.Duration
+	effectiveTimeout  time.Duration
+	attempts          int
+	attemptTimeout    time.Duration
+	attemptTimeouts   int
+	minPollInterval   time.Duration
+	maxPollInterval   time.Duration
 }
 
 func (r *timeoutReport) nextPoll() {
@@ -38,7 +52,7 @@ func (r *timeoutReport) recordErrors(errors []string) {
 }
 
 func (r *timeoutReport) recordAttemptTimeout() {
-	r.attemptTimeouts++
+	r.derivation.attemptTimeouts++
 }
 
 func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
@@ -47,12 +61,42 @@ func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
 
 func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
 	r.reportAttemptErrors(tb)
-	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
+	derivation := r.derivation
+	derivation.attempts = r.attempts
+	detail := derivation.String()
+	message := fmt.Sprintf("condition not satisfied after %v", r.derivation.effectiveTimeout)
 	if timeoutMsg != "" {
-		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.effectiveTimeout)
+		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.derivation.effectiveTimeout)
 	}
-	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
-		funcName, message, r.attempts, r.attemptTimeouts)
+	tb.Fatalf("%s: %s\n%s", funcName, message, detail)
+}
+
+func (d timeoutDerivation) String() string {
+	var b strings.Builder
+	b.WriteString("details:")
+	fmt.Fprintf(&b, "\n  cfg.totalTimeout      = %v", d.cfgTotalTimeout)
+	if d.hasParentDeadline {
+		fmt.Fprintf(&b, "\n  parent ctx deadline   = +%v", d.parentRemaining.Round(time.Millisecond))
+	} else {
+		b.WriteString("\n  parent ctx deadline   = (none)")
+	}
+	if d.hasTestCap {
+		hit := "not hit"
+		if d.testCapHit {
+			hit = "HIT"
+		}
+		fmt.Fprintf(&b, "\n  test 2min cap         = +%v remaining (%s)", d.testCapRemaining.Round(time.Millisecond), hit)
+	}
+	fmt.Fprintf(&b, "\n  effective deadline    = %v from start", d.effectiveTimeout)
+	fmt.Fprintf(&b, "\n  attempts              = %d", d.attempts)
+	fmt.Fprintf(&b, "\n  per-attempt timeout   = %v", d.attemptTimeout)
+	fmt.Fprintf(&b, "\n  attempt timeouts      = %d", d.attemptTimeouts)
+	if d.minPollInterval == d.maxPollInterval {
+		fmt.Fprintf(&b, "\n  poll interval         = %v (fixed)", d.minPollInterval)
+	} else {
+		fmt.Fprintf(&b, "\n  poll interval         = %v -> %v (exp backoff)", d.minPollInterval, d.maxPollInterval)
+	}
+	return b.String()
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {

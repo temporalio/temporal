@@ -21,7 +21,7 @@ func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval tim
 		if !condition() {
 			t.Fail()
 		}
-	}, legacyConfig(timeout, pollInterval, ""), "RequireTrue", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, pollInterval, ""), "RequireTrue", requireTrueMisuseHint, false, true)
 }
 
 // RequireTruef is like [RequireTrue] but accepts a format string that is included
@@ -32,5 +32,17 @@ func RequireTruef(tb testing.TB, condition func() bool, timeout, pollInterval ti
 		if !condition() {
 			t.Fail()
 		}
-	}, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false, true)
+}
+
+// RequireTrue2 polls condition until it returns true. See [Require2] for options.
+// Use only for simple local predicates; for assertions use [Require2].
+func RequireTrue2(tb testing.TB, condition func() bool, opts ...Option) {
+	tb.Helper()
+	cfg := newConfig(opts)
+	run(testcontext.New(tb), tb, func(t *T) {
+		if !condition() {
+			t.Fail()
+		}
+	}, cfg, "RequireTrue2", requireTrueMisuseHint, false, true)
 }
