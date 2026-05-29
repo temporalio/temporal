@@ -6,8 +6,11 @@
 name: Claude review for opted-in team PRs
 
 on:
-  pull_request_target:
-    types: [opened, reopened, ready_for_review]
+  # Auto-trigger on PR open/reopen/ready is disabled while we validate the
+  # workflow end-to-end via workflow_dispatch. Re-enable once we've confirmed
+  # the membership check and review behave as expected on real PRs.
+  # pull_request_target:
+  #   types: [opened, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       pr_number:
