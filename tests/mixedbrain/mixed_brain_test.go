@@ -69,10 +69,12 @@ func TestMixedBrain(t *testing.T) {
 		return
 	}
 
-	persistence := devserver.PersistenceOptions{}
-	if driver := os.Getenv("PERSISTENCE_DRIVER"); driver != "" && driver != "sqlite" {
-		persistence.Driver = driver
+	persistenceDriver := os.Getenv("PERSISTENCE_DRIVER")
+	if persistenceDriver == "" {
+		persistenceDriver = "postgres12"
 	}
+	require.Contains(t, []string{"postgres12", "postgres12_pgx"}, persistenceDriver, "mixedbrain requires PostgreSQL because older release config templates do not support SQLite")
+	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
 
 	// Start the current-source server first so the release server can target
 	// its frontend in cluster metadata.
