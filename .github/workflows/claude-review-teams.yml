@@ -41,6 +41,10 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          # Least-privilege: members:read for team-membership lookups,
+          # pull-requests:read for the workflow_dispatch PR lookup.
+          permission-members: read
+          permission-pull-requests: read
       - id: resolve
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
