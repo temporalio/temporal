@@ -26,15 +26,21 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
-    permissions:
-      pull-requests: read # GITHUB_TOKEN reads the PR for workflow_dispatch
+    permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
     outputs:
       is_member: ${{ steps.check.outputs.is_member }}
       head_sha: ${{ steps.resolve.outputs.head_sha }}
     steps:
+      - name: Generate app token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
       - id: resolve
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -55,7 +61,7 @@ jobs:
           echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
       - id: check
         env:
-          GH_TOKEN: ${{ secrets.TEAM_READ_TOKEN }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
         run: |
           set -euo pipefail
