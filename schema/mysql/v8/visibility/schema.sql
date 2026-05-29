@@ -53,13 +53,6 @@ CREATE TABLE executions_visibility (
   TemporalUsedWorkerDeploymentVersions JSON GENERATED ALWAYS AS (search_attributes->'$.TemporalUsedWorkerDeploymentVersions'),
   TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadSizeBytes"),
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount"),
-  TemporalScheduleNextActionTime DATETIME(6) GENERATED ALWAYS AS (
-    CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.TemporalScheduleNextActionTime", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.TemporalScheduleNextActionTime", 'Z', '+00:00'), -6, 6),
-      '+00:00'
-    )
-  ),
   PRIMARY KEY (namespace_id, run_id)
 );
 
@@ -94,7 +87,6 @@ CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespac
 CREATE INDEX by_temporal_schedule_paused      ON executions_visibility (namespace_id, TemporalSchedulePaused,     (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_namespace_division   ON executions_visibility (namespace_id, TemporalNamespaceDivision,  (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_external_payload_size_bytes ON executions_visibility (namespace_id, TemporalExternalPayloadSizeBytes, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
-CREATE INDEX by_temporal_schedule_next_action_time ON executions_visibility (namespace_id, TemporalScheduleNextActionTime, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id); 
 
 CREATE TABLE custom_search_attributes (

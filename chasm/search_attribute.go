@@ -66,7 +66,6 @@ var (
 	SearchAttributeTemporalScheduledStartTime           = newSearchAttributeDateTimeByField(sadefs.TemporalScheduledStartTime)
 	SearchAttributeTemporalScheduledByID                = newSearchAttributeKeywordByField(sadefs.TemporalScheduledById)
 	SearchAttributeTemporalSchedulePaused               = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
-	SearchAttributeTemporalScheduleNextActionTime       = newSearchAttributeDateTimeByField(sadefs.TemporalScheduleNextActionTime)
 	SearchAttributeTemporalNamespaceDivision            = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
 	SearchAttributeTemporalPauseInfo                    = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
 	SearchAttributeTemporalReportedProblems             = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)

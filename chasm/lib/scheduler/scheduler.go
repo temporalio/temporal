@@ -67,7 +67,11 @@ var (
 	executionStatusCompleted = "Completed"
 )
 
-var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+var (
+	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime("TemporalScheduleNextActionTime", chasm.SearchAttributeFieldDateTime01)
+)
+
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
 
 const (
@@ -909,7 +913,7 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 	}
 	if !s.Closed {
 		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
-			out = append(out, chasm.SearchAttributeTemporalScheduleNextActionTime.Value(gen.FutureActionTimes[0].AsTime()))
+			out = append(out, scheduleNextActionTimeSearchAttribute.Value(gen.FutureActionTimes[0].AsTime()))
 		}
 	}
 	return out
