@@ -15,6 +15,8 @@ import (
 // the cluster's lifetime.
 type sharedClusterT struct {
 	name string
+	// In CI, fanout Log/Logf to every active t
+	logFanout bool
 
 	mu          sync.Mutex
 	activeTests []testlogger.CleanupCapableT
@@ -64,20 +66,41 @@ func (s *sharedClusterT) activeTestsSnapshot() []testlogger.CleanupCapableT {
 	return snap
 }
 
-func (s *sharedClusterT) Logf(format string, args ...any) {
+// logTargets returns the tests that should receive Log/Logf, or nil when no
+// test target applies and the caller should write to stderr.
+func (s *sharedClusterT) logTargets() []testlogger.CleanupCapableT {
+	if s.logFanout {
+		if snap := s.activeTestsSnapshot(); len(snap) > 0 {
+			return snap
+		}
+		return nil
+	}
 	if t := s.currentT(); t != nil {
-		t.Logf(format, args...)
+		return []testlogger.CleanupCapableT{t}
+	}
+	return nil
+}
+
+func (s *sharedClusterT) Logf(format string, args ...any) {
+	targets := s.logTargets()
+	if targets == nil {
+		fmt.Fprintf(os.Stderr, format+"\n", args...)
 		return
 	}
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	for _, t := range targets {
+		t.Logf(format, args...)
+	}
 }
 
 func (s *sharedClusterT) Log(args ...any) {
-	if t := s.currentT(); t != nil {
-		t.Log(args...)
+	targets := s.logTargets()
+	if targets == nil {
+		fmt.Fprintln(os.Stderr, args...)
 		return
 	}
-	fmt.Fprintln(os.Stderr, args...)
+	for _, t := range targets {
+		t.Log(args...)
+	}
 }
 
 func (s *sharedClusterT) Errorf(format string, args ...any) {

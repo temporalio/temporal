@@ -301,7 +301,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	if s.Logger == nil {
 		// The cluster outlives any single test and s.T() changes as different tests use it,
 		// but the proxy T's Name() must be stable, so this is never updated.
-		s.t = &sharedClusterT{name: s.T().Name()}
+		s.t = &sharedClusterT{
+			name:      s.T().Name(),
+			logFanout: os.Getenv("CI") != "",
+		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
