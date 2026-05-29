@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -86,7 +85,6 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster      bool
-	dedicatedReason       string
 	dynamicConfigSettings []dynamicConfigOverride
 	timeout               time.Duration
 }
@@ -107,17 +105,6 @@ func WithDedicatedCluster() TestOption {
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
-	}
-}
-
-// WithFxOptions appends fx options to a specific service's fx graph. This
-// implies a dedicated cluster because custom fx options cannot be shared
-// across tests.
-func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
-		o.dedicatedReason = "custom fx options used"
 	}
 }
 
@@ -167,7 +154,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.

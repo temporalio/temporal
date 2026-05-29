@@ -1321,7 +1321,6 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendContextMetadataSetTrailer, true),
 	)
 
@@ -1524,7 +1523,6 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendContextMetadataSetTrailer, true),
 	)
 
