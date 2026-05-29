@@ -47,11 +47,6 @@ const (
 	// Used by scheduler workflow.
 	TemporalSchedulePaused = "TemporalSchedulePaused"
 
-	// Set on the Scheduler component itself. Holds the next scheduled action
-	// time (the first entry of the generator's future action times) while the
-	// schedule is open. Unset once the schedule is closed.
-	TemporalScheduleNextActionTime = "TemporalScheduleNextActionTime"
-
 	ReservedPrefix = "Temporal"
 
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
@@ -157,18 +152,17 @@ var (
 	// production workflows. Until then, this whitelist acts as a temporary allowance
 	// to ensure backward compatibility and avoid breaking existing use cases.
 	predefinedWhiteList = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:                enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BuildIds:                       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:               enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime:     enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:         enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalScheduleNextActionTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalNamespaceDivision:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalPauseInfo:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalReportedProblems:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -184,7 +178,6 @@ var (
 		TemporalScheduledStartTime:           enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalScheduledById:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:               enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalScheduleNextActionTime:       enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalNamespaceDivision:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalReportedProblems:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,

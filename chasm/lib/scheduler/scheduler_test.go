@@ -314,7 +314,7 @@ func TestContextMetadata(t *testing.T) {
 }
 
 func TestSearchAttributes_NextActionTime(t *testing.T) {
-	const nextActionAlias = "TemporalScheduleNextActionTime"
+	const nextActionAlias = "ScheduleNextActionTime"
 
 	t.Run("open with future actions emits NextActionTime", func(t *testing.T) {
 		sched, ctx, _ := setupSchedulerForTest(t)
