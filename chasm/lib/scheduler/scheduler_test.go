@@ -359,3 +359,84 @@ func TestContextMetadata(t *testing.T) {
 		require.Nil(t, md)
 	})
 }
+
+func TestSearchAttributes_NextActionTime(t *testing.T) {
+
+	t.Run("open with future actions emits NextActionTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		nextAction := time.Now().Add(15 * time.Minute).UTC().Truncate(time.Second)
+		later := nextAction.Add(time.Hour)
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = []*timestamppb.Timestamp{
+			timestamppb.New(nextAction),
+			timestamppb.New(later),
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleNextActionTimeName)
+		require.True(t, nextAction.Equal(val.(time.Time)), "want %v, got %v", nextAction, val)
+	})
+
+	t.Run("open with no future actions does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = nil
+
+		sas := sched.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.False(t, hasNext, "expected %s to be absent when there is no upcoming action", scheduler.ScheduleNextActionTimeName)
+	})
+
+	t.Run("closed does not emit NextActionTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		// Future action times left over from before close must not leak through.
+		generator := sched.Generator.Get(ctx)
+		generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(time.Now().Add(time.Hour))}
+
+		sas := sched.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.False(t, hasNext, "expected %s to be absent once closed", scheduler.ScheduleNextActionTimeName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.False(t, hasNext)
+	})
+}
+
+func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
+	t.Helper()
+	for _, sa := range sas {
+		if sa.Alias == alias {
+			return sa.Value.Value(), true
+		}
+	}
+	return nil, false
+}
+
+// TestSearchAttributes_RoundTripThroughCloseTransaction verifies that
+// TemporalScheduleNextActionTime survives registration/serialization by
+// flowing through the same CHASM pipeline that runs in production —
+// closeTransactionForceUpdateVisibility, which calls SearchAttributes() on
+// the root component and snapshots the result. If the attribute were
+// unregistered or had a bad value type, the CloseTransaction call would
+// error or panic.
+func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	nextAction := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	generator := sched.Generator.Get(ctx)
+	generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(nextAction)}
+
+	require.NoError(t, node.SetRootComponent(sched))
+	_, err := node.CloseTransaction()
+	require.NoError(t, err, "CloseTransaction should accept TemporalScheduleNextActionTime")
+}

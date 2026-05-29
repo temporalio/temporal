@@ -68,7 +68,13 @@ var (
 	executionStatusCompleted = "Completed"
 )
 
-var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+const ScheduleNextActionTimeName = "ScheduleNextActionTime"
+
+var (
+	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+)
+
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
 
 const (
@@ -902,16 +908,22 @@ func (s *Scheduler) executionStatus() string {
 }
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
-func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	if s.Sentinel {
 		return []chasm.SearchAttributeKeyValue{
 			executionStatusSearchAttribute.Value(s.executionStatus()),
 		}
 	}
-	return []chasm.SearchAttributeKeyValue{
+	out := []chasm.SearchAttributeKeyValue{
 		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
+	if !s.Closed {
+		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
+			out = append(out, scheduleNextActionTimeSearchAttribute.Value(gen.FutureActionTimes[0].AsTime()))
+		}
+	}
+	return out
 }
 
 // Memo returns the scheduler's info block for visibility.
