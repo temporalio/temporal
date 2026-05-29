@@ -482,7 +482,9 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	if s.testCluster == nil {
 		return nil
 	}
-	return s.testCluster.TearDownCluster()
+	err := s.testCluster.TearDownCluster()
+	s.testCluster = nil
+	return err
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
