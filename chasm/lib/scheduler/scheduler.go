@@ -69,7 +69,7 @@ var (
 
 var (
 	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime("TemporalScheduleNextActionTime", chasm.SearchAttributeFieldDateTime01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime("ScheduleNextActionTime", chasm.SearchAttributeFieldDateTime01)
 )
 
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
