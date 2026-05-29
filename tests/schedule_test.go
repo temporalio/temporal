@@ -3628,7 +3628,7 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	// timestamp at or after the create time.
 	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
 	s.NotNil(v2Entry)
-	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduleNextActionTime]
+	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
 
 	var v2Next time.Time
 	s.NoError(payload.Decode(v2Pl, &v2Next))

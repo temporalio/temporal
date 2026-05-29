@@ -314,7 +314,6 @@ func TestContextMetadata(t *testing.T) {
 }
 
 func TestSearchAttributes_NextActionTime(t *testing.T) {
-	const nextActionAlias = "ScheduleNextActionTime"
 
 	t.Run("open with future actions emits NextActionTime", func(t *testing.T) {
 		sched, ctx, _ := setupSchedulerForTest(t)
@@ -328,8 +327,8 @@ func TestSearchAttributes_NextActionTime(t *testing.T) {
 		}
 
 		sas := sched.SearchAttributes(ctx)
-		val, ok := findSearchAttribute(t, sas, nextActionAlias)
-		require.True(t, ok, "expected %s to be present", nextActionAlias)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleNextActionTimeName)
 		require.True(t, nextAction.Equal(val.(time.Time)), "want %v, got %v", nextAction, val)
 	})
 
@@ -340,8 +339,8 @@ func TestSearchAttributes_NextActionTime(t *testing.T) {
 		generator.FutureActionTimes = nil
 
 		sas := sched.SearchAttributes(ctx)
-		_, hasNext := findSearchAttribute(t, sas, nextActionAlias)
-		require.False(t, hasNext, "expected %s to be absent when there is no upcoming action", nextActionAlias)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.False(t, hasNext, "expected %s to be absent when there is no upcoming action", scheduler.ScheduleNextActionTimeName)
 	})
 
 	t.Run("closed does not emit NextActionTime", func(t *testing.T) {
@@ -353,15 +352,15 @@ func TestSearchAttributes_NextActionTime(t *testing.T) {
 		generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(time.Now().Add(time.Hour))}
 
 		sas := sched.SearchAttributes(ctx)
-		_, hasNext := findSearchAttribute(t, sas, nextActionAlias)
-		require.False(t, hasNext, "expected %s to be absent once closed", nextActionAlias)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
+		require.False(t, hasNext, "expected %s to be absent once closed", scheduler.ScheduleNextActionTimeName)
 	})
 
 	t.Run("sentinel does not emit", func(t *testing.T) {
 		sentinel, ctx, _ := setupSentinelForTest(t)
 
 		sas := sentinel.SearchAttributes(ctx)
-		_, hasNext := findSearchAttribute(t, sas, nextActionAlias)
+		_, hasNext := findSearchAttribute(t, sas, scheduler.ScheduleNextActionTimeName)
 		require.False(t, hasNext)
 	})
 }
