@@ -799,6 +799,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	FrontendContextMetadataSetTrailer = NewGlobalBoolSetting(
+		"frontend.contextMetadataSetTrailer",
+		false,
+		`FrontendContextMetadataSetTrailer controls whether frontend gRPC handlers emit context metadata in response trailers. This is read when constructing the frontend ContextMetadataInterceptor.`,
+	)
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
