@@ -3437,13 +3437,27 @@ func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testv
 // tqTypes controls which task queue types to poll; it defaults to workflow only.
 // Pollers run continuously until all TQ types are registered.
 func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) {
-	stopPollers := s.startRegistrationPollers(env, tv, tqTypes...)
+	s.pollUntilRegisteredWithMessage(env, tv, "should not get any tasks yet", tqTypes...)
+}
+
+func (s *Versioning3Suite) pollUntilRegisteredWithMessage(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	unexpectedTaskMessage string,
+	tqTypes ...enumspb.TaskQueueType,
+) {
+	stopPollers := s.startRegistrationPollers(env, tv, unexpectedTaskMessage, tqTypes...)
 	defer stopPollers()
 
 	s.waitForDeploymentVersionRegistration(env, tv, tqTypes...)
 }
 
-func (s *Versioning3Suite) startRegistrationPollers(env *testcore.TestEnv, tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) func() {
+func (s *Versioning3Suite) startRegistrationPollers(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	unexpectedTaskMessage string,
+	tqTypes ...enumspb.TaskQueueType,
+) func() {
 	if len(tqTypes) == 0 {
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
@@ -3455,11 +3469,11 @@ func (s *Versioning3Suite) startRegistrationPollers(env *testcore.TestEnv, tv *t
 			for pollCtx.Err() == nil {
 				switch tqType {
 				case tqTypeWf:
-					s.idlePollWorkflow(env, pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					s.idlePollWorkflow(env, pollCtx, tv, true, ver3MinPollTime, unexpectedTaskMessage)
 				case tqTypeAct:
-					s.idlePollActivity(pollCtx, env, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					s.idlePollActivity(pollCtx, env, tv, true, ver3MinPollTime, unexpectedTaskMessage)
 				case tqTypeNexus:
-					s.idlePollNexus(env, pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					s.idlePollNexus(env, pollCtx, tv, true, ver3MinPollTime, unexpectedTaskMessage)
 				default:
 					panic("invalid task queue type")
 				}
@@ -6581,11 +6595,11 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Register v2, set v2 as current (revision increments)
-	s.pollUntilRegistered(env, tv2)
+	s.pollUntilRegisteredWithMessage(env, tv2, "v2 poller registration")
 	s.setCurrentDeployment(env, tv2)
 
 	// Register v3, set v3 as current (revision increments again)
-	s.pollUntilRegistered(env, tv3)
+	s.pollUntilRegisteredWithMessage(env, tv3, "v3 poller registration")
 	s.setCurrentDeployment(env, tv3)
 
 	// Trigger WFT — target should be v3 with a high revision
@@ -6658,7 +6672,7 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	// Set a new v4 as current — this produces a revision strictly higher than
 	// the declined revision, simulating an up-to-date partition with fresh data.
 	tv4 := tv1.WithBuildIDNumber(4)
-	s.pollUntilRegistered(env, tv4)
+	s.pollUntilRegisteredWithMessage(env, tv4, "v4 poller registration")
 	s.setCurrentDeployment(env, tv4)
 	s.waitForDeploymentDataPropagation(env, tv4, versionStatusCurrent, false, tqTypeWf)
 
