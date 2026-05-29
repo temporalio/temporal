@@ -995,8 +995,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 			a.ResetHeartbeats = true
 		}
 		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
-		// yields the activity lands back in PAUSED rather than SCHEDULED. Recorded as an explicit
-		// flag so no logic has to gate on the descriptive LastPauseState field.
+		// yields the activity lands back in PAUSED rather than SCHEDULED.
 		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
 		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
 			req:          frontendReq,
