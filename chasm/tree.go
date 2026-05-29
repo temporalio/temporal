@@ -3119,6 +3119,14 @@ func (n *Node) ExecutePureTask(
 	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (_ bool, retErr error) {
+	defer func() {
+		if retErr == nil {
+			// Mark the tree state to dirty so it will force the transaction to clean up
+			// invalid tasks (including the current one).
+			n.isActiveStateDirty = true
+		}
+	}()
+
 	registrableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return false, fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())

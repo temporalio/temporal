@@ -311,6 +311,8 @@ type (
 	FaultInjectionTarget struct {
 		Store  DataStoreName
 		Method string
+		// Request is optionally populated by fault injection wrappers for request-aware faults.
+		Request any
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.

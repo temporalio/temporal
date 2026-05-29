@@ -33,7 +33,7 @@ func newFaultInjectionShardStore(
 
 // AssertShardOwnership wraps ShardStore.AssertShardOwnership.
 func (d faultInjectionShardStore) AssertShardOwnership(ctx context.Context, request *_sourcePersistence.AssertShardOwnershipRequest) (err error) {
-	err = d.generator.generate("AssertShardOwnership").inject(func() error {
+	err = d.generator.generate("AssertShardOwnership", request).inject(func() error {
 		err = d.ShardStore.AssertShardOwnership(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionShardStore) AssertShardOwnership(ctx context.Context, requ
 
 // GetOrCreateShard wraps ShardStore.GetOrCreateShard.
 func (d faultInjectionShardStore) GetOrCreateShard(ctx context.Context, request *_sourcePersistence.InternalGetOrCreateShardRequest) (ip1 *_sourcePersistence.InternalGetOrCreateShardResponse, err error) {
-	err = d.generator.generate("GetOrCreateShard").inject(func() error {
+	err = d.generator.generate("GetOrCreateShard", request).inject(func() error {
 		ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionShardStore) GetOrCreateShard(ctx context.Context, request 
 
 // UpdateShard wraps ShardStore.UpdateShard.
 func (d faultInjectionShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
-	err = d.generator.generate("UpdateShard").inject(func() error {
+	err = d.generator.generate("UpdateShard", request).inject(func() error {
 		err = d.ShardStore.UpdateShard(ctx, request)
 		return err
 	})
