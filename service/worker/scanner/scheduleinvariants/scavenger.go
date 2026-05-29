@@ -24,9 +24,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 )
 
-// totalNamespaceTag is the value used on the cluster-wide aggregate metric emission.
-const totalNamespaceTag = "__total__"
-
 const (
 	// scanInterval is how often each scanner activity kicks off a fresh scan pass.
 	scanInterval = 15 * time.Minute
@@ -164,7 +161,8 @@ func (a *Activities) heartbeatLoop(ctx context.Context) {
 }
 
 // runScan ties the per-scanner pieces together: list namespaces, fan out a single
-// visibility query per namespace, accumulate the total, and emit metrics.
+// visibility query per namespace, and emit per-namespace metrics. Cluster-wide
+// totals are computed by the metrics backend by summing across the namespace tag.
 // Used by the count-only scanners (StuckOpen, UnknownState).
 func (a *Activities) runScan(ctx context.Context, subScanner, query, metricName string) error {
 	namespaces, err := a.ListAllNamespaces(ctx)
@@ -172,18 +170,15 @@ func (a *Activities) runScan(ctx context.Context, subScanner, query, metricName 
 		return err
 	}
 
-	var total int64
 	for _, nsName := range namespaces {
 		err := a.forEachNamespace(ctx, nsName, query, func(count int64) {
 			a.emitCount(metricName, nsName, count)
-			total += count
 		})
 		if err != nil {
 			a.recordScanError(nsName, subScanner, err)
 			continue
 		}
 	}
-	a.emitCount(metricName, totalNamespaceTag, total)
 	return nil
 }
 
@@ -200,7 +195,6 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 		return err
 	}
 
-	var total int64
 	for _, nsName := range namespaces {
 		var nsAnomalies int64
 		err := a.forEachScheduleInNamespace(ctx, nsName, query, func(scheduleID string) {
@@ -217,9 +211,7 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 			continue
 		}
 		a.emitCount(metricName, nsName, nsAnomalies)
-		total += nsAnomalies
 	}
-	a.emitCount(metricName, totalNamespaceTag, total)
 	return nil
 }
 
