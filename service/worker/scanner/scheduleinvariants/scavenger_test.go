@@ -261,7 +261,7 @@ func describeResp(paused bool, overlap enumspb.ScheduleOverlapPolicy, runningCou
 		},
 		Info: &schedulepb.ScheduleInfo{},
 	}
-	for i := 0; i < runningCount; i++ {
+	for range runningCount {
 		resp.Info.RunningWorkflows = append(resp.Info.RunningWorkflows, &commonpb.WorkflowExecution{WorkflowId: "running"})
 	}
 	return resp
