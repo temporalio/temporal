@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -44,7 +45,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	// goroutines within a namespace. If any namespace fails, queued (not-yet-started) namespaces bail; in-flight
 	// namespaces continue until finish.
 	auditStart := time.Now()
-	total := len(in.Namespaces)
+	total := len(in.Targets)
 	sem := make(chan struct{}, in.NamespaceConcurrency)
 	var (
 		mu         sync.Mutex
@@ -53,7 +54,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 		done       int
 	)
 	var wg sync.WaitGroup
-	for _, ns := range in.Namespaces {
+	for _, t := range in.Targets {
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
@@ -65,11 +66,15 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 			}
 			mu.Unlock()
 
+			label := t.Namespace
+			if t.ScheduleID != "" {
+				label = fmt.Sprintf("%s/%s", t.Namespace, t.ScheduleID)
+			}
 			nsStart := time.Now()
-			_, _ = fmt.Fprintf(os.Stderr, "auditing %s...\n", ns)
+			_, _ = fmt.Fprintf(os.Stderr, "auditing %s...\n", label)
 			auditor := &scheduleAuditor{
-				Namespace:   ns,
-				ScheduleID:  in.ScheduleID,
+				Namespace:   t.Namespace,
+				ScheduleID:  t.ScheduleID,
 				WindowStart: in.WindowStart,
 				WindowEnd:   in.WindowEnd,
 				Schedules:   &grpcScheduleLoader{client: wfClient, retrier: retrier},
@@ -81,13 +86,13 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 			defer mu.Unlock()
 			if err != nil {
 				if firstErr == nil {
-					firstErr = fmt.Errorf("audit %s: %w", ns, err)
+					firstErr = fmt.Errorf("audit %s: %w", label, err)
 				}
 				return
 			}
 			done++
 			_, _ = fmt.Fprintf(os.Stderr, "[%d/%d] %s: %d schedule(s) flagged in %s\n",
-				done, total, ns, len(results), time.Since(nsStart).Round(time.Second))
+				done, total, label, len(results), time.Since(nsStart).Round(time.Second))
 			allResults = append(allResults, results...)
 		})
 	}
@@ -95,7 +100,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	if firstErr != nil {
 		return firstErr
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "audit complete: %d total flagged across %d namespaces in %s\n",
+	_, _ = fmt.Fprintf(os.Stderr, "audit complete: %d total flagged across %d target(s) in %s\n",
 		len(allResults), total, time.Since(auditStart).Round(time.Second))
 	if in.OutputDir == "" {
 		// Stdout mode: one CSV stream, all rows, single header, no summary file.
@@ -111,103 +116,160 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	return writeOutput(in.OutputDir, allResults)
 }
 
+type auditTarget struct {
+	Namespace  string
+	ScheduleID string
+}
+
 type auditInputs struct {
-	Namespaces           []string
-	ScheduleID           string // optional; if set, len(Namespaces) == 1
+	Targets              []auditTarget
 	WindowStart          time.Time
 	WindowEnd            time.Time
+	MaxWindow            time.Duration
 	OutputDir            string
 	NamespaceConcurrency int
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	in := &auditInputs{
-		ScheduleID:           c.String(FlagScheduleID),
 		OutputDir:            c.String(FlagOutputDir),
 		NamespaceConcurrency: c.Int(FlagNamespaceConcurrency),
+		MaxWindow:            c.Duration(FlagMaxWindow),
 	}
 	if in.NamespaceConcurrency <= 0 {
 		in.NamespaceConcurrency = 1
 	}
+	if in.MaxWindow <= 0 {
+		in.MaxWindow = defaultMaxAuditWindow
+	}
 
-	ns, err := resolveNamespaces(c)
+	targets, err := resolveTargetsFromFlags(c.String(FlagNamespace), c.String(FlagScheduleID), c.String(FlagFile), os.Stdin)
 	if err != nil {
 		return nil, err
 	}
-	in.Namespaces = ns
+	in.Targets = targets
 
-	if in.WindowStart, err = time.Parse(time.RFC3339, c.String(FlagAuditStart)); err != nil {
+	if in.WindowStart, err = time.Parse(time.RFC3339, c.String(FlagStart)); err != nil {
 		return nil, fmt.Errorf("--start: %w", err)
 	}
-	if in.WindowEnd, err = time.Parse(time.RFC3339, c.String(FlagAuditEnd)); err != nil {
+	if in.WindowEnd, err = time.Parse(time.RFC3339, c.String(FlagEnd)); err != nil {
 		return nil, fmt.Errorf("--end: %w", err)
 	}
 
 	if err := in.validate(); err != nil {
 		return nil, err
 	}
+
+	if d := in.WindowEnd.Sub(in.WindowStart); d > defaultMaxAuditWindow {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: window is %s (longer than default cap %s); proportionally slower and more memory-intensive\n",
+			d.Round(time.Hour), defaultMaxAuditWindow)
+	}
+
 	return in, nil
 }
 
-// maxAuditWindow caps how wide a single audit window can be. Catches typos (e.g. wrong month in --end) and discourages
-// expensive multi-day runs that should be chunked into separate invocations.
-const maxAuditWindow = 7 * 24 * time.Hour
+// defaultMaxAuditWindow caps how wide a single audit window can be by default. Catches typos (e.g. wrong month in
+// --end) and discourages expensive multi-day runs that should be chunked into separate invocations. Operators can
+// raise the cap via --max-window for schedules that fire less frequently (quarterly, yearly).
+const defaultMaxAuditWindow = 7 * 24 * time.Hour
 
 func (in *auditInputs) validate() error {
-	if in.ScheduleID != "" && len(in.Namespaces) != 1 {
-		return errors.New("--schedule-id requires exactly one namespace (use --namespace, not --namespace-file)")
+	if len(in.Targets) == 0 {
+		return errors.New("no audit targets resolved")
 	}
 	if !in.WindowEnd.After(in.WindowStart) {
 		return fmt.Errorf("--end (%s) must be after --start (%s)",
 			in.WindowEnd.UTC().Format(time.RFC3339),
 			in.WindowStart.UTC().Format(time.RFC3339))
 	}
-	if d := in.WindowEnd.Sub(in.WindowStart); d > maxAuditWindow {
-		return fmt.Errorf("window is %s (--start %s to --end %s); max is %s -- run multiple shorter audits for longer spans",
+	if d := in.WindowEnd.Sub(in.WindowStart); d > in.MaxWindow {
+		return fmt.Errorf("window is %s (--start %s to --end %s); max is %s. Pass --max-window=%s if intentional",
 			d.Round(time.Hour),
 			in.WindowStart.UTC().Format(time.RFC3339),
 			in.WindowEnd.UTC().Format(time.RFC3339),
-			maxAuditWindow)
+			in.MaxWindow,
+			d.Round(time.Hour))
 	}
 	return nil
 }
 
-func resolveNamespaces(c *cli.Context) ([]string, error) {
-	ns := c.String(FlagNamespace)
-	file := c.String(FlagNamespaceFile)
+// resolveTargetsFromFlags returns the list of audit targets, sourced from one of (in priority order):
+//   - namespace (+ optional scheduleID) for a single target
+//   - file path (or "-" for stdin via the provided Reader) for many targets
+//
+// Takes flag values directly (not cli.Context) so tests don't need to fake a context.
+func resolveTargetsFromFlags(namespace, scheduleID, file string, stdin io.Reader) ([]auditTarget, error) {
 	switch {
-	case ns != "" && file != "":
-		return nil, errors.New("--namespace and --namespace-file are mutually exclusive")
-	case ns != "":
-		return []string{ns}, nil
+	case namespace != "" && file != "":
+		return nil, errors.New("--namespace and --file are mutually exclusive")
+	case file != "" && scheduleID != "":
+		return nil, errors.New("--schedule-id is only valid with --namespace; for multiple targets put schedule IDs inline in --file as 'namespace,schedule_id'")
+	case namespace != "":
+		return []auditTarget{{Namespace: namespace, ScheduleID: scheduleID}}, nil
 	case file != "":
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("--namespace-file: %w", err)
-		}
-		var out []string
-		for line := range strings.SplitSeq(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			out = append(out, line)
-		}
-		if len(out) == 0 {
-			return nil, fmt.Errorf("--namespace-file %q has no namespace entries", file)
-		}
-		return out, nil
+		return loadTargets(file, stdin)
 	default:
-		return nil, errors.New("one of --namespace or --namespace-file is required")
+		return nil, errors.New("one of --namespace or --file is required")
 	}
 }
 
-// expectedFireTimes returns the nominal (pre-jitter) fire times the spec would produce in (start, end]. Uses the
-// server's own spec compiler so the semantics exactly match the live scheduler.
-//
-// jitterSeed is required by the underlying compiler but does not affect the returned nominal times. Pass the schedule
-// ID so the seed is stable per schedule.
-func expectedFireTimes(spec *schedulepb.ScheduleSpec, jitterSeed string, start, end time.Time) ([]time.Time, error) {
+// loadTargets reads audit targets from a file path (or the provided stdin Reader when path is "-") and parses them.
+func loadTargets(path string, stdin io.Reader) ([]auditTarget, error) {
+	r := stdin
+	if path != "-" {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = f.Close() }()
+		r = f
+	}
+	targets, err := parseTargetLines(r)
+	if err != nil {
+		return nil, fmt.Errorf("--file: %w", err)
+	}
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("--file %q has no target entries", path)
+	}
+	return targets, nil
+}
+
+// parseTargetLines parses an io.Reader of audit-target lines. Each non-blank, non-comment line is 'namespace' or
+// 'namespace,schedule_id'. Whitespace around fields is trimmed. Returns an error if any line has more than one comma.
+func parseTargetLines(r io.Reader) ([]auditTarget, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var out []auditTarget
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		if len(parts) > 2 {
+			return nil, fmt.Errorf("malformed line %q: expected 'namespace' or 'namespace,schedule_id'", line)
+		}
+		t := auditTarget{Namespace: strings.TrimSpace(parts[0])}
+		if t.Namespace == "" {
+			return nil, fmt.Errorf("malformed line %q: namespace is empty", line)
+		}
+		if len(parts) == 2 {
+			t.ScheduleID = strings.TrimSpace(parts[1])
+			if t.ScheduleID == "" {
+				return nil, fmt.Errorf("malformed line %q: schedule_id is empty after comma", line)
+			}
+		}
+		out = append(out, t)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// expectedFireTimes returns the nominal fire times the spec would produce in (start, end]. Uses the server's own spec
+// compiler so the semantics exactly match the live scheduler.
+func expectedFireTimes(spec *schedulepb.ScheduleSpec, start, end time.Time) ([]time.Time, error) {
 	if spec == nil {
 		return nil, nil
 	}
@@ -219,7 +281,9 @@ func expectedFireTimes(spec *schedulepb.ScheduleSpec, jitterSeed string, start, 
 	var out []time.Time
 	cursor := start
 	for {
-		res := compiled.GetNextTime(jitterSeed, cursor)
+		// Pass empty jitter seed: only GetNextTimeResult.Nominal is consumed, which is computed without the seed
+		// (the seed only feeds GetNextTimeResult.Next, which we discard).
+		res := compiled.GetNextTime("", cursor)
 		if res.Nominal.IsZero() || res.Nominal.After(end) {
 			return out, nil
 		}
@@ -608,7 +672,7 @@ func (a *scheduleAuditor) analyzeAll(scheds []scheduleEntry, executions map[stri
 //   - UnsupportedReason != "" -> reclassify real_miss to unsupported_policy and stamp the reason. These are
 //     corner-case policy/state configs the algorithm does not model correctly today, so we move the count out of
 //     the trusted real_miss bucket and surface the row for manual review. Reasons currently detected:
-//   - keep_original_workflow_id  -- all fires share one WorkflowID, collapsing the chain-by-WorkflowID model.
+//   - keep_original_workflow_id  -- defined in the API but not server-supported today (and not on the near-term roadmap).
 //   - overlap_buffer_all         -- fires can be queued for arbitrary durations, beyond our 24h query buffer.
 //   - overlap_allow_all          -- scheduler never skips on overlap, so skip_overlap labels may be wrong.
 //   - overlap_cancel_other       -- new fire cancels prior; chain lifecycle differs (likely works, unverified).
@@ -714,7 +778,7 @@ func (a *scheduleAuditor) reanalyzeFromCreate(r scheduleResult, createTime time.
 // later than WindowStart) to suppress false-positive real_miss for schedules that didn't yet exist at the start of the
 // audit window.
 func (a *scheduleAuditor) analyzeSchedule(s scheduleEntry, entries []timelineEntry, expectedStart time.Time) (*scheduleResult, error) {
-	expected, err := expectedFireTimes(s.Spec, s.ID, expectedStart, a.WindowEnd)
+	expected, err := expectedFireTimes(s.Spec, expectedStart, a.WindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("expected fires for %s: %w", s.ID, err)
 	}

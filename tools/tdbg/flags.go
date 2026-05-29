@@ -80,13 +80,15 @@ var (
 	FlagScheduleID                 = "schedule-id"
 	FlagScheduleIDAlias            = []string{"sid"}
 	FlagTarget                     = "target"
-	FlagNamespaceFile              = "namespace-file"
-	FlagAuditStart                 = "start"
-	FlagAuditEnd                   = "end"
+	FlagFile                       = "file"
+	FlagStart                      = "start"
+	FlagEnd                        = "end"
+	FlagMaxWindow                  = "max-window"
 	FlagOutputDir                  = "output-dir"
 	FlagNamespaceConcurrency       = "namespace-concurrency"
 )
 
 var (
 	FlagOutputDirAlias = []string{"o"}
+	FlagFileAlias      = []string{"f"}
 )

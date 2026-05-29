@@ -6,6 +6,9 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,9 +25,10 @@ import (
 func TestAuditInputs_Validate(t *testing.T) {
 	base := func() *auditInputs {
 		return &auditInputs{
-			Namespaces:  []string{"ns"},
+			Targets:     []auditTarget{{Namespace: "ns"}},
 			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
 			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
+			MaxWindow:   defaultMaxAuditWindow,
 			OutputDir:   "/tmp/out",
 		}
 	}
@@ -39,16 +43,19 @@ func TestAuditInputs_Validate(t *testing.T) {
 		require.NoError(t, in.validate())
 	})
 
-	t.Run("schedule-id requires single namespace", func(t *testing.T) {
+	t.Run("no targets resolved is rejected", func(t *testing.T) {
 		in := base()
-		in.ScheduleID = "sched1"
-		in.Namespaces = []string{"ns1", "ns2"}
-		require.ErrorContains(t, in.validate(), "--schedule-id requires exactly one namespace")
+		in.Targets = nil
+		require.ErrorContains(t, in.validate(), "no audit targets resolved")
 	})
 
-	t.Run("schedule-id with one namespace OK", func(t *testing.T) {
+	t.Run("multiple targets with per-line schedule IDs accepted", func(t *testing.T) {
 		in := base()
-		in.ScheduleID = "sched1"
+		in.Targets = []auditTarget{
+			{Namespace: "ns1", ScheduleID: "sched1"},
+			{Namespace: "ns2"},
+			{Namespace: "ns3", ScheduleID: "sched3"},
+		}
 		require.NoError(t, in.validate())
 	})
 
@@ -65,18 +72,35 @@ func TestAuditInputs_Validate(t *testing.T) {
 		require.ErrorContains(t, in.validate(), "must be after")
 	})
 
-	t.Run("window at 7d cap accepted", func(t *testing.T) {
+	t.Run("window at default cap accepted", func(t *testing.T) {
 		in := base()
-		in.WindowEnd = in.WindowStart.Add(7 * 24 * time.Hour)
+		in.WindowEnd = in.WindowStart.Add(defaultMaxAuditWindow)
 		require.NoError(t, in.validate())
 	})
 
-	t.Run("window over 7d cap rejected", func(t *testing.T) {
+	t.Run("window over default cap rejected with override hint", func(t *testing.T) {
 		in := base()
-		in.WindowEnd = in.WindowStart.Add(7*24*time.Hour + time.Second)
-		require.ErrorContains(t, in.validate(), "max is 168h")
+		in.WindowEnd = in.WindowStart.Add(defaultMaxAuditWindow + time.Second)
+		err := in.validate()
+		require.ErrorContains(t, err, "max is 168h")
+		require.ErrorContains(t, err, "Pass --max-window=")
 	})
 
+	t.Run("raised --max-window accepts wider window", func(t *testing.T) {
+		in := base()
+		in.MaxWindow = 400 * 24 * time.Hour
+		in.WindowEnd = in.WindowStart.Add(365 * 24 * time.Hour)
+		require.NoError(t, in.validate())
+	})
+
+	t.Run("--max-window still bounds the window", func(t *testing.T) {
+		in := base()
+		in.MaxWindow = 30 * 24 * time.Hour
+		in.WindowEnd = in.WindowStart.Add(31 * 24 * time.Hour)
+		err := in.validate()
+		require.ErrorContains(t, err, "max is 720h")
+		require.ErrorContains(t, err, "Pass --max-window=")
+	})
 }
 
 func TestAuditCommandIsRegistered(t *testing.T) {
@@ -94,6 +118,156 @@ func TestAuditCommandIsRegistered(t *testing.T) {
 		}
 	}
 	require.True(t, found, "audit subcommand not registered under schedule")
+}
+
+func TestParseTargetLines(t *testing.T) {
+	t.Run("just namespaces, one per line", func(t *testing.T) {
+		got, err := parseTargetLines(strings.NewReader("ns1\nns2\nns3\n"))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1"}, {Namespace: "ns2"}, {Namespace: "ns3"}}, got)
+	})
+
+	t.Run("namespace + schedule_id pairs", func(t *testing.T) {
+		input := "ns1,sched1\nns2,sched2\n"
+		got, err := parseTargetLines(strings.NewReader(input))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{
+			{Namespace: "ns1", ScheduleID: "sched1"},
+			{Namespace: "ns2", ScheduleID: "sched2"},
+		}, got)
+	})
+
+	t.Run("mixed: some namespaces only, some with schedule_id", func(t *testing.T) {
+		input := "ns1\nns2,sched2\nns3\n"
+		got, err := parseTargetLines(strings.NewReader(input))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{
+			{Namespace: "ns1"},
+			{Namespace: "ns2", ScheduleID: "sched2"},
+			{Namespace: "ns3"},
+		}, got)
+	})
+
+	t.Run("blank lines and # comments are ignored", func(t *testing.T) {
+		input := "# top comment\n\nns1\n\n# inline comment\nns2,sched2\n   \n"
+		got, err := parseTargetLines(strings.NewReader(input))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{
+			{Namespace: "ns1"},
+			{Namespace: "ns2", ScheduleID: "sched2"},
+		}, got)
+	})
+
+	t.Run("whitespace around fields is trimmed", func(t *testing.T) {
+		input := "  ns1  ,  sched1  \n  ns2  \n"
+		got, err := parseTargetLines(strings.NewReader(input))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{
+			{Namespace: "ns1", ScheduleID: "sched1"},
+			{Namespace: "ns2"},
+		}, got)
+	})
+
+	t.Run("trailing newline missing is fine", func(t *testing.T) {
+		got, err := parseTargetLines(strings.NewReader("ns1,sched1"))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1", ScheduleID: "sched1"}}, got)
+	})
+
+	t.Run("CRLF line endings handled", func(t *testing.T) {
+		got, err := parseTargetLines(strings.NewReader("ns1\r\nns2,sched2\r\n"))
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1"}, {Namespace: "ns2", ScheduleID: "sched2"}}, got)
+	})
+
+	t.Run("empty input returns no targets without error", func(t *testing.T) {
+		got, err := parseTargetLines(strings.NewReader(""))
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("line with more than one comma is rejected", func(t *testing.T) {
+		_, err := parseTargetLines(strings.NewReader("ns1,sched1,extra\n"))
+		require.ErrorContains(t, err, `malformed line "ns1,sched1,extra"`)
+	})
+
+	t.Run("empty namespace is rejected", func(t *testing.T) {
+		_, err := parseTargetLines(strings.NewReader(",sched1\n"))
+		require.ErrorContains(t, err, "namespace is empty")
+	})
+
+	t.Run("trailing comma with empty schedule_id is rejected", func(t *testing.T) {
+		_, err := parseTargetLines(strings.NewReader("ns1,\n"))
+		require.ErrorContains(t, err, "schedule_id is empty after comma")
+	})
+}
+
+func TestResolveTargetsFromFlags(t *testing.T) {
+	t.Run("single --namespace, no schedule-id", func(t *testing.T) {
+		got, err := resolveTargetsFromFlags("ns1", "", "", nil)
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1"}}, got)
+	})
+
+	t.Run("single --namespace with --schedule-id", func(t *testing.T) {
+		got, err := resolveTargetsFromFlags("ns1", "sched1", "", nil)
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1", ScheduleID: "sched1"}}, got)
+	})
+
+	t.Run("--namespace and --file are mutually exclusive", func(t *testing.T) {
+		_, err := resolveTargetsFromFlags("ns1", "", "some-path", nil)
+		require.ErrorContains(t, err, "--namespace and --file are mutually exclusive")
+	})
+
+	t.Run("--schedule-id with --file is rejected", func(t *testing.T) {
+		_, err := resolveTargetsFromFlags("", "sched1", "some-path", nil)
+		require.ErrorContains(t, err, "--schedule-id is only valid with --namespace")
+	})
+
+	t.Run("neither --namespace nor --file is an error", func(t *testing.T) {
+		_, err := resolveTargetsFromFlags("", "", "", nil)
+		require.ErrorContains(t, err, "one of --namespace or --file is required")
+	})
+
+	t.Run("--file - reads from stdin", func(t *testing.T) {
+		stdin := strings.NewReader("ns1\nns2,sched2\n")
+		got, err := resolveTargetsFromFlags("", "", "-", stdin)
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1"}, {Namespace: "ns2", ScheduleID: "sched2"}}, got)
+	})
+
+	t.Run("--file - with empty stdin is rejected", func(t *testing.T) {
+		_, err := resolveTargetsFromFlags("", "", "-", strings.NewReader(""))
+		require.ErrorContains(t, err, `--file "-" has no target entries`)
+	})
+
+	t.Run("--file path reads from disk", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "targets.tsv")
+		require.NoError(t, os.WriteFile(path, []byte("ns1\nns2,sched2\n"), 0o600))
+		got, err := resolveTargetsFromFlags("", "", path, nil)
+		require.NoError(t, err)
+		require.Equal(t, []auditTarget{{Namespace: "ns1"}, {Namespace: "ns2", ScheduleID: "sched2"}}, got)
+	})
+
+	t.Run("--file path that doesn't exist returns an error", func(t *testing.T) {
+		_, err := resolveTargetsFromFlags("", "", filepath.Join(t.TempDir(), "missing.tsv"), nil)
+		require.ErrorContains(t, err, "no such file or directory")
+	})
+
+	t.Run("--file with only comments is rejected", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "comments.tsv")
+		require.NoError(t, os.WriteFile(path, []byte("# only comments\n\n# nothing else\n"), 0o600))
+		_, err := resolveTargetsFromFlags("", "", path, nil)
+		require.ErrorContains(t, err, "has no target entries")
+	})
+
+	t.Run("--file with malformed line surfaces parser error", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "bad.tsv")
+		require.NoError(t, os.WriteFile(path, []byte("ns1,sched1,extra\n"), 0o600))
+		_, err := resolveTargetsFromFlags("", "", path, nil)
+		require.ErrorContains(t, err, "malformed line")
+	})
 }
 
 func TestExpectedFireTimes(t *testing.T) {
@@ -115,7 +289,7 @@ func TestExpectedFireTimes(t *testing.T) {
 		start := time.Date(2026, 5, 19, 18, 0, 0, 0, time.UTC)
 		end := time.Date(2026, 5, 19, 23, 0, 0, 0, time.UTC)
 
-		actual, err := expectedFireTimes(spec, "schedid", start, end)
+		actual, err := expectedFireTimes(spec, start, end)
 		require.NoError(t, err)
 
 		expected := []time.Time{
@@ -143,7 +317,7 @@ func TestExpectedFireTimes(t *testing.T) {
 		}
 		start := time.Date(2026, 5, 19, 18, 0, 0, 0, time.UTC)
 		end := time.Date(2026, 5, 19, 19, 0, 0, 0, time.UTC)
-		actual, err := expectedFireTimes(spec, "x", start, end)
+		actual, err := expectedFireTimes(spec, start, end)
 		require.NoError(t, err)
 
 		expected := []time.Time{
@@ -159,7 +333,7 @@ func TestExpectedFireTimes(t *testing.T) {
 		spec := &schedulepb.ScheduleSpec{
 			CronString: []string{"0 * * * *"},
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T21:00:00Z"))
 		require.NoError(t, err)
@@ -178,7 +352,7 @@ func TestExpectedFireTimes(t *testing.T) {
 				Second: "0",
 			}},
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T00:00:00Z"),
 			mustParseTime("2026-05-21T12:00:00Z"))
 		require.NoError(t, err)
@@ -201,7 +375,7 @@ func TestExpectedFireTimes(t *testing.T) {
 				DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
 			}},
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T00:30:00Z"),
 			mustParseTime("2026-05-19T04:00:00Z"))
 		require.NoError(t, err)
@@ -226,7 +400,7 @@ func TestExpectedFireTimes(t *testing.T) {
 			}},
 			TimezoneName: "America/Los_Angeles",
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T00:00:00Z"),
 			mustParseTime("2026-05-20T00:00:00Z"))
 		require.NoError(t, err)
@@ -248,7 +422,7 @@ func TestExpectedFireTimes(t *testing.T) {
 			}},
 			TimezoneName: "America/New_York",
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-03-07T00:00:00Z"),
 			mustParseTime("2026-03-11T00:00:00Z"))
 		require.NoError(t, err)
@@ -262,7 +436,7 @@ func TestExpectedFireTimes(t *testing.T) {
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{hourlyStructured()},
 			EndTime:            timestamppb.New(mustParseTime("2026-01-01T00:00:00Z")),
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T22:00:00Z"))
 		require.NoError(t, err)
@@ -274,7 +448,7 @@ func TestExpectedFireTimes(t *testing.T) {
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{hourlyStructured()},
 			StartTime:          timestamppb.New(mustParseTime("2027-01-01T00:00:00Z")),
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T22:00:00Z"))
 		require.NoError(t, err)
@@ -288,7 +462,7 @@ func TestExpectedFireTimes(t *testing.T) {
 				Phase:    durationpb.New(6*time.Minute + 7*time.Second),
 			}},
 		}
-		actual, err := expectedFireTimes(spec, "sid",
+		actual, err := expectedFireTimes(spec,
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T19:00:00Z"))
 		require.NoError(t, err)

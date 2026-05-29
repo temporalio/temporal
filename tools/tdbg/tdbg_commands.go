@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -396,49 +397,71 @@ CAVEATS AND LIMITATIONS
     (3) compare the identity field on WORKFLOW_TASK_STARTED across affected schedules. A shared worker identity points
     to a single sick worker pod; distinct identities point to a broader frontend/matching/persistence issue.
 
-  Window size cap: --start and --end must span no more than 7 days. Wider windows are rejected; chunk into multiple
-    shorter audits instead.
+  Window size cap: --start and --end must span no more than the value of --max-window (default 168h = 7 days).
+    Raise --max-window to audit lower-frequency schedules (e.g. quarterly, yearly); see the --max-window flag help
+    for details and unit caveats. Wider windows are proportionally slower and use more memory.
+
+FILE FORMAT (for --file / stdin)
+  One audit target per line as 'namespace[,schedule_id]'. Examples:
+    checker-ses-northwest-prod.90d0d
+    datastore-northwest-prod.90d0d,DeleteExpiredSecretsScheduledWorkflow--one
+    synthetics-northwest-prod.90d0d,my-schedule
+  Lines starting with '#' and blank lines are ignored. Schedule IDs must not contain commas.
 
 EXAMPLES
   Single namespace, 1-day window, write CSV bundle:
     tdbg schedule audit --namespace my-ns --start 2026-05-19T00:00:00Z --end 2026-05-20T00:00:00Z --output-dir ./audit-out
 
-  Many namespaces from a file:
-    tdbg schedule audit --namespace-file ./ns-list.txt --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
+  Many targets from a file:
+    tdbg schedule audit -f ./targets.csv --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
       --output-dir ./audit-out
+
+  Pipe targets from stdin (cat, psql, awk, etc.):
+    cat ./targets.csv | tdbg schedule audit -f - --start 2026-05-01T00:00:00Z --end 2026-05-02T00:00:00Z
 
   Single schedule deep-dive (omit --output-dir to print one CSV row to stdout):
     tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
       --start 2026-05-19T18:00:00Z --end 2026-05-19T22:00:00Z
 
   Pipe stdout output to your favorite filter (e.g. only show rows with real_miss > 0):
-    tdbg schedule audit --namespace-file ./ns-list.txt \
+    tdbg schedule audit -f ./targets.csv \
       --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
       | awk -F, 'NR==1 || $9 > 0'`,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    FlagNamespace,
 					Aliases: FlagNamespaceAlias,
-					Usage:   "Single namespace to audit (mutually exclusive with --namespace-file)",
+					Usage:   "Single namespace to audit (mutually exclusive with --file)",
 				},
 				&cli.StringFlag{
-					Name:  FlagNamespaceFile,
-					Usage: "Path to file with one namespace per line (mutually exclusive with --namespace)",
+					Name:    FlagFile,
+					Aliases: FlagFileAlias,
+					Usage: "Path to file with one audit target per line as 'namespace[,schedule_id]'. " +
+						"Use '-' to read from stdin. Mutually exclusive with --namespace. " +
+						"Schedule IDs must not contain commas. Lines starting with '#' and blank lines are ignored.",
 				},
 				&cli.StringFlag{
 					Name:    FlagScheduleID,
 					Aliases: FlagScheduleIDAlias,
-					Usage:   "Optional: audit only this schedule within --namespace",
+					Usage:   "Optional: audit only this schedule within --namespace (use the per-line form in --file for multiple targets)",
 				},
 				&cli.StringFlag{
-					Name:     FlagAuditStart,
+					Name:     FlagStart,
 					Usage:    "Window start (RFC3339)",
 					Required: true,
 				},
 				&cli.StringFlag{
-					Name:     FlagAuditEnd,
+					Name:     FlagEnd,
 					Usage:    "Window end (RFC3339)",
 					Required: true,
+				},
+				&cli.DurationFlag{
+					Name: FlagMaxWindow,
+					Usage: "Maximum allowed window between --start and --end. Default 168h (7d). Raise this " +
+						"to audit schedules that fire less frequently (e.g. quarterly, yearly); larger windows " +
+						"are proportionally slower and use more memory. Use hour units (e.g. 9600h for 400 days); " +
+						"day suffixes are not supported by Go's duration parser.",
+					Value: 7 * 24 * time.Hour,
 				},
 				&cli.StringFlag{
 					Name:    FlagOutputDir,
