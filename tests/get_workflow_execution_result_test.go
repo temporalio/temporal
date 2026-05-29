@@ -202,21 +202,12 @@ NexusOperationStarted`, pollResp.History.Events)
 // callback is carried over to the post-reset run and fires when that run completes — delivering
 // the nexus operation result back to the caller.
 //
-// TODO: This test currently fails. The Nexus handler's Start() runs against the initial run and
-// registers a callback via w.AddCompletionCallbacks (stored in the CHASM Workflow's Callbacks
-// map). When the target is reset:
-//   - The handler's Start() is not re-invoked against the new run, so no callback is registered
-//     there.
-//   - The original (now TERMINATED) run does not fire its callback either, so the caller never
-//     receives NexusOperationCompleted.
-//
-// The continued-as-new path propagates runtime-added callbacks correctly (see
-// TestGetWorkflowExecutionResult_TargetContinuedAsNew), but the reset path does not. Skipping
-// until the reset implementation is updated to carry over runtime-registered completion
-// callbacks the same way it does for callbacks registered via StartWorkflowExecution.
+// The Nexus handler's Start() registers a completion callback via w.AddCompletionCallbacks, stored
+// only in the CHASM Workflow's Callbacks map (never written to history). Reset therefore cannot
+// recover it via event reapply the way it does for StartWorkflow- and update-registered callbacks;
+// instead the resetter copies STANDBY CHASM callbacks from the terminated run onto the reset run
+// (see workflowResetterImpl.reapplyChasmCompletionCallbacks).
 func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_TargetResetAfterCallbackAdded() {
-	s.T().Skip("reset does not yet propagate runtime-registered completion callbacks; see comment above")
-
 	ctx := testcore.NewContext()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -348,6 +339,16 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 	})
 	s.NoError(err)
 	s.ContainsHistoryEvents(`NexusOperationCompleted`, pollResp.History.Events)
+
+	// The callback must be delivered exactly once — carrying it over to the reset run must not
+	// duplicate the StartWorkflow/runtime registration.
+	completedCount := 0
+	for _, ev := range pollResp.History.Events {
+		if ev.GetNexusOperationCompletedEventAttributes() != nil {
+			completedCount++
+		}
+	}
+	s.Equal(1, completedCount, "callback should be delivered exactly once after reset")
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",

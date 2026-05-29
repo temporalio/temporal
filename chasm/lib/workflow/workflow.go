@@ -207,6 +207,41 @@ func (w *Workflow) AddCompletionCallbacks(
 	return addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
+// CarryOverStandbyCallbacks copies STANDBY completion callbacks from src into w, preserving each
+// callback's original map key and RequestId. Keys already present in w are skipped, so it is safe
+// to call after StartWorkflow- and update-registered callbacks have already been added to w (those
+// are not duplicated, since they share the same "<requestID>-<idx>" key).
+//
+// This is used by workflow reset to propagate runtime-registered completion callbacks (e.g. the
+// Nexus GetWorkflowExecutionResult callback) that live only in the CHASM tree and are never written
+// to history, so they would otherwise be lost on the reset run. Already-fired callbacks (non-STANDBY)
+// are intentionally not carried over; carried-over callbacks are reconstructed with a fresh state so
+// they fire against the new run.
+func (w *Workflow) CarryOverStandbyCallbacks(
+	ctx chasm.MutableContext,
+	srcCtx chasm.Context,
+	src *Workflow,
+) error {
+	if len(src.Callbacks) == 0 {
+		return nil
+	}
+	if w.Callbacks == nil {
+		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(src.Callbacks))
+	}
+	for id, field := range src.Callbacks {
+		if _, exists := w.Callbacks[id]; exists {
+			continue
+		}
+		cb := field.Get(srcCtx)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		w.Callbacks[id] = chasm.NewComponentField(ctx, callback.NewCallback(
+			cb.RequestId, cb.RegistrationTime, &callbackspb.CallbackState{}, cb.Callback))
+	}
+	return nil
+}
+
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
 // maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
 // maxCallbacksPerUpdateID is the configured maximum number of callbacks allowed per update ID.
