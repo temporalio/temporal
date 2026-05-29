@@ -328,7 +328,7 @@ func (s *scheduler) run() error {
 		if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
-				s.logger.Info("Migration to CHASM succeeded, closing V1 workflow",
+				s.logger.Info("schedule migration to CHASM succeeded",
 					"namespace", s.State.Namespace,
 					"schedule-id", s.State.ScheduleId,
 				)
@@ -337,7 +337,7 @@ func (s *scheduler) run() error {
 				}).Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
 				return nil
 			}
-			s.logger.Error("Migration to CHASM failed, continuing V1 workflow",
+			s.logger.Error("schedule migration to CHASM failed",
 				"namespace", s.State.Namespace,
 				"schedule-id", s.State.ScheduleId,
 				"error", err,
@@ -1007,7 +1007,7 @@ func (s *scheduler) handleMigrateSignal(ch workflow.ReceiveChannel, _ bool) {
 }
 
 func (s *scheduler) executeMigration() error {
-	s.logger.Info("Starting migration to CHASM",
+	s.logger.Info("schedule migration to CHASM started",
 		"namespace", s.State.Namespace,
 		"schedule-id", s.State.ScheduleId,
 	)
