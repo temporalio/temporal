@@ -236,8 +236,6 @@ func (w *getWorkflowExecutionResultHandler) Start(
 		}, nil,
 	)
 	if err != nil {
-		// consts.ErrWorkflowCompleted is a *serviceerror.NotFound, but the CHASM engine's
-		// convertError rewrites it into a different NotFound message, so errors.Is won't match.
 		// Check for any NotFound to trigger the synchronous getTerminalState path.
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			result, err := w.getTerminalState(ctx, nsID.String(), req)

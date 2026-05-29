@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
@@ -19,6 +23,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type GetWorkflowExecutionResultTestSuite struct {
@@ -356,6 +361,266 @@ func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_Tar
 	})
 	s.NoError(err)
 	s.NoError(callerRun.Get(ctx, nil))
+}
+
+// terminalStateTestCase parameterizes TestGetWorkflowExecutionResult_TerminalStates: each case
+// drives a target workflow into a distinct terminal state and asserts the synchronous
+// getTerminalState path maps that state to the expected GetWorkflowExecutionResultResponse status.
+type terminalStateTestCase struct {
+	name string
+	// workflowExecutionTimeout, when > 0, is set on the target's StartWorkflowExecution so the
+	// target can time out without a worker (used for the TIMED_OUT case).
+	workflowExecutionTimeout time.Duration
+	// drive transitions the target run into its terminal state. It may be a no-op (e.g. TIMED_OUT,
+	// where the workflow closes on its own).
+	drive          func(ctx context.Context, targetTaskQueue, targetWorkflowID, targetRunID string)
+	expectedStatus enumspb.WorkflowExecutionStatus
+	// verify runs additional assertions on the decoded response (e.g. result/failure payloads).
+	verify func(resp *applicationservice.GetWorkflowExecutionResultResponse)
+}
+
+// TestGetWorkflowExecutionResult_TerminalStates exercises the synchronous getTerminalState path for
+// every terminal workflow state. For each state it drives a target workflow to that state, waits
+// until it is fully closed, then schedules GetWorkflowExecutionResult so Start() short-circuits to
+// getTerminalState. The nexus operation result is surfaced as the caller workflow's own result and
+// decoded back into a GetWorkflowExecutionResultResponse to assert the reported status.
+func (s *GetWorkflowExecutionResultTestSuite) TestGetWorkflowExecutionResult_TerminalStates() {
+	completedResult := payloads.MustEncodeSingle("the-result")
+	testFailure := &failurepb.Failure{Message: "boom"}
+
+	testCases := []terminalStateTestCase{
+		{
+			name:           "Completed",
+			expectedStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			drive: func(ctx context.Context, targetTaskQueue, _, _ string) {
+				s.respondTargetWorkflowTask(ctx, targetTaskQueue, []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: &commonpb.Payloads{Payloads: []*commonpb.Payload{completedResult}},
+						},
+					},
+				}})
+			},
+			verify: func(resp *applicationservice.GetWorkflowExecutionResultResponse) {
+				s.NotNil(resp.GetResult(), "completed result payload should be carried back to the caller")
+			},
+		},
+		{
+			name:           "Failed",
+			expectedStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			drive: func(ctx context.Context, targetTaskQueue, _, _ string) {
+				s.respondTargetWorkflowTask(ctx, targetTaskQueue, []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+						FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: testFailure,
+						},
+					},
+				}})
+			},
+			verify: func(resp *applicationservice.GetWorkflowExecutionResultResponse) {
+				s.NotNil(resp.GetFailure(), "failure should be carried back to the caller")
+			},
+		},
+		{
+			name:                     "TimedOut",
+			workflowExecutionTimeout: 1 * time.Second,
+			expectedStatus:           enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			// No drive: with no worker and a short execution timeout, the target times out on its own.
+			drive: func(context.Context, string, string, string) {},
+		},
+		{
+			name:           "Canceled",
+			expectedStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+			drive: func(ctx context.Context, targetTaskQueue, targetWorkflowID, targetRunID string) {
+				_, err := s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Namespace:         s.Namespace().String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+				})
+				s.NoError(err)
+				s.respondTargetWorkflowTask(ctx, targetTaskQueue, []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{
+						CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{},
+					},
+				}})
+			},
+		},
+		{
+			name:           "Terminated",
+			expectedStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			drive: func(ctx context.Context, _, targetWorkflowID, targetRunID string) {
+				_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         s.Namespace().String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+					Reason:            "test terminate",
+				})
+				s.NoError(err)
+			},
+		},
+		{
+			name:           "ContinuedAsNew",
+			expectedStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			drive: func(ctx context.Context, targetTaskQueue, _, _ string) {
+				// The initial run closes with CONTINUED_AS_NEW; we query that closed run below. The
+				// post-CAN run keeps running and is cleaned up by terminating the workflow ID.
+				s.respondTargetWorkflowTask(ctx, targetTaskQueue, []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+							WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
+							TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						},
+					},
+				}})
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.runTerminalStateCase(tc)
+		})
+	}
+}
+
+// respondTargetWorkflowTask polls a single workflow task from the target task queue and responds
+// with the given commands.
+func (s *GetWorkflowExecutionResultTestSuite) respondTargetWorkflowTask(ctx context.Context, taskQueue string, commands []*commandpb.Command) {
+	s.T().Helper()
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands:  commands,
+	})
+	s.NoError(err)
+}
+
+func (s *GetWorkflowExecutionResultTestSuite) runTerminalStateCase(tc terminalStateTestCase) {
+	ctx := testcore.NewContext()
+	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
+	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
+	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	// Start the target workflow.
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   targetWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		RequestId:    uuid.NewString(),
+	}
+	if tc.workflowExecutionTimeout > 0 {
+		startReq.WorkflowExecutionTimeout = durationpb.New(tc.workflowExecutionTimeout)
+	}
+	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, startReq)
+	s.NoError(err)
+	targetRunID := startResp.RunId
+	s.T().Cleanup(func() {
+		_, _ = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+			Reason:            "test cleanup",
+		})
+	})
+
+	// Drive the target into the terminal state.
+	tc.drive(ctx, targetTaskQueue, targetWorkflowID, targetRunID)
+
+	// Wait until the target run is fully closed in the expected state. This guarantees the nexus
+	// operation's Start() hits the synchronous getTerminalState path instead of registering a callback.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+		})
+		assert.NoError(t, descErr)
+		assert.Equal(t, tc.expectedStatus, descResp.GetWorkflowExecutionInfo().GetStatus())
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Start the caller workflow.
+	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: callerTaskQueue,
+	}, "caller-workflow")
+	s.NoError(err)
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+	})
+
+	// Schedule GetWorkflowExecutionResult against the closed target run.
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  commonnexus.SystemEndpoint,
+					Service:   workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.ServiceName,
+					Operation: workflowservicenexus.TemporalAPIApplicationserviceV1ApplicationService.GetWorkflowExecutionResult.Name(),
+					Input: payloads.MustEncodeSingle(&applicationservice.GetWorkflowExecutionResultRequest{
+						Namespace: s.Namespace().String(),
+						Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+					}),
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	// The operation completes synchronously via getTerminalState, so the next WFT carries
+	// NexusOperationCompleted (and no NexusOperationStarted — the async callback path is skipped).
+	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	s.ContainsHistoryEvents(`NexusOperationScheduled`, pollResp.History.Events)
+	s.ContainsHistoryEvents(`NexusOperationCompleted`, pollResp.History.Events)
+
+	completedIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationCompletedEventAttributes() != nil
+	})
+	s.Positive(completedIdx, "caller history should contain a NexusOperationCompleted event")
+	result := pollResp.History.Events[completedIdx].GetNexusOperationCompletedEventAttributes().GetResult()
+	s.NotNil(result)
+
+	// Complete the caller, surfacing the nexus result as its own result so we can decode it.
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: &commonpb.Payloads{Payloads: []*commonpb.Payload{result}},
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	// Decode the nexus result back into a GetWorkflowExecutionResultResponse and assert the status.
+	var resultResp applicationservice.GetWorkflowExecutionResultResponse
+	s.NoError(callerRun.Get(ctx, &resultResp))
+	s.Equal(tc.expectedStatus, resultResp.GetStatus())
+	if tc.verify != nil {
+		tc.verify(&resultResp)
+	}
 }
 
 // TestGetWorkflowExecutionResult_TargetContinuedAsNew verifies that when the target workflow
