@@ -83,6 +83,37 @@ func TestSearchAttributesMap_Get(t *testing.T) {
 	})
 }
 
+func TestSearchAttributesMap_IndexedFields(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		require.Nil(t, NewSearchAttributesMap(nil).IndexedFields())
+		require.Nil(t, NewSearchAttributesMap(map[string]VisibilityValue{}).IndexedFields())
+	})
+
+	t.Run("ReEncodesAndRoundTrips", func(t *testing.T) {
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		values := map[string]VisibilityValue{
+			"ScheduleNextActionTime": VisibilityValueTime(now),
+			"ExecutionStatus":        VisibilityValueKeyword("Running"),
+			"Count":                  VisibilityValueInt64(7),
+		}
+		m := NewSearchAttributesMap(values)
+
+		fields := m.IndexedFields()
+		require.Len(t, fields, len(values))
+		for name := range values {
+			require.Contains(t, fields, name)
+			require.NotNil(t, fields[name])
+		}
+
+		// Round-trip: decoding the payloads back yields the original values.
+		roundTripped, err := newSearchAttributesMapFromProto(&commonpb.SearchAttributes{IndexedFields: fields})
+		require.NoError(t, err)
+		for name, want := range values {
+			require.True(t, want.Equal(roundTripped.values[name]), "value for %q changed across re-encode", name)
+		}
+	})
+}
+
 func TestNewSearchAttributesMapFromProto(t *testing.T) {
 	t.Run("NilSearchAttributes", func(t *testing.T) {
 		m, err := newSearchAttributesMapFromProto(nil)

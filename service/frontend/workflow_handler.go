@@ -5036,12 +5036,27 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
 
+		// On the CHASM path, resolve the Scheduler component's search-attribute mapper so
+		// CHASM search attributes (e.g. ScheduleNextActionTime, which maps to a reserved
+		// predefined field) validate and convert correctly. Without it, validation runs with
+		// no CHASM mapper and rejects these aliases as "invalid search attribute".
+		var chasmMapper *chasm.VisibilitySearchAttributesMapper
+		archetypeID := chasm.UnspecifiedArchetypeID
+		if chasmEnabled {
+			if rc, ok := wh.registry.ComponentByID(chasm.SchedulerArchetypeID); ok {
+				chasmMapper = rc.SearchAttributesMapper()
+				archetypeID = chasm.SchedulerArchetypeID
+			}
+		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
+			chasmMapper,
+			archetypeID,
 		); err != nil {
 			return "", err
 		}
@@ -5059,6 +5074,29 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 	}
 
 	return result, nil
+}
+
+// mergeChasmSearchAttributes combines a CHASM execution's custom search attributes with its
+// (already-aliased) CHASM search attributes into a single indexed-fields map for a schedule list
+// entry. CHASM search attributes are stored separately from custom ones on the execution info, so
+// they must be folded in here to be surfaced to clients. On key collision the CHASM value wins.
+// The inputs are never mutated; when there are no CHASM fields the custom map is returned as-is.
+func mergeChasmSearchAttributes(
+	custom map[string]*commonpb.Payload,
+	chasmSAs chasm.SearchAttributesMap,
+) map[string]*commonpb.Payload {
+	chasmFields := chasmSAs.IndexedFields()
+	if len(chasmFields) == 0 {
+		return custom
+	}
+	merged := make(map[string]*commonpb.Payload, len(custom)+len(chasmFields))
+	for k, v := range custom {
+		merged[k] = v
+	}
+	for k, v := range chasmFields {
+		merged[k] = v
+	}
+	return merged
 }
 
 func (wh *WorkflowHandler) listSchedulesChasm(
@@ -5095,12 +5133,18 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 		workflowID := ex.BusinessID
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
 
+		// Merge the V2/CHASM search attributes (e.g. ScheduleNextActionTime, which the
+		// visibility manager has already aliased from its reserved predefined field) into the
+		// entry's custom search attributes so they are surfaced to the client. They are stored
+		// separately on the execution info; without this merge they'd be queryable but invisible.
+		indexedFields := mergeChasmSearchAttributes(ex.CustomSearchAttributes, ex.ChasmSearchAttributes)
+
 		schedules[i] = &schedulepb.ScheduleListEntry{
 			ScheduleId: scheduleID,
 			Memo:       customMemo,
 			// cleanScheduleSearchAttributes is only needed for V1 schedules
 			SearchAttributes: wh.cleanScheduleSearchAttributes(&commonpb.SearchAttributes{
-				IndexedFields: ex.CustomSearchAttributes,
+				IndexedFields: indexedFields,
 			}),
 			Info: listInfo,
 		}
