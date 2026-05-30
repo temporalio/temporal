@@ -33,9 +33,11 @@ func newFieldNameAggInterceptor(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *fieldNameAggInterceptor {
 	return &fieldNameAggInterceptor{
-		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil, chasm.UnspecifiedArchetypeID),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, chasmMapper, archetypeID),
 		names:           make(map[string]bool),
 	}
 }
@@ -63,6 +65,8 @@ func ValidateVisibilityQuery(
 	saMapperProvider searchattribute.MapperProvider,
 	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) error {
 	var fields []string
 	var err error
@@ -72,9 +76,11 @@ func ValidateVisibilityQuery(
 			saNameType,
 			saMapperProvider,
 			queryString,
+			chasmMapper,
+			archetypeID,
 		)
 	} else {
-		fields, err = getQueryFieldsLegacy(namespaceName, saNameType, saMapperProvider, queryString)
+		fields, err = getQueryFieldsLegacy(namespaceName, saNameType, saMapperProvider, queryString, chasmMapper, archetypeID)
 	}
 	if err != nil {
 		return err
@@ -94,6 +100,8 @@ func getQueryFields(
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) ([]string, error) {
 	saMapper, err := saMapperProvider.GetMapper(namespaceName)
 	if err != nil {
@@ -104,7 +112,9 @@ func getQueryFields(
 		namespaceName,
 		saNameType,
 		saMapper,
-	).WithSearchAttributeInterceptor(saInterceptor)
+	).WithSearchAttributeInterceptor(saInterceptor).
+		WithChasmMapper(chasmMapper).
+		WithArchetypeID(archetypeID)
 	_, err = queryConverter.Convert(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError
@@ -124,9 +134,11 @@ func getQueryFieldsLegacy(
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) ([]string, error) {
-	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
-	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, nil)
+	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider, chasmMapper, archetypeID)
+	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, chasmMapper)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError

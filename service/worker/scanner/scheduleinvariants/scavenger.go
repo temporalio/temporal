@@ -90,8 +90,11 @@ func NewActivities(
 func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
 		threshold := a.timeSource.Now().UTC().Add(-a.overdueTolerance()).Format(time.RFC3339Nano)
+		// the query's intention is:
+		// show running schedules where ScheduleNextActionTime is in the past (plus a small buffer)
 		query := fmt.Sprintf(
-			`TemporalScheduleNextActionTime < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
+			`%s < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
+			scheduler.ScheduleNextActionTimeName,
 			threshold,
 		)
 		return a.runOverdueScan(scanCtx, query)
@@ -112,7 +115,9 @@ func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 // unpaused schedules with no TemporalScheduleNextActionTime set.
 func (a *Activities) ScanUnknownState(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
-		query := `TemporalScheduleNextActionTime IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`
+		query := fmt.Sprintf(`%s IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`, scheduler.ScheduleNextActionTimeName)
+		a.logger.Info("schedule-invariants: starting unknown_state scan",
+			tag.NewStringTag("query", query))
 		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
 	})
 }

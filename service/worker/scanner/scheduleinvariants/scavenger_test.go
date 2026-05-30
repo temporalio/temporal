@@ -305,7 +305,7 @@ func TestScheduleIsExpectedNotToFire(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "describe_error_counts_as_anomaly",
+			name: "describe_error",
 			err:  errors.New("describe failed"),
 			want: false,
 		},
