@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -23,6 +24,8 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 		testNamespace,
 		searchattribute.TestEsNameTypeMap(),
 		searchattribute.NewTestMapperProvider(nil),
+		nil,
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
@@ -169,6 +172,8 @@ func TestGetQueryFieldsLegacy(t *testing.T) {
 					searchattribute.TestEsNameTypeMap(),
 					searchattribute.NewTestMapperProvider(nil),
 					tc.input,
+					nil,
+					chasm.UnspecifiedArchetypeID,
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
@@ -259,6 +264,8 @@ func TestGetQueryFields(t *testing.T) {
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					tc.input,
+					nil,
+					chasm.UnspecifiedArchetypeID,
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
@@ -340,6 +347,8 @@ func TestValidateVisibilityQuery(t *testing.T) {
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
+					nil,
+					chasm.UnspecifiedArchetypeID,
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
