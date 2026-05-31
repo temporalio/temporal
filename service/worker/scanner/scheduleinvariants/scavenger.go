@@ -101,12 +101,19 @@ func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 	})
 }
 
-// ScanStuckOpen is a long-running activity that periodically scans for schedules with
-// ExecutionStatus=Completed and CloseTime older than the configured buffer.
+// ScanStuckOpen is a long-running activity that periodically scans for schedules whose
+// ScheduleIdleCloseTime deadline has already passed (beyond the configured buffer).
+// ScheduleIdleCloseTime is only emitted while a schedule is open, so an overdue value
+// means the idle-close task never fired and the schedule is stuck open. Paused schedules
+// are excluded since they are intentionally held open and do not idle-close.
 func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
-		threshold := a.timeSource.Now().UTC().Add(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier).Format(time.RFC3339Nano)
-		query := fmt.Sprintf(`ExecutionStatus = "Completed" AND CloseTime < "%s"`, threshold)
+		threshold := a.timeSource.Now().UTC().Add(-(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier)).Format(time.RFC3339Nano)
+		query := fmt.Sprintf(
+			`%s < "%s" AND TemporalSchedulePaused = false`,
+			scheduler.ScheduleIdleCloseTimeName,
+			threshold,
+		)
 		return a.runScan(scanCtx, "stuck_open", query, metrics.ScheduleInvariantsScannerStuckOpenCount.Name())
 	})
 }
