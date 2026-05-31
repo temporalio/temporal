@@ -84,11 +84,6 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			err = validateTimeSkippingConfig(requestedOptions.GetTimeSkippingConfig(), mutableState)
-			if err != nil {
-				return nil, err
-			}
-
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
@@ -128,9 +123,6 @@ func Invoke(
 	return ret, nil
 }
 
-// validateTimeSkippingConfig rejects an update whose MaxSkippedDuration is
-// below what the workflow has already skipped — the new bound would be
-// retroactively violated. Validated against current MS state, before merge.
 func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.MutableState) error {
 	if !cfg.GetEnabled() {
 		if cfg.GetBound() != nil {
@@ -138,18 +130,8 @@ func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.
 		}
 		return nil
 	}
-	bound, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
-	if !ok {
-		return nil
-	}
-	maxSkipped := bound.MaxSkippedDuration.AsDuration()
-	accumulated := ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
-	if maxSkipped <= accumulated {
-		return serviceerror.NewInvalidArgumentf(
-			"max skipped duration must be greater than skipped duration: %v <= %v",
-			maxSkipped, accumulated,
-		)
-	}
+	// todo@fx
+	// max elapsed duration should be bound should never be negative
 	return nil
 }
 
@@ -278,15 +260,6 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
 		}
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
-	}
-
-	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxSkippedDuration(),
-		}
 	}
 
 	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
