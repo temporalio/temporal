@@ -1,4 +1,4 @@
-package testrunner
+package gotestparse
 
 import (
 	"os"
@@ -13,7 +13,7 @@ func TestParseTestTimeouts(t *testing.T) {
 	logOutput, err := os.ReadFile("testdata/timeout-output.log")
 	require.NoError(t, err)
 
-	stacktrace, tests := parseTestTimeouts(string(logInput))
+	stacktrace, tests := ParseTestTimeouts(string(logInput))
 	require.Equal(t, []string{
 		"TestActivityApiResetClientTestSuite",
 		"TestNDCFuncTestSuite",
@@ -37,7 +37,7 @@ func TestParseFailedTestsFromOutput(t *testing.T) {
 --- FAIL: TestBaz (0.50s)
 FAIL
 `
-		got := parseFailedTestsFromOutput(stdout)
+		got := ParseFailedTestsFromOutput(stdout)
 		require.Equal(t, []string{"TestFoo/SubTest1", "TestFoo", "TestBaz"}, got)
 	})
 
@@ -47,7 +47,7 @@ FAIL
 --- FAIL: TestDupe (0.10s)
 --- FAIL: TestOther (0.20s)
 `
-		got := parseFailedTestsFromOutput(stdout)
+		got := ParseFailedTestsFromOutput(stdout)
 		require.Equal(t, []string{"TestDupe", "TestOther"}, got)
 	})
 
@@ -57,12 +57,12 @@ FAIL
 --- PASS: TestPass (0.01s)
 ok  	go.temporal.io/server/tests
 `
-		got := parseFailedTestsFromOutput(stdout)
+		got := ParseFailedTestsFromOutput(stdout)
 		require.Empty(t, got)
 	})
 
 	t.Run("ReturnsEmptyOnEmptyInput", func(t *testing.T) {
-		require.Empty(t, parseFailedTestsFromOutput(""))
+		require.Empty(t, ParseFailedTestsFromOutput(""))
 	})
 }
 
@@ -70,20 +70,16 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 	input, err := os.ReadFile("testdata/alerts-input.log")
 	require.NoError(t, err)
 
-	alerts := parseAlerts(string(input))
+	alerts := ParseAlerts(string(input))
 	require.NotEmpty(t, alerts)
 	require.Equal(t, 2, len(alerts))
 
 	require.Contains(t, alerts[0].Details, "WARNING: DATA RACE")
 	require.Contains(t, alerts[0].Tests[0], "test.TestDataRaceExample")
-	require.Contains(t, primaryTestName(alerts[0].Tests), "test.TestDataRaceExample")
+	require.Contains(t, PrimaryTestName(alerts[0].Tests), "test.TestDataRaceExample")
 	require.Contains(t, alerts[1].Details, "panic: ")
 	require.Contains(t, alerts[1].Tests[0], "test.TestPanicExample")
-	require.Contains(t, primaryTestName(alerts[1].Tests), "TestPanicExample")
-
-	// Ensure dedupe works
-	deduped := dedupeAlerts(append(alerts, alerts...))
-	require.Equal(t, len(deduped), len(alerts))
+	require.Contains(t, PrimaryTestName(alerts[1].Tests), "TestPanicExample")
 }
 
 func TestParseFailureDetails(t *testing.T) {
@@ -148,7 +144,7 @@ FAIL`,
 		{
 			name:  "returns sentinel when no output exists",
 			data:  "FAIL\n",
-			exact: noFailureDetails,
+			exact: NoFailureDetails,
 		},
 		{
 			name: "stops before logs printed after assertion block",
@@ -174,17 +170,17 @@ FAIL`,
 			name: "keeps last await attempt without trailing logs",
 			data: `    report.go:54: attempt errors:
   --- attempt 1 ---
-    
+
     Error Trace:	suite_test.go:10
     Error:      	first failure
 
   --- attempt 2 ---
-    
+
     Error Trace:	suite_test.go:10
     Error:      	penultimate failure
 
   --- attempt 3 ---
-    
+
     Error Trace:	suite_test.go:10
     Error:      	last failure
 
@@ -202,7 +198,7 @@ FAIL`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFailureDetails(tt.data)
+			got := ParseFailureDetails(tt.data)
 			if tt.exact != "" {
 				require.Equal(t, tt.exact, got)
 				return

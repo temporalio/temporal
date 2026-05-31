@@ -1,4 +1,8 @@
-package testrunner
+// Package gotestparse extracts failures from `go test` / gotestsum output: failing test
+// names, high-priority alerts (data races, panics, fatals), test timeouts, and the
+// actionable detail from a JUnit failure body. It is shared by testrunner (CI summaries)
+// and flakeshake (local flake reports).
+package gotestparse
 
 import (
 	"fmt"
@@ -9,15 +13,35 @@ import (
 	"github.com/maruel/panicparse/v2/stack"
 )
 
+// FailureType categorizes a detected failure.
+type FailureType string
+
 const (
-	// noFailureDetails is returned by parseFailureDetails when no recognisable
+	FailureTypeFailed   FailureType = "Failed"
+	FailureTypeTimeout  FailureType = "TIMEOUT"
+	FailureTypeCrash    FailureType = "CRASH"
+	FailureTypeDataRace FailureType = "DATA RACE"
+	FailureTypePanic    FailureType = "PANIC"
+	FailureTypeFatal    FailureType = "FATAL"
+)
+
+const (
+	// NoFailureDetails is returned by ParseFailureDetails when no recognisable
 	// failure block is found.
-	noFailureDetails     = "(error details not found)"
+	NoFailureDetails     = "(error details not found)"
 	goTestFailLinePrefix = "--- FAIL:"
 )
 
-// parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
-func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
+// Alert captures a prominent issue detected from stdout/stderr of test runs.
+type Alert struct {
+	Type    FailureType
+	Summary string
+	Details string
+	Tests   []string
+}
+
+// ParseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
+func ParseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
@@ -73,19 +97,11 @@ func testOnlyStacktrace(stacktrace string) string {
 	return res
 }
 
-// alert captures a prominent issue detected from stdout/stderr of test runs.
-type alert struct {
-	Type    failureType
-	Summary string
-	Details string
-	Tests   []string
-}
-
-// primaryTestName returns a single representative test name for an alert.
+// PrimaryTestName returns a single representative test name for an alert.
 // Preference order:
 // 1) Fully-qualified test name containing ".Test"
 // 2) First detected test name
-func primaryTestName(tests []string) string {
+func PrimaryTestName(tests []string) string {
 	if len(tests) == 0 {
 		return ""
 	}
@@ -97,31 +113,12 @@ func primaryTestName(tests []string) string {
 	return tests[0]
 }
 
-// preferFullyQualifiedTestName returns the best display name for a test.
-// If the primary name is not fully-qualified (e.g., "TestXxx"), but a
-// fully-qualified variant exists in the list (e.g., "pkg/path.TestXxx"),
-// this returns the fully-qualified variant.
-func preferFullyQualifiedTestName(tests []string) string {
-	primary := primaryTestName(tests)
-	if primary == "" || strings.Contains(primary, ".Test") {
-		return primary
-	}
-	// Try to find an FQN that ends with "."+primary
-	suffix := "." + primary
-	for _, t := range tests {
-		if strings.HasSuffix(t, suffix) {
-			return t
-		}
-	}
-	return primary
-}
-
-// parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
+// ParseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
 // alerts such as data races and panics. It returns a slice of alerts in the
 // order they were encountered.
-func parseAlerts(stdout string) []alert {
+func ParseAlerts(stdout string) []Alert {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
-	var alerts []alert
+	var alerts []Alert
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
@@ -223,9 +220,9 @@ func parsePlainTestName(line string) (string, bool) {
 }
 
 // tryParseDataRace parses a data race alert at position i if present.
-func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
+func tryParseDataRace(lines []string, i int, line string) (Alert, int, bool) {
 	if !strings.HasPrefix(line, "WARNING: DATA RACE") {
-		return alert{}, i, false
+		return Alert{}, i, false
 	}
 	start := findRaceBlockStart(lines, i)
 	// Merge contiguous race-report sections into a single alert. The Go race
@@ -251,8 +248,8 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 		}
 		return false
 	})
-	return alert{
-		Type:    failureTypeDataRace,
+	return Alert{
+		Type:    FailureTypeDataRace,
 		Summary: "Data race detected",
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -260,13 +257,13 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 }
 
 // tryParsePanic parses a non-timeout panic alert at position i if present.
-func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
+func tryParsePanic(lines []string, i int, line string) (Alert, int, bool) {
 	if !strings.HasPrefix(line, "panic: ") || strings.HasPrefix(line, "panic: test timed out after") {
-		return alert{}, i, false
+		return Alert{}, i, false
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
-	return alert{
-		Type:    failureTypePanic,
+	return Alert{
+		Type:    FailureTypePanic,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -274,13 +271,13 @@ func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
 }
 
 // tryParseFatal parses a runtime fatal error alert at position i if present.
-func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
+func tryParseFatal(lines []string, i int, line string) (Alert, int, bool) {
 	if !strings.HasPrefix(line, "fatal error: ") {
-		return alert{}, i, false
+		return Alert{}, i, false
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
-	return alert{
-		Type:    failureTypeFatal,
+	return Alert{
+		Type:    FailureTypeFatal,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -324,10 +321,10 @@ func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
 }
 
-// parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
+// ParseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
 // It looks for Go test failure lines produced as tests complete, and is
 // used when the test binary was killed externally before producing a JUnit XML.
-func parseFailedTestsFromOutput(stdout string) []string {
+func ParseFailedTestsFromOutput(stdout string) []string {
 	var failed []string
 	seen := make(map[string]struct{})
 	for line := range strings.SplitSeq(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
@@ -342,8 +339,8 @@ func parseFailedTestsFromOutput(stdout string) []string {
 	return failed
 }
 
-// parseFailureDetails extracts the actionable part of a JUnit failure Data block.
-func parseFailureDetails(data string) string {
+// ParseFailureDetails extracts the actionable part of a JUnit failure Data block.
+func ParseFailureDetails(data string) string {
 	lines := normalizedFailureLines(data)
 
 	// Prefer assertion blocks because they contain the useful testify failure
@@ -356,7 +353,7 @@ func parseFailureDetails(data string) string {
 	if start, end, ok := findLastTestOutputFailureBlock(lines); ok {
 		return strings.Join(lines[start:end], "\n")
 	}
-	return noFailureDetails
+	return NoFailureDetails
 }
 
 func normalizedFailureLines(data string) []string {

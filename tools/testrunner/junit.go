@@ -19,18 +19,6 @@ const alertsSuiteName = "ALERTS"
 
 const junitAlertDetailsMaxBytes = 64 * 1024
 
-type failureType string
-
-const (
-	// failureTypeFailed marks a failed assertion.
-	failureTypeFailed   failureType = "Failed"
-	failureTypeTimeout  failureType = "TIMEOUT"
-	failureTypeCrash    failureType = "CRASH"
-	failureTypeDataRace failureType = "DATA RACE"
-	failureTypePanic    failureType = "PANIC"
-	failureTypeFatal    failureType = "FATAL"
-)
-
 type junitReport struct {
 	junit.Testsuites
 	path          string

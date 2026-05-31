@@ -161,11 +161,20 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	defaults := GetPersistenceTestDefaults()
 	options.ApplyDefaults(&defaults)
 
-	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
-		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.
+	if cliFlags.faultPersistence != "" && options.FaultInjection == nil {
+		// If -faultPersistence is passed to the test runner, then default fault injection config is added to the persistence options.
 		// If FaultInjectionConfig is already set by test, then it means that this test requires
 		// a specific fault injection configuration that takes precedence over a default one.
 		options.FaultInjection = config.DefaultFaultInjection()
+	}
+
+	// The persistence Latency fault is injected via the runtime Injector hook so it composes
+	// with any configured error faults without modifying the faultinjection package.
+	if injector := PersistenceLatencyInjector(); injector != nil {
+		if options.FaultInjection == nil {
+			options.FaultInjection = &config.FaultInjection{}
+		}
+		options.FaultInjection.Injector = injector
 	}
 
 	return persistencetests.NewTestBase(options)
@@ -355,6 +364,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		RPCFaultInjection:                RPCFaultInjectionConfig(),
 	}
 
 	if clusterConfig.EnableMetricsCapture {

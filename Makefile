@@ -496,12 +496,17 @@ functional-test: clean-test-output
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
-functional-with-fault-injection-test: clean-test-output
-	@printf $(COLOR) "Run integration tests with fault injection..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@$(MAKE) verify-test-log
+# flakeshake: reproduce a CI flake locally by running a test under RPC + persistence Latency
+# fault injection, documenting the outcome under $(TEST_OUTPUT_ROOT). flakeshake owns only the
+# fault flags; the go test invocation is forwarded as-is. Scope it with RUN (and override
+# rounds/latency by appending flags), e.g.:
+#   make flakeshake RUN=TestVersioningFunctionalSuite/TestDispatchNewWorkflowWithRamp
+RUN ?= TestVersioningFunctionalSuite
+ROUNDS ?= 1
+flakeshake:
+	@go run ./cmd/tools/flakeshake --output $(TEST_OUTPUT_ROOT) --rounds $(ROUNDS) -- \
+		$(FUNCTIONAL_TEST_ROOT) -run "$(RUN)" $(COMPILED_TEST_ARGS) \
+		-persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."

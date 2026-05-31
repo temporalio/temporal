@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -122,6 +123,7 @@ type (
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmRegistry             *chasm.Registry
 		grpcClientInterceptor     *grpcinject.Interceptor
+		rpcFaultInjector          *rpcfaultinjection.Injector
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -184,6 +186,7 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
+		RPCFaultInjection        rpcfaultinjection.Config
 	}
 
 	listenHostPort string
@@ -234,6 +237,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
+
+	// Only construct the gRPC fault injector when chaos mode is enabled, so normal test
+	// runs are unaffected.
+	if params.RPCFaultInjection.Enabled() {
+		impl.rpcFaultInjector = rpcfaultinjection.New(params.RPCFaultInjection)
+	}
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
 	for k, v := range defaultDynamicConfigOverrides {
@@ -393,20 +402,18 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				var interceptors []grpc.UnaryServerInterceptor
 				if c.replicationStreamRecorder != nil {
-					return []grpc.UnaryServerInterceptor{
-						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
+					interceptors = append(interceptors, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return nil
+				return append(interceptors, c.rpcFaultUnaryInterceptors()...)
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
+				var interceptors []grpc.StreamServerInterceptor
 				if c.replicationStreamRecorder != nil {
-					return []grpc.StreamServerInterceptor{
-						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
+					interceptors = append(interceptors, c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return nil
+				return append(interceptors, c.rpcFaultStreamInterceptors()...)
 			}),
 			fx.Provide(func() authorization.Authorizer { return c }),
 			fx.Provide(func() authorization.ClaimMapper { return c }),
@@ -491,17 +498,16 @@ func (c *TemporalImpl) startHistory() {
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
 				if c.replicationStreamRecorder != nil {
-					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+					base = append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return base
+				return append(base, c.rpcFaultUnaryInterceptors()...)
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
+				var interceptors []grpc.StreamServerInterceptor
 				if c.replicationStreamRecorder != nil {
-					return []grpc.StreamServerInterceptor{
-						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
+					interceptors = append(interceptors, c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return nil
+				return append(interceptors, c.rpcFaultStreamInterceptors()...)
 			}),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
@@ -585,6 +591,8 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(func() []grpc.UnaryServerInterceptor { return c.rpcFaultUnaryInterceptors() }),
+			fx.Provide(func() []grpc.StreamServerInterceptor { return c.rpcFaultStreamInterceptors() }),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
@@ -653,6 +661,8 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(func() []grpc.UnaryServerInterceptor { return c.rpcFaultUnaryInterceptors() }),
+			fx.Provide(func() []grpc.StreamServerInterceptor { return c.rpcFaultStreamInterceptors() }),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
@@ -713,6 +723,24 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
 	return c.grpcClientInterceptor
+}
+
+// rpcFaultUnaryInterceptors returns the gRPC fault injection unary server interceptors,
+// or nil when chaos mode is disabled.
+func (c *TemporalImpl) rpcFaultUnaryInterceptors() []grpc.UnaryServerInterceptor {
+	if c.rpcFaultInjector == nil {
+		return nil
+	}
+	return []grpc.UnaryServerInterceptor{c.rpcFaultInjector.UnaryServerInterceptor()}
+}
+
+// rpcFaultStreamInterceptors returns the gRPC fault injection stream server interceptors,
+// or nil when chaos mode is disabled.
+func (c *TemporalImpl) rpcFaultStreamInterceptors() []grpc.StreamServerInterceptor {
+	if c.rpcFaultInjector == nil {
+		return nil
+	}
+	return []grpc.StreamServerInterceptor{c.rpcFaultInjector.StreamServerInterceptor()}
 }
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
