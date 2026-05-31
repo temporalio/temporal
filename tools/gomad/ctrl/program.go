@@ -80,7 +80,7 @@ func (p *simProgram) generate(resetFiles bool) {
 			Skip:                   transformer.TemporalDefaultSkip,
 			GRPCRewritePkgPrefixes: transformer.TemporalGRPCRewritePkgPrefixes,
 			NativeHTTPPkgPrefixes:  transformer.TemporalNativeHTTPPkgPrefixes,
-			CacheFunc:              transformer.CreateCacheWriter(p.workingDir),
+			CacheFunc:              transformer.CreateCacheWriter(p.workingDir, transformer.HashEmbeddedFS(staticOverrides)),
 			ResultFunc:             transformer.CreateFileWriter(p.workingDir),
 		},
 	)

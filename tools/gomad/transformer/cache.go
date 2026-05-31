@@ -26,7 +26,9 @@ package transformer
 
 import (
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -35,14 +37,20 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-func CreateCacheWriter(outDir string) func(*packages.Package, func()) {
+//go:embed *.go
+var transformerSources embed.FS
+
+func CreateCacheWriter(outDir string, extraInputHash string) func(*packages.Package, func()) {
 	if err := os.MkdirAll(outDir, os.ModePerm); err != nil {
 		panic(err)
 	}
 
+	toolHash := hashEmbeddedFS(transformerSources)
+	prefix := toolHash + extraInputHash
+
 	return func(pkg *packages.Package, transformFn func()) {
 		// generate hash
-		hash := hashDirectory(pkg.CompiledGoFiles)
+		hash := prefix + hashDirectory(pkg.CompiledGoFiles)
 
 		// Normalise internal test package paths (e.g. "foo [foo.test]" → "foo").
 		pkgPath := pkg.PkgPath
@@ -83,6 +91,26 @@ func CreateCacheWriter(outDir string) func(*packages.Package, func()) {
 			log.Panic(err)
 		}
 	}
+}
+
+func HashEmbeddedFS(efs embed.FS) string {
+	return hashEmbeddedFS(efs)
+}
+
+func hashEmbeddedFS(efs embed.FS) string {
+	hasher := sha256.New()
+	_ = fs.WalkDir(efs, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		content, err := efs.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		hasher.Write(content)
+		return nil
+	})
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 func hashDirectory(files []string) string {
