@@ -229,7 +229,7 @@ type ChasmComponentAttributes struct {
 	Detached bool `protobuf:"varint,4,opt,name=detached,proto3" json:"detached,omitempty"`
 	// Per-request metadata contributed to this component, keyed by the caller's
 	// request_id.
-	Requests map[string]*ChasmComponentAttributes_Request `protobuf:"bytes,5,rep,name=requests,proto3" json:"requests,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Requests map[string]*ChasmComponentAttributes_RequestMetadata `protobuf:"bytes,5,rep,name=requests,proto3" json:"requests,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Caller-supplied user metadata (summary, details) attached to this component.
 	UserMetadata  *v11.UserMetadata `protobuf:"bytes,6,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -294,7 +294,7 @@ func (x *ChasmComponentAttributes) GetDetached() bool {
 	return false
 }
 
-func (x *ChasmComponentAttributes) GetRequests() map[string]*ChasmComponentAttributes_Request {
+func (x *ChasmComponentAttributes) GetRequests() map[string]*ChasmComponentAttributes_RequestMetadata {
 	if x != nil {
 		return x.Requests
 	}
@@ -869,32 +869,32 @@ func (x *ChasmComponentAttributes_Task) GetPhysicalTaskStatus() int32 {
 	return 0
 }
 
-// Request groups the framework-tracked metadata contributed by a single
-// caller request to this component.
-type ChasmComponentAttributes_Request struct {
+// RequestMetadata groups the framework-tracked metadata contributed by a
+// single caller request to this component.
+type ChasmComponentAttributes_RequestMetadata struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Links attached by this request. Components use these to record
 	// references back to the caller(s) that initiated or extended the
 	// execution (e.g. parent workflow events, Nexus completion sources).
-	Link          []*v1.Link `protobuf:"bytes,1,rep,name=link,proto3" json:"link,omitempty"`
+	Links         []*v1.Link `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChasmComponentAttributes_Request) Reset() {
-	*x = ChasmComponentAttributes_Request{}
+func (x *ChasmComponentAttributes_RequestMetadata) Reset() {
+	*x = ChasmComponentAttributes_RequestMetadata{}
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChasmComponentAttributes_Request) String() string {
+func (x *ChasmComponentAttributes_RequestMetadata) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChasmComponentAttributes_Request) ProtoMessage() {}
+func (*ChasmComponentAttributes_RequestMetadata) ProtoMessage() {}
 
-func (x *ChasmComponentAttributes_Request) ProtoReflect() protoreflect.Message {
+func (x *ChasmComponentAttributes_RequestMetadata) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -906,14 +906,14 @@ func (x *ChasmComponentAttributes_Request) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmComponentAttributes_Request.ProtoReflect.Descriptor instead.
-func (*ChasmComponentAttributes_Request) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChasmComponentAttributes_RequestMetadata.ProtoReflect.Descriptor instead.
+func (*ChasmComponentAttributes_RequestMetadata) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{2, 1}
 }
 
-func (x *ChasmComponentAttributes_Request) GetLink() []*v1.Link {
+func (x *ChasmComponentAttributes_RequestMetadata) GetLinks() []*v1.Link {
 	if x != nil {
-		return x.Link
+		return x.Links
 	}
 	return nil
 }
@@ -934,7 +934,7 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x15collection_attributes\x18\r \x01(\v2=.temporal.server.api.persistence.v1.ChasmCollectionAttributesH\x00R\x14collectionAttributes\x12k\n" +
 	"\x12pointer_attributes\x18\x0e \x01(\v2:.temporal.server.api.persistence.v1.ChasmPointerAttributesH\x00R\x11pointerAttributesB\f\n" +
 	"\n" +
-	"attributes\"\xac\b\n" +
+	"attributes\"\xbe\b\n" +
 	"\x18ChasmComponentAttributes\x12\x17\n" +
 	"\atype_id\x18\x01 \x01(\rR\x06typeId\x12m\n" +
 	"\x11side_effect_tasks\x18\x02 \x03(\v2A.temporal.server.api.persistence.v1.ChasmComponentAttributes.TaskR\x0fsideEffectTasks\x12`\n" +
@@ -950,12 +950,12 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x04data\x18\x04 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04data\x12j\n" +
 	"\x14versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition\x12>\n" +
 	"\x1bversioned_transition_offset\x18\x06 \x01(\x03R\x19versionedTransitionOffset\x120\n" +
-	"\x14physical_task_status\x18\a \x01(\x05R\x12physicalTaskStatus\x1a;\n" +
-	"\aRequest\x120\n" +
-	"\x04link\x18\x01 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x04link\x1a\x81\x01\n" +
+	"\x14physical_task_status\x18\a \x01(\x05R\x12physicalTaskStatus\x1aE\n" +
+	"\x0fRequestMetadata\x122\n" +
+	"\x05links\x18\x01 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x1a\x89\x01\n" +
 	"\rRequestsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12Z\n" +
-	"\x05value\x18\x02 \x01(\v2D.temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestR\x05value:\x028\x01\"\x15\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12b\n" +
+	"\x05value\x18\x02 \x01(\v2L.temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadataR\x05value:\x028\x01\"\x15\n" +
 	"\x13ChasmDataAttributes\"\x1b\n" +
 	"\x19ChasmCollectionAttributes\"5\n" +
 	"\x16ChasmPointerAttributes\x12\x1b\n" +
@@ -1005,25 +1005,25 @@ func file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP() []byte {
 
 var file_temporal_server_api_persistence_v1_chasm_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
-	(*ChasmNode)(nil),                        // 0: temporal.server.api.persistence.v1.ChasmNode
-	(*ChasmNodeMetadata)(nil),                // 1: temporal.server.api.persistence.v1.ChasmNodeMetadata
-	(*ChasmComponentAttributes)(nil),         // 2: temporal.server.api.persistence.v1.ChasmComponentAttributes
-	(*ChasmDataAttributes)(nil),              // 3: temporal.server.api.persistence.v1.ChasmDataAttributes
-	(*ChasmCollectionAttributes)(nil),        // 4: temporal.server.api.persistence.v1.ChasmCollectionAttributes
-	(*ChasmPointerAttributes)(nil),           // 5: temporal.server.api.persistence.v1.ChasmPointerAttributes
-	(*ChasmTaskInfo)(nil),                    // 6: temporal.server.api.persistence.v1.ChasmTaskInfo
-	(*ChasmComponentRef)(nil),                // 7: temporal.server.api.persistence.v1.ChasmComponentRef
-	(*ChasmNexusCompletion)(nil),             // 8: temporal.server.api.persistence.v1.ChasmNexusCompletion
-	(*ChasmComponentAttributes_Task)(nil),    // 9: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task
-	(*ChasmComponentAttributes_Request)(nil), // 10: temporal.server.api.persistence.v1.ChasmComponentAttributes.Request
-	nil,                                      // 11: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry
-	(*v1.DataBlob)(nil),                      // 12: temporal.api.common.v1.DataBlob
-	(*VersionedTransition)(nil),              // 13: temporal.server.api.persistence.v1.VersionedTransition
-	(*v11.UserMetadata)(nil),                 // 14: temporal.api.sdk.v1.UserMetadata
-	(*v1.Payload)(nil),                       // 15: temporal.api.common.v1.Payload
-	(*v12.Failure)(nil),                      // 16: temporal.api.failure.v1.Failure
-	(*timestamppb.Timestamp)(nil),            // 17: google.protobuf.Timestamp
-	(*v1.Link)(nil),                          // 18: temporal.api.common.v1.Link
+	(*ChasmNode)(nil),                                // 0: temporal.server.api.persistence.v1.ChasmNode
+	(*ChasmNodeMetadata)(nil),                        // 1: temporal.server.api.persistence.v1.ChasmNodeMetadata
+	(*ChasmComponentAttributes)(nil),                 // 2: temporal.server.api.persistence.v1.ChasmComponentAttributes
+	(*ChasmDataAttributes)(nil),                      // 3: temporal.server.api.persistence.v1.ChasmDataAttributes
+	(*ChasmCollectionAttributes)(nil),                // 4: temporal.server.api.persistence.v1.ChasmCollectionAttributes
+	(*ChasmPointerAttributes)(nil),                   // 5: temporal.server.api.persistence.v1.ChasmPointerAttributes
+	(*ChasmTaskInfo)(nil),                            // 6: temporal.server.api.persistence.v1.ChasmTaskInfo
+	(*ChasmComponentRef)(nil),                        // 7: temporal.server.api.persistence.v1.ChasmComponentRef
+	(*ChasmNexusCompletion)(nil),                     // 8: temporal.server.api.persistence.v1.ChasmNexusCompletion
+	(*ChasmComponentAttributes_Task)(nil),            // 9: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task
+	(*ChasmComponentAttributes_RequestMetadata)(nil), // 10: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
+	nil,                           // 11: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry
+	(*v1.DataBlob)(nil),           // 12: temporal.api.common.v1.DataBlob
+	(*VersionedTransition)(nil),   // 13: temporal.server.api.persistence.v1.VersionedTransition
+	(*v11.UserMetadata)(nil),      // 14: temporal.api.sdk.v1.UserMetadata
+	(*v1.Payload)(nil),            // 15: temporal.api.common.v1.Payload
+	(*v12.Failure)(nil),           // 16: temporal.api.failure.v1.Failure
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(*v1.Link)(nil),               // 18: temporal.api.common.v1.Link
 }
 var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.ChasmNode.metadata:type_name -> temporal.server.api.persistence.v1.ChasmNodeMetadata
@@ -1052,8 +1052,8 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	17, // 23: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.scheduled_time:type_name -> google.protobuf.Timestamp
 	12, // 24: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.data:type_name -> temporal.api.common.v1.DataBlob
 	13, // 25: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	18, // 26: temporal.server.api.persistence.v1.ChasmComponentAttributes.Request.link:type_name -> temporal.api.common.v1.Link
-	10, // 27: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.Request
+	18, // 26: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata.links:type_name -> temporal.api.common.v1.Link
+	10, // 27: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
 	28, // [28:28] is the sub-list for method output_type
 	28, // [28:28] is the sub-list for method input_type
 	28, // [28:28] is the sub-list for extension type_name

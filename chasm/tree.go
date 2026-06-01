@@ -337,6 +337,8 @@ func newTreeHelper(
 		},
 		newTasks:               make(map[any][]taskWithAttributes),
 		immediatePureTasks:     make(map[any][]taskWithAttributes),
+		pendingRequestLinks:    make(map[any]map[string][]*commonpb.Link),
+		pendingUserMetadata:    make(map[any]*sdkpb.UserMetadata),
 		valueToNode:            make(map[any]*Node),
 		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
 		needsPointerResolution: false,
@@ -1456,7 +1458,7 @@ func (n *Node) componentLinks(component Component) []*commonpb.Link {
 			if _, overridden := pending[requestID]; overridden {
 				continue
 			}
-			links = append(links, req.GetLink()...)
+			links = append(links, req.GetLinks()...)
 		}
 	}
 
@@ -1472,9 +1474,6 @@ func (n *Node) componentLinks(component Component) []*commonpb.Link {
 func (n *Node) setComponentRequestLinks(component Component, requestID string, links []*commonpb.Link) error {
 	if requestID == "" {
 		return serviceerror.NewInvalidArgument("requestID is required when setting per-request links")
-	}
-	if n.pendingRequestLinks == nil {
-		n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
 	}
 	perRequest, ok := n.pendingRequestLinks[component]
 	if !ok {
@@ -1499,7 +1498,7 @@ func (n *Node) componentRequestLinks(component Component, requestID string) ([]*
 	}
 	if refNode, ok := n.valueToNode[component]; ok && refNode.isComponent() {
 		if req, ok := refNode.serializedNode.GetMetadata().GetComponentAttributes().GetRequests()[requestID]; ok {
-			return req.GetLink(), nil
+			return req.GetLinks(), nil
 		}
 	}
 	return nil, nil
@@ -1520,9 +1519,6 @@ func (n *Node) componentUserMetadata(component Component) *sdkpb.UserMetadata {
 // setComponentUserMetadata stages a user-metadata write for the given component.
 // Applied during CloseTransaction.
 func (n *Node) setComponentUserMetadata(component Component, md *sdkpb.UserMetadata) error {
-	if n.pendingUserMetadata == nil {
-		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
-	}
 	n.pendingUserMetadata[component] = md
 	return nil
 }
@@ -1547,7 +1543,6 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 		node.updateLastUpdateVersionedTransition()
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		delete(n.mutation.DeletedNodes, encodedPath)
-		n.isActiveStateDirty = true
 	}
 	if len(n.pendingRequestLinks) > 0 || len(n.pendingUserMetadata) > 0 {
 		n.logger.Warn(
@@ -1556,8 +1551,8 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 			tag.NewInt("orphan-user-metadata-components", len(n.pendingUserMetadata)),
 		)
 	}
-	n.pendingRequestLinks = nil
-	n.pendingUserMetadata = nil
+	n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
+	n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	return nil
 }
 
@@ -1576,7 +1571,7 @@ func (n *Node) applyPendingComponentMetadata() bool {
 
 	if pending, ok := n.pendingRequestLinks[n.value]; ok {
 		if attrs.Requests == nil && len(pending) > 0 {
-			attrs.Requests = make(map[string]*persistencespb.ChasmComponentAttributes_Request)
+			attrs.Requests = make(map[string]*persistencespb.ChasmComponentAttributes_RequestMetadata)
 		}
 		for requestID, links := range pending {
 			if len(links) == 0 {
@@ -1586,7 +1581,7 @@ func (n *Node) applyPendingComponentMetadata() bool {
 				}
 				continue
 			}
-			attrs.Requests[requestID] = &persistencespb.ChasmComponentAttributes_Request{Link: links}
+			attrs.Requests[requestID] = &persistencespb.ChasmComponentAttributes_RequestMetadata{Links: links}
 			dirty = true
 		}
 		delete(n.pendingRequestLinks, n.value)
@@ -2422,8 +2417,12 @@ func (n *Node) cleanupTransaction() {
 		n.immediatePureTasks = make(map[any][]taskWithAttributes)
 	}
 
-	n.pendingRequestLinks = nil
-	n.pendingUserMetadata = nil
+	if len(n.pendingRequestLinks) != 0 {
+		n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
+	}
+	if len(n.pendingUserMetadata) != 0 {
+		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
+	}
 
 	n.isActiveStateDirty = false
 	n.needsPointerResolution = false

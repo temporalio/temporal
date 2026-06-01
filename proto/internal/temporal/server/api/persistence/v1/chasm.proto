@@ -51,13 +51,13 @@ message ChasmComponentAttributes {
     // Changes to this field also doesn't require an increase in versioned transition.
     int32 physical_task_status = 7;
   }
-  // Request groups the framework-tracked metadata contributed by a single
-  // caller request to this component.
-  message Request {
+  // RequestMetadata groups the framework-tracked metadata contributed by a
+  // single caller request to this component.
+  message RequestMetadata {
     // Links attached by this request. Components use these to record
     // references back to the caller(s) that initiated or extended the
     // execution (e.g. parent workflow events, Nexus completion sources).
-    repeated temporal.api.common.v1.Link link = 1;
+    repeated temporal.api.common.v1.Link links = 1;
   }
 
   // Registered component's type ID.
@@ -75,7 +75,7 @@ message ChasmComponentAttributes {
   bool detached = 4;
   // Per-request metadata contributed to this component, keyed by the caller's
   // request_id.
-  map<string, Request> requests = 5;
+  map<string, RequestMetadata> requests = 5;
   // Caller-supplied user metadata (summary, details) attached to this component.
   temporal.api.sdk.v1.UserMetadata user_metadata = 6;
 }
