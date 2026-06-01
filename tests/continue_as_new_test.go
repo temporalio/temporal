@@ -497,47 +497,44 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 
 	continueAsNewed := false
 	workflowComplete := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		if !continueAsNewed {
 			continueAsNewed = true
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-						WorkflowType:        workflowType,
-						TaskQueue:           taskQueue,
-						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-						// "delay start": SDKs don't expose this yet, so we set it on the raw command.
-						BackoffStartInterval: durationpb.New(delayStart),
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+							WorkflowType:        workflowType,
+							TaskQueue:           taskQueue,
+							WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+							WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+							// "delay start": SDKs don't expose this yet, so we set it on the raw command.
+							BackoffStartInterval: durationpb.New(delayStart),
+						},
 					},
-				},
-			}}, nil
+				}},
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					},
 				},
-			},
-		}}, nil
+			}},
+		}, nil
 	}
 
-	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 
 	// Process the first workflow task: it issues a continue-as-new with a delayed start.
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
 	s.NoError(err)
 	s.False(workflowComplete)
 
@@ -557,7 +554,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	// becomes available, which only happens once the delay-start backoff timer fires (~delayStart
 	// later). Long-polling here keeps the test deterministic: we don't have to inspect intermediate
 	// history to observe that the task was deferred.
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
 	s.NoError(err)
 	s.True(workflowComplete)
 
