@@ -102,6 +102,7 @@ type (
 		EnableWorkerService             bool
 		FaultInjectionConfig            *config.FaultInjection
 		NumHistoryShards                int32
+		Logger                          log.Logger
 		SharedCluster                   bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -178,6 +179,14 @@ func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 func WithNumHistoryShards(n int32) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.NumHistoryShards = n
+	}
+}
+
+// WithClusterLogger sets a custom logger for the test cluster, used instead of
+// the default test logger. Useful for intercepting server log output.
+func WithClusterLogger(logger log.Logger) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.Logger = logger
 	}
 }
 
@@ -282,6 +291,11 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
+
+	// A custom logger supplied via WithClusterLogger takes precedence.
+	if params.Logger != nil {
+		s.Logger = params.Logger
+	}
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
