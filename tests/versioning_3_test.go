@@ -5913,6 +5913,11 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
 }
 
+// Flow:
+//  1. Start a pinned workflow on v1 and fail a normal WFT before any target change.
+//  2. Move matching's current version to v2, poll a hidden transient WFT, and fail it after it notifies v2.
+//  3. Verify the notification is still outstanding in mutable state, with no durable started-event flag in history.
+//  4. Roll matching back to v1 and assert the next WFT re-fires the outstanding target-version notification.
 func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
 	env := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),

@@ -2751,13 +2751,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinuedFailure:       command.GetFailure(),
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff:     previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
-		SourceVersionStamp:           sourceVersionStamp,
-		RootExecutionInfo:            rootExecutionInfo,
-		InheritedBuildId:             inheritedBuildId,
-		InheritedPinnedVersion:       inheritedPinnedVersion,
-		VersioningOverride:           pinnedOverride,
-		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo), // todo (shivam): do we really need to be dumb here.
+		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:       sourceVersionStamp,
+		RootExecutionInfo:        rootExecutionInfo,
+		InheritedBuildId:         inheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
+		VersioningOverride:       pinnedOverride,
+		// TODO (Shivam): Revisit whether this can be derived closer to the versioning transition logic.
+		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
 		InitialSkippedDuration:       newRunInitialSkipped,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
