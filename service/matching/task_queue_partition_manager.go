@@ -558,11 +558,10 @@ reredirectTask:
 				pm.processTaskAddHooks(ctx, targetVersion, outcome)
 			}
 
-			syncMatchResult := metrics.TaskAddResultSyncMatch
 			if err != nil {
-				syncMatchResult = taskAddErrResult(err)
+				outcome = syncMatchOutcomeFromErr(err)
 			}
-			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
+			syncMatchQueue.RecordTaskAdd(outcome, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -579,7 +578,6 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
-		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -590,11 +588,13 @@ reredirectTask:
 	}
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
+	spoolOutcome := syncMatchBacklog
+	if err != nil {
+		spoolOutcome = syncMatchOutcomeFromErr(err)
+	}
+	spoolQueue.RecordTaskAdd(spoolOutcome, forwarded, behavior)
 	if err == nil {
-		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
 		pm.processTaskAddHooks(ctx, targetVersion, outcome)
-	} else {
-		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
 
 	return assignedBuildId, false, err
@@ -622,14 +622,6 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			SyncMatchOutcome:  hookOutcome,
 		})
 	}
-}
-
-func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
-		return metrics.TaskAddResultThrottled
-	}
-	return metrics.TaskAddResultFailure
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {

@@ -451,10 +451,10 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
-func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior) {
+func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(outcome syncMatchOutcome, forwarded bool, behavior enumspb.VersioningBehavior) {
 	c.metricsHandler.Counter(metrics.TasksAddedCounter.Name()).Record(
 		1,
-		metrics.TaskAddResultTag(result),
+		metrics.TaskAddResultTag(syncMatchOutcomeToTag(outcome)),
 		metrics.ForwardedTag(forwarded),
 		metrics.VersioningBehaviorTag(behavior),
 	)

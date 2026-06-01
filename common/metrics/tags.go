@@ -316,14 +316,6 @@ func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
 }
 
-const (
-	TaskAddResultSyncMatch        = "sync_match"
-	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
-	TaskAddResultBacklog          = "backlog"
-	TaskAddResultThrottled        = "throttled"
-	TaskAddResultFailure          = "failure"
-)
-
 func TaskAddResultTag(result string) Tag {
 	return Tag{Key: taskAddResult, Value: result}
 }
