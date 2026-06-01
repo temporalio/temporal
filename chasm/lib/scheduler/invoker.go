@@ -21,6 +21,8 @@ type Invoker struct {
 	*schedulerpb.InvokerState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -38,6 +40,7 @@ func NewInvoker(ctx chasm.MutableContext) *Invoker {
 func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerState) *Invoker {
 	i := &Invoker{
 		InvokerState: state,
+		EventLog:     chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	return i
 }
@@ -180,6 +183,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		if completedStart, ok := completed[start.RequestId]; ok {
 			start.RunId = completedStart.GetRunId()
 			start.StartTime = completedStart.GetStartTime()
+			start.HasCallback = true
 		}
 		if retry, ok := retryable[start.RequestId]; ok {
 			start.Attempt++
