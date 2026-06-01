@@ -4036,7 +4036,7 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_MaxDeploymentsLimit()
 	s.Error(err)
 	var resourceExhausted *serviceerror.ResourceExhausted
 	s.ErrorAs(err, &resourceExhausted)
-	s.Contains(resourceExhausted.Message, "reached maximum deployments in namespace")
+	s.Contains(resourceExhausted.Message, "reached maximum worker deployments in namespace")
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause)
 }
