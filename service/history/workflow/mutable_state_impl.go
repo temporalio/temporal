@@ -10080,7 +10080,16 @@ func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
 	}
-	if len(ms.GetPendingActivityInfos()) > 0 {
+	// A pending activity blocks time skipping unless it has failed and is still
+	// waiting out its retry backoff (next attempt strictly in the future) — that one
+	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
+	// strict future check is what keeps a just-scheduled or already-due activity (next
+	// attempt <= now) blocking.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		// if this activity is just a retry with backoff scheduled in the future
+		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
+			continue
+		}
 		return true, "has pending activity"
 	}
 	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
@@ -10166,10 +10175,10 @@ func (d timeSkippingTransition) isValid() bool {
 // 1. targetTime: the time to skip to
 // 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
 // right now the time points considered for target time are:
-// 1. the first expiry time of the pending user timers
-// 2. the start delay of the workflow execution
-// 3. the current elapsed duration bound of the time skipping config
-// 4. the remaining time to skip to the max skipped duration bound
+// - the first expiry time of the pending user timers
+// - the workflow execution retry backoff
+// - the current elapsed duration bound of the time skipping config
+// - the activity retry backoff
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
@@ -10181,6 +10190,15 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		advance(timerInfo.ExpiryTime.AsTime(), false)
+	}
+
+	// Activities waiting out a retry backoff are skip targets: advance to the earliest
+	// next-attempt time. No clock comparison is needed here — the idle check already
+	// guarantees each pending activity's next attempt is in the future when we get here.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
+			advance(ai.ScheduledTime.AsTime(), false)
+		}
 	}
 
 	if !ms.HadOrHasWorkflowTask() {
