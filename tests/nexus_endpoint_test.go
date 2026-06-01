@@ -1,53 +1,54 @@
 package tests
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
-func TestNexusEndpointsFunctionalSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("Common", func(t *testing.T) {
-		s := new(CommonSuite)
-		suite.Run(t, s)
-	})
-	t.Run("Matching", func(t *testing.T) {
-		s := new(MatchingSuite)
-		suite.Run(t, s)
-	})
-	t.Run("Operator", func(t *testing.T) {
-		s := new(OperatorSuite)
-		suite.Run(t, s)
-	})
+func TestNexusEndpointsCommonSuite(t *testing.T) {
+	parallelsuite.Run(t, &CommonSuite{})
 }
 
-type NexusEndpointFunctionalSuite struct {
-	testcore.FunctionalTestBase
+func TestNexusEndpointsMatchingSuite(t *testing.T) {
+	parallelsuite.Run(t, &MatchingSuite{})
+}
+
+func TestNexusEndpointsOperatorSuite(t *testing.T) {
+	parallelsuite.Run(t, &OperatorSuite{})
 }
 
 type CommonSuite struct {
-	NexusEndpointFunctionalSuite
+	parallelsuite.Suite[*CommonSuite]
 }
 
 func (s *CommonSuite) TestListOrdering() {
+	// The nexus endpoints table is cluster-global; this test asserts exact table
+	// versions and entry counts, so it needs a cluster with no concurrent writers.
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
+	)
+	ctx := s.Context()
+
 	// get initial table version since it has been modified by other tests
-	resp, err := s.GetTestCluster().MatchingClient().ListNexusEndpoints(testcore.NewContext(), &matchingservice.ListNexusEndpointsRequest{
+	resp, err := env.GetTestCluster().MatchingClient().ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		LastKnownTableVersion: 0,
 		PageSize:              0,
 	})
@@ -56,14 +57,13 @@ func (s *CommonSuite) TestListOrdering() {
 
 	// create some endpoints
 	numEndpoints := 40 // minimum number of endpoints to test, there may be more in DB from other tests
-	ctx := testcore.NewContext()
 	for range numEndpoints {
-		s.createNexusEndpoint(ctx, testcore.RandomizeStr("test-endpoint-name"))
+		s.createNexusEndpoint(env, testcore.RandomizeStr("test-endpoint-name"))
 	}
 	tableVersion := initialTableVersion + int64(numEndpoints)
 
 	// list from persistence manager level
-	persistence := s.GetTestCluster().TestBase().NexusEndpointManager
+	persistence := env.GetTestCluster().TestBase().NexusEndpointManager
 	persistenceResp1, err := persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
 		LastKnownTableVersion: tableVersion,
 		PageSize:              numEndpoints / 2,
@@ -80,7 +80,7 @@ func (s *CommonSuite) TestListOrdering() {
 	s.Len(persistenceResp2.Entries, numEndpoints/2)
 
 	// list from matching level
-	matchingClient := s.GetTestCluster().MatchingClient()
+	matchingClient := env.GetTestCluster().MatchingClient()
 	matchingResp1, err := matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		LastKnownTableVersion: tableVersion,
 		PageSize:              int32(numEndpoints / 2),
@@ -97,13 +97,13 @@ func (s *CommonSuite) TestListOrdering() {
 	s.Len(matchingResp2.Entries, numEndpoints/2)
 
 	// list from operator level
-	operatorResp1, err := s.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{
+	operatorResp1, err := env.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{
 		PageSize: int32(numEndpoints / 2),
 	})
 	s.NoError(err)
 	s.Len(operatorResp1.Endpoints, numEndpoints/2)
 	s.NotNil(operatorResp1.NextPageToken)
-	operatorResp2, err := s.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{
+	operatorResp2, err := env.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{
 		PageSize:      int32(numEndpoints / 2),
 		NextPageToken: operatorResp1.NextPageToken,
 	})
@@ -121,27 +121,28 @@ func (s *CommonSuite) TestListOrdering() {
 }
 
 type MatchingSuite struct {
-	NexusEndpointFunctionalSuite
+	parallelsuite.Suite[*MatchingSuite]
 }
 
 func (s *MatchingSuite) TestCreate() {
-	ctx := testcore.NewContext()
+	env := testcore.NewEnv(s.T())
+	ctx := s.Context()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
-	entry := s.createNexusEndpoint(ctx, endpointName)
+	entry := s.createNexusEndpoint(env, endpointName)
 	s.Equal(int64(1), entry.Version)
 	s.NotNil(entry.Endpoint.Clock)
 	s.NotNil(entry.Endpoint.CreatedTime)
 	s.NotEmpty(entry.Id)
 	s.Equal(entry.Endpoint.Spec.Name, endpointName)
-	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.NamespaceID().String())
+	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, env.NamespaceID().String())
 
-	_, err := s.GetTestCluster().MatchingClient().CreateNexusEndpoint(ctx, &matchingservice.CreateNexusEndpointRequest{
+	_, err := env.GetTestCluster().MatchingClient().CreateNexusEndpoint(ctx, &matchingservice.CreateNexusEndpointRequest{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: endpointName,
 			Target: &persistencespb.NexusEndpointTarget{
 				Variant: &persistencespb.NexusEndpointTarget_Worker_{
 					Worker: &persistencespb.NexusEndpointTarget_Worker{
-						NamespaceId: s.NamespaceID().String(),
+						NamespaceId: env.NamespaceID().String(),
 						TaskQueue:   "dont-care",
 					},
 				},
@@ -153,10 +154,10 @@ func (s *MatchingSuite) TestCreate() {
 }
 
 func (s *MatchingSuite) TestUpdate() {
+	env := testcore.NewEnv(s.T())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	updatedName := testcore.RandomizedNexusEndpoint(s.T().Name() + "-updated")
-	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx, endpointName)
+	endpoint := s.createNexusEndpoint(env, endpointName)
 	type testcase struct {
 		name      string
 		request   *matchingservice.UpdateNexusEndpointRequest
@@ -173,8 +174,8 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.NamespaceID().String(),
-								TaskQueue:   s.defaultTaskQueue().Name,
+								NamespaceId: env.NamespaceID().String(),
+								TaskQueue:   defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -198,8 +199,8 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.NamespaceID().String(),
-								TaskQueue:   s.defaultTaskQueue().Name,
+								NamespaceId: env.NamespaceID().String(),
+								TaskQueue:   defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -220,8 +221,8 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.NamespaceID().String(),
-								TaskQueue:   s.defaultTaskQueue().Name,
+								NamespaceId: env.NamespaceID().String(),
+								TaskQueue:   defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -234,19 +235,19 @@ func (s *MatchingSuite) TestUpdate() {
 		},
 	}
 
-	matchingClient := s.GetTestCluster().MatchingClient()
+	matchingClient := env.GetTestCluster().MatchingClient()
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := matchingClient.UpdateNexusEndpoint(testcore.NewContext(), tc.request)
+			resp, err := matchingClient.UpdateNexusEndpoint(s.Context(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
 func (s *MatchingSuite) TestDelete() {
+	env := testcore.NewEnv(s.T())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
-	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx, endpointName)
+	endpoint := s.createNexusEndpoint(env, endpointName)
 	type testcase struct {
 		name       string
 		endpointID string
@@ -270,11 +271,11 @@ func (s *MatchingSuite) TestDelete() {
 		},
 	}
 
-	matchingClient := s.GetTestCluster().MatchingClient()
+	matchingClient := env.GetTestCluster().MatchingClient()
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := matchingClient.DeleteNexusEndpoint(
-				testcore.NewContext(),
+				s.Context(),
 				&matchingservice.DeleteNexusEndpointRequest{
 					Id: tc.endpointID,
 				})
@@ -284,14 +285,20 @@ func (s *MatchingSuite) TestDelete() {
 }
 
 func (s *MatchingSuite) TestList() {
-	ctx := testcore.NewContext()
+	// The nexus endpoints table is cluster-global; this test asserts exact entry
+	// ordering and counts, so it needs a cluster with no concurrent writers.
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
+	)
+	ctx := s.Context()
+
 	// initialize some endpoints
-	s.createNexusEndpoint(ctx, "list-test-endpoint0")
-	s.createNexusEndpoint(ctx, "list-test-endpoint1")
-	s.createNexusEndpoint(ctx, "list-test-endpoint2")
+	s.createNexusEndpoint(env, "list-test-endpoint0")
+	s.createNexusEndpoint(env, "list-test-endpoint1")
+	s.createNexusEndpoint(env, "list-test-endpoint2")
 
 	// get expected table version and endpoints for the course of the tests
-	matchingClient := s.GetTestCluster().MatchingClient()
+	matchingClient := env.GetTestCluster().MatchingClient()
 	resp, err := matchingClient.ListNexusEndpoints(
 		ctx,
 		&matchingservice.ListNexusEndpointsRequest{
@@ -412,7 +419,7 @@ func (s *MatchingSuite) TestList() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			ctx := testcore.NewContext()
+			ctx := s.Context()
 			listReqDone := make(chan struct{})
 			go func() {
 				defer close(listReqDone)
@@ -420,7 +427,7 @@ func (s *MatchingSuite) TestList() {
 				tc.assertion(resp, err)
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {
-				s.createNexusEndpoint(ctx, "new-endpoint")
+				s.createNexusEndpoint(env, "new-endpoint")
 			}
 			select {
 			case <-listReqDone:
@@ -432,10 +439,11 @@ func (s *MatchingSuite) TestList() {
 }
 
 type OperatorSuite struct {
-	NexusEndpointFunctionalSuite
+	parallelsuite.Suite[*OperatorSuite]
 }
 
 func (s *OperatorSuite) TestCreate() {
+	env := testcore.NewEnv(s.T())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	type testcase struct {
 		name      string
@@ -451,8 +459,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -466,7 +474,7 @@ func (s *OperatorSuite) TestCreate() {
 				s.NotNil(resp.Endpoint.CreatedTime)
 				s.NotEmpty(resp.Endpoint.Id)
 				s.Equal(resp.Endpoint.Spec.Name, endpointName)
-				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.Namespace().String())
+				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, env.Namespace().String())
 				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(resp.Endpoint.Id), resp.Endpoint.UrlPrefix)
 			},
 		},
@@ -478,8 +486,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -497,8 +505,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -517,8 +525,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -537,8 +545,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -557,7 +565,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								TaskQueue: s.defaultTaskQueue().Name,
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -577,7 +585,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: "missing-namespace",
-								TaskQueue: s.defaultTaskQueue().Name,
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -596,7 +604,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
+								Namespace: env.Namespace().String(),
 							},
 						},
 					},
@@ -615,7 +623,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
+								Namespace: env.Namespace().String(),
 								TaskQueue: string(make([]byte, 1005)),
 							},
 						},
@@ -709,8 +717,8 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -728,17 +736,17 @@ func (s *OperatorSuite) TestCreate() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := s.OperatorClient().CreateNexusEndpoint(testcore.NewContext(), tc.request)
+			resp, err := env.OperatorClient().CreateNexusEndpoint(s.Context(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
 func (s *OperatorSuite) TestUpdate() {
+	env := testcore.NewEnv(s.T())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	updatedName := testcore.RandomizedNexusEndpoint(s.T().Name() + "-updated")
-	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx, endpointName)
+	endpoint := s.createNexusEndpoint(env, endpointName)
 	type testcase struct {
 		name      string
 		request   *operatorservice.UpdateNexusEndpointRequest
@@ -755,8 +763,8 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -780,8 +788,8 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -802,8 +810,8 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace().String(),
-								TaskQueue: s.defaultTaskQueue().Name,
+								Namespace: env.Namespace().String(),
+								TaskQueue: defaultTaskQueue(s.T()).Name,
 							},
 						},
 					},
@@ -818,15 +826,15 @@ func (s *OperatorSuite) TestUpdate() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := s.OperatorClient().UpdateNexusEndpoint(testcore.NewContext(), tc.request)
+			resp, err := env.OperatorClient().UpdateNexusEndpoint(s.Context(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
 func (s *OperatorSuite) TestDelete() {
-	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx, "endpoint-to-delete-operator")
+	env := testcore.NewEnv(s.T())
+	endpoint := s.createNexusEndpoint(env, "endpoint-to-delete-operator")
 	type testcase struct {
 		name      string
 		serviceId string
@@ -852,8 +860,8 @@ func (s *OperatorSuite) TestDelete() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := s.OperatorClient().DeleteNexusEndpoint(
-				testcore.NewContext(),
+			resp, err := env.OperatorClient().DeleteNexusEndpoint(
+				s.Context(),
 				&operatorservice.DeleteNexusEndpointRequest{
 					Id:      tc.serviceId,
 					Version: 1,
@@ -864,19 +872,25 @@ func (s *OperatorSuite) TestDelete() {
 }
 
 func (s *OperatorSuite) TestList() {
-	ctx := testcore.NewContext()
+	// The nexus endpoints table is cluster-global; this test asserts exact entry
+	// ordering, so it needs a cluster with no concurrent writers.
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
+	)
+	ctx := s.Context()
+
 	// initialize some endpoints
-	s.createNexusEndpoint(ctx, "operator-list-test-service0")
-	s.createNexusEndpoint(ctx, "operator-list-test-service1")
-	entryToFilter := s.createNexusEndpoint(ctx, "operator-list-test-service2")
+	s.createNexusEndpoint(env, "operator-list-test-service0")
+	s.createNexusEndpoint(env, "operator-list-test-service1")
+	entryToFilter := s.createNexusEndpoint(env, "operator-list-test-service2")
 
 	// get ordered endpoints for the course of the tests
-	resp, err := s.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{})
+	resp, err := env.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 	endpointsOrdered := resp.Endpoints
 
-	resp, err = s.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{PageSize: 2})
+	resp, err = env.OperatorClient().ListNexusEndpoints(ctx, &operatorservice.ListNexusEndpointsRequest{PageSize: 2})
 	s.NoError(err)
 	s.NotNil(resp)
 	nextPageToken := resp.NextPageToken
@@ -960,16 +974,22 @@ func (s *OperatorSuite) TestList() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := s.OperatorClient().ListNexusEndpoints(testcore.NewContext(), tc.request)
+			resp, err := env.OperatorClient().ListNexusEndpoints(s.Context(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
 func (s *OperatorSuite) TestGet() {
+	env := testcore.NewEnv(s.T())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
-	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx, endpointName)
+	endpoint := s.createNexusEndpoint(env, endpointName)
+
+	namespaceResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: env.Namespace().String(),
+	})
+	s.NoError(err)
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
 
 	type testcase struct {
 		name      string
@@ -988,7 +1008,7 @@ func (s *OperatorSuite) TestGet() {
 				s.Equal(endpoint.Version, response.Endpoint.Version)
 				s.Equal(endpoint.Endpoint.CreatedTime, response.Endpoint.CreatedTime)
 				s.Equal(endpoint.Endpoint.Spec.Name, response.Endpoint.Spec.Name)
-				s.Equal(endpoint.Endpoint.Spec.Target.GetWorker().NamespaceId, s.GetNamespaceID(response.Endpoint.Spec.Target.GetWorker().Namespace))
+				s.Equal(endpoint.Endpoint.Spec.Target.GetWorker().NamespaceId, namespaceID)
 				s.Equal(endpoint.Endpoint.Spec.Target.GetWorker().TaskQueue, response.Endpoint.Spec.Target.GetWorker().TaskQueue)
 			},
 		},
@@ -1013,35 +1033,47 @@ func (s *OperatorSuite) TestGet() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			resp, err := s.OperatorClient().GetNexusEndpoint(testcore.NewContext(), tc.request)
+			resp, err := env.OperatorClient().GetNexusEndpoint(s.Context(), tc.request)
 			tc.assertion(resp, err)
 		})
 	}
 }
 
-func (s *NexusEndpointFunctionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
-	name := fmt.Sprintf("functional-queue-%v", s.T().Name())
+func defaultTaskQueue(t *testing.T) *taskqueuepb.TaskQueue {
+	name := fmt.Sprintf("functional-queue-%v", t.Name())
 	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(ctx context.Context, name string) *persistencespb.NexusEndpointEntry {
-	resp, err := s.GetTestCluster().MatchingClient().CreateNexusEndpoint(
-		ctx,
+func (s *CommonSuite) createNexusEndpoint(env *testcore.TestEnv, name string) *persistencespb.NexusEndpointEntry {
+	return createNexusEndpoint(s.T(), env, s.Assertions, name)
+}
+
+func (s *MatchingSuite) createNexusEndpoint(env *testcore.TestEnv, name string) *persistencespb.NexusEndpointEntry {
+	return createNexusEndpoint(s.T(), env, s.Assertions, name)
+}
+
+func (s *OperatorSuite) createNexusEndpoint(env *testcore.TestEnv, name string) *persistencespb.NexusEndpointEntry {
+	return createNexusEndpoint(s.T(), env, s.Assertions, name)
+}
+
+func createNexusEndpoint(t *testing.T, env *testcore.TestEnv, r *require.Assertions, name string) *persistencespb.NexusEndpointEntry {
+	resp, err := env.GetTestCluster().MatchingClient().CreateNexusEndpoint(
+		env.Context(),
 		&matchingservice.CreateNexusEndpointRequest{
 			Spec: &persistencespb.NexusEndpointSpec{
 				Name: name,
 				Target: &persistencespb.NexusEndpointTarget{
 					Variant: &persistencespb.NexusEndpointTarget_Worker_{
 						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: s.NamespaceID().String(),
-							TaskQueue:   s.defaultTaskQueue().Name,
+							NamespaceId: env.NamespaceID().String(),
+							TaskQueue:   defaultTaskQueue(t).Name,
 						},
 					},
 				},
 			},
 		})
 
-	s.NoError(err)
-	s.NotNil(resp.Entry)
+	r.NoError(err)
+	r.NotNil(resp.Entry)
 	return resp.Entry
 }
