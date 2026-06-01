@@ -100,6 +100,13 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	// A pause policy with a negative max_attempts is invalid. A zero value means
+	// the policy is disabled (the activity never auto-pauses); positive values arm
+	// the one-shot auto-pause at that attempt threshold.
+	if attributes.GetPausePolicy().GetMaxAttempts() < 0 {
+		return failedCause, serviceerror.NewInvalidArgument("PausePolicy.MaxAttempts cannot be negative.")
+	}
+
 	opts := &activitypb.ActivityOptions{
 		TaskQueue:              attributes.TaskQueue,
 		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),

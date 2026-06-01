@@ -679,12 +679,22 @@ message ActivityInfo {
       string reason = 2;
     }
 
+    // The activity was paused automatically because its pause policy's
+    // max_attempts threshold was reached.
+    message PausePolicy {
+      // The max_attempts of the pause policy that triggered the pause.
+      int32 max_attempts = 1;
+    }
+
     oneof paused_by {
       // activity was paused by the manual intervention
       Manual manual = 2;
 
       // Id of the rule that paused the activity.
       string rule_id = 3;
+
+      // activity was paused automatically by its pause policy
+      PausePolicy pause_policy = 4;
     }
   }
 
@@ -716,6 +726,18 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // Pause policy declared when the activity was scheduled. When set with a
+  // positive max_attempts, the activity is automatically paused once its
+  // just-failed attempt reaches max_attempts (subject to retry_maximum_attempts
+  // superseding it). Reconstructed from the ActivityTaskScheduled history event.
+  temporal.api.common.v1.PausePolicy pause_policy = 53;
+
+  // One-shot guard for pause_policy: set to true the first (and only) time the
+  // pause policy auto-pauses the activity. Once set, the policy never auto-pauses
+  // again, even after the activity is unpaused. Mutable-state-only (not sourced
+  // from a history event); replicated via normal state-based ActivityInfo sync.
+  bool pause_policy_applied = 54;
 }
 
 // timer_map column

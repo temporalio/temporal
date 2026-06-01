@@ -898,3 +898,46 @@ func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_Workf
 		})
 	}
 }
+
+func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_PausePolicy() {
+	testCases := []struct {
+		name        string
+		pausePolicy *commonpb.PausePolicy
+		expectError bool
+	}{
+		{name: "no pause policy is allowed", pausePolicy: nil, expectError: false},
+		{name: "zero max attempts (disabled) is allowed", pausePolicy: &commonpb.PausePolicy{MaxAttempts: 0}, expectError: false},
+		{name: "positive max attempts is allowed", pausePolicy: &commonpb.PausePolicy{MaxAttempts: 3}, expectError: false},
+		{name: "negative max attempts is rejected", pausePolicy: &commonpb.PausePolicy{MaxAttempts: -1}, expectError: true},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:          "test-activity-id",
+				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "user-task-queue"},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				PausePolicy:         tt.pausePolicy,
+			}
+
+			fc, err := s.validator.ValidateActivityScheduleAttributes(
+				s.testNamespaceID,
+				attributes,
+				durationpb.New(0),
+				"user-task-queue",
+			)
+
+			if tt.expectError {
+				s.Error(err)
+				var invalidArgument *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgument)
+				s.Contains(err.Error(), "PausePolicy.MaxAttempts")
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, fc)
+			} else {
+				s.NoError(err)
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+			}
+		})
+	}
+}

@@ -362,6 +362,100 @@ func (s *retryActivitySuite) TestRetryActivity_ScheduleToCloseTimeout_should_ret
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
+// TestRetryActivity_pause_policy_pauses_at_max_attempts asserts that when the
+// just-failed attempt reaches the pause policy's max_attempts (with unlimited
+// retries), the activity is auto-paused instead of being retried: the attempt
+// advances to max_attempts+1, the one-shot guard is set, and the pause info
+// attributes the pause to the policy.
+func (s *retryActivitySuite) TestRetryActivity_pause_policy_pauses_at_max_attempts() {
+	// No retry task should be generated when the activity is paused.
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	const maxAttempts = int32(3)
+	s.activity.PausePolicy = &commonpb.PausePolicy{MaxAttempts: maxAttempts}
+	s.activity.Attempt = maxAttempts    // the just-failed attempt reaches the threshold
+	s.activity.RetryMaximumAttempts = 0 // unlimited retries
+
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
+
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
+	s.True(s.activity.Paused, "activity should be paused by its pause policy")
+	s.True(s.activity.PausePolicyApplied, "one-shot guard should be set")
+	s.Equal(maxAttempts+1, s.activity.Attempt, "paused attempt should be max_attempts+1")
+	s.Require().NotNil(s.activity.PauseInfo)
+	s.Require().NotNil(s.activity.PauseInfo.GetPausePolicy(), "pause should be attributed to the pause policy")
+	s.Equal(maxAttempts, s.activity.PauseInfo.GetPausePolicy().GetMaxAttempts())
+}
+
+// TestRetryActivity_pause_policy_allowed_when_below_retry_max asserts the policy
+// still pauses when retries are finite, as long as the pause threshold is
+// strictly below the retry max.
+func (s *retryActivitySuite) TestRetryActivity_pause_policy_allowed_when_below_retry_max() {
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	const maxAttempts = int32(3)
+	s.activity.PausePolicy = &commonpb.PausePolicy{MaxAttempts: maxAttempts}
+	s.activity.Attempt = maxAttempts
+	s.activity.RetryMaximumAttempts = 10 // finite, but greater than the pause threshold
+
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
+
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
+	s.True(s.activity.Paused)
+	s.True(s.activity.PausePolicyApplied)
+	s.Equal(maxAttempts+1, s.activity.Attempt)
+}
+
+// TestRetryActivity_retry_policy_supersedes_pause_policy asserts that when the
+// retry max is not greater than the pause threshold, the retry policy wins
+// (backwards compat): the activity fails terminally and never pauses.
+func (s *retryActivitySuite) TestRetryActivity_retry_policy_supersedes_pause_policy() {
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	const maxAttempts = int32(3)
+	s.activity.PausePolicy = &commonpb.PausePolicy{MaxAttempts: maxAttempts}
+	s.activity.Attempt = maxAttempts
+	s.activity.RetryMaximumAttempts = maxAttempts // equal -> retry policy fails first
+
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
+
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, state, "retry policy should supersede pause policy")
+	s.False(s.activity.Paused, "activity should not be paused when retry policy supersedes")
+	s.False(s.activity.PausePolicyApplied)
+}
+
+// TestRetryActivity_pause_policy_one_shot_after_unpause asserts that once the
+// pause policy has fired (pause_policy_applied=true), a later failure with the
+// attempt climbing past the threshold does not pause again.
+func (s *retryActivitySuite) TestRetryActivity_pause_policy_one_shot_after_unpause() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	const maxAttempts = int32(2)
+	s.activity.PausePolicy = &commonpb.PausePolicy{MaxAttempts: maxAttempts}
+	s.activity.PausePolicyApplied = true     // already paused once, then unpaused
+	s.activity.Attempt = 5                   // well past the threshold
+	s.activity.RetryMaximumAttempts = 0      // unlimited
+	s.activity.RetryExpirationTime = nil     // no schedule-to-close expiration, so retry proceeds
+	s.activity.RetryBackoffCoefficient = 1.0 // constant 1s interval regardless of attempt
+
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure)
+
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, state)
+	s.False(s.activity.Paused, "activity should not re-pause after the one-shot guard is set")
+	s.True(s.activity.PausePolicyApplied, "one-shot guard should remain set")
+	s.Equal(int32(6), s.activity.Attempt, "activity should retry normally")
+}
+
 const nextBackoffIntervalParametersFormat = "now(%v):currentAttempt(%v):maxAttempts(%v):initInterval(%v):maxInterval(%v):expirationTime(%v):backoffCoefficient(%v)"
 
 type nextBackoffIntervalStub struct {
