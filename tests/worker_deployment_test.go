@@ -310,8 +310,8 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1)
 
 	// Set up namespace specifically for this test (since we are triggering a per-namespace limit)
-	namespace := namespace.Name("TestNamespaceDeploymentsLimit-namespace")
-	_, err := s.RegisterNamespace(namespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	testNamespace := namespace.Name("TestNamespaceDeploymentsLimit-namespace")
+	_, err := s.RegisterNamespace(testNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -322,7 +322,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// the first deployment version should be fine
 	go func() {
 		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         namespace.String(),
+			Namespace:         testNamespace.String(),
 			TaskQueue:         tv.TaskQueue(),
 			Identity:          "random",
 			DeploymentOptions: tv.WorkerDeploymentOptions(true),
@@ -330,11 +330,12 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	}()
 
 	// ensure the version is created in deployment
+	// nolint:forbidigo - this is a legacy EventuallyWithT as present in many of these tests, I'm not adding it I'm just changing the namespace field
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		res, _ := s.FrontendClient().DescribeWorkerDeployment(ctx,
 			&workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      namespace.String(),
+				Namespace:      testNamespace.String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
 
@@ -352,7 +353,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 
 	// pollers of the second deployment should be rejected with a clear error message
 	_, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: namespace.String(),
+		Namespace: testNamespace.String(),
 		TaskQueue: tv.TaskQueue(),
 		Identity:  tv.ClientIdentity(),
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
