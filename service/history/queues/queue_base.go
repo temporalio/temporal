@@ -302,10 +302,6 @@ func (p *queueBase) checkpoint() {
 		// so that upon shard reload, those groups won't block other tasks in the default reader from
 		// being loaded.
 		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase, p.options.MoveGroupTaskCountMultiplier(), p.logger)
-	} else {
-		// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
-		// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
-		checkpointAction = newSlicePredicateAction(p.monitor, maxReaderCount)
 	}
 
 	runAction(checkpointAction, p.readerGroup, p.metricsHandler)

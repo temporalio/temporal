@@ -453,67 +453,6 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
 
-func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
-	exclusiveReaderHighWatermark := tasks.MaximumKey
-	scopes := NewRandomScopes(3)
-	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
-	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
-	initialQueueState := &queueState{
-		readerScopes: map[int64][]Scope{
-			DefaultReaderId: scopes,
-		},
-		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
-	}
-	initialPersistenceState := ToPersistenceQueueState(initialQueueState)
-
-	expectedQueueState := &queueState{
-		readerScopes: map[int64][]Scope{
-			DefaultReaderId:     {scopes[1]},
-			DefaultReaderId + 1: {scopes[0], scopes[2]},
-		},
-		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
-	}
-	expectedPersistenceState := ToPersistenceQueueState(expectedQueueState)
-
-	mockShard := shard.NewTestContext(
-		s.controller,
-		&persistencespb.ShardInfo{
-			ShardId: 0,
-			RangeId: 10,
-			QueueStates: map[int32]*persistencespb.QueueState{
-				int32(tasks.CategoryIDTimer): initialPersistenceState,
-			},
-		},
-		s.config,
-	)
-	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-
-	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
-	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
-
-	// set to a smaller value so that delete will be triggered
-	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
-
-	// manually set pending task count to trigger slice predicate action
-	base.monitor.SetSlicePendingTaskCount(&SliceImpl{}, 2*moveSliceDefaultReaderMinPendingTaskCount)
-
-	gomock.InOrder(
-		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
-		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
-				return nil
-			},
-		).Times(1),
-	)
-
-	base.checkpoint()
-
-	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
-}
-
 func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	// With this configuration:
 	// - task groups with more than 50 pending tasks on reader 0 will be moved to reader 1
@@ -540,12 +479,6 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
-
-	// set to a smaller value so that delete will be triggered
-	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
-
-	// manually set pending task count to trigger slice predicate action
-	base.monitor.SetSlicePendingTaskCount(&SliceImpl{}, 2*moveSliceDefaultReaderMinPendingTaskCount)
 
 	addExecutableToSlice := func(readerID int64, slice Slice, namespaceID string, count int) {
 		sliceRange := slice.Scope().Range
