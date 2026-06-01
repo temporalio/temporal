@@ -84,6 +84,7 @@ type (
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogMetricsEmitInterval               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		EffectiveRateLimitMetricsEmitInterval    dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -150,14 +151,15 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration         func() time.Duration
-		EphemeralDataUpdateInterval   func() time.Duration
-		BacklogMetricsEmitInterval    func() time.Duration
-		PriorityBacklogForwarding     func() bool
-		BacklogNegligibleAge          func() time.Duration
-		MaxWaitForPollerBeforeFwd     func() time.Duration
-		QueryPollerUnavailableWindow  func() time.Duration
-		EmitTaskDispatchLatencyAtPoll func() bool
+		SyncMatchWaitDuration                 func() time.Duration
+		EphemeralDataUpdateInterval           func() time.Duration
+		BacklogMetricsEmitInterval            func() time.Duration
+		EffectiveRateLimitMetricsEmitInterval func() time.Duration
+		PriorityBacklogForwarding             func() bool
+		BacklogNegligibleAge                  func() time.Duration
+		MaxWaitForPollerBeforeFwd             func() time.Duration
+		QueryPollerUnavailableWindow          func() time.Duration
+		EmitTaskDispatchLatencyAtPoll         func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval     func() time.Duration
 		BacklogTaskForwardTimeout      func() time.Duration
@@ -337,6 +339,7 @@ func NewConfig(
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
 		BacklogMetricsEmitInterval:               dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
+		EffectiveRateLimitMetricsEmitInterval:    dynamicconfig.MatchingEffectiveRateLimitMetricsEmitInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),
@@ -432,6 +435,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		BacklogMetricsEmitInterval: func() time.Duration {
 			return config.BacklogMetricsEmitInterval(ns.String(), taskQueueName, taskType)
+		},
+		EffectiveRateLimitMetricsEmitInterval: func() time.Duration {
+			return config.EffectiveRateLimitMetricsEmitInterval(ns.String(), taskQueueName, taskType)
 		},
 		PriorityBacklogForwarding: func() bool {
 			return config.PriorityBacklogForwarding(ns.String(), taskQueueName, taskType)
