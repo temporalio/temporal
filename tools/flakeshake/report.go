@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jstemmer/go-junit-report/v2/junit"
+	"github.com/jstemmer/go-junit-report/v2/parser/gotest"
 	"go.temporal.io/server/tools/common/gotestparse"
 )
 
-const maxAlertDetailBytes = 2048
+const maxDetailBytes = 2048
 
 type alertAgg struct {
 	typ     string
@@ -19,11 +21,15 @@ type alertAgg struct {
 	rounds  int
 }
 
-// aggregator folds the output of one or more rounds into a flake report.
+// aggregator folds the output of one or more rounds into a flake report. Failing tests and
+// their failure details come from parsing the `go test -v` output into JUnit (via
+// go-junit-report) and reusing gotestparse.ParseFailureDetails; data races / panics / fatals
+// and timeouts are extracted from the raw output via gotestparse.
 type aggregator struct {
 	roundsFailed int
-	failedTests  map[string]int // test name -> rounds it failed in
-	timeouts     map[string]int // test name -> rounds it timed out in
+	failedTests  map[string]int    // test name -> rounds it failed in
+	details      map[string]string // test name -> abridged failure detail
+	timeouts     map[string]int    // test name -> rounds it timed out in
 	alerts       map[string]*alertAgg
 	lastStatus   string
 }
@@ -31,21 +37,32 @@ type aggregator struct {
 func newAggregator() *aggregator {
 	return &aggregator{
 		failedTests: map[string]int{},
+		details:     map[string]string{},
 		timeouts:    map[string]int{},
 		alerts:      map[string]*alertAgg{},
 	}
 }
 
-// addRound folds one round's output into the aggregate, reusing gotestparse to extract
-// failing tests, timeouts, and alerts (data races / panics / fatals).
+// addRound folds one round's output into the aggregate.
 func (a *aggregator) addRound(out string, failed bool) {
 	if failed {
 		a.roundsFailed++
 	}
 
-	for _, name := range gotestparse.ParseFailedTestsFromOutput(out) {
-		a.failedTests[name]++
+	for _, tc := range failedTestcases(out) {
+		// Only count tests that have their own failure detail. This drops parent/suite
+		// aggregation entries (which fail solely because a subtest did) so the report shows
+		// the actual failing test for each flake — no more, no less.
+		d := gotestparse.ParseFailureDetails(tc.Failure.Data)
+		if d == gotestparse.NoFailureDetails {
+			continue
+		}
+		a.failedTests[tc.Name]++
+		if _, ok := a.details[tc.Name]; !ok {
+			a.details[tc.Name] = clip(d, maxDetailBytes)
+		}
 	}
+
 	if _, timedOut := gotestparse.ParseTestTimeouts(out); len(timedOut) > 0 {
 		for _, name := range timedOut {
 			a.timeouts[name]++
@@ -61,13 +78,30 @@ func (a *aggregator) addRound(out string, failed bool) {
 		seen[key] = struct{}{}
 		agg := a.alerts[key]
 		if agg == nil {
-			agg = &alertAgg{typ: string(al.Type), summary: al.Summary, tests: al.Tests, sample: clip(al.Details, maxAlertDetailBytes)}
+			agg = &alertAgg{typ: string(al.Type), summary: al.Summary, tests: al.Tests, sample: clip(al.Details, maxDetailBytes)}
 			a.alerts[key] = agg
 		}
 		agg.rounds++
 	}
 
 	a.lastStatus = roundStatus(failed, out)
+}
+
+// failedTestcases parses `go test -v` output into JUnit testcases and returns the failing ones.
+func failedTestcases(out string) []junit.Testcase {
+	report, err := gotest.NewParser().Parse(strings.NewReader(out))
+	if err != nil {
+		return nil
+	}
+	var failed []junit.Testcase
+	for _, suite := range junit.CreateFromReport(report, "").Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure != nil {
+				failed = append(failed, tc)
+			}
+		}
+	}
+	return failed
 }
 
 func roundStatus(failed bool, out string) string {
@@ -99,18 +133,20 @@ func (a *aggregator) report(m reportMeta) string {
 	fmt.Fprintf(&b, "- **Distinct flakes**: %d\n\n", len(a.failedTests))
 	fmt.Fprintf(&b, "```\ngo %s\n```\n\n", strings.Join(m.goArgs, " "))
 
-	if len(a.failedTests) > 0 {
+	if len(a.failedTests) == 0 {
+		b.WriteString("No flakes reproduced.\n\n")
+	} else {
 		fmt.Fprintf(&b, "## Flakes found (%d)\n\n", len(a.failedTests))
 		for _, name := range sortedByCountDesc(a.failedTests) {
 			to := ""
 			if a.timeouts[name] > 0 {
 				to = fmt.Sprintf(", timed out in %d", a.timeouts[name])
 			}
-			fmt.Fprintf(&b, "- `%s` — failed in %d/%d rounds%s\n", name, a.failedTests[name], m.rounds, to)
+			fmt.Fprintf(&b, "### `%s` — %d/%d rounds%s\n\n", name, a.failedTests[name], m.rounds, to)
+			if d := a.details[name]; d != "" {
+				fmt.Fprintf(&b, "```\n%s\n```\n\n", d)
+			}
 		}
-		b.WriteString("\n")
-	} else {
-		b.WriteString("No flakes reproduced.\n\n")
 	}
 
 	if len(a.alerts) > 0 {

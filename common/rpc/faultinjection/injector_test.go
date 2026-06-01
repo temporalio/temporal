@@ -8,12 +8,61 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestConfigEnabled(t *testing.T) {
 	require.False(t, Config{}.Enabled())
 	require.False(t, Config{Rate: 0}.Enabled())
 	require.True(t, Config{Rate: 0.5}.Enabled())
+	require.True(t, Config{ErrorRate: 0.5}.Enabled()) // error fault alone enables the injector
+}
+
+func TestMaybeError_DisabledReturnsNil(t *testing.T) {
+	i := New(Config{ErrorRate: 0})
+	for range 100 {
+		require.NoError(t, i.maybeError("/some.Service/Method"))
+	}
+}
+
+func TestMaybeError_AlwaysReturnsRetryableError(t *testing.T) {
+	i := New(Config{ErrorRate: 1.0, Seed: 9})
+	for range 100 {
+		err := i.maybeError("/some.Service/Method")
+		require.Error(t, err)
+		code := status.Code(err)
+		require.Contains(t, []codes.Code{codes.Unavailable, codes.ResourceExhausted}, code)
+	}
+}
+
+func TestMaybeError_ExcludedMethod(t *testing.T) {
+	i := New(Config{ErrorRate: 1.0})
+	require.NoError(t, i.maybeError("/grpc.health.v1.Health/Check"))
+}
+
+func TestMaybeError_Rate(t *testing.T) {
+	i := New(Config{ErrorRate: 0.5, Seed: 3})
+	const n = 20000
+	errs := 0
+	for range n {
+		if i.maybeError("/some.Service/Method") != nil {
+			errs++
+		}
+	}
+	require.InDelta(t, 0.5, float64(errs)/n, 0.02)
+}
+
+func TestUnaryInterceptor_InjectsTransientError(t *testing.T) {
+	i := New(Config{ErrorRate: 1.0, Seed: 5})
+	called := false
+	handler := func(ctx context.Context, req any) (any, error) { called = true; return "ok", nil }
+	_, err := i.UnaryServerInterceptor()(
+		context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/some.Service/Method"}, handler,
+	)
+	require.Error(t, err)
+	require.Contains(t, []codes.Code{codes.Unavailable, codes.ResourceExhausted}, status.Code(err))
+	require.False(t, called, "handler must not run when a transient error is injected")
 }
 
 func TestDisabledNeverFaults(t *testing.T) {

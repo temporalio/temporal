@@ -27,9 +27,10 @@ var cliFlags struct {
 	faultPersistenceLatencyStddevMs float64
 	faultPersistenceLatencyMaxMs    float64
 
-	faultRPC               string
-	faultRPCRate           float64
-	faultRPCSeed           int64
+	faultRPC              string
+	faultRPCRate          float64
+	faultRPCErrorRate     float64
+	faultRPCSeed          int64
 	faultRPCLatencyMeanMs float64
 	faultRPCLatencyStddev float64
 	faultRPCLatencyMaxMs  float64
@@ -48,8 +49,9 @@ func init() {
 	flag.Float64Var(&cliFlags.faultPersistenceLatencyStddevMs, "faultPersistenceLatencyStddevMs", 15, "stddev latency in ms for the persistence Latency fault")
 	flag.Float64Var(&cliFlags.faultPersistenceLatencyMaxMs, "faultPersistenceLatencyMaxMs", 250, "max latency clamp in ms for the persistence Latency fault (0 = unbounded)")
 
-	flag.StringVar(&cliFlags.faultRPC, "faultRPC", "", "enable gRPC fault injection (chaos mode) on the test cluster")
-	flag.Float64Var(&cliFlags.faultRPCRate, "faultRPCRate", 1.0, "probability (0..1) that an RPC receives an injected fault")
+	flag.StringVar(&cliFlags.faultRPC, "faultRPC", "", "enable the gRPC Latency fault on the test cluster")
+	flag.Float64Var(&cliFlags.faultRPCRate, "faultRPCRate", 1.0, "probability (0..1) that an RPC receives a Latency fault")
+	flag.Float64Var(&cliFlags.faultRPCErrorRate, "faultRPCErrorRate", 0, "probability (0..1) that an RPC fails with a transient retryable error (independent of -faultRPC)")
 	flag.Int64Var(&cliFlags.faultRPCSeed, "faultRPCSeed", 0, "seed for the RPC fault injector RNG (0 = time-based)")
 	flag.Float64Var(&cliFlags.faultRPCLatencyMeanMs, "faultRPCLatencyMeanMs", 25, "mean latency in ms for the Latency fault")
 	flag.Float64Var(&cliFlags.faultRPCLatencyStddev, "faultRPCLatencyStddevMs", 15, "stddev latency in ms for the Latency fault")
@@ -57,20 +59,22 @@ func init() {
 }
 
 // RPCFaultInjectionConfig returns the gRPC fault injection config derived from CLI flags.
-// It is disabled (zero value) unless -faultRPC is set.
+// The Latency fault is enabled by -faultRPC; the transient Error fault is enabled independently
+// by -faultRPCErrorRate. The result is disabled (zero value) unless at least one is set.
 func RPCFaultInjectionConfig() rpcfaultinjection.Config {
-	if cliFlags.faultRPC == "" {
-		return rpcfaultinjection.Config{}
+	cfg := rpcfaultinjection.Config{
+		Seed:      cliFlags.faultRPCSeed,
+		ErrorRate: cliFlags.faultRPCErrorRate,
 	}
-	return rpcfaultinjection.Config{
-		Rate: cliFlags.faultRPCRate,
-		Seed: cliFlags.faultRPCSeed,
-		Latency: rpcfaultinjection.LatencyConfig{
+	if cliFlags.faultRPC != "" {
+		cfg.Rate = cliFlags.faultRPCRate
+		cfg.Latency = rpcfaultinjection.LatencyConfig{
 			MeanMs:   cliFlags.faultRPCLatencyMeanMs,
 			StddevMs: cliFlags.faultRPCLatencyStddev,
 			MaxMs:    cliFlags.faultRPCLatencyMaxMs,
-		},
+		}
 	}
+	return cfg
 }
 
 // PersistenceLatencyInjector returns a runtime persistence fault injector that sleeps for a

@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// FaultKind identifies a kind of fault that the gRPC fault injector can inject.
-// Latency is currently the only supported kind. Additional kinds (e.g. returning
-// Unavailable or ResourceExhausted errors) can reuse the same serviceerror vocabulary
-// as the persistence fault injector in common/persistence/faultinjection.
+// FaultKind identifies a kind of fault that the gRPC fault injector can inject: added latency
+// (Latency) and transient retryable errors (Error). Both are recoverable — they model a slow,
+// flaky network/peer that the system is expected to ride out.
 type FaultKind string
 
 const (
@@ -22,7 +23,15 @@ const (
 	// error: it models slow, contended machines and lets the caller's own deadline fail
 	// naturally under the added latency.
 	FaultLatency FaultKind = "Latency"
+	// FaultError injects a transient, retryable error before the handler runs. The system is
+	// expected to recover (the internal clients retry these codes), so it exercises retry and
+	// idempotency paths without causing legitimate test failures.
+	FaultError FaultKind = "Error"
 )
+
+// transientErrorCodes are retryable gRPC codes injected by the Error fault. They are
+// converted to the corresponding retryable serviceerror on the client side.
+var transientErrorCodes = []codes.Code{codes.Unavailable, codes.ResourceExhausted}
 
 // LatencyConfig configures the latency distribution for the Latency fault.
 type LatencyConfig struct {
@@ -36,8 +45,11 @@ type LatencyConfig struct {
 
 // Config configures the gRPC fault injector.
 type Config struct {
-	// Rate is the probability (0..1) that any given RPC receives a fault. 0 disables injection.
+	// Rate is the probability (0..1) that any given RPC receives a Latency fault. 0 disables it.
 	Rate float64
+	// ErrorRate is the probability (0..1) that any given RPC fails with a transient, retryable
+	// error (the Error fault). 0 disables it. Independent of Rate.
+	ErrorRate float64
 	// Seed seeds the random number generator for reproducible runs. 0 uses a time-based seed.
 	Seed int64
 	// Latency configures the Latency fault's latency distribution.
@@ -49,7 +61,7 @@ type Config struct {
 
 // Enabled reports whether the config would inject any fault.
 func (c Config) Enabled() bool {
-	return c.Rate > 0
+	return c.Rate > 0 || c.ErrorRate > 0
 }
 
 // defaultExcludedMethods are never faulted to avoid breaking health checking, which the
@@ -151,6 +163,31 @@ func (i *Injector) Delay(ctx context.Context, fullMethod string) error {
 	return i.inject(ctx)
 }
 
+// maybeError returns a transient, retryable error for the call with probability ErrorRate,
+// or nil. The error code is chosen from transientErrorCodes. These codes are retried by the
+// internal clients, so the fault is recoverable: a test should still pass under it.
+func (i *Injector) maybeError(fullMethod string) error {
+	if i.cfg.ErrorRate <= 0 || i.excluded(fullMethod) {
+		return nil
+	}
+	i.rndMu.Lock()
+	roll := i.rnd.Float64()
+	code := transientErrorCodes[i.rnd.Intn(len(transientErrorCodes))]
+	i.rndMu.Unlock()
+	if roll < i.cfg.ErrorRate {
+		return status.Errorf(code, "faultinjection: injected transient %s", code)
+	}
+	return nil
+}
+
+// apply runs both faults for a call: optional latency, then an optional transient error.
+func (i *Injector) apply(ctx context.Context, fullMethod string) error {
+	if err := i.Delay(ctx, fullMethod); err != nil {
+		return err
+	}
+	return i.maybeError(fullMethod)
+}
+
 // UnaryServerInterceptor returns a gRPC unary server interceptor that injects faults
 // before invoking the handler.
 func (i *Injector) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
@@ -160,7 +197,7 @@ func (i *Injector) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
-		if err := i.Delay(ctx, info.FullMethod); err != nil {
+		if err := i.apply(ctx, info.FullMethod); err != nil {
 			return nil, err
 		}
 		return handler(ctx, req)
@@ -176,7 +213,7 @@ func (i *Injector) StreamServerInterceptor() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		if err := i.Delay(ss.Context(), info.FullMethod); err != nil {
+		if err := i.apply(ss.Context(), info.FullMethod); err != nil {
 			return err
 		}
 		return handler(srv, ss)
@@ -194,7 +231,7 @@ func (i *Injector) UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		if err := i.Delay(ctx, method); err != nil {
+		if err := i.apply(ctx, method); err != nil {
 			return err
 		}
 		return invoker(ctx, method, req, reply, cc, opts...)

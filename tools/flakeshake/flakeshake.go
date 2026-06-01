@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -23,18 +25,25 @@ const (
 	flagRounds                = "rounds"
 	flagRPCMultiplier         = "rpc-multiplier"
 	flagPersistenceMultiplier = "persistence-multiplier"
+	flagRPCErrorMultiplier    = "rpc-error-multiplier"
 )
 
-// Base ("extreme") latency in milliseconds that reliably reproduces the versioning flakes;
-// the per-layer multipliers scale these.
+// Base latency in milliseconds at multiplier 1.0. Deliberately low: on a contended parallel
+// suite even small latency surfaces timing flakes, while high latency makes every test blow
+// its deadline. Escalate with the per-layer multipliers (e.g. for isolated single-test runs,
+// which have no contention and need much more).
 const (
-	baseRPCMeanMs    = 300
-	baseRPCStddevMs  = 150
-	baseRPCMaxMs     = 1500
-	basePersMeanMs   = 150
-	basePersStddevMs = 75
-	basePersMaxMs    = 1500
+	baseRPCMeanMs    = 25
+	baseRPCStddevMs  = 15
+	baseRPCMaxMs     = 250
+	basePersMeanMs   = 25
+	basePersStddevMs = 15
+	basePersMaxMs    = 250
 )
+
+// baseRPCErrorRate is the transient-error probability at --rpc-error-multiplier 1.0; scaled by
+// that multiplier (default 0 = off) the same way latency is scaled by its multipliers.
+const baseRPCErrorRate = 0.05
 
 // Main is the tool entrypoint.
 func Main() {
@@ -55,6 +64,7 @@ func NewCliApp() *cli.App {
 		&cli.IntFlag{Name: flagRounds, Usage: "number of rounds to run", Value: 1},
 		&cli.Float64Flag{Name: flagRPCMultiplier, Usage: "scale gRPC latency (1.0 = aggressive base)", Value: 1.0},
 		&cli.Float64Flag{Name: flagPersistenceMultiplier, Usage: "scale persistence latency (1.0 = aggressive base)", Value: 1.0},
+		&cli.Float64Flag{Name: flagRPCErrorMultiplier, Usage: "scale the transient RPC-error rate from its base (0 = off, like the latency multipliers)", Value: 0},
 	}
 	app.Action = run
 	return app
@@ -69,46 +79,99 @@ func run(c *cli.Context) error {
 	if rpcMul < 0 || persMul < 0 {
 		return fmt.Errorf("multipliers must be >= 0")
 	}
+	rpcErrorMul := c.Float64(flagRPCErrorMultiplier)
+	if rpcErrorMul < 0 {
+		return fmt.Errorf("--%s must be >= 0", flagRPCErrorMultiplier)
+	}
+	rpcErrorRate := min(baseRPCErrorRate*rpcErrorMul, 1.0)
 	rounds := max(c.Int(flagRounds), 1)
-	outDir := c.String(flagOutput)
+	// Each run gets its own timestamped folder under --output.
+	outDir := filepath.Join(c.String(flagOutput), "flakeshake-"+time.Now().Format("2006-01-02T15-04-05"))
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
 
-	faults := faultFlags(rpcMul, persMul)
-	goArgs := append(append([]string{"test"}, testArgs...), faults...)
+	faults := faultFlags(rpcMul, persMul, rpcErrorRate)
+	goArgs := append([]string{"test"}, testArgs...)
+	if !slices.Contains(goArgs, "-v") {
+		goArgs = append(goArgs, "-v") // required so go-junit-report can parse per-test results
+	}
+	if !slices.Contains(goArgs, "-count=1") {
+		goArgs = append(goArgs, "-count=1") // each round must re-run, not hit the test cache
+	}
+	goArgs = append(goArgs, faults...)
+
+	reportPath := filepath.Join(outDir, "report.md")
+	meta := reportMeta{
+		rounds:   rounds,
+		goArgs:   goArgs,
+		rpcMul:   rpcMul,
+		persMul:  persMul,
+		baseNote: fmt.Sprintf("rpc %g/%g/%g, persistence %g/%g/%g (mean/stddev/max ms); rpc transient-error rate %g; GOMAXPROCS=1; per-test timeout %s", baseRPCMeanMs*rpcMul, baseRPCStddevMs*rpcMul, baseRPCMaxMs*rpcMul, basePersMeanMs*persMul, basePersStddevMs*persMul, basePersMaxMs*persMul, rpcErrorRate, time.Duration(float64(defaultPerTestTimeout)*max(rpcMul, persMul, 1))),
+	}
+
+	childEnv := testEnv(rpcMul, persMul)
 
 	agg := newAggregator()
 	start := time.Now()
 	for round := 1; round <= rounds; round++ {
 		cmd := exec.Command("go", goArgs...)
+		cmd.Env = childEnv
 		out, runErr := cmd.CombinedOutput()
-		logPath := filepath.Join(outDir, fmt.Sprintf("flakeshake-round-%d.log", round))
+		logPath := filepath.Join(outDir, fmt.Sprintf("round-%d.log", round))
 		_ = os.WriteFile(logPath, out, 0o644)
 		agg.addRound(string(out), runErr != nil)
 		fmt.Printf("round %d/%d: %s\n", round, rounds, agg.lastStatus)
+
+		// Write the report after every round so a long run's progress is never lost.
+		meta.elapsed = time.Since(start)
+		if err := os.WriteFile(reportPath, []byte(agg.report(meta)), 0o644); err != nil {
+			return err
+		}
 	}
 
-	report := agg.report(reportMeta{
-		rounds:   rounds,
-		elapsed:  time.Since(start),
-		goArgs:   goArgs,
-		rpcMul:   rpcMul,
-		persMul:  persMul,
-		baseNote: fmt.Sprintf("rpc %g/%g/%g, persistence %g/%g/%g (mean/stddev/max ms)", baseRPCMeanMs*rpcMul, baseRPCStddevMs*rpcMul, baseRPCMaxMs*rpcMul, basePersMeanMs*persMul, basePersStddevMs*persMul, basePersMaxMs*persMul),
-	})
-	reportPath := filepath.Join(outDir, "flakeshake.md")
-	if err := os.WriteFile(reportPath, []byte(report), 0o644); err != nil {
-		return err
-	}
 	fmt.Printf("flakeshake: %d/%d rounds had failures; %d distinct flake(s)\nreport: %s\n",
 		agg.roundsFailed, rounds, len(agg.failedTests), reportPath)
 	return nil
 }
 
-// faultFlags renders the go test fault-injection flags for the given multipliers.
-func faultFlags(rpcMul, persMul float64) []string {
-	return []string{
+// defaultPerTestTimeout mirrors testcore's defaultTestTimeout (90s); the injected latency
+// scales a test's work, so we scale this per-test budget by the latency multiplier to avoid
+// blanket "context deadline exceeded" failures while still surfacing ordering flakes.
+const defaultPerTestTimeout = 90 * time.Second
+
+// testEnv returns the child environment for the test process. It pins GOMAXPROCS=1 to
+// oversubscribe the scheduler — starving in-process timers and background loops the way a
+// contended CI machine does, which surfaces contention flakes that pure RPC/persistence
+// latency cannot. It also scales TEMPORAL_TEST_TIMEOUT by the larger multiplier (floored at
+// 1x) so injected latency doesn't blow per-test deadlines. Either value the caller already
+// set in the environment is left untouched.
+func testEnv(rpcMul, persMul float64) []string {
+	env := os.Environ()
+	if !hasEnv(env, "GOMAXPROCS") {
+		env = append(env, "GOMAXPROCS=1")
+	}
+	if !hasEnv(env, "TEMPORAL_TEST_TIMEOUT") {
+		mul := max(rpcMul, persMul, 1)
+		timeout := time.Duration(float64(defaultPerTestTimeout) * mul)
+		env = append(env, "TEMPORAL_TEST_TIMEOUT="+timeout.String())
+	}
+	return env
+}
+
+func hasEnv(env []string, key string) bool {
+	for _, e := range env {
+		if strings.HasPrefix(e, key+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// faultFlags renders the go test fault-injection flags for the given multipliers and
+// transient-error rate.
+func faultFlags(rpcMul, persMul, rpcErrorRate float64) []string {
+	flags := []string{
 		"-faultRPC=true",
 		fmt.Sprintf("-faultRPCLatencyMeanMs=%g", baseRPCMeanMs*rpcMul),
 		fmt.Sprintf("-faultRPCLatencyStddevMs=%g", baseRPCStddevMs*rpcMul),
@@ -118,4 +181,8 @@ func faultFlags(rpcMul, persMul float64) []string {
 		fmt.Sprintf("-faultPersistenceLatencyStddevMs=%g", basePersStddevMs*persMul),
 		fmt.Sprintf("-faultPersistenceLatencyMaxMs=%g", basePersMaxMs*persMul),
 	}
+	if rpcErrorRate > 0 {
+		flags = append(flags, fmt.Sprintf("-faultRPCErrorRate=%g", rpcErrorRate))
+	}
+	return flags
 }
