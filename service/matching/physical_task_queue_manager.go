@@ -607,17 +607,11 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
-	if c.queue.Partition().IsRoot() {
-		metrics.WorkerCountPerTaskQueue.With(c.metricsHandler).Record(float64(c.pollerHistory.size()))
-	}
 }
 
 func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
 	if c.pollerHistory != nil {
 		c.pollerHistory.removePoller(id)
-		if c.queue.Partition().IsRoot() {
-			metrics.WorkerCountPerTaskQueue.With(c.metricsHandler).Record(float64(c.pollerHistory.size()))
-		}
 	}
 }
 

@@ -1211,7 +1211,6 @@ var (
 	ForceLoadedTaskQueuePartitionUnnecessarilyCounter = NewCounterDef("force_loaded_task_queue_partition_unnecessarily_count")
 	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
 	PendingPolls                                      = NewGaugeDef("pending_polls")
-	WorkerCountPerTaskQueue                           = NewGaugeDef("worker_count")
 	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TasksAddedCounter                                 = NewCounterDef(

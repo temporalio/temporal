@@ -70,10 +70,6 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 	return result
 }
 
-func (pollers *pollerHistory) size() int {
-	return pollers.history.Size()
-}
-
 func defaultRPS(wrapper *wrapperspb.DoubleValue) float64 {
 	if wrapper != nil {
 		return wrapper.Value
