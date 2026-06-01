@@ -9426,6 +9426,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
 			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
 			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+			PendingLastNotifiedTargetVersion:     incoming.WorkflowTaskPendingLastNotifiedTargetVersion,
 			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
 			BuildId:                              incoming.WorkflowTaskBuildId,
 			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,

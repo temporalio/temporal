@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -52,6 +53,7 @@ type WorkflowTaskInfo struct {
 	HistorySizeBytes            int64
 
 	TargetWorkerDeploymentVersionChanged bool
+	PendingLastNotifiedTargetVersion     *persistencespb.LastNotifiedTargetVersion
 	// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 	// info is to make sure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.

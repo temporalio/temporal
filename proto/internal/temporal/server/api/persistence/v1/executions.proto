@@ -91,6 +91,12 @@ message WorkflowExecutionInfo {
   bool workflow_task_suggest_continue_as_new = 69;
   repeated temporal.api.enums.v1.SuggestContinueAsNewReason workflow_task_suggest_continue_as_new_reasons = 110;
   bool workflow_task_target_worker_deployment_version_changed = 112;
+  // The target version/revision that should become last_notified_target_version
+  // if the current workflow task completes successfully. This is stored with
+  // workflow-task-local state because transient/speculative workflow tasks may
+  // expose target_worker_deployment_version_changed to the SDK before their
+  // started event is durably written.
+  LastNotifiedTargetVersion workflow_task_pending_last_notified_target_version = 116;
   int64 workflow_task_history_size_bytes = 70;
   // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
   // - verify WFT completes by the same Build ID that started in the latest attempt

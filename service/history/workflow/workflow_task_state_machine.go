@@ -493,6 +493,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	}
 
 	var targetDeploymentVersionChanged bool
+	var pendingLastNotifiedTargetVersion *persistencespb.LastNotifiedTargetVersion
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 
@@ -538,11 +539,10 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			}
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
-			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
+			pendingLastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
 				DeploymentVersion: targetDeploymentVersion,
 				RevisionNumber:    targetRevisionNumber,
 			}
-			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
 	}
 	// emit metric
@@ -629,6 +629,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	if err != nil {
 		return nil, nil, err
 	}
+	workflowTask.PendingLastNotifiedTargetVersion = pendingLastNotifiedTargetVersion
+	m.UpdateWorkflowTask(workflowTask)
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
@@ -780,6 +782,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	if m.skipWorkflowTaskCompletedEvent(workflowTask.Type, request) {
 		return nil, nil
 	}
+	m.promoteWorkflowTaskTargetVersionNotification(workflowTask)
 
 	if !workflowTaskScheduledStartedEventsCreated {
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for transient/speculative workflow tasks.
@@ -863,6 +866,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	}
 
 	return event, nil
+}
+
+func (m *workflowTaskStateMachine) promoteWorkflowTaskTargetVersionNotification(
+	workflowTask *historyi.WorkflowTaskInfo,
+) {
+	if workflowTask.PendingLastNotifiedTargetVersion == nil {
+		return
+	}
+	pending := workflowTask.PendingLastNotifiedTargetVersion
+	m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
+		DeploymentVersion: pending.GetDeploymentVersion(),
+		RevisionNumber:    pending.GetRevisionNumber(),
+	}
+	m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
@@ -1143,6 +1160,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNewReasons = workflowTask.SuggestContinueAsNewReasons
 	m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged = workflowTask.TargetWorkerDeploymentVersionChanged
+	m.ms.executionInfo.WorkflowTaskPendingLastNotifiedTargetVersion = workflowTask.PendingLastNotifiedTargetVersion
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
@@ -1287,6 +1305,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
 
 		TargetWorkerDeploymentVersionChanged: m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+		PendingLastNotifiedTargetVersion:     m.ms.executionInfo.WorkflowTaskPendingLastNotifiedTargetVersion,
 	}
 
 	return wft
