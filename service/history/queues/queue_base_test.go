@@ -67,7 +67,7 @@ var testQueueOptions = Options{
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
-	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
+	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(500),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 }
 
