@@ -208,12 +208,28 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Wait until the namespace is visible through the frontend API.
 	// Under GoMaD the namespace registry's background polling timer may not
 	// fire between creation and the first test RPC.
-	require.Eventually(t, func() bool {
-		resp, err := cluster.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+	//
+	// A synchronous ticker loop is used here instead of require.Eventually: under
+	// GoMaD's simulated time the absolute timeout timer require.Eventually starts
+	// can fire before its (asynchronous) condition goroutine is scheduled, so it
+	// reports "condition never satisfied" even when the namespace is already
+	// visible. Checking the condition synchronously avoids that race, and works
+	// identically under real time.
+	namespaceVisibleDeadline := time.Now().Add(10 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		resp, describeErr := cluster.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID.String(),
 		})
-		return err == nil && resp != nil
-	}, 10*time.Second, 100*time.Millisecond)
+		if describeErr == nil && resp != nil {
+			break
+		}
+		if time.Now().After(namespaceVisibleDeadline) {
+			t.Fatalf("namespace %s not visible through frontend API before deadline", nsID)
+		}
+		<-ticker.C
+	}
 
 	env := &TestEnv{
 		FunctionalTestBase: base,

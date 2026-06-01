@@ -252,6 +252,12 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 	}
 }
 
+func WithPerRPCCredentials(creds credentials.PerRPCCredentials) DialOption {
+	return func(conn ClientConn) {
+		// ignore
+	}
+}
+
 func WithBlock() DialOption {
 	return func(conn ClientConn) {
 		// ignore

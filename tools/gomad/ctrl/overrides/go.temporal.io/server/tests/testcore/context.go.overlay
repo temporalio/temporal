@@ -2,6 +2,7 @@ package testcore
 
 import (
 	"context"
+	"testing"
 
 	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
@@ -9,13 +10,27 @@ import (
 )
 
 // NewContext create new context with default timeout 90 seconds.
-func NewContext() context.Context {
+func NewContext(parent ...context.Context) context.Context {
 	SIMAPI.FuncStart()
 	// In the simulation the cooperative scheduler can advance simulated time by
 	// large amounts (each scaled 5-min timer adds 600M simulated seconds), so any
 	// finite deadline — even 100 years — can expire mid-call. Use an unbounded
 	// background context instead. Test isolation is provided by stuck-goroutine
 	// detection and the Go test runner's wall-clock timeout.
+	if len(parent) > 0 && parent[0] != nil {
+		return headers.SetVersions(parent[0])
+	}
+	return headers.SetVersions(SIMLIB.Background())
+}
+
+// setupTestTimeoutWithContext returns an unbounded, version-header-decorated
+// context. The real implementation installs a context that is canceled on the
+// test timeout, but under the simulation a finite deadline is canceled
+// prematurely by simulated-time advances (see NewContext), so the timeout is
+// dropped here and isolation relies on stuck-goroutine detection instead.
+func setupTestTimeoutWithContext(t *testing.T) context.Context {
+	SIMAPI.FuncStart()
+	t.Helper()
 	return headers.SetVersions(SIMLIB.Background())
 }
 

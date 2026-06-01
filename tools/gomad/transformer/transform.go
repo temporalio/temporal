@@ -98,8 +98,23 @@ var (
 		"modernc.org/sqlite",
 
 		// AWS SDK uses net/http/httputil (stdlib) alongside ext-lib net/http types,
-		// causing incompatible type errors.
+		// causing incompatible type errors. This applies to both v1 and v2: the v2
+		// signer's SignHTTP takes a net/http.Request, which must stay stdlib to match
+		// callers in skipped packages (e.g. the elasticsearch client's AWS transport).
 		"github.com/aws/aws-sdk-go/.*",
+		"github.com/aws/aws-sdk-go-v2/.*",
+		// smithy-go is aws-sdk-go-v2's transport/HTTP foundation; it must be skipped
+		// together with the SDK so the net/http types stay consistent across the
+		// SDK<->smithy boundary (smithyhttp.ClientDo, signer.SignHTTP).
+		"github.com/aws/smithy-go/.*",
+
+		// Kubernetes client libraries are pulled in transitively and are not part of
+		// any simulated code path. apimachinery's net util hands an ext-lib
+		// net/http.Transport to golang.org/x/net/http2.ConfigureTransports (skipped,
+		// stdlib), and structured-merge-diff's reflect usage trips the method-receiver
+		// rewrite; keeping them at stdlib avoids both.
+		"k8s.io/.*",
+		"sigs.k8s.io/.*",
 
 
 		// olivere elastic uses net/http types alongside libraries

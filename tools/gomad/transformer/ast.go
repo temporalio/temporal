@@ -224,6 +224,7 @@ var (
 				"KeepaliveParams":            {},
 				"WithUserAgent":              {},
 				"WithTransportCredentials":   {},
+				"WithPerRPCCredentials":      {},
 				"WithBlock":                  {},
 				"WithContextDialer":          {},
 				"WithStatsHandler":           {},
