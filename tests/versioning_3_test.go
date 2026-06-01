@@ -5913,7 +5913,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
 }
 
-func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationDoesNotBecomeDeclinedOnPlainCaN() {
+func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
 	env := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
@@ -6027,7 +6027,9 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationDoesNotBecom
 	})
 	s.NoError(err)
 	lastNotified := ms.GetDatabaseMutableState().GetExecutionInfo().GetLastNotifiedTargetVersion()
-	s.Nil(lastNotified, "failed transient notification should not be promoted to LastNotifiedTargetVersion")
+	s.NotNil(lastNotified, "failed transient notification should remain as an outstanding notification")
+	s.Equal(tv2.BuildID(), lastNotified.GetDeploymentVersion().GetBuildId())
+	s.Equal(int64(2), lastNotified.GetRevisionNumber())
 	assertNoPersistedTargetChange(execution)
 
 	s.rollbackTaskQueueToVersion(env, tv1)
@@ -6042,65 +6044,8 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationDoesNotBecom
 	s.NotEmpty(finalTask.GetTaskToken())
 	finalStarted := lastStartedEvent(finalTask.GetHistory().GetEvents())
 	s.NotNil(finalStarted)
-	s.False(finalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
-		"stale matching view should not re-fire after matching is rolled back to v1")
-
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		TaskToken: finalTask.GetTaskToken(),
-		Identity:  tv1.WorkerIdentity(),
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-						WorkflowType: tv1.WorkflowType(),
-						TaskQueue:    tv1.TaskQueue(),
-						Input:        tv1.Any().Payloads(),
-					},
-				},
-			},
-		},
-		VersioningBehavior: vbPinned,
-		DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
-	})
-	s.NoError(err)
-
-	parentEvents := env.GetHistory(env.Namespace().String(), execution)
-	var childRunID string
-	for _, event := range parentEvents {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-			s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
-				"parent history should still have no persisted true flag after CaN")
-		}
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-			childRunID = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
-		}
-	}
-	s.NotEmpty(childRunID)
-
-	s.pollWftAndHandle(env, tv1, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.Equal(childRunID, task.GetWorkflowExecution().GetRunId())
-
-			var startAttrs *historypb.WorkflowExecutionStartedEventAttributes
-			for _, event := range task.GetHistory().GetEvents() {
-				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-					startAttrs = event.GetWorkflowExecutionStartedEventAttributes()
-				}
-				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-					s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
-						"new run should not see a target change while matching is rolled back to v1")
-				}
-			}
-			s.NotNil(startAttrs)
-			s.NotNil(startAttrs.GetInheritedPinnedVersion())
-			s.Equal(tv1.BuildID(), startAttrs.GetInheritedPinnedVersion().GetBuildId())
-			s.Nil(startAttrs.GetDeclinedTargetVersionUpgrade(),
-				"plain CaN should not inherit a failed transient notification as a declined target")
-			return respondCompleteWorkflow(tv1, vbPinned), nil
-		})
+	s.True(finalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"outstanding notification should re-fire even when matching is rolled back to v1")
 }
 
 // TestOverride_SuppressesTargetVersionChangedSignal tests that a versioning override
