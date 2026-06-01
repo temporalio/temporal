@@ -33,6 +33,13 @@ type WorkflowResetSuite struct {
 	parallelsuite.Suite[*WorkflowResetSuite]
 }
 
+type preparedWorkflow struct {
+	workflowID string
+	taskQueue  *taskqueuepb.TaskQueue
+	identity   string
+	runIDs     []string
+}
+
 // versioningConfig contains configuration for setting up versioned pollers.
 type versioningConfig struct {
 	// Required indicates whether a versioned poller should be started for a particular test.
@@ -47,38 +54,27 @@ func TestWorkflowResetTestSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &WorkflowResetSuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
-// newTestEnv creates a TestEnv with the worker service enabled, which the batch
-// reset test requires (StartBatchOperation runs on the system worker service).
-func (s *WorkflowResetSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	baseOpts := []testcore.TestOption{
-		testcore.WithWorkerService("batch operations"),
-	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
-}
-
 // No explicit base run provided. current run is still running.
 func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
-	env := s.newTestEnv()
-	ctx := s.Context()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 1, true, versioningConfig{})
-	currentRunID := runs[0]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 1, true, versioningConfig{})
+	currentRunID := workflow.runIDs[0]
 
 	// Reset the current run (i.e don't give an explicit runID)
-	resp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
-		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
-		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, currentRunID),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflow, currentRunID),
 	})
 	s.NoError(err)
 	newRunID := resp.RunId
 
 	// Current run is the assumed base run. The new run should be linked to this one.
-	currentMutableState, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	currentMutableState, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: currentRunID},
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
@@ -88,27 +84,25 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 
 // No explicit base run provided. current run is closed.
 func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
-	env := s.newTestEnv()
-	ctx := s.Context()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 1, false, versioningConfig{})
-	currentRunID := runs[0]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 1, false, versioningConfig{})
+	currentRunID := workflow.runIDs[0]
 
 	// Reset the current run (i.e don't give an explicit runID)
-	resp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
-		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
-		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, currentRunID),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflow, currentRunID),
 	})
 	s.NoError(err)
 	newRunID := resp.RunId
 
 	// Current run is the assumed base run. The new run should be linked to this one.
-	currentMutableState, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	currentMutableState, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: currentRunID},
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
@@ -118,107 +112,99 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 
 // Explicit base run is provided to be reset and its the same as currently running execution.
 func (s *WorkflowResetSuite) TestSameBaseCurrentRunning() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 1, true, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[0]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 1, true, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[0]
 
-	newRunID := s.performReset(env, workflowID, baseRunID)
+	newRunID := s.performReset(env, workflow, baseRunID)
 
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 }
 
 // Explicit base run is provided. Its the same as current and is in closed state.
 func (s *WorkflowResetSuite) TestSameBaseCurrentClosed() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 1, false, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[0]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 1, false, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[0]
 
-	newRunID := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	newRunID := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 }
 
 // Explicit base run is provided. It is different from the currently running execution.
 func (s *WorkflowResetSuite) TestDifferentBaseCurrentRunning() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 2, true, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[1]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 2, true, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[1]
 
-	newRunID := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	newRunID := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 }
 
 // Explicit base run is provided. It is different from the current run which in closed state.
 func (s *WorkflowResetSuite) TestDifferentBaseCurrentClosed() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 2, false, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[1]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 2, false, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[1]
 
-	newRunID := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	newRunID := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 }
 
 // Base is reset multuple times. Assert that each time it point to the new run.
 func (s *WorkflowResetSuite) TestRepeatedResets() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 2, false, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[1]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 2, false, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[1]
 
-	newRunID1 := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID1)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	newRunID1 := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID1)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 
 	// reset again and ensure the pointer in base is also updated.
-	newRunID2 := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID2)                                     // base -> newRunID2
-	s.assertMutableStateStatus(env, workflowID, newRunID1, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED) // newRunID1 was the current run.
+	newRunID2 := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID2)                                     // base -> newRunID2
+	s.assertMutableStateStatus(env, workflow, newRunID1, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED) // newRunID1 was the current run.
 }
 
 // Explicit base run is provided. There are more closed runs between base and the current run. Asserts that no other runs apart from base & current are mutated.
 func (s *WorkflowResetSuite) TestWithMoreClosedRuns() {
-	env := s.newTestEnv()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 5, false, versioningConfig{})
-	baseRunID := runs[0]
-	currentRunID := runs[4]
-	noChangeRuns := runs[1:4]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 5, false, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
+	currentRunID := workflow.runIDs[4]
+	noChangeRuns := workflow.runIDs[1:4]
 
-	newRunID := s.performReset(env, workflowID, baseRunID)
-	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID)
-	s.assertMutableStateStatus(env, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	newRunID := s.performReset(env, workflow, baseRunID)
+	s.assertResetWorkflowLink(env, workflow, baseRunID, newRunID)
+	s.assertMutableStateStatus(env, workflow, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 
 	// assert that these runs don't have any links and their status remains completed.
 	for _, noChangeRunID := range noChangeRuns {
-		s.assertResetWorkflowLink(env, workflowID, noChangeRunID, "") // empty link
-		s.assertMutableStateStatus(env, workflowID, noChangeRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+		s.assertResetWorkflowLink(env, workflow, noChangeRunID, "") // empty link
+		s.assertMutableStateStatus(env, workflow, noChangeRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	}
 }
 
 func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
-	env := s.newTestEnv()
-	ctx := s.Context()
-	workflowID := "test-reset" + uuid.NewString()
-	runs := s.setupRuns(env, workflowID, 1, true, versioningConfig{})
-	baseRunID := runs[0]
+	env := testcore.NewEnv(s.T())
+	workflow := s.prepareWorkflowRuns(env, 1, true, versioningConfig{})
+	baseRunID := workflow.runIDs[0]
 	// Reset the current run repeatedly. Verify that each time the new run points to the original baseRunID
 	for range 5 {
-		currentRunID := s.performReset(env, workflowID, baseRunID)
-		baseMutableState, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		currentRunID := s.performReset(env, workflow, baseRunID)
+		baseMutableState, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: currentRunID},
 			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
@@ -228,20 +214,18 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 
 // Test that the workflow options are updated when the workflow is reset.
 func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
-	env := s.newTestEnv()
-	ctx := s.Context()
-	workflowID := "test-reset" + uuid.NewString()
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("worker-deployment version registration"))
 	deploymentName := "testing"
 	buildID := "v.123"
 
 	// Setup runs with versioning enabled so that the version is present in the task queue before the
 	// versioning override is set.
-	runs := s.setupRuns(env, workflowID, 1, true, versioningConfig{
+	workflow := s.prepareWorkflowRuns(env, 1, true, versioningConfig{
 		Required:       true,
 		DeploymentName: deploymentName,
 		BuildID:        buildID,
 	})
-	currentRunID := runs[0]
+	currentRunID := workflow.runIDs[0]
 
 	override := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{
@@ -256,12 +240,12 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	}
 
 	// Reset the workflow by providing the explicit runID (base run) to reset.
-	resp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
-		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: currentRunID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
-		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, currentRunID),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflow, currentRunID),
 		PostResetOperations: []*workflowpb.PostResetOperation{
 			{
 				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
@@ -284,7 +268,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 
 	// assert that the new run has the updated workflow options
 	var optionsUpdatedEvent *historypb.HistoryEvent
-	hist := env.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflow.workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for hist.HasNext() {
 		event, err := hist.Next()
 		s.NoError(err)
@@ -296,7 +280,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	s.NotNil(optionsUpdatedEvent)
 	s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
 
-	info, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+	info, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflow.workflowID, newRunID)
 	s.NoError(err)
 
 	// TODO (Carly): remove deprecated values from verification once we stop populating them
@@ -307,19 +291,14 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 
 // Test batch reset operation with version update as post reset operation
 func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
-	env := s.newTestEnv()
-	ctx := s.Context()
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
 	deploymentName := "batch-testing"
 	buildID := "v.456"
 
-	// Create 2 workflows for batch reset
-	workflowID1 := "test-batch-reset-1-" + uuid.NewString()
-	workflowID2 := "test-batch-reset-2-" + uuid.NewString()
-
 	// Setup runs
 	versioningConfig := versioningConfig{Required: true, DeploymentName: deploymentName, BuildID: buildID}
-	runs1 := s.setupRuns(env, workflowID1, 1, true, versioningConfig)
-	runs2 := s.setupRuns(env, workflowID2, 1, true, versioningConfig)
+	workflow1 := s.prepareWorkflowRuns(env, 1, true, versioningConfig)
+	workflow2 := s.prepareWorkflowRuns(env, 1, true, versioningConfig)
 
 	// Create versioning override for post-reset operations
 	override := &workflowpb.VersioningOverride{
@@ -336,20 +315,20 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 
 	// Start batch reset operation
 	batchJobID := "batch-reset-job-" + uuid.NewString()
-	_, err := env.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	_, err := env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		JobId:     batchJobID,
 		Reason:    "testing-batch-reset-with-options",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: workflowID1, RunId: runs1[0]},
-			{WorkflowId: workflowID2, RunId: runs2[0]},
+			{WorkflowId: workflow1.workflowID, RunId: workflow1.runIDs[0]},
+			{WorkflowId: workflow2.workflowID, RunId: workflow2.runIDs[0]},
 		},
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				Identity: "test-batch-reset",
 				Options: &commonpb.ResetOptions{
 					Target: &commonpb.ResetOptions_WorkflowTaskId{
-						WorkflowTaskId: s.getFirstWFTaskCompleteEventID(env, workflowID1, runs1[0]),
+						WorkflowTaskId: s.getFirstWFTaskCompleteEventID(env, workflow1, workflow1.runIDs[0]),
 					},
 				},
 				PostResetOperations: []*workflowpb.PostResetOperation{
@@ -375,7 +354,7 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 
 	// Wait for batch operation to complete
 	s.Eventually(func() bool {
-		resp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
 			Namespace: env.Namespace().String(),
 			JobId:     batchJobID,
 		})
@@ -387,16 +366,16 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 
 	// Get the new run IDs after reset
 	// The workflows should be terminated and new runs started
-	newWorkflows := s.getLatestRunsForWorkflows(env, []string{workflowID1, workflowID2})
+	newWorkflows := s.getLatestRunsForWorkflows(env, []string{workflow1.workflowID, workflow2.workflowID})
 	s.Len(newWorkflows, 2)
 
 	// Verify both workflows have the options updated event and correct versioning override
-	for i, workflowID := range []string{workflowID1, workflowID2} {
+	for i, workflowID := range []string{workflow1.workflowID, workflow2.workflowID} {
 		newRunID := newWorkflows[i]
 
 		// Find the options updated event in history
 		var optionsUpdatedEvent *historypb.HistoryEvent
-		hist := env.SdkClient().GetWorkflowHistory(ctx, workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, newRunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
 			s.NoError(err)
@@ -409,7 +388,7 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 		s.ProtoEqual(override, optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride())
 
 		// Verify the workflow execution info has the correct versioning override
-		info, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowID, newRunID)
+		info, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, newRunID)
 		s.NoError(err)
 
 		expectedOverride := &workflowpb.VersioningOverride{
@@ -430,8 +409,8 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 // Helper methods
 
 // getFirstWFTaskCompleteEventID finds the first event corresponding to workflow task completion. This can be used as a good reset point for tests in this suite.
-func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(env *testcore.TestEnv, workflowID string, runID string) int64 {
-	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(env *testcore.TestEnv, workflow preparedWorkflow, runID string) int64 {
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflow.workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for hist.HasNext() {
 		event, err := hist.Next()
 		s.NoError(err)
@@ -439,29 +418,29 @@ func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(env *testcore.TestEnv
 			return event.EventId
 		}
 	}
-	s.FailNow("Couldn't find a workflow task complete event for workflowID:[%s], runID:[%s]", workflowID, runID)
+	s.Failf("couldn't find a workflow task complete event", "workflowID:[%s], runID:[%s]", workflow.workflowID, runID)
 	return 0
 }
 
 // performReset is a helper method to reset the given workflow run and assert that it is successful.
-func (s *WorkflowResetSuite) performReset(env *testcore.TestEnv, workflowID string, runID string) string {
+func (s *WorkflowResetSuite) performReset(env *testcore.TestEnv, workflow preparedWorkflow, runID string) string {
 	// Reset the workflow by providing the explicit runID (base run) to reset.
 	resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
-		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: runID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
-		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, runID),
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflow, runID),
 	})
 	s.NoError(err)
 	return resp.RunId
 }
 
 // assertMutableStateStatus asserts that the mutable state for the given run matches the expected status.
-func (s *WorkflowResetSuite) assertMutableStateStatus(env *testcore.TestEnv, workflowID string, runID string, expectedStatus enumspb.WorkflowExecutionStatus) {
+func (s *WorkflowResetSuite) assertMutableStateStatus(env *testcore.TestEnv, workflow preparedWorkflow, runID string, expectedStatus enumspb.WorkflowExecutionStatus) {
 	ms, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: runID},
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
@@ -469,62 +448,59 @@ func (s *WorkflowResetSuite) assertMutableStateStatus(env *testcore.TestEnv, wor
 }
 
 // assertResetWorkflowLink asserts that the reset runID is properly recorded in the given run.
-func (s *WorkflowResetSuite) assertResetWorkflowLink(env *testcore.TestEnv, workflowID string, runID string, expectedLinkRunID string) {
+func (s *WorkflowResetSuite) assertResetWorkflowLink(env *testcore.TestEnv, workflow preparedWorkflow, runID string, expectedLinkRunID string) {
 	baseMutableState, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflow.workflowID, RunId: runID},
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(expectedLinkRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId)
 }
 
-// helper method to setup the test run in the required configuration. It creates a total of n runs. If isCurrentRunning is true then the last run is kept open.
-func (s *WorkflowResetSuite) setupRuns(env *testcore.TestEnv, workflowID string, n int, isCurrentRunning bool, versioningConfig versioningConfig) []string {
-	taskQueueName := testcore.RandomizeStr(s.T().Name())
+// prepareWorkflowRuns prepares a workflow with n runs. If isCurrentRunning is true then the last run is kept open.
+func (s *WorkflowResetSuite) prepareWorkflowRuns(env *testcore.TestEnv, n int, isCurrentRunning bool, versioningConfig versioningConfig) preparedWorkflow {
+	tv := env.Tv()
+	workflow := preparedWorkflow{
+		workflowID: tv.WithWorkflowID(testcore.RandomizeStr("test-reset")).WorkflowID(),
+		taskQueue:  tv.WithTaskQueue(testcore.RandomizeStr(s.T().Name())).TaskQueue(),
+		identity:   tv.WorkerIdentity(),
+	}
 
 	// If versioning is requested, start a versioned poller and validate version membership
 	if versioningConfig.Required {
-		s.startVersionedPollerAndValidate(env, taskQueueName, versioningConfig.DeploymentName, versioningConfig.BuildID)
+		s.startVersionedPollerAndValidate(env, workflow, versioningConfig.DeploymentName, versioningConfig.BuildID)
 	}
 
-	runs := []string{}
 	for i := 0; i < n-1; i++ {
-		runs = append(runs, s.prepareSingleRun(env, workflowID, taskQueueName, false))
+		workflow.runIDs = append(workflow.runIDs, s.prepareSingleRun(env, workflow, false))
 	}
-	runs = append(runs, s.prepareSingleRun(env, workflowID, taskQueueName, isCurrentRunning))
-	return runs
+	workflow.runIDs = append(workflow.runIDs, s.prepareSingleRun(env, workflow, isCurrentRunning))
+	return workflow
 }
 
-func (s *WorkflowResetSuite) prepareSingleRun(env *testcore.TestEnv, workflowID string, taskQueueName string, isRunning bool) string {
-	ctx := s.Context()
-	identity := "worker-identity"
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: taskQueueName,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue: taskQueueName,
-		ID:        workflowID,
+func (s *WorkflowResetSuite) prepareSingleRun(env *testcore.TestEnv, workflow preparedWorkflow, isRunning bool) string {
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
+		TaskQueue: workflow.taskQueue.Name,
+		ID:        workflow.workflowID,
 	}, "test-workflow-arg")
 	s.NoError(err)
 
-	pollWTResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollWTResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  "test",
+		TaskQueue: workflow.taskQueue,
+		Identity:  workflow.identity,
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollWTResp.TaskToken,
 		Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
 				ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId: "test-activity-id",
-					TaskQueue:  taskQueue,
+					TaskQueue:  workflow.taskQueue,
 
 					ActivityType:        &commonpb.ActivityType{Name: "test-activity-name"},
 					Input:               payloads.EncodeBytes([]byte{}),
@@ -540,25 +516,25 @@ func (s *WorkflowResetSuite) prepareSingleRun(env *testcore.TestEnv, workflowID 
 		return run.GetRunID()
 	}
 
-	pollATResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollATResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: env.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  identity,
+		TaskQueue: workflow.taskQueue,
+		Identity:  workflow.identity,
 	})
 	s.NoError(err)
-	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 		TaskToken: pollATResp.TaskToken,
 	})
 	s.NoError(err)
 
-	pollWTResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollWTResp, err = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  "test",
+		TaskQueue: workflow.taskQueue,
+		Identity:  workflow.identity,
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollWTResp.TaskToken,
 		Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -575,22 +551,16 @@ func (s *WorkflowResetSuite) prepareSingleRun(env *testcore.TestEnv, workflowID 
 // and validates that the version is present in the task queue via matching RPC.
 func (s *WorkflowResetSuite) startVersionedPollerAndValidate(
 	env *testcore.TestEnv,
-	taskQueueName string,
+	workflow preparedWorkflow,
 	deploymentName string,
 	buildID string,
 ) {
-	ctx := s.Context()
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: taskQueueName,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
 	// Start versioned poller in background
 	go func() {
-		_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
-			TaskQueue: taskQueue,
-			Identity:  "versioned-poller",
+			TaskQueue: workflow.taskQueue,
+			Identity:  workflow.identity,
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 				DeploymentName:       deploymentName,
 				BuildId:              buildID,
@@ -607,10 +577,10 @@ func (s *WorkflowResetSuite) startVersionedPollerAndValidate(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
-			ctx,
+			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
 				NamespaceId:   env.NamespaceID().String(),
-				TaskQueue:     taskQueueName,
+				TaskQueue:     workflow.taskQueue.Name,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				Version:       version,
 			},
