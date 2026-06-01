@@ -95,11 +95,14 @@ type (
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
+		EnableWorkerService             bool
 		FaultInjectionConfig            *config.FaultInjection
 		NumHistoryShards                int32
+		Logger                          log.Logger
 		SharedCluster                   bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -125,9 +128,17 @@ func init() {
 // This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
 // scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
 // each one.
+//
+// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.DCRedirectionPolicy = policy
 	}
 }
 
@@ -153,6 +164,12 @@ func WithMTLS() TestClusterOption {
 	}
 }
 
+func withWorkerService(enabled bool) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.EnableWorkerService = enabled
+	}
+}
+
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.FaultInjectionConfig = cfg
@@ -162,6 +179,14 @@ func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 func WithNumHistoryShards(n int32) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.NumHistoryShards = n
+	}
+}
+
+// WithClusterLogger sets a custom logger for the test cluster, used instead of
+// the default test logger. Useful for intercepting server log output.
+func WithClusterLogger(logger log.Logger) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.Logger = logger
 	}
 }
 
@@ -267,6 +292,11 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
+	// A custom logger supplied via WithClusterLogger takes precedence.
+	if params.Logger != nil {
+		s.Logger = params.Logger
+	}
+
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
 		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
@@ -284,6 +314,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
+		DCRedirectionPolicy:             params.DCRedirectionPolicy,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,
@@ -291,6 +322,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMTLS:                      params.EnableMTLS,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
+		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 
 	// Apply configuration for shared clusters.
@@ -368,7 +400,8 @@ func (s *FunctionalTestBase) checkTestShard() {
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
-		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
+		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
+		EnableWorkerService: true,
 	}
 	for _, opt := range options {
 		opt(&params)
@@ -693,6 +726,7 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
+// Deprecated: use (*TestEnv).WaitForChannel instead.
 func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {
@@ -702,6 +736,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
+// Deprecated: use (*TestEnv).SendToChannel instead.
 func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {

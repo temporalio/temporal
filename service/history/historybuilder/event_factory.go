@@ -407,6 +407,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -418,6 +419,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			Identity:                    identity,
 			Priority:                    priority,
 			TimeSkippingConfig:          timeSkippingConfig,
+			WorkflowUpdateOptions:       workflowUpdateOptions,
 		},
 	}
 	event.Links = links
@@ -819,6 +821,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
@@ -829,6 +832,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 			Identity:                  identity,
 			Header:                    header,
 			ExternalWorkflowExecution: externalWorkflowExecution,
+			RequestId:                 requestID,
 		},
 	}
 	event.Links = links

@@ -148,6 +148,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
+		if !manual {
+			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
+				Record(end.Sub(next.Next))
+		}
+
 		if limitReached {
 			droppedCount++
 			continue

@@ -21,13 +21,16 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -87,8 +90,9 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster      bool
+	dedicatedReason       string
 	dynamicConfigSettings []dynamicConfigOverride
-	timeout               time.Duration
+	clusterOptions        []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -110,6 +114,57 @@ func WithSdkWorker() TestOption {
 	}
 }
 
+// WithFxOptions appends fx options to a specific service's fx graph. This
+// implies a dedicated cluster because custom fx options cannot be shared
+// across tests.
+func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
+		o.dedicatedReason = "custom fx options used"
+	}
+}
+
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
+func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
+		o.dedicatedReason = "fault injection config used"
+	}
+}
+
+// WithLogger sets a custom logger for the test's cluster, letting a test intercept
+// server log output. This implies a dedicated cluster, since a custom logger cannot
+// be shared across tests.
+func WithLogger(logger log.Logger) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
+		o.dedicatedReason = "custom logger used"
+	}
+}
+
+// WithHistoryShardCount sets the number of history shards for the test's cluster.
+// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
+func WithHistoryShardCount(n int32) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
+		o.dedicatedReason = "custom history shard count used"
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
@@ -125,15 +180,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
-// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
-// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
-// The TEMPORAL_TEST_TIMEOUT environment variable can also set the default timeout in seconds.
-func WithTimeout(duration time.Duration) TestOption {
-	return func(o *testOptions) {
-		o.timeout = duration
-	}
-}
-
 // NewEnv creates a new test environment with access to a Temporal cluster.
 func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
@@ -146,6 +192,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		opt(&options)
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
+	if options.dedicatedReason != "" {
+		dedicatedGuard.record(options.dedicatedReason)
+	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
@@ -160,7 +209,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -187,7 +236,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
-		ctx:                setupTestTimeoutWithContext(t, options.timeout),
+		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
@@ -308,6 +357,26 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //	defer cancel()
 func (e *TestEnv) Context() context.Context {
 	return e.ctx
+}
+
+// WaitForChannel waits for ch to receive using the TestEnv context.
+func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
+	e.t.Helper()
+	select {
+	case <-ch:
+	case <-e.ctx.Done():
+		e.FailNow("context timeout while waiting for channel")
+	}
+}
+
+// SendToChannel sends to ch using the TestEnv context.
+func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
+	e.t.Helper()
+	select {
+	case ch <- struct{}{}:
+	case <-e.ctx.Done():
+		e.FailNow("context timeout while sending to channel")
+	}
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.

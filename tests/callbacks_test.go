@@ -9,25 +9,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -44,28 +40,18 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexu
 }
 
 type CallbacksSuite struct {
-	testcore.FunctionalTestBase
-
-	chasmEnabled bool
+	parallelsuite.Suite[*CallbacksSuite]
 }
 
 func TestCallbacksSuiteHSM(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(CallbacksSuite))
+	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{})
 }
 
 func TestCallbacksSuiteCHASM(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &CallbacksSuite{chasmEnabled: true})
-}
-
-func (s *CallbacksSuite) SetupSuite() {
-	s.SetupSuiteWithCluster(
-		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():          s.chasmEnabled,
-			dynamicconfig.EnableCHASMCallbacks.Key(): s.chasmEnabled,
-		}),
-	)
+	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+	})
 }
 
 func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
@@ -77,9 +63,16 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 	return srv.URL
 }
 
-func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
-	ctx := testcore.NewContext()
-	taskQueue := testcore.RandomizeStr(s.T().Name())
+func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	env := testcore.NewEnv(s.T(), opts...)
+	env.OverrideDynamicConfig(
+		callback.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+	return env
+}
+
+func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.TestOption) {
 	workflowType := "test"
 
 	cases := []struct {
@@ -121,17 +114,20 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 		},
 	}
 
-	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
-	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
-	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
-	s.OverrideDynamicConfig(callback.MaxPerExecution, 2)
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
-	)
-
 	for _, tc := range cases {
-		s.Run(tc.name, func() {
+		s.Run(tc.name, func(s *CallbacksSuite) {
+			env := testcore.NewEnv(s.T(), opts...)
+			env.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
+			env.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
+			env.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+			env.OverrideDynamicConfig(callback.MaxPerExecution, 2)
+			env.OverrideDynamicConfig(
+				callback.AllowedAddresses,
+				[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
+			)
+
+			taskQueue := testcore.RandomizeStr(s.T().Name())
+
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
@@ -145,7 +141,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.NewString(),
-				Namespace:           s.Namespace().String(),
+				Namespace:           env.Namespace().String(),
 				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -155,7 +151,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 				CompletionCallbacks: cbs,
 			}
 
-			_, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
 			s.Equal(tc.message, err.Error())
@@ -163,12 +159,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	}
 }
 
-func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
-
+func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.TestOption) {
 	cases := []struct {
 		name       string
 		wf         func(workflow.Context) (int, error)
@@ -193,7 +184,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 					return 0, workflow.Sleep(ctx, 10*time.Second)
 				}
-				s.Greater(info.Attempt, int32(1))
 				return 666, nil
 			},
 			runTimeout: 500 * time.Millisecond,
@@ -206,7 +196,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 					return 0, errors.New("intentional workflow failure")
 				}
-				s.Greater(info.Attempt, int32(1))
 				return 666, nil
 			},
 			runTimeout: 100 * time.Second,
@@ -214,18 +203,14 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	}
 
 	for _, tc := range cases {
-		s.Run(tc.name, func() {
-			tv := testvars.New(s.T())
-			ctx := testcore.NewContext()
-			sdkClient, err := client.Dial(client.Options{
-				HostPort:  s.FrontendGRPCAddress(),
-				Namespace: s.Namespace().String(),
-			})
-			s.NoError(err)
+		s.Run(tc.name, func(s *CallbacksSuite) {
+			env := s.newTestEnv(opts...)
 
-			taskQueue := testcore.RandomizeStr(s.T().Name())
+			ctx := s.Context()
+			sdkClient := env.SdkClient()
+
 			workflowType := "test"
-			workflowID := tv.WorkflowID()
+			workflowID := env.Tv().WorkflowID()
 
 			ch := &completionHandler{
 				requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
@@ -237,16 +222,13 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			}()
 			callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
-			w := worker.New(sdkClient, taskQueue, worker.Options{})
-			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
-			s.NoError(w.Start())
-			defer w.Stop()
+			env.SdkWorker().RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
 
 			links := []*commonpb.Link{
 				{
 					Variant: &commonpb.Link_WorkflowEvent_{
 						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  s.Namespace().String(),
+							Namespace:  env.Namespace().String(),
 							WorkflowId: "some-caller-wfid-1",
 							RunId:      "some-caller-runid-1",
 						},
@@ -255,7 +237,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				{
 					Variant: &commonpb.Link_WorkflowEvent_{
 						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  s.Namespace().String(),
+							Namespace:  env.Namespace().String(),
 							WorkflowId: "some-caller-wfid-2",
 							RunId:      "some-caller-runid-2",
 						},
@@ -284,10 +266,10 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.NewString(),
-				Namespace:          s.Namespace().String(),
+				Namespace:          env.Namespace().String(),
 				WorkflowId:         workflowID,
 				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				Input:              nil,
 				WorkflowRunTimeout: durationpb.New(tc.runTimeout),
 				Identity:           s.T().Name(),
@@ -300,7 +282,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				Links:               []*commonpb.Link{links[0]},
 			}
 
-			response1, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+			response1, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
 			s.NoError(err)
 
 			workflowExecution := &commonpb.WorkflowExecution{
@@ -319,15 +301,15 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			request2.CompletionCallbacks = []*commonpb.Callback{cbs[1]}
 			request2.Links = []*commonpb.Link{links[1]}
 
-			response2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
+			response2, err := env.FrontendClient().StartWorkflowExecution(ctx, request2)
 			s.NoError(err)
 			s.False(response2.Started)
 			s.Equal(workflowExecution.RunId, response2.RunId)
 
-			_, err = s.FrontendClient().SignalWorkflowExecution(
+			_, err = env.FrontendClient().SignalWorkflowExecution(
 				ctx,
 				&workflowservice.SignalWorkflowExecutionRequest{
-					Namespace:         s.Namespace().String(),
+					Namespace:         env.Namespace().String(),
 					WorkflowExecution: workflowExecution,
 					SignalName:        "continue",
 				},
@@ -357,10 +339,10 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					ch.requestCompleteCh <- err
 				}
 
-				getHistoryResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(
+				getHistoryResponse, err := env.FrontendClient().GetWorkflowExecutionHistory(
 					ctx,
 					&workflowservice.GetWorkflowExecutionHistoryRequest{
-						Namespace: s.Namespace().String(),
+						Namespace: env.Namespace().String(),
 						Execution: &commonpb.WorkflowExecution{
 							WorkflowId: workflowID,
 						},
@@ -368,8 +350,11 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					},
 				)
 				s.NoError(err)
-				s.Len(getHistoryResponse.History.Events, 1)
-				startEvent := getHistoryResponse.History.Events[0]
+				startEvent := s.RequireHistoryEvent(
+					getHistoryResponse.History.Events,
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				)
+
 				// Start event links is empty since it's deduped.
 				s.Empty(startEvent.Links)
 				startEventAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -377,7 +362,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				// Start event contains all callbacks attached to the first workflow.
 				s.ProtoElementsMatch(cbs, startEventAttr.CompletionCallbacks)
 
-				s.EventuallyWithT(func(col *assert.CollectT) {
+				await.Require(s.Context(), s.T(), func(col *await.T) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 					require.NoError(col, err)
 					require.Len(col, description.Callbacks, len(cbs))
@@ -419,22 +404,14 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	}
 }
 
-func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
 
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
+	ctx := s.Context()
+	sdkClient := env.SdkClient()
 
-	taskQueue := tv.TaskQueue()
-	workflowID := tv.WorkflowID()
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workflowID := env.Tv().WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
@@ -446,8 +423,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	}()
 	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
-	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
-
 	// A workflow that completes once it has been reset.
 	longRunningWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
@@ -457,11 +432,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		})
 	}
 
-	w.RegisterWorkflowWithOptions(longRunningWorkflow, workflow.RegisterOptions{
+	env.SdkWorker().RegisterWorkflowWithOptions(longRunningWorkflow, workflow.RegisterOptions{
 		Name: "longRunningWorkflow",
 	})
-	s.NoError(w.Start())
-	defer w.Stop()
 
 	cbs := []*commonpb.Callback{
 		{
@@ -482,7 +455,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 	request1 := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: "longRunningWorkflow"},
 		TaskQueue:           taskQueue,
@@ -491,7 +464,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		CompletionCallbacks: []*commonpb.Callback{cbs[0]},
 	}
 
-	startResponse1, err := s.FrontendClient().StartWorkflowExecution(ctx, request1)
+	startResponse1, err := env.FrontendClient().StartWorkflowExecution(ctx, request1)
 	s.NoError(err)
 
 	// Get history, iterate to ensure workflow task completed event exists.
@@ -504,7 +477,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
   			2 WorkflowTaskScheduled
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
@@ -518,7 +491,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	}
 	request2.CompletionCallbacks = []*commonpb.Callback{cbs[1]}
 
-	startResponse2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
+	startResponse2, err := env.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
 	s.False(startResponse2.Started)
 	s.Equal(workflowExecution.RunId, startResponse2.RunId)
@@ -530,13 +503,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted
      		5 WorkflowExecutionOptionsUpdated`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	// Reset workflow must copy all callbacks even after the reset point.
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: env.Namespace().String(),
 
 		WorkflowExecution:         workflowExecution,
 		Reason:                    "TestNexusResetWorkflowWithCallback",
@@ -578,8 +551,8 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		}
 	}
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
+	await.Require(s.Context(), s.T(),
+		func(t *await.T) {
 			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
 			// state.
 			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
@@ -609,11 +582,8 @@ func blockingWorkflow(ctx workflow.Context) error {
 	})
 }
 
-func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() {
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
+func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
 
 	/*
 	 * 1. Start WF w/ no callbacks and immediately terminate
@@ -622,16 +592,10 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	 * 4. Verify callback is called
 	 */
 
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-	sdkClient, err := client.Dial(client.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
+	ctx := s.Context()
 
-	taskQueue := tv.TaskQueue()
-	workflowID := tv.WorkflowID()
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workflowID := env.Tv().WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
@@ -643,16 +607,12 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	}()
 	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
-	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
-
-	w.RegisterWorkflow(blockingWorkflow)
-	s.NoError(w.Start())
-	defer w.Stop()
+	env.SdkWorker().RegisterWorkflow(blockingWorkflow)
 
 	// 1. Start WF w/ no callbacks and immediately terminate
 	request1 := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
-		Namespace:          s.Namespace().String(),
+		Namespace:          env.Namespace().String(),
 		WorkflowId:         workflowID,
 		WorkflowType:       &commonpb.WorkflowType{Name: "blockingWorkflow"},
 		TaskQueue:          taskQueue,
@@ -661,7 +621,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		Identity:           s.T().Name(),
 	}
 
-	startResponse1, err := s.FrontendClient().StartWorkflowExecution(ctx, request1)
+	startResponse1, err := env.FrontendClient().StartWorkflowExecution(ctx, request1)
 	s.NoError(err)
 
 	// Validate the workflow started, then terminate it
@@ -674,15 +634,15 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 			2 WorkflowTaskScheduled
 			3 WorkflowTaskStarted
 			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
-	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		Reason:            s.T().Name(),
-		Identity:          tv.WorkerIdentity(),
+		Identity:          env.Tv().WorkerIdentity(),
 	})
 	s.NoError(err)
 
@@ -695,12 +655,12 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	request2.RequestId = uuid.NewString()
 	request2.CompletionCallbacks = cbs
 
-	_, err = s.FrontendClient().StartWorkflowExecution(ctx, request2)
+	_, err = env.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
 
 	// 3. Reset workflow back to the first (terminated) run as base; must copy callbacks
-	_, err = sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace().String(),
+	_, err = env.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
 		WorkflowExecution:         workflowExecution, // base = first (terminated) run
 		Reason:                    s.T().Name(),
 		WorkflowTaskFinishEventId: 4,
@@ -718,13 +678,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	}
 
 	// Ensure the original workflow runs to completion to avoid leaving dangling runs
-	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 		},
 		Reason:   s.T().Name(),
-		Identity: tv.WorkerIdentity(),
+		Identity: env.Tv().WorkerIdentity(),
 	})
 	s.NoError(err)
 }

@@ -632,11 +632,7 @@ var (
 		"service_errors",
 		WithDescription("The number of unexpected service request errors."),
 	)
-	ServicePanic                            = NewCounterDef("service_panics")
-	ServiceRequestsNamespaceFairnessDemoted = NewCounterDef(
-		"service_requests_namespace_fairness_demoted",
-		WithDescription("The number of requests demoted by the history namespace fairness mechanism (over-share). Tagged with namespace and original caller type."),
-	)
+	ServicePanic         = NewCounterDef("service_panics")
 	ServiceErrorWithType = NewCounterDef(
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
@@ -904,6 +900,14 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmIncomingSignalWritten = NewCounterDef(
+		"chasm_incoming_signal_written",
+		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
+	)
+	ChasmIncomingSignalDuplicate = NewCounterDef(
+		"chasm_incoming_signal_duplicate",
+		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
@@ -1006,30 +1010,34 @@ var (
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
-	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                      = NewBytesHistogramDef("activity_info_size")
-	TimerInfoSize                         = NewBytesHistogramDef("timer_info_size")
-	ChildInfoSize                         = NewBytesHistogramDef("child_info_size")
-	RequestCancelInfoSize                 = NewBytesHistogramDef("request_cancel_info_size")
-	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
-	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
-	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
-	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
-	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
-	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
-	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
-	SignalInfoCount                       = NewDimensionlessHistogramDef("signal_info_count")
-	RequestCancelInfoCount                = NewDimensionlessHistogramDef("request_cancel_info_count")
-	SignalRequestIDCount                  = NewDimensionlessHistogramDef("signal_request_id_count")
-	BufferedEventsCount                   = NewDimensionlessHistogramDef("buffered_events_count")
-	TaskCount                             = NewDimensionlessHistogramDef("task_count")
-	TotalActivityCount                    = NewDimensionlessHistogramDef("total_activity_count")
-	TotalUserTimerCount                   = NewDimensionlessHistogramDef("total_user_timer_count")
-	TotalChildExecutionCount              = NewDimensionlessHistogramDef("total_child_execution_count")
-	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
-	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
-	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	ExecutionInfoSize                    = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize                   = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize                     = NewBytesHistogramDef("activity_info_size")
+	TimerInfoSize                        = NewBytesHistogramDef("timer_info_size")
+	ChildInfoSize                        = NewBytesHistogramDef("child_info_size")
+	RequestCancelInfoSize                = NewBytesHistogramDef("request_cancel_info_size")
+	SignalInfoSize                       = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                  = NewBytesHistogramDef("signal_request_id_size")
+	BufferedEventsSize                   = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                       = NewBytesHistogramDef("chasm_total_size")
+	ActivityInfoCount                    = NewDimensionlessHistogramDef("activity_info_count")
+	TimerInfoCount                       = NewDimensionlessHistogramDef("timer_info_count")
+	ChildInfoCount                       = NewDimensionlessHistogramDef("child_info_count")
+	SignalInfoCount                      = NewDimensionlessHistogramDef("signal_info_count")
+	RequestCancelInfoCount               = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                 = NewDimensionlessHistogramDef("signal_request_id_count")
+	BufferedEventsCount                  = NewDimensionlessHistogramDef("buffered_events_count")
+	TaskCount                            = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                   = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                  = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount             = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount      = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount             = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                     = NewDimensionlessHistogramDef("total_signal_count")
+	DescribeWorkflowSignalBacklinksCount = NewCounterDef(
+		"describe_workflow_signal_backlinks",
+		WithDescription("The number of signal backlinks resolved from the CHASM IncomingSignals map in DescribeWorkflow responses."),
+	)
 	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
@@ -1204,9 +1212,13 @@ var (
 	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
 	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
-	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
-	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskRewrites                                      = NewCounterDef(
+	TasksAddedCounter                                 = NewCounterDef(
+		"tasks_added",
+		WithDescription("Number of tasks arriving at a physical task queue, broken down by add result, forwarding, and versioning behavior"),
+	)
+	TaskWriteThrottlePerTaskQueueCounter = NewCounterDef("task_write_throttle_count")
+	TaskWriteLatencyPerTaskQueue         = NewTimerDef("task_write_latency")
+	TaskRewrites                         = NewCounterDef(
 		"task_rewrites",
 		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
 	)
@@ -1385,7 +1397,11 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef(
+	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+		"signal_external_workflow_execution_failures",
+		WithDescription("The number of signal external workflow execution failures by cause."),
+	)
+	ScheduleMissedCatchupWindow = NewCounterDef(
 		"schedule_missed_catchup_window",
 		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
 	)
@@ -1416,6 +1432,10 @@ var (
 	ScheduleActionDelay = NewTimerDef(
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
+	)
+	ScheduleGenerateLatency = NewTimerDef(
+		"schedule_generate_latency",
+		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
 	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",

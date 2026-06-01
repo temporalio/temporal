@@ -18,7 +18,8 @@ type (
 	// It would be nice to move it another package, but this creates a circular dependency.
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
-	TestComponent    struct {
+
+	TestComponent struct {
 		UnimplementedComponent
 
 		ComponentData                *protoMessageType

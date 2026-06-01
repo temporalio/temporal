@@ -95,7 +95,7 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		return nil, err
 	}
 
-	modifiedReq, err := h.validateAndPopulateStartRequest(req, namespaceID)
+	modifiedReq, err := h.validateAndPopulateStartRequest(ctx, req, namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -351,6 +351,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 }
 
 func (h *frontendHandler) validateAndPopulateStartRequest(
+	ctx context.Context,
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
@@ -405,7 +406,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := h.callbackValidator.Validate(req.GetNamespace(), cbs); err != nil {
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
 	}

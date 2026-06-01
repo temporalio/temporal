@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -36,6 +37,7 @@ type (
 		Logger                   log.Logger
 		ThrottledLogger          log.ThrottledLogger
 		Serializer               serialization.Serializer
+		TestHooks                testhooks.TestHooks
 		DLQWriter                DLQWriter
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler
 		WorkflowCache            wcache.Cache

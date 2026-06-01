@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,13 +25,14 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
@@ -47,7 +48,6 @@ type (
 		testcore.FunctionalTestBase
 
 		dlq              persistence.HistoryTaskQueueManager
-		dlqTasks         chan tasks.Task
 		writer           bytes.Buffer
 		sdkClientFactory sdk.ClientFactory
 		tdbgApp          *cli.App
@@ -66,17 +66,6 @@ type (
 		targetCluster       string
 		expectedNumMessages int
 	}
-	testExecutorWrapper struct {
-		suite *DLQSuite
-	}
-	testExecutor struct {
-		base  queues.Executor
-		suite *DLQSuite
-	}
-	testDLQWriter struct {
-		suite *DLQSuite
-		queues.QueueWriter
-	}
 	testTaskQueueManager struct {
 		suite *DLQSuite
 		persistence.HistoryTaskQueueManager
@@ -93,27 +82,24 @@ func TestDLQSuite(t *testing.T) {
 }
 
 func (s *DLQSuite) SetupSuite() {
-	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
 	s.FunctionalTestBase.SetupSuiteWithCluster(
+		// Return a terminal error that will cause workflow task to be added to the DLQ.
+		testcore.WithFaultInjectionConfig(&config.FaultInjection{
+			Injector: func(target config.FaultInjectionTarget) error {
+				if target.Store != config.ExecutionStoreName || target.Method != "GetWorkflowExecution" {
+					return nil
+				}
+				request, ok := target.Request.(*persistence.GetWorkflowExecutionRequest)
+				if !ok || !strings.HasPrefix(request.WorkflowID, *s.failingWorkflowIDPrefix.Load()) {
+					return nil
+				}
+				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
+			},
+		}),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
-			fx.Provide(
-				func() queues.ExecutorWrapper {
-					return &testExecutorWrapper{
-						suite: s,
-					}
-				},
-			),
-			fx.Decorate(
-				func(writer queues.QueueWriter) queues.QueueWriter {
-					return &testDLQWriter{
-						QueueWriter: writer,
-						suite:       s,
-					}
-				},
-			),
 			fx.Decorate(
 				func(m persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 					return &testTaskQueueManager{
@@ -436,31 +422,19 @@ func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.Workflo
 	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.NewString())
 
 	// Wait for the workflow task to be added to the DLQ.
-	select {
-	case <-ctx.Done():
-		s.FailNow("timed out waiting for workflow to task to be DLQ'd")
-	case task := <-s.dlqTasks:
-		s.Equal(run.GetRunID(), task.GetRunID())
-	}
-
-	// Verify that the workflow task is in the DLQ.
-	task := s.verifyRunIsInDLQ(ctx, run)
-	dlqMessageID := task.MessageID
-	return run, dlqMessageID
-}
-
-func (s *DLQSuite) verifyRunIsInDLQ(
-	ctx context.Context,
-	run sdkclient.WorkflowRun,
-) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
-	dlqTasks := s.readDLQTasks(ctx)
-	for _, task := range dlqTasks {
-		if task.Payload.RunId == run.GetRunID() {
-			return task
+	var found *tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo]
+	await.Require(ctx, s.T(), func(t *await.T) {
+		dlqTasks := s.readDLQTasks(t.Context())
+		for _, task := range dlqTasks {
+			if task.Payload.RunId == run.GetRunID() {
+				found = &task
+				return
+			}
 		}
-	}
-	s.Fail("workflow task not found in DLQ", run.GetRunID())
-	panic("unreachable")
+		require.Failf(t, "workflow task not found in DLQ", "run ID: %s", run.GetRunID())
+	}, dlqTestTimeout, 100*time.Millisecond)
+
+	return run, found.MessageID
 }
 
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
@@ -642,42 +616,6 @@ func (s *DLQSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persi
 	})
 	s.NoError(err)
 	return dlqTasks
-}
-
-// EnqueueTask is used to intercept writes to the DLQ, so that we can unblock the test upon completion.
-func (t *testDLQWriter) EnqueueTask(
-	ctx context.Context,
-	request *persistence.EnqueueTaskRequest,
-) (*persistence.EnqueueTaskResponse, error) {
-	res, err := t.QueueWriter.EnqueueTask(ctx, request)
-	select {
-	case t.suite.dlqTasks <- request.Task:
-	case <-ctx.Done():
-		return res, fmt.Errorf("interrupted while trying to observe DLQ write: %w", ctx.Err())
-	}
-	return res, err
-}
-
-// Wrap is used to wrap the executor with our own faulty one.
-func (t testExecutorWrapper) Wrap(delegate queues.Executor) queues.Executor {
-	return &testExecutor{
-		base:  delegate,
-		suite: t.suite,
-	}
-}
-
-// Execute is used to wrap the executor so that we can intercept the workflow task and ensure it fails with a terminal
-// error.
-//
-//nolint:err113
-func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.ExecuteResponse {
-	if strings.HasPrefix(e.GetWorkflowID(), *t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
-		// Return a terminal error that will cause this task to be added to the DLQ.
-		return queues.ExecuteResponse{
-			ExecutionErr: serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error")),
-		}
-	}
-	return t.base.Execute(ctx, e)
 }
 
 // ReadTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.

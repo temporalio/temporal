@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -602,9 +603,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {
+		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
-			Record(actualStartTime.Sub(start.DesiredTime.AsTime()))
+			Record(actualStartTime.Sub(desiredTime.AsTime()))
 	}
 
 	return &schedulepb.ScheduleActionResult{

@@ -21,6 +21,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -31,7 +32,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -202,7 +202,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
-	s.OverrideDynamicConfig(callbacks.AllowedAddresses, []any{
+	s.OverrideDynamicConfig(callback.AllowedAddresses, []any{
 		map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false},
 		map[string]any{"Pattern": "some-random-address", "AllowInsecure": false},
 	})

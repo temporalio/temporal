@@ -305,7 +305,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
-	s.Eventually(func() bool {
+	s.AwaitTrue(func() bool {
 		// wait for workflow task to fail 3 times
 		return atomic.LoadInt32(&failures) >= 3
 	}, 10*time.Second, 50*time.Millisecond)
