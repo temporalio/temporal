@@ -93,9 +93,7 @@ func newStartNexusOperationExecutionRequestValidator(
 		},
 		SearchAttributes: startNexusValidateSearchAttributes(saMapperProvider, saValidator),
 		NexusHeader:      startNexusValidateNexusHeader(config),
-		UserMetadata: func(*workflowservice.StartNexusOperationExecutionRequest, string, *sdkpb.UserMetadata) error {
-			return nil
-		},
+		UserMetadata:     startNexusValidateUserMetadata(config),
 	}
 }
 
@@ -134,6 +132,19 @@ func startNexusValidateStartToCloseTimeout() func(*workflowservice.StartNexusOpe
 		scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
 		if scheduleToCloseTimeout > 0 && startToCloseTimeout.AsDuration() > scheduleToCloseTimeout {
 			req.StartToCloseTimeout = req.GetScheduleToCloseTimeout()
+		}
+		return nil
+	}
+}
+
+func startNexusValidateUserMetadata(config *Config) func(*workflowservice.StartNexusOperationExecutionRequest, string, *sdkpb.UserMetadata) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, userMetadata *sdkpb.UserMetadata) error {
+		ns := req.GetNamespace()
+		if summarySize := userMetadata.GetSummary().Size(); summarySize > config.MaxUserMetadataSummarySize(ns) {
+			return serviceerror.NewInvalidArgumentf("%s.summary exceeds size limit", fieldName)
+		}
+		if detailsSize := userMetadata.GetDetails().Size(); detailsSize > config.MaxUserMetadataDetailsSize(ns) {
+			return serviceerror.NewInvalidArgumentf("%s.details exceeds size limit", fieldName)
 		}
 		return nil
 	}

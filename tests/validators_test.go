@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -24,11 +25,8 @@ func TestValidatorsSuite(t *testing.T) {
 
 func (s *ValidatorsSuite) TestRegisteredValidatorsCoverAllFields() {
 	var validatorCount int
-	testBase := &testcore.FunctionalTestBase{}
-	testBase.SetT(s.T())
-
-	testBase.SetupSuiteWithCluster(
-		testcore.WithFxOptionsForService(
+	testcore.NewEnv(s.T(),
+		testcore.WithFxOptions(
 			primitives.FrontendService,
 			fx.Invoke(func(lc fx.Lifecycle, registry *validation.ValidatorRegistry) {
 				lc.Append(fx.StartHook(func(context.Context) error {
@@ -41,7 +39,6 @@ func (s *ValidatorsSuite) TestRegisteredValidatorsCoverAllFields() {
 			}),
 		),
 	)
-	s.T().Cleanup(testBase.TearDownCluster)
 
 	if validatorCount <= 1 {
 		s.T().Fatalf("expected more than 1 registered validator, got %d", validatorCount)
@@ -50,12 +47,12 @@ func (s *ValidatorsSuite) TestRegisteredValidatorsCoverAllFields() {
 
 func (s *ValidatorsSuite) validateRegisteredValidators(registry *validation.ValidatorRegistry) error {
 	if registry == nil {
-		return fmt.Errorf("validator registry is nil")
+		return errors.New("validator registry is nil")
 	}
 
 	validators := validation.RegisteredValidatorsForTesting(registry)
 	if len(validators) == 0 {
-		return fmt.Errorf("validator registry has no registered validators")
+		return errors.New("validator registry has no registered validators")
 	}
 
 	types := make([]reflect.Type, 0, len(validators))
