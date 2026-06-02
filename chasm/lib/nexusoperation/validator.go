@@ -75,52 +75,10 @@ func newStartNexusOperationExecutionRequestValidator(
 			}
 			return nil
 		},
-		ScheduleToCloseTimeout: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, scheduleToCloseTimeout *durationpb.Duration) error {
-			if err := timestamp.ValidateAndCapProtoDuration(scheduleToCloseTimeout); err != nil {
-				return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
-			}
-			duration := scheduleToCloseTimeout.AsDuration()
-			maxTimeout := config.MaxOperationScheduleToCloseTimeout(req.GetNamespace())
-			if maxTimeout > 0 && (duration == 0 || duration > maxTimeout) {
-				req.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
-			}
-			return nil
-		},
-		ScheduleToStartTimeout: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, scheduleToStartTimeout *durationpb.Duration) error {
-			if err := timestamp.ValidateAndCapProtoDuration(scheduleToStartTimeout); err != nil {
-				return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
-			}
-			scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
-			if scheduleToCloseTimeout > 0 && scheduleToStartTimeout.AsDuration() > scheduleToCloseTimeout {
-				req.ScheduleToStartTimeout = req.GetScheduleToCloseTimeout()
-			}
-			return nil
-		},
-		StartToCloseTimeout: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, startToCloseTimeout *durationpb.Duration) error {
-			if err := timestamp.ValidateAndCapProtoDuration(startToCloseTimeout); err != nil {
-				return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
-			}
-			scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
-			if scheduleToCloseTimeout > 0 && startToCloseTimeout.AsDuration() > scheduleToCloseTimeout {
-				req.StartToCloseTimeout = req.GetScheduleToCloseTimeout()
-			}
-			return nil
-		},
-		Input: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, input *commonpb.Payload) error {
-			ns := req.GetNamespace()
-			inputSize := input.Size()
-			if inputSize > config.PayloadSizeLimitWarn(ns) {
-				logger.Warn("Nexus Start Operation input size exceeds the warning limit.",
-					tag.WorkflowNamespace(ns),
-					tag.OperationID(req.GetOperationId()),
-					tag.BlobSize(int64(inputSize)),
-					tag.BlobSizeViolationOperation("StartNexusOperationExecution"))
-			}
-			if inputSize > config.PayloadSizeLimit(ns) {
-				return serviceerror.NewInvalidArgumentf("%s exceeds size limit. Length=%d Limit=%d", fieldName, inputSize, config.PayloadSizeLimit(ns))
-			}
-			return nil
-		},
+		ScheduleToCloseTimeout: startNexusValidateScheduleToCloseTimeout(config),
+		ScheduleToStartTimeout: startNexusValidateScheduleToStartTimeout(),
+		StartToCloseTimeout:    startNexusValidateStartToCloseTimeout(),
+		Input:                  startNexusValidateInput(config, logger),
 		IdReusePolicy: func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, idReusePolicy enumspb.NexusOperationIdReusePolicy) error {
 			if idReusePolicy == enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_UNSPECIFIED {
 				req.IdReusePolicy = enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE
@@ -133,42 +91,119 @@ func newStartNexusOperationExecutionRequestValidator(
 			}
 			return nil
 		},
-		SearchAttributes: func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, _ *commonpb.SearchAttributes) error {
-			namespaceName := req.GetNamespace()
-			searchAttributes := req.SearchAttributes
-			if saMapperProvider != nil && searchAttributes != nil {
-				var err error
-				searchAttributes, err = searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
-				if err != nil {
-					return err
-				}
-			}
-			if err := saValidator.Validate(searchAttributes, namespaceName); err != nil {
+		SearchAttributes: startNexusValidateSearchAttributes(saMapperProvider, saValidator),
+		NexusHeader:      startNexusValidateNexusHeader(config),
+		UserMetadata:     startNexusValidateUserMetadata(config),
+	}
+}
+
+func startNexusValidateScheduleToCloseTimeout(config *Config) func(*workflowservice.StartNexusOperationExecutionRequest, string, *durationpb.Duration) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, scheduleToCloseTimeout *durationpb.Duration) error {
+		if err := timestamp.ValidateAndCapProtoDuration(scheduleToCloseTimeout); err != nil {
+			return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
+		}
+		duration := scheduleToCloseTimeout.AsDuration()
+		maxTimeout := config.MaxOperationScheduleToCloseTimeout(req.GetNamespace())
+		if maxTimeout > 0 && (duration == 0 || duration > maxTimeout) {
+			req.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
+		}
+		return nil
+	}
+}
+
+func startNexusValidateScheduleToStartTimeout() func(*workflowservice.StartNexusOperationExecutionRequest, string, *durationpb.Duration) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, scheduleToStartTimeout *durationpb.Duration) error {
+		if err := timestamp.ValidateAndCapProtoDuration(scheduleToStartTimeout); err != nil {
+			return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
+		}
+		scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
+		if scheduleToCloseTimeout > 0 && scheduleToStartTimeout.AsDuration() > scheduleToCloseTimeout {
+			req.ScheduleToStartTimeout = req.GetScheduleToCloseTimeout()
+		}
+		return nil
+	}
+}
+
+func startNexusValidateStartToCloseTimeout() func(*workflowservice.StartNexusOperationExecutionRequest, string, *durationpb.Duration) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, startToCloseTimeout *durationpb.Duration) error {
+		if err := timestamp.ValidateAndCapProtoDuration(startToCloseTimeout); err != nil {
+			return serviceerror.NewInvalidArgumentf("%s is invalid: %v", fieldName, err)
+		}
+		scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
+		if scheduleToCloseTimeout > 0 && startToCloseTimeout.AsDuration() > scheduleToCloseTimeout {
+			req.StartToCloseTimeout = req.GetScheduleToCloseTimeout()
+		}
+		return nil
+	}
+}
+
+func startNexusValidateUserMetadata(config *Config) func(*workflowservice.StartNexusOperationExecutionRequest, string, *sdkpb.UserMetadata) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, userMetadata *sdkpb.UserMetadata) error {
+		ns := req.GetNamespace()
+		if summarySize := userMetadata.GetSummary().Size(); summarySize > config.MaxUserMetadataSummarySize(ns) {
+			return serviceerror.NewInvalidArgumentf("%s.summary exceeds size limit", fieldName)
+		}
+		if detailsSize := userMetadata.GetDetails().Size(); detailsSize > config.MaxUserMetadataDetailsSize(ns) {
+			return serviceerror.NewInvalidArgumentf("%s.details exceeds size limit", fieldName)
+		}
+		return nil
+	}
+}
+
+func startNexusValidateInput(config *Config, logger log.Logger) func(*workflowservice.StartNexusOperationExecutionRequest, string, *commonpb.Payload) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, input *commonpb.Payload) error {
+		ns := req.GetNamespace()
+		inputSize := input.Size()
+		if inputSize > config.PayloadSizeLimitWarn(ns) {
+			logger.Warn("Nexus Start Operation input size exceeds the warning limit.",
+				tag.WorkflowNamespace(ns),
+				tag.OperationID(req.GetOperationId()),
+				tag.BlobSize(int64(inputSize)),
+				tag.BlobSizeViolationOperation("StartNexusOperationExecution"))
+		}
+		if inputSize > config.PayloadSizeLimit(ns) {
+			return serviceerror.NewInvalidArgumentf("%s exceeds size limit. Length=%d Limit=%d", fieldName, inputSize, config.PayloadSizeLimit(ns))
+		}
+		return nil
+	}
+}
+
+func startNexusValidateSearchAttributes(saMapperProvider searchattribute.MapperProvider, saValidator *searchattribute.Validator) func(*workflowservice.StartNexusOperationExecutionRequest, string, *commonpb.SearchAttributes) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, _ *commonpb.SearchAttributes) error {
+		namespaceName := req.GetNamespace()
+		searchAttributes := req.SearchAttributes
+		if saMapperProvider != nil && searchAttributes != nil {
+			var err error
+			searchAttributes, err = searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
+			if err != nil {
 				return err
 			}
-			return saValidator.ValidateSize(searchAttributes, namespaceName)
-		},
-		NexusHeader: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, nexusHeader map[string]string) error {
-			headerLength := 0
-			loweredHeaders := make(map[string]string, len(nexusHeader))
-			disallowedHeaders := config.DisallowedOperationHeaders()
-			for key, value := range nexusHeader {
-				loweredKey := strings.ToLower(key)
-				headerLength += len(loweredKey) + len(value)
-				if slices.Contains(disallowedHeaders, loweredKey) {
-					return serviceerror.NewInvalidArgumentf("%s contains a disallowed key: %q", fieldName, key)
-				}
-				loweredHeaders[loweredKey] = value
+		}
+		if err := saValidator.Validate(searchAttributes, namespaceName); err != nil {
+			return err
+		}
+		return saValidator.ValidateSize(searchAttributes, namespaceName)
+	}
+}
+
+func startNexusValidateNexusHeader(config *Config) func(*workflowservice.StartNexusOperationExecutionRequest, string, map[string]string) error {
+	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, nexusHeader map[string]string) error {
+		headerLength := 0
+		loweredHeaders := make(map[string]string, len(nexusHeader))
+		disallowedHeaders := config.DisallowedOperationHeaders()
+		for key, value := range nexusHeader {
+			loweredKey := strings.ToLower(key)
+			headerLength += len(loweredKey) + len(value)
+			if slices.Contains(disallowedHeaders, loweredKey) {
+				return serviceerror.NewInvalidArgumentf("%s contains a disallowed key: %q", fieldName, key)
 			}
-			if headerLength > config.MaxOperationHeaderSize(req.GetNamespace()) {
-				return serviceerror.NewInvalidArgumentf("%s exceeds size limit", fieldName)
-			}
-			req.NexusHeader = loweredHeaders
-			return nil
-		},
-		UserMetadata: func(*workflowservice.StartNexusOperationExecutionRequest, string, *sdkpb.UserMetadata) error {
-			return nil
-		},
+			loweredHeaders[loweredKey] = value
+		}
+		if headerLength > config.MaxOperationHeaderSize(req.GetNamespace()) {
+			return serviceerror.NewInvalidArgumentf("%s exceeds size limit", fieldName)
+		}
+		req.NexusHeader = loweredHeaders
+		return nil
 	}
 }
 

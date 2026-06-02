@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -41,7 +42,7 @@ func RegisteredValidatorsForTesting(registry *ValidatorRegistry) map[reflect.Typ
 
 func RegisterValidator[T any](registry *ValidatorRegistry, validator requestValidator[T]) error {
 	if registry == nil {
-		return fmt.Errorf("validator registry is nil")
+		return errors.New("validator registry is nil")
 	}
 	typ := reflect.TypeFor[*T]()
 	if _, ok := registry.validators[typ]; ok {
