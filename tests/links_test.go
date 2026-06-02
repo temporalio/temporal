@@ -210,8 +210,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 	// is or is-not running.
 	testImpl := func(ls *LinksSuite, signalExistingWorkflow bool) {
 		env := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
+		ctx := ls.Context()
 
 		signalTest := newSignalWorkflowTest(env, ls)
 
