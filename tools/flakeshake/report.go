@@ -25,47 +25,51 @@ type alertAgg struct {
 // their failure details come from parsing the `go test -v` output into JUnit (via
 // go-junit-report) and reusing gotestparse.ParseFailureDetails; data races / panics / fatals
 // and timeouts are extracted from the raw output via gotestparse.
+//
+// Committed state (failedTests/details/timeouts/alerts) is updated once per round in
+// commitRound. While a round streams, setLive records the failures seen so far so the report
+// can show them immediately without inflating the per-round counts.
 type aggregator struct {
+	roundsDone   int
 	roundsFailed int
 	failedTests  map[string]int    // test name -> rounds it failed in
 	details      map[string]string // test name -> abridged failure detail
-	timeouts     map[string]int    // test name -> rounds it timed out in
 	alerts       map[string]*alertAgg
 	lastStatus   string
+
+	liveRound int               // round currently streaming (0 = none)
+	live      map[string]string // live failures for that round (test name -> detail)
 }
 
 func newAggregator() *aggregator {
 	return &aggregator{
 		failedTests: map[string]int{},
 		details:     map[string]string{},
-		timeouts:    map[string]int{},
 		alerts:      map[string]*alertAgg{},
 	}
 }
 
-// addRound folds one round's output into the aggregate.
-func (a *aggregator) addRound(out string, failed bool) {
-	if failed {
+// setLive records the in-progress round's failures (idempotent; the full set each time).
+func (a *aggregator) setLive(round int, failures map[string]string) {
+	a.liveRound = round
+	a.live = failures
+}
+
+// commitRound folds a completed round's output into the aggregate and clears the live view.
+// A round counts as failed only if a test actually reported a failure (a "--- FAIL" with its
+// own detail). The go test exit code is deliberately ignored: binary timeouts, post-completion
+// panics, and other "go test failures" that aren't a reported test failure don't count.
+func (a *aggregator) commitRound(out string) {
+	a.roundsDone++
+
+	failures := parseFailures(out)
+	if len(failures) > 0 {
 		a.roundsFailed++
 	}
-
-	for _, tc := range failedTestcases(out) {
-		// Only count tests that have their own failure detail. This drops parent/suite
-		// aggregation entries (which fail solely because a subtest did) so the report shows
-		// the actual failing test for each flake — no more, no less.
-		d := gotestparse.ParseFailureDetails(tc.Failure.Data)
-		if d == gotestparse.NoFailureDetails {
-			continue
-		}
-		a.failedTests[tc.Name]++
-		if _, ok := a.details[tc.Name]; !ok {
-			a.details[tc.Name] = clip(d, maxDetailBytes)
-		}
-	}
-
-	if _, timedOut := gotestparse.ParseTestTimeouts(out); len(timedOut) > 0 {
-		for _, name := range timedOut {
-			a.timeouts[name]++
+	for name, d := range failures {
+		a.failedTests[name]++
+		if _, ok := a.details[name]; !ok {
+			a.details[name] = d
 		}
 	}
 
@@ -84,7 +88,26 @@ func (a *aggregator) addRound(out string, failed bool) {
 		agg.rounds++
 	}
 
-	a.lastStatus = roundStatus(failed, out)
+	a.lastStatus = roundStatus(len(failures))
+	a.liveRound, a.live = 0, nil
+}
+
+// parseFailures extracts failing tests with their own assertion detail from `go test -v`
+// output, keyed by test name. Parent/suite aggregation entries (no own detail) are dropped, so
+// the report shows the actual failing test for each flake — no more, no less. It is safe to
+// call repeatedly on a growing buffer: it returns the full set each time (no double-counting).
+func parseFailures(out string) map[string]string {
+	res := map[string]string{}
+	for _, tc := range failedTestcases(out) {
+		d := gotestparse.ParseFailureDetails(tc.Failure.Data)
+		if d == gotestparse.NoFailureDetails {
+			continue
+		}
+		if _, ok := res[tc.Name]; !ok {
+			res[tc.Name] = clip(d, maxDetailBytes)
+		}
+	}
+	return res
 }
 
 // failedTestcases parses `go test -v` output into JUnit testcases and returns the failing ones.
@@ -104,18 +127,15 @@ func failedTestcases(out string) []junit.Testcase {
 	return failed
 }
 
-func roundStatus(failed bool, out string) string {
-	if !failed {
-		return "pass"
+func roundStatus(numFailures int) string {
+	if numFailures == 0 {
+		return "pass (no reported test failures)"
 	}
-	if _, timedOut := gotestparse.ParseTestTimeouts(out); len(timedOut) > 0 {
-		return "FAIL (timeout)"
-	}
-	return "FAIL"
+	return fmt.Sprintf("FAIL (%d reported)", numFailures)
 }
 
 type reportMeta struct {
-	rounds   int
+	budget   string // human-readable run budget, e.g. "duration 30m0s" or "5 rounds"
 	elapsed  time.Duration
 	goArgs   []string
 	rpcMul   float64
@@ -127,22 +147,28 @@ func (a *aggregator) report(m reportMeta) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# flakeshake report\n\n")
 	fmt.Fprintf(&b, "Generated %s.\n\n", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Fprintf(&b, "- **Rounds**: %d (%d had failures)\n", m.rounds, a.roundsFailed)
-	fmt.Fprintf(&b, "- **Duration**: %s\n", m.elapsed.Round(time.Second))
+	fmt.Fprintf(&b, "- **Rounds completed**: %d (%d had failures) — budget: %s\n", a.roundsDone, a.roundsFailed, m.budget)
+	fmt.Fprintf(&b, "- **Elapsed**: %s\n", m.elapsed.Round(time.Second))
 	fmt.Fprintf(&b, "- **Latency** (rpc %gx, persistence %gx): %s\n", m.rpcMul, m.persMul, m.baseNote)
 	fmt.Fprintf(&b, "- **Distinct flakes**: %d\n\n", len(a.failedTests))
 	fmt.Fprintf(&b, "```\ngo %s\n```\n\n", strings.Join(m.goArgs, " "))
+
+	if len(a.live) > 0 {
+		fmt.Fprintf(&b, "## Round %d in progress — failing so far (%d)\n\n", a.liveRound, len(a.live))
+		for _, name := range sortedKeys(a.live) {
+			fmt.Fprintf(&b, "### `%s`\n\n", name)
+			if d := a.live[name]; d != "" {
+				fmt.Fprintf(&b, "```\n%s\n```\n\n", d)
+			}
+		}
+	}
 
 	if len(a.failedTests) == 0 {
 		b.WriteString("No flakes reproduced.\n\n")
 	} else {
 		fmt.Fprintf(&b, "## Flakes found (%d)\n\n", len(a.failedTests))
 		for _, name := range sortedByCountDesc(a.failedTests) {
-			to := ""
-			if a.timeouts[name] > 0 {
-				to = fmt.Sprintf(", timed out in %d", a.timeouts[name])
-			}
-			fmt.Fprintf(&b, "### `%s` — %d/%d rounds%s\n\n", name, a.failedTests[name], m.rounds, to)
+			fmt.Fprintf(&b, "### `%s` — %d/%d rounds\n\n", name, a.failedTests[name], a.roundsDone)
 			if d := a.details[name]; d != "" {
 				fmt.Fprintf(&b, "```\n%s\n```\n\n", d)
 			}
@@ -158,7 +184,7 @@ func (a *aggregator) report(m reportMeta) string {
 		sort.Strings(keys)
 		for _, k := range keys {
 			al := a.alerts[k]
-			fmt.Fprintf(&b, "### %s: %s (%d/%d rounds)\n\n", al.typ, al.summary, al.rounds, m.rounds)
+			fmt.Fprintf(&b, "### %s: %s (%d/%d rounds)\n\n", al.typ, al.summary, al.rounds, a.roundsDone)
 			if len(al.tests) > 0 {
 				fmt.Fprintf(&b, "Tests: %s\n\n", strings.Join(al.tests, ", "))
 			}
@@ -180,6 +206,16 @@ func sortedByCountDesc(m map[string]int) []string {
 		}
 		return keys[i] < keys[j]
 	})
+	return keys
+}
+
+// sortedKeys returns the map keys sorted alphabetically.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	return keys
 }
 

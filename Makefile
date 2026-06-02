@@ -498,13 +498,14 @@ functional-test: clean-test-output
 
 # flakeshake: reproduce a CI flake locally by running a test under RPC + persistence Latency
 # fault injection, documenting the outcome under $(TEST_OUTPUT_ROOT). flakeshake owns only the
-# fault flags; the go test invocation is forwarded as-is. Scope it with RUN (and override
-# rounds/latency by appending flags), e.g.:
-#   make flakeshake RUN=TestVersioningFunctionalSuite/TestDispatchNewWorkflowWithRamp
+# fault flags; the go test invocation is forwarded as-is. Scope it with RUN, and bound the run by
+# time (DURATION) or count (ROUNDS), e.g.:
+#   make flakeshake RUN=TestVersioningFunctionalSuite/TestDispatchNewWorkflowWithRamp DURATION=30m
 RUN ?= TestVersioningFunctionalSuite
-ROUNDS ?= 1
+DURATION ?= 0
+ROUNDS ?= 0
 flakeshake:
-	@go run ./cmd/tools/flakeshake --output $(TEST_OUTPUT_ROOT) --rounds $(ROUNDS) -- \
+	@go run ./cmd/tools/flakeshake --output $(TEST_OUTPUT_ROOT) --duration $(DURATION) --rounds $(ROUNDS) -- \
 		$(FUNCTIONAL_TEST_ROOT) -run "$(RUN)" $(COMPILED_TEST_ARGS) \
 		-persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
