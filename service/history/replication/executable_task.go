@@ -699,7 +699,16 @@ func (e *ExecutableTaskImpl) SyncState(
 	remainingAttempt int,
 ) (bool, error) {
 
-	// TODO: check & update remainingAttempt
+	remainingAttempt--
+	if remainingAttempt < 0 {
+		e.Logger.Error("sync state attempts exceeded",
+			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
+			tag.WorkflowID(syncStateErr.WorkflowId),
+			tag.WorkflowRunID(syncStateErr.RunId),
+			tag.Error(ErrResendAttemptExceeded),
+		)
+		return false, ErrResendAttemptExceeded
+	}
 
 	remoteAdminClient, err := e.ClientBean.GetRemoteAdminClient(e.sourceClusterName)
 	if err != nil {
