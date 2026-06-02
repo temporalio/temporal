@@ -125,7 +125,6 @@ var Module = fx.Options(
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
-	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
 	chasmnexus.FrontendModule,
 	chasmscheduler.Module,
