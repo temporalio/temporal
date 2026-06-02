@@ -800,6 +800,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	FrontendContextMetadataSetTrailer = NewGlobalBoolSetting(
+		"frontend.contextMetadataSetTrailer",
+		false,
+		`FrontendContextMetadataSetTrailer controls whether frontend gRPC handlers emit context metadata in response trailers. This is read when constructing the frontend ContextMetadataInterceptor.`,
+	)
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
@@ -1608,21 +1613,8 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 	HistoryNamespaceRPS = NewNamespaceIntSetting(
 		"history.namespaceRPS",
 		0,
-		`HistoryNamespaceRPS is namespace rate limit per second for each history host.
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
 If value less or equal to 0, will fall back to HistoryRPS`,
-	)
-	EnableHistoryNamespaceFairness = NewGlobalBoolSetting(
-		"history.enableNamespaceFairness",
-		false,
-		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
-Requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's frontend cluster-wide
-RPS budget) are routed to a lower-priority bucket`,
-	)
-	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
-		"history.namespaceFairShareMultiplier",
-		1.0,
-		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used by the history host RPS rate limiter.
-share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",

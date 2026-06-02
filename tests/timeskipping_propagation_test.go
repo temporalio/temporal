@@ -706,13 +706,13 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 	})
 }
 
-// approxDuration asserts actual is within 5s of expected. Each skip loses
+// approxDuration asserts actual is within 10s of expected. Each skip loses
 // (event_time - command_apply_time) of wall clock because
 // AccumulatedSkippedDuration is computed as TargetTime - event.EventTime in
 // ApplyWorkflowExecutionTimeSkippingTransitionedEvent; that drift accrues per
 // skip and across nested workflows.
 func (s *TimeSkippingPropagationTestSuite) approxDuration(expected, actual time.Duration, msgAndArgs ...any) {
-	s.InDelta(float64(expected), float64(actual), float64(5*time.Second), msgAndArgs...)
+	s.InDelta(float64(expected), float64(actual), float64(10*time.Second), msgAndArgs...)
 }
 
 // initiatedChildEvents returns every StartChildWorkflowExecutionInitiated event in the

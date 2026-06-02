@@ -89,8 +89,10 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
+	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
+	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -1960,6 +1962,54 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
+func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-state-size")
+	wid := testcore.RandomizeStr("sched-state-size-wf")
+	wt := testcore.RandomizeStr("sched-state-size-wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.Positive(desc.GetInfo().GetStateSizeBytes(), "Describe should report a non-zero StateSizeBytes")
+
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetStateSizeBytes() > 0
+	})
+	s.Positive(entry.GetInfo().GetStateSizeBytes(), "ListSchedules entry should report a non-zero StateSizeBytes")
+}
+
 // testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
 func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
@@ -3580,4 +3630,88 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		})
 		return err != nil
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
+}
+
+// testScheduleNextActionTimeVisibility asserts that the
+// TemporalScheduleNextActionTime search attribute is published to visibility.
+func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
+	opts := scheduleCommonOpts(t)
+	s := testcore.NewEnv(t, opts...)
+
+	v2Sid := testcore.RandomizeStr("sched-next-action-v2")
+	wid := testcore.RandomizeStr("sched-next-action-wf")
+	wt := testcore.RandomizeStr("sched-next-action-wt")
+
+	// Register a no-op workflow type. We pause both schedules immediately after
+	// creation so spawned actions shouldn't run, but registering avoids worker
+	// noise if a fire slips through before pause lands.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour), Phase: durationpb.New(23 * time.Minute)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	v2Ctx := newContext(s.Context())
+	createTime := time.Now()
+
+	_, err := s.FrontendClient().CreateSchedule(v2Ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: v2Sid,
+		Schedule:   mkSchedule(),
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Pause so FutureActionTimes is stable, and so that any SA the
+	// implementation intends to publish has been committed to visibility by
+	// the time the entry comes back paused.
+	for _, p := range []struct {
+		ctx context.Context
+		sid string
+	}{{v2Ctx, v2Sid}} {
+		_, err := s.FrontendClient().PatchSchedule(p.ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: p.sid,
+			Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	paused := func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetPaused()
+	}
+
+	// V2: TemporalScheduleNextActionTime must be present and decode to a
+	// timestamp at or after the create time.
+	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
+	s.NotNil(v2Entry)
+	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
+
+	var v2Next time.Time
+	s.NoError(payload.Decode(v2Pl, &v2Next))
+	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
+	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
+	s.True(v2Next.After(createTime.Add(-time.Second)),
+		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
 }

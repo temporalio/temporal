@@ -65,7 +65,7 @@ func (g *GeneratorTaskHandler) Execute(
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
-		g.logSchedule(logger, "starting schedule", scheduler)
+		g.logSchedule(ctx, logger, "starting schedule", generator, scheduler)
 	}
 
 	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
@@ -144,10 +144,15 @@ func (g *GeneratorTaskHandler) Execute(
 	return nil
 }
 
-func (g *GeneratorTaskHandler) logSchedule(logger log.Logger, msg string, sched *Scheduler) {
+func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.Logger, msg string, generator *Generator, sched *Scheduler) {
+	spec := jsonStringer{sched.Schedule.Spec}
+	policies := jsonStringer{sched.Schedule.Policies}
+
+	tw := g.config.Tweakables(sched.Namespace)
+	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies), tw.EventLogMaxEntries, tw.EventLogMaxMessageLen)
 	logger.Info(msg,
-		tag.Stringer("spec", jsonStringer{sched.Schedule.Spec}),
-		tag.Stringer("policies", jsonStringer{sched.Schedule.Policies}))
+		tag.Stringer("spec", spec),
+		tag.Stringer("policies", policies))
 }
 
 func (g *GeneratorTaskHandler) Validate(

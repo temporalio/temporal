@@ -59,11 +59,15 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*Scheduler](
 			chasm.SchedulerComponentName,
 			chasm.WithBusinessIDAlias("ScheduleId"),
-			chasm.WithSearchAttributes(executionStatusSearchAttribute),
+			chasm.WithSearchAttributes(
+				executionStatusSearchAttribute,
+				scheduleNextActionTimeSearchAttribute,
+			),
 		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
+		chasm.NewRegistrableComponent[*EventLog]("eventlog"),
 	}
 }
 
