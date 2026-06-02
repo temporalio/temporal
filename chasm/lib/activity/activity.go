@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -162,12 +164,28 @@ func NewStandaloneActivity(
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:        request.Input,
-			Header:       request.Header,
-			UserMetadata: request.UserMetadata,
+			Input:  request.Input,
+			Header: request.Header,
+			// Dual-write user_metadata to the legacy ActivityRequestData field so that a
+			// rolled-back binary (which only reads from here) keeps showing it. The
+			// authoritative copy lives on ChasmComponentAttributes.user_metadata; this
+			// field will be dropped once a rollback to pre-migration code is no longer
+			// supported.
+			UserMetadata: request.GetUserMetadata(), //nolint:staticcheck // intentional dual-write for rollback safety
 		}),
 		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
+	}
+
+	if md := request.GetUserMetadata(); md != nil {
+		if err := ctx.SetUserMetadata(activity, md); err != nil {
+			return nil, err
+		}
+	}
+	if len(request.GetLinks()) > 0 {
+		if err := ctx.SetRequestLinks(activity, request.GetRequestId(), request.GetLinks()); err != nil {
+			return nil, err
+		}
 	}
 
 	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
@@ -231,6 +249,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
+	links := ctx.Links(a)
 
 	return &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 attempt.GetStartedTime(),
@@ -257,6 +276,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 					HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				},
 			},
+			Links: links,
 		},
 	}, nil
 }
@@ -341,6 +361,58 @@ func (a *Activity) addCompletionCallbacks(
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+// effectiveUserMetadata returns the activity's user metadata, preferring the
+// framework-level ChasmComponentAttributes.user_metadata and falling back to
+// the legacy ActivityRequestData.user_metadata for activities persisted before
+// the migration.
+func (a *Activity) effectiveUserMetadata(ctx chasm.Context) *sdkpb.UserMetadata {
+	if md := ctx.UserMetadata(a); md != nil {
+		return md
+	}
+	return a.RequestData.Get(ctx).GetUserMetadata() //nolint:staticcheck // deprecated, read-only fallback
+}
+
+// attachLinks records the given links on the activity keyed by requestID. Duplicates
+// within the same batch are skipped. If the requestID has already been used to attach
+// links the call is a no-op, making retries idempotent. Returns an error if the activity
+// is closed, if the per-execution cap would be exceeded, or if the request's per-link
+// size, per-request count, or variant shape is invalid.
+func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, requestID string, validator *linkValidator, namespaceName string) error {
+	if len(links) == 0 {
+		return nil
+	}
+	if a.LifecycleState(ctx).IsClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach links to a closed activity")
+	}
+	if err := validator.ValidateRequest(namespaceName, links); err != nil {
+		return err
+	}
+	priorForRequest, err := ctx.RequestLinks(a, requestID)
+	if err != nil {
+		return err
+	}
+	if len(priorForRequest) > 0 {
+		return nil
+	}
+	toAdd := make([]*commonpb.Link, 0, len(links))
+	for _, link := range links {
+		isDup := false
+		for _, t := range toAdd {
+			if proto.Equal(link, t) {
+				isDup = true
+				break
+			}
+		}
+		if !isDup {
+			toAdd = append(toAdd, link)
+		}
+	}
+	if err := validator.ValidateExecutionTotal(namespaceName, len(ctx.Links(a)), len(toAdd)); err != nil {
+		return err
+	}
+	return ctx.SetRequestLinks(a, requestID, toAdd)
 }
 
 // GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
@@ -796,6 +868,9 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	key := ctx.ExecutionKey()
 	executionInfo := ctx.ExecutionInfo()
 
+	links := ctx.Links(a)
+	userMetadata := a.effectiveUserMetadata(ctx)
+
 	var closeTime *timestamppb.Timestamp
 	var executionDuration *durationpb.Duration
 	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
@@ -824,6 +899,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
+		Links:                   links,
 		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
@@ -846,7 +922,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		SearchAttributes:        sa,
 		Status:                  status,
 		TaskQueue:               a.GetTaskQueue().GetName(),
-		UserMetadata:            requestData.GetUserMetadata(),
+		UserMetadata:            userMetadata,
 	}
 
 	return info

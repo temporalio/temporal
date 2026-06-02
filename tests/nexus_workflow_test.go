@@ -33,11 +33,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/payloads"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -330,6 +332,127 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	})
 	s.NoError(err)
 	s.Empty(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType)
+}
+
+// TestNexusOperationStartsStandaloneActivityBidirectionalLinks verifies the end-to-end
+// SAA-via-Nexus path: a workflow invokes a Nexus operation whose handler creates a
+// standalone activity, attaches the Nexus operation back-link to that activity, and
+// returns the activity's link as the handler response link. After completion we assert
+// (1) the Nexus operation completed event carries the Activity link and (2) the SAA's
+// stored links carry the NexusOperation link back to the caller workflow.
+func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidirectionalLinks(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("standalone activity is only available with chasm enabled")
+	}
+
+	env := s.newTestEnv(chasmEnabled)
+	cluster := env.GetTestCluster()
+	nsValues := []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
+	}
+	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
+	ctx := env.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	activityID := testcore.RandomizeStr("saa-via-nexus")
+	var run client.WorkflowRun
+
+	h := nexustest.Handler{
+		OnStartOperation: func(
+			handlerCtx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			// Build the NexusOperation back-link the SAA should record as its caller.
+			// In chasm mode the caller workflow's identifiers are surfaced to the handler
+			// via options.Links; we mirror them here using the closed-over run.
+			nexusOpBackLink := &commonpb.Link{
+				Variant: &commonpb.Link_NexusOperation_{
+					NexusOperation: &commonpb.Link_NexusOperation{
+						Namespace:   env.Namespace().String(),
+						OperationId: run.GetID(),
+						RunId:       run.GetRunID(),
+					},
+				},
+			}
+
+			startResp, err := env.FrontendClient().StartActivityExecution(handlerCtx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    env.Namespace().String(),
+				ActivityId:   activityID,
+				ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+				Identity:     "test",
+				Input:        payloads.EncodeString("saa-input"),
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				StartToCloseTimeout: durationpb.New(time.Minute),
+				RequestId:           uuid.NewString(),
+				Links:               []*commonpb.Link{nexusOpBackLink},
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			activityLink := startResp.GetLink().GetActivity()
+			if activityLink == nil {
+				return nil, fmt.Errorf("expected StartActivityExecution response to carry an Activity link, got %T", startResp.GetLink().GetVariant())
+			}
+
+			// Surface the SAA's Activity link back to the Nexus caller as a handler link.
+			nexus.AddHandlerLinks(handlerCtx, commonnexus.ConvertLinkActivityToNexusLink(activityLink))
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	var err error
+	run, err = env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWF)
+	s.NoError(err)
+
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("ok", result)
+
+	// (1) The Nexus operation completed event carries the SAA's Activity link.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	s.Len(completedEvent.GetLinks(), 1)
+	activityLink := completedEvent.GetLinks()[0].GetActivity()
+	s.NotNil(activityLink, "completed event link must be an Activity link")
+	s.Equal(env.Namespace().String(), activityLink.GetNamespace())
+	s.Equal(activityID, activityLink.GetActivityId())
+	s.NotEmpty(activityLink.GetRunId())
+
+	// (2) The SAA stores the NexusOperation back-link to the caller workflow.
+	descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      activityLink.GetRunId(),
+	})
+	s.NoError(err)
+	saLinks := descResp.GetInfo().GetLinks()
+	s.Len(saLinks, 1, "SAA should store exactly the NexusOperation back-link supplied by the handler")
+	nexusOpLink := saLinks[0].GetNexusOperation()
+	s.NotNil(nexusOpLink, "SAA stored link must be a NexusOperation link")
+	s.Equal(env.Namespace().String(), nexusOpLink.GetNamespace())
+	s.Equal(run.GetID(), nexusOpLink.GetOperationId())
+	s.Equal(run.GetRunID(), nexusOpLink.GetRunId())
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(chasmEnabled bool) {
