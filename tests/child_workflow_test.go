@@ -960,8 +960,8 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFailedEvent() {
 	env := testcore.NewEnv(s.T())
-	tvParent := env.Tv().WithWorkflowID("parent").WithTaskQueue("parent")
-	tvChild := env.Tv().WithWorkflowID("child").WithTaskQueue("child")
+	tvParent := env.Tv().Sub("parent")
+	tvChild := env.Tv().Sub("child")
 
 	// Start a child workflow directly and leave it running so the parent's child-start transfer task
 	// hits a running workflow ID conflict with the default child conflict policy.
@@ -1047,8 +1047,8 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFa
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_TerminateIfRunningStartsNewChild() {
 	env := testcore.NewEnv(s.T())
-	tvParent := env.Tv().WithWorkflowID("parent").WithTaskQueue("parent")
-	tvChild := env.Tv().WithWorkflowID("child").WithTaskQueue("child")
+	tvParent := env.Tv().Sub("parent")
+	tvChild := env.Tv().Sub("child")
 
 	// Pre-create the child workflow ID so the parent's StartChild transfer task has to resolve
 	// a duplicate child ID through the history StartWorkflowExecution path.
