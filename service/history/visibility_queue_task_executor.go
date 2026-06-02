@@ -1,6 +1,7 @@
 package history
 
 import (
+	"bytes"
 	"context"
 	"strconv"
 	"time"
@@ -8,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -414,9 +416,14 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	for alias, value := range aliasedCustomSearchAttributes {
 		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
-			// or there are delays in propagating search attribute mappings to History.
-			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
+			// To reach here, either the search attribute has been deregistered before task execution,
+			// which is valid behavior, or there are delays in propagating search attribute mappings to
+			// History.
+			t.logger.Warn(
+				"Failed to get field name for alias, ignoring search attribute",
+				tag.String("alias", alias),
+				tag.Error(err),
+			)
 			continue
 		}
 		searchAttributes[fieldName] = value
@@ -469,11 +476,22 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchAttributes,
 	)
 
-	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
-	searchattribute.AddSearchAttributes(
-		&requestBase.SearchAttributes,
-		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
-	)
+	if !mutableState.IsWorkflow() {
+		// We reuse the TemporalNamespaceDivision column to store the string
+		// representation of ArchetypeID.
+		searchattribute.AddSearchAttributes(
+			&requestBase.SearchAttributes,
+			chasm.SearchAttributeTemporalNamespaceDivision.Value(
+				strconv.FormatUint(uint64(tree.ArchetypeID()), 10),
+			),
+		)
+	} else if t.shardContext.GetConfig().EnableCHASMVisibilityRatio(namespaceEntry.Name().String()) < 1 {
+		t.validateChasmWorkflowVisibility(
+			mutableState.GetExecutionInfo(),
+			searchAttributes,
+			userMemoMap,
+		)
+	}
 
 	// Override TaskQueue if provided by CHASM search attributes.
 	if chasmTaskQueue != "" {
@@ -660,6 +678,21 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 
+func (t *visibilityQueueTaskExecutor) validateChasmWorkflowVisibility(
+	executionInfo *persistencepb.WorkflowExecutionInfo,
+	chasmCustomSearchAttributes map[string]*commonpb.Payload,
+	chasmCustomMemo map[string]*commonpb.Payload,
+) {
+	if !isEqualMapPayload(executionInfo.GetSearchAttributes(), chasmCustomSearchAttributes) {
+		// Log there is a difference, but do not fail the task.
+		t.logger.Warn("CHASM Visibility custom search attributes does not match values in ExecutionInfo")
+	}
+	if !isEqualMapPayload(executionInfo.GetMemo(), chasmCustomMemo) {
+		// Log there is a difference, but do not fail the task.
+		t.logger.Warn("CHASM Visibility custom memo does not match values in ExecutionInfo")
+	}
+}
+
 func getWorkflowMemo(
 	memoFields map[string]*commonpb.Payload,
 ) *commonpb.Memo {
@@ -687,4 +720,17 @@ func copyMapPayload(input map[string]*commonpb.Payload) map[string]*commonpb.Pay
 		result[k] = common.CloneProto(v)
 	}
 	return result
+}
+
+func isEqualMapPayload(a, b map[string]*commonpb.Payload) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		other := b[key]
+		if !bytes.Equal(value.GetData(), other.GetData()) {
+			return false
+		}
+	}
+	return true
 }

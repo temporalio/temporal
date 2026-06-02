@@ -1292,7 +1292,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAttributes(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 	// get namespace name
@@ -1303,6 +1303,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
 	}
 	namespace := namespaceEntry.Name()
+
+	currentSearchAttributes, err := handler.mutableState.GetSearchAttributes(ctx)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable("Unable to load current search attributes")
+	}
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
 		handler.searchAttributesMapperProvider,
@@ -1343,7 +1348,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	err = handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
 		&commonpb.SearchAttributes{
 			IndexedFields: payload.MergeMapOfPayload(
-				executionInfo.SearchAttributes,
+				currentSearchAttributes,
 				attr.GetSearchAttributes().GetIndexedFields(),
 			),
 		},
@@ -1360,7 +1365,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperties(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 	// get namespace name
@@ -1369,6 +1374,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
+	}
+
+	currentMemo, err := handler.mutableState.GetMemo(ctx)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable("Unable to load current memo")
 	}
 
 	// valid properties
@@ -1392,7 +1402,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	// new memo size limit check
 	err = handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
 		&commonpb.Memo{
-			Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
+			Fields: payload.MergeMapOfPayload(currentMemo, attr.GetUpsertedMemo().GetFields()),
 		},
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",

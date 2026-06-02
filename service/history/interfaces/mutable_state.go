@@ -218,6 +218,8 @@ type (
 		IsNonCurrentWorkflowGuaranteed() (bool, error)
 		IsSignalRequested(requestID string) bool
 		GetApproximatePersistedSize() int
+		GetSearchAttributes(ctx context.Context) (map[string]*commonpb.Payload, error)
+		GetMemo(ctx context.Context) (map[string]*commonpb.Payload, error)
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration)
@@ -267,8 +269,8 @@ type (
 		ApplyTimerFiredEvent(*historypb.HistoryEvent) error
 		ApplyTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)
 		ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error)
-		ApplyWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent)
-		ApplyUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
+		ApplyWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent) error
+		ApplyUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error
