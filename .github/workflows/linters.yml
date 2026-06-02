@@ -37,9 +37,16 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - name: read protoc version
+        id: protoc-version
+        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          mise_toml: |
+            [tools]
+            protoc = "${{ steps.protoc-version.outputs.version }}"
+          install_args: protoc
 
       - name: lint protobuf definitions
         run: |
@@ -58,9 +65,16 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - name: read protoc version
+        id: protoc-version
+        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          mise_toml: |
+            [tools]
+            protoc = "${{ steps.protoc-version.outputs.version }}"
+          install_args: protoc
 
       - name: lint protobuf API definitions
         run: |
@@ -79,9 +93,16 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - name: read protoc version
+        id: protoc-version
+        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          mise_toml: |
+            [tools]
+            protoc = "${{ steps.protoc-version.outputs.version }}"
+          install_args: protoc
 
       - name: lint system workflows with workflowcheck
         run: make workflowcheck
