@@ -337,8 +337,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkf
 	s.Require().Len(replicationTasks, 1, "expected a DeleteExecutionReplicationTask when workflow is active in current cluster")
 	deleteTask, ok := replicationTasks[0].(*tasks.DeleteExecutionReplicationTask)
 	s.True(ok, "task should be *DeleteExecutionReplicationTask")
-	s.Equal(captured.WorkflowID, deleteTask.WorkflowKey.WorkflowID)
-	s.Equal(captured.NamespaceID, deleteTask.WorkflowKey.NamespaceID)
+	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
+	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
