@@ -112,9 +112,11 @@ type (
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
 		// without modifying state).
-		specBuilder          *SpecBuilder
-		cspec                *CompiledSpec
-		enableCHASMMigration bool
+		specBuilder *SpecBuilder
+		cspec       *CompiledSpec
+		// enableCHASMMigration is re-evaluated every iteration inside the
+		// "tweakables" MutableSideEffect.
+		enableCHASMMigration func() bool
 
 		tweakables TweakablePolicies
 
@@ -224,10 +226,10 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return false })
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -1265,10 +1267,10 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	enableCHASMMigration := s.enableCHASMMigration
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		p.EnableCHASMMigration = enableCHASMMigration
+		// Re-evaluates migration dynamic config each iteration.
+		p.EnableCHASMMigration = s.enableCHASMMigration()
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }

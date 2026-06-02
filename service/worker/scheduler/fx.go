@@ -108,8 +108,10 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
-		enableMigration := s.enableCHASMMigration(nsName) &&
-			dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+		enableMigration := func() bool {
+			return s.enableCHASMMigration(nsName) &&
+				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+		}
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
