@@ -108,7 +108,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	wfBacklogCount := int64(0)
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = getBacklogCount(s, env, tv)
+			wfBacklogCount = s.getBacklogCount(env, tv)
 			return wfBacklogCount >= maxBacklog
 		},
 		5*time.Second,
@@ -153,7 +153,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	// wait for backlog to be 0
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = getBacklogCount(s, env, tv)
+			wfBacklogCount = s.getBacklogCount(env, tv)
 			return wfBacklogCount == 0
 		},
 		timeToDrain,
@@ -162,7 +162,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 }
 
-func getBacklogCount(s *TaskQueueSuite, env *testcore.TestEnv, tv *testvars.TestVars) int64 {
+func (s *TaskQueueSuite) getBacklogCount(env *testcore.TestEnv, tv *testvars.TestVars) int64 {
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace:   env.Namespace().String(),
 		TaskQueue:   tv.TaskQueue(),
