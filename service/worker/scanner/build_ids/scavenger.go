@@ -170,7 +170,7 @@ func (a *Activities) processNamespaceEntry(
 		return err
 	}
 	// Only the active cluster for this namespace should perform the cleanup.
-	if !ns.ActiveInCluster(a.currentClusterName) {
+	if !ns.ActiveInCluster(a.currentClusterName) { //nolint:forbidigo // scavenger scans entire namespace, not per workflow.
 		return nil
 	}
 	for {

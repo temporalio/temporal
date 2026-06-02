@@ -487,7 +487,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
-	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) { //nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 

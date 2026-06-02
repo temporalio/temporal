@@ -81,7 +81,7 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 	// to handover state from active cluster, so the second condition will always be true. Adding
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := newNs.IsGlobalNamespace() &&
-		newNs.ActiveInCluster(t.clusterMetadata.GetCurrentClusterName()) &&
+		newNs.ActiveInCluster(t.clusterMetadata.GetCurrentClusterName()) && //nolint:forbidigo // namespace-wide handover tracking; ReplicationState("") below is also ns-level
 		newNs.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
 
 	if deletedFromDB || !isHandoverNamespace {

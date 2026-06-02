@@ -52,6 +52,8 @@ linters:
           msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
         - pattern: 'assert\.\w+'
           msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
+        - pattern: ActiveInCluster
+          msg: "ActiveInCluster is not businessID-aware. For any decision tied to a workflow / businessID, use ns.ActiveClusterName(routingKey) instead. For genuine namespace-level checks (no workflow context), suppress with //nolint:forbidigo // <justification>."
     depguard:
       rules:
         main:
@@ -198,6 +200,10 @@ linters:
           - forbidigo
       - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
+        linters:
+          - forbidigo
+      - path: common/namespace/(namespace|replication_resolver)(_test)?\.go$ # ActiveInCluster definition and direct unit tests
+        text: "ActiveInCluster"
         linters:
           - forbidigo
       - path-except: tests/.+_test\.go # only enforce in test files

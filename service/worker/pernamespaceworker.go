@@ -373,7 +373,8 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	if !w.wm.Running() ||
 		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
-		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
+		!args.ns.ActiveInCluster(w.wm.thisClusterName) { //nolint:forbidigo // per-namespace worker lifecycle, no workflow context
+
 		return errNoWorkerNeeded
 	}
 

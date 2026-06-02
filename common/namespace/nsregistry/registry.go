@@ -185,7 +185,7 @@ func DefaultNamespaceStateChanged(currentClusterName string, oldNS *namespace.Na
 		oldNS.State() != newNS.State() ||
 		oldNS.Name() != newNS.Name() ||
 		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
-		oldNS.ActiveInCluster(currentClusterName) != newNS.ActiveInCluster(currentClusterName) ||
+		oldNS.ActiveInCluster(currentClusterName) != newNS.ActiveInCluster(currentClusterName) || //nolint:forbidigo // ns-wide state diff for cache invalidation.
 		oldNS.ReplicationState("") != newNS.ReplicationState("")
 }
 

@@ -645,7 +645,7 @@ func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err e
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
 	ns, err := pm.engine.namespaceRegistry.GetNamespaceByID(pm.ns.ID())
 	if err == nil {
-		return ns.ActiveInCluster(pm.engine.clusterMeta.GetCurrentClusterName()), nil
+		return ns.ActiveInCluster(pm.engine.clusterMeta.GetCurrentClusterName()), nil //nolint:forbidigo // partition manager is namespace-scoped
 	}
 	return false, err
 }
