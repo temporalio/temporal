@@ -860,7 +860,7 @@ func (swt *signalWorkflowTest) signalWithStartWorkflow(ctx context.Context, targ
 	}, "caller-workflow")
 	swt.s.NoError(err)
 	defer func() {
-		swt.env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+		_ = swt.env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
 	}()
 
 	// Encode the SWS request as binary/protobuf. PreferProtoDataConverter places
