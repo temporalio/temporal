@@ -118,6 +118,10 @@ func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
 	return NewNexusEndpointStore(f.session, f.logger), nil
 }
 
+func (f *Factory) NewStreamSegmentManager() (p.StreamSegmentManager, error) {
+	return NewStreamSegmentManager(f.session, f.logger), nil
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.Lock()

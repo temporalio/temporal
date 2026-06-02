@@ -129,6 +129,21 @@ func (mr *MockDataStoreFactoryMockRecorder) NewNexusEndpointStore() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewNexusEndpointStore", reflect.TypeOf((*MockDataStoreFactory)(nil).NewNexusEndpointStore))
 }
 
+// NewStreamSegmentManager mocks base method.
+func (m *MockDataStoreFactory) NewStreamSegmentManager() (persistence.StreamSegmentManager, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewStreamSegmentManager")
+	ret0, _ := ret[0].(persistence.StreamSegmentManager)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewStreamSegmentManager indicates an expected call of NewStreamSegmentManager.
+func (mr *MockDataStoreFactoryMockRecorder) NewStreamSegmentManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStreamSegmentManager", reflect.TypeOf((*MockDataStoreFactory)(nil).NewStreamSegmentManager))
+}
+
 // NewQueue mocks base method.
 func (m *MockDataStoreFactory) NewQueue(queueType persistence.QueueType) (persistence.Queue, error) {
 	m.ctrl.T.Helper()

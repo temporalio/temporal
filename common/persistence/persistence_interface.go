@@ -48,6 +48,8 @@ type (
 		NewClusterMetadataStore() (ClusterMetadataStore, error)
 		// NewNexusEndpointStore returns a new nexus service store
 		NewNexusEndpointStore() (NexusEndpointStore, error)
+		// NewStreamSegmentManager returns a native-streams segment manager
+		NewStreamSegmentManager() (StreamSegmentManager, error)
 	}
 
 	// ShardStore is a lower level of ShardManager

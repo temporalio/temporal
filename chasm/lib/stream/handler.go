@@ -184,21 +184,23 @@ func (h *Handler) writeTentativeSegments(
 	if len(items) == 0 {
 		return ErrInvalidPublishBatchEmpty
 	}
-	// One segment row per (segment_id, txn_id).  For the M4 reference
-	// implementation we put the whole batch in one row covering the
-	// reserved offset range; production drivers can chunk per segment
-	// boundary, but the row schema supports either layout.
+	// One segment row per (segment_id, txn_id).  The reference
+	// implementation puts the whole batch in one row covering the
+	// reserved offset range. Until we chunk and merge physical segment
+	// rows, use first_offset as the row segment key so successive appends
+	// in the same configured segment do not hide one another under the
+	// latest-txn-per-segment read rule.
 	rowData, err := encodeSegmentRowData(prep.FirstOffset, items)
 	if err != nil {
 		return err
 	}
 	rows := []persistence.StreamSegmentRow{{
-		SegmentID:   prep.FirstSegmentID,
+		SegmentID:   prep.FirstOffset,
 		TxnID:       prep.TxnID,
 		FirstOffset: prep.FirstOffset,
 		LastOffset:  prep.FirstOffset + int64(prep.ItemCount) - 1,
 		ItemCount:   prep.ItemCount,
-		PayloadHash: hashPublishItemsPayload(items),
+		PayloadHash: hashSegmentRowData(rowData),
 		Data:        &commonpb.DataBlob{Data: rowData},
 	}}
 	_, err = h.segmentStore.WriteTentative(ctx, &persistence.WriteTentativeSegmentsRequest{
@@ -231,6 +233,13 @@ func (h *Handler) verifyProofOfWrite(
 	for _, row := range resp.Rows {
 		if row.TxnID != prep.TxnID {
 			continue
+		}
+		if row.Data == nil {
+			return false, serviceerror.NewInternal("stream segment row missing data")
+		}
+		if len(row.PayloadHash) > 0 &&
+			!bytes.Equal(hashSegmentRowData(row.Data.Data), row.PayloadHash) {
+			return false, nil
 		}
 		rowItems, err := decodeSegmentRowData(row)
 		if err != nil {
@@ -557,6 +566,11 @@ func hashPublishItemsPayload(items []*streampb.PublishItem) []byte {
 		hasher.Write(item.Data)
 	}
 	return hasher.Sum(nil)
+}
+
+func hashSegmentRowData(data []byte) []byte {
+	sum := sha256.Sum256(data)
+	return sum[:]
 }
 
 func encodeSegmentRowData(firstOffset int64, items []*streampb.PublishItem) ([]byte, error) {

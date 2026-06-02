@@ -45,6 +45,8 @@ type (
 		NewHistoryTaskQueueManager() (persistence.HistoryTaskQueueManager, error)
 		// NewNexusEndpointManager returns a new manager for nexus endpoints
 		NewNexusEndpointManager() (persistence.NexusEndpointManager, error)
+		// NewStreamSegmentManager returns a native-streams segment manager
+		NewStreamSegmentManager() (persistence.StreamSegmentManager, error)
 	}
 
 	factoryImpl struct {
@@ -257,6 +259,10 @@ func (f *factoryImpl) NewNexusEndpointManager() (persistence.NexusEndpointManage
 	}
 	result = persistence.NewNexusEndpointPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
+}
+
+func (f *factoryImpl) NewStreamSegmentManager() (persistence.StreamSegmentManager, error) {
+	return f.dataStoreFactory.NewStreamSegmentManager()
 }
 
 // Close closes this factory

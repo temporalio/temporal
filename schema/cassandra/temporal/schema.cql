@@ -247,3 +247,27 @@ CREATE TABLE nexus_endpoints
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
     };
+
+-- Native streams: stream_segments persistence facet.  See
+-- native-streams/persistence-abi.html Approach C and
+-- native-streams/cassandra-operability.html for table options.
+CREATE TABLE stream_segments (
+  shard_id        int,
+  namespace_id    uuid,
+  stream_id       text,
+  segment_id      bigint,
+  txn_id          bigint,
+  first_offset    bigint,
+  last_offset     bigint,
+  item_count      int,
+  payload_hash    blob,
+  data            blob,
+  data_encoding   text,
+  PRIMARY KEY ((shard_id, namespace_id, stream_id), segment_id, txn_id)
+) WITH COMPACTION = {
+    'class':                  'TimeWindowCompactionStrategy',
+    'compaction_window_unit': 'HOURS',
+    'compaction_window_size': 1,
+    'unchecked_tombstone_compaction': 'true'
+  }
+  AND gc_grace_seconds = 172800;

@@ -150,6 +150,14 @@ func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
 	return NewSqlNexusEndpointStore(conn, f.logger, f.serializer)
 }
 
+func (f *Factory) NewStreamSegmentManager() (p.StreamSegmentManager, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return NewSQLStreamSegmentManager(conn, f.logger, f.serializer), nil
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.mainDBConn.ForceClose()

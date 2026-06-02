@@ -28,9 +28,9 @@ type StreamSegmentManager interface {
 	// WriteTentative writes the segment rows for one txn_id of one
 	// publish.  Idempotent under same-txn retry with identical bytes (the
 	// same (segment_id, txn_id) clustering key rewrites the same payload).
-	// A retry with different bytes is detected at commit time via the
-	// payload-hash proof-of-write check; the row write itself does not
-	// reject.
+	// A retry with different persisted row bytes is detected at commit
+	// time via the payload-hash proof-of-write check; the row write itself
+	// does not reject.
 	WriteTentative(ctx context.Context, request *WriteTentativeSegmentsRequest) (*WriteTentativeSegmentsResponse, error)
 
 	// ReadRange returns committed segment rows in the requested offset
@@ -63,13 +63,15 @@ type StreamSegmentKey struct {
 
 // StreamSegmentRow is one persisted segment row.
 type StreamSegmentRow struct {
-	SegmentID    int64
-	TxnID        int64
-	FirstOffset  int64
-	LastOffset   int64
-	ItemCount    int32
-	PayloadHash  []byte
-	Data         *commonpb.DataBlob
+	SegmentID   int64
+	TxnID       int64
+	FirstOffset int64
+	LastOffset  int64
+	ItemCount   int32
+	// PayloadHash is SHA-256 over Data.Data, the exact bytes persisted in
+	// stream_segments.data.
+	PayloadHash []byte
+	Data        *commonpb.DataBlob
 }
 
 // WriteTentativeSegmentsRequest writes one or more segment rows under a
@@ -87,10 +89,10 @@ type WriteTentativeSegmentsResponse struct{}
 // is the visibility frontier; only rows with txn_id <= CommittedTxnID
 // are returned.
 type ReadStreamRangeRequest struct {
-	Key             StreamSegmentKey
-	StartOffset     int64
-	EndOffset       int64
-	CommittedTxnID  int64
+	Key            StreamSegmentKey
+	StartOffset    int64
+	EndOffset      int64
+	CommittedTxnID int64
 
 	// PageSize caps the number of rows returned per call; pagination via
 	// NextPageOffset on the response.  Zero means use the driver's
@@ -114,8 +116,8 @@ type DeleteSegmentsByTxnRequest struct {
 // tombstone on Cassandra per native-streams/cassandra-operability.html
 // (range-tombstone discipline).
 type DeleteSegmentsPrefixRequest struct {
-	Key                StreamSegmentKey
-	BelowOffset        int64
+	Key         StreamSegmentKey
+	BelowOffset int64
 }
 
 // DeleteStreamSegmentsRequest removes all rows for a stream.

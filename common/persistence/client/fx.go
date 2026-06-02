@@ -75,6 +75,7 @@ var Module = fx.Options(
 	fx.Provide(managerProvider(Factory.NewExecutionManager)),
 	fx.Provide(managerProvider(Factory.NewHistoryTaskQueueManager)),
 	fx.Provide(managerProvider(Factory.NewNexusEndpointManager)),
+	fx.Provide(managerProvider(Factory.NewStreamSegmentManager)),
 
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(HealthSignalAggregatorProvider),

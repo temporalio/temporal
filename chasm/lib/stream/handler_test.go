@@ -145,6 +145,55 @@ func TestHandlerReadRangeTopicFilterPreservesOffsets(t *testing.T) {
 	require.Equal(t, int64(3), readResp.NextOffset)
 }
 
+func TestHandlerReadRangePreservesMultiplePublishesInSameSegment(t *testing.T) {
+	h, ctx := newHandlerTestEngine(t)
+
+	_, err := h.CreateStream(ctx, &streampb.CreateStreamRequest{
+		NamespaceId:     "ns-1",
+		StreamId:        "stream-1",
+		SegmentMaxItems: 100,
+	})
+	require.NoError(t, err)
+
+	firstBatch := []*streampb.PublishItem{
+		{Data: []byte("a")},
+		{Data: []byte("b")},
+	}
+	secondBatch := []*streampb.PublishItem{
+		{Data: []byte("c")},
+	}
+	_, err = h.Publish(ctx, &streampb.PublishRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		PublisherId: "pub-1",
+		Sequence:    1,
+		Items:       firstBatch,
+		PayloadHash: sha256Hash(firstBatch),
+	})
+	require.NoError(t, err)
+	_, err = h.Publish(ctx, &streampb.PublishRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		PublisherId: "pub-1",
+		Sequence:    2,
+		Items:       secondBatch,
+		PayloadHash: sha256Hash(secondBatch),
+	})
+	require.NoError(t, err)
+
+	readResp, err := h.ReadRange(ctx, &streampb.ReadRangeRequest{
+		NamespaceId: "ns-1",
+		StreamId:    "stream-1",
+		StartOffset: 0,
+		EndOffset:   3,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{0, 1, 2}, readResp.Offsets)
+	require.Equal(t, []byte("a"), readResp.Items[0].Data)
+	require.Equal(t, []byte("b"), readResp.Items[1].Data)
+	require.Equal(t, []byte("c"), readResp.Items[2].Data)
+}
+
 // Handler-level: a Publish retry with the same (publisher_id, sequence)
 // returns the prior outcome and does not advance head.
 //

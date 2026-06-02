@@ -21,6 +21,7 @@ type (
 		queueV2            persistence.QueueV2
 		clusterMDStore     persistence.ClusterMetadataStore
 		nexusEndpointStore persistence.NexusEndpointStore
+		streamSegments     persistence.StreamSegmentManager
 	}
 )
 
@@ -137,4 +138,15 @@ func (d *TelemetryDataStoreFactory) NewNexusEndpointStore() (persistence.NexusEn
 		d.nexusEndpointStore = newTelemetryNexusEndpointStore(baseStore, d.logger, d.tracer)
 	}
 	return d.nexusEndpointStore, nil
+}
+
+func (d *TelemetryDataStoreFactory) NewStreamSegmentManager() (persistence.StreamSegmentManager, error) {
+	if d.streamSegments == nil {
+		baseManager, err := d.baseFactory.NewStreamSegmentManager()
+		if err != nil {
+			return nil, err
+		}
+		d.streamSegments = baseManager
+	}
+	return d.streamSegments, nil
 }

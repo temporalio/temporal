@@ -19,6 +19,7 @@ type (
 		queueV2            persistence.QueueV2
 		clusterMDStore     persistence.ClusterMetadataStore
 		nexusEndpointStore persistence.NexusEndpointStore
+		streamSegments     persistence.StreamSegmentManager
 	}
 )
 
@@ -195,6 +196,17 @@ func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.Ne
 		}
 	}
 	return d.nexusEndpointStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewStreamSegmentManager() (persistence.StreamSegmentManager, error) {
+	if d.streamSegments == nil {
+		baseManager, err := d.baseFactory.NewStreamSegmentManager()
+		if err != nil {
+			return nil, err
+		}
+		d.streamSegments = baseManager
+	}
+	return d.streamSegments, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) storeFaultInjector(storeName config.DataStoreName) (faultGenerator, bool) {

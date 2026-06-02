@@ -7,8 +7,6 @@ import (
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/streamsegmentstore"
 )
 
 // Register registers the stream Library with the chasm Registry.
@@ -28,15 +26,10 @@ func NewHistoryShardResolver(persistenceConfig config.Persistence) ShardResolver
 	return historyShardResolver{numShards: persistenceConfig.NumHistoryShards}
 }
 
-func NewMemorySegmentManager() persistence.StreamSegmentManager {
-	return streamsegmentstore.NewMemory()
-}
-
 // Module is the fx module for the native-streams chasm library.
 var Module = fx.Module(
 	"chasm.lib.stream",
 	fx.Provide(NewHistoryShardResolver),
-	fx.Provide(NewMemorySegmentManager),
 	fx.Provide(NewHandler),
 	fx.Provide(NewSweepExpiredTaskHandler),
 	fx.Provide(NewAbortCleanupTaskHandler),

@@ -350,9 +350,9 @@ type PublishRequest struct {
 	Sequence    uint64                 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	// Each item is opaque, codec-applied bytes plus an optional topic.
 	Items []*PublishItem `protobuf:"bytes,5,rep,name=items,proto3" json:"items,omitempty"`
-	// Hash over the concatenated payload bytes, used for the proof-of-write
-	// check at commit time.  Computed by the SDK over the same bytes that
-	// get persisted in stream_segments.data.
+	// Hash over the concatenated item payload bytes.  The server validates
+	// this request hash before writing and stores a separate proof-of-write
+	// hash over the exact stream_segments.data row bytes.
 	PayloadHash   []byte `protobuf:"bytes,6,opt,name=payload_hash,json=payloadHash,proto3" json:"payload_hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
