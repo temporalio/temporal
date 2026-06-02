@@ -1450,37 +1450,21 @@ var (
 		"scheduler_generator_loop_completed",
 		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
 	)
-	ScheduleIdleTaskFired = NewCounterDef(
-		"schedule_idle_task_fired",
-		WithDescription("The number of times a schedule's idle task fired and closed the component. Compare with schedule_idle_task_invalidated to compute the natural-close rate."),
+	ScheduleIdleTask = NewCounterDef(
+		"schedule_idle_task",
+		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome."),
 	)
-	ScheduleIdleTaskInvalidated = NewCounterDef(
-		"schedule_idle_task_invalidated",
-		WithDescription("The number of times a schedule's idle task was dropped by Validate without closing the component."),
+	ScheduleInvokerProcessBufferTask = NewCounterDef(
+		"schedule_invoker_process_buffer_task",
+		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome."),
 	)
-	ScheduleInvokerProcessBufferFired = NewCounterDef(
-		"schedule_invoker_process_buffer_fired",
-		WithDescription("The number of times a scheduler's ProcessBuffer task executed. Compare with schedule_invoker_process_buffer_invalidated for the drop rate."),
+	ScheduleInvokerExecuteTask = NewCounterDef(
+		"schedule_invoker_execute_task",
+		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome."),
 	)
-	ScheduleInvokerProcessBufferInvalidated = NewCounterDef(
-		"schedule_invoker_process_buffer_invalidated",
-		WithDescription("The number of times a scheduler's ProcessBuffer task was dropped by Validate."),
-	)
-	ScheduleInvokerExecuteFired = NewCounterDef(
-		"schedule_invoker_execute_fired",
-		WithDescription("The number of times a scheduler's Execute side-effect task executed. Compare with schedule_invoker_execute_invalidated for the drop rate, and with schedule_action_success/errors for actual work performed."),
-	)
-	ScheduleInvokerExecuteInvalidated = NewCounterDef(
-		"schedule_invoker_execute_invalidated",
-		WithDescription("The number of times a scheduler's Execute side-effect task's work was dropped."),
-	)
-	ScheduleBackfillerFired = NewCounterDef(
-		"schedule_backfiller_fired",
-		WithDescription("The number of times a scheduler's Backfiller task executed. Includes both buffer-fill and buffer-full-backoff fires."),
-	)
-	ScheduleBackfillerInvalidated = NewCounterDef(
-		"schedule_backfiller_invalidated",
-		WithDescription("The number of times a scheduler's Backfiller task was dropped by Validate. "),
+	ScheduleBackfillerTask = NewCounterDef(
+		"schedule_backfiller_task",
+		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome."),
 	)
 	ScheduleBackfillerCompleted = NewCounterDef(
 		"schedule_backfiller_completed",

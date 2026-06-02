@@ -119,9 +119,9 @@ func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
 	})
 }
 
-// Each Validate=false branch must emit ScheduleIdleTaskInvalidated with the
-// matching reason tag; pin the reason values so a future rename of the
-// constants surfaces in tests.
+// Each Validate=false branch must emit ScheduleIdleTask{outcome=invalidated}
+// with the matching reason tag; pin the reason values so a future rename of
+// the constants surfaces in tests.
 func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -175,8 +175,9 @@ func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, isValid)
 
-			recorded := capture.Snapshot()[metrics.ScheduleIdleTaskInvalidated.Name()]
-			require.Len(t, recorded, 1, "expected exactly one invalidated counter sample")
+			recorded := capture.Snapshot()[metrics.ScheduleIdleTask.Name()]
+			require.Len(t, recorded, 1, "expected exactly one idle-task counter sample")
+			require.Equal(t, "invalidated", recorded[0].Tags["outcome"])
 			require.Equal(t, c.expectedReason, recorded[0].Tags["reason"])
 		})
 	}

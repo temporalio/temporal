@@ -55,8 +55,8 @@ func (r *SchedulerIdleTaskHandler) Execute(
 ) error {
 	scheduler.Closed = true
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
-		Counter(metrics.ScheduleIdleTaskFired.Name()).
-		Record(1)
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeFired))
 	return nil
 }
 
@@ -67,11 +67,9 @@ const (
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
 )
 
-// Validate returns true (fire) when the schedule should still close. False
-// drops (and emits ScheduleIdleTaskInvalidated) for: already-closed (idempotency),
-// held-open by state, or a deadline that shifted later than ScheduledTime
-// (the Generator will have re-armed at the new deadline). It deliberately
-// does not re-derive "is the spec exhausted" - that's an arm-time concern.
+// The expiration-shift drop assumes the Generator has re-armed at the new
+// deadline. Validate deliberately does not re-derive "is the spec exhausted" -
+// that's an arm-time concern.
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
@@ -113,8 +111,8 @@ func (r *SchedulerIdleTaskHandler) recordInvalidated(
 	recomputedDeadline time.Time,
 ) {
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
-		Counter(metrics.ScheduleIdleTaskInvalidated.Name()).
-		Record(1, metrics.ReasonTag(reason))
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(reason))
 	newTaggedLogger(r.baseLogger, scheduler).Debug("idle task invalidated",
 		tag.NewStringTag("reason", string(reason)),
 		tag.NewTimeTag("scheduled-time", scheduledTime),

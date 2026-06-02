@@ -61,8 +61,8 @@ func (b *BackfillerTaskHandler) Validate(
 	}
 	if !valid {
 		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
-			Counter(metrics.ScheduleBackfillerInvalidated.Name()).
-			Record(1, metrics.ReasonTag(backfillerInvalidatedStaleHWM))
+			Counter(metrics.ScheduleBackfillerTask.Name()).
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleHWM))
 	}
 	return valid, nil
 }
@@ -78,7 +78,7 @@ func (b *BackfillerTaskHandler) Execute(
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleBackfillerFired.Name()).Record(1)
+	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
 
 	invoker := scheduler.Invoker.Get(ctx)
 

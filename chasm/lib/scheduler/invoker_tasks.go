@@ -128,8 +128,8 @@ func NewInvokerProcessBufferTaskHandler(opts InvokerTaskHandlerOptions) *Invoker
 // duplicate without inflating ActionCount.
 func (h *InvokerExecuteTaskHandler) recordDuplicateExecuteDrops(scheduler *Scheduler, count int) {
 	newTaggedMetricsHandler(h.metricsHandler, scheduler).
-		Counter(metrics.ScheduleInvokerExecuteInvalidated.Name()).
-		Record(int64(count), metrics.ReasonTag(invokerExecuteInvalidatedAlreadyRecorded))
+		Counter(metrics.ScheduleInvokerExecuteTask.Name()).
+		Record(int64(count), metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(invokerExecuteInvalidatedAlreadyRecorded))
 	newTaggedLogger(h.baseLogger, scheduler).Debug(
 		"duplicate ExecuteTask result dropped",
 		tag.NewInt("count", count))
@@ -148,8 +148,8 @@ func (h *InvokerExecuteTaskHandler) Validate(
 		return true, nil
 	}
 	newTaggedMetricsHandler(h.metricsHandler, invoker.Scheduler.Get(ctx)).
-		Counter(metrics.ScheduleInvokerExecuteInvalidated.Name()).
-		Record(1, metrics.ReasonTag(invokerExecuteInvalidatedNoWork))
+		Counter(metrics.ScheduleInvokerExecuteTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(invokerExecuteInvalidatedNoWork))
 	return false, nil
 }
 
@@ -208,7 +208,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(h.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleInvokerExecuteFired.Name()).Record(1)
+	metricsHandler.Counter(metrics.ScheduleInvokerExecuteTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
@@ -417,8 +417,8 @@ func (h *InvokerProcessBufferTaskHandler) Validate(
 	}
 	if !valid {
 		newTaggedMetricsHandler(h.metricsHandler, invoker.Scheduler.Get(ctx)).
-			Counter(metrics.ScheduleInvokerProcessBufferInvalidated.Name()).
-			Record(1, metrics.ReasonTag(invokerProcessBufferInvalidatedStaleHWM))
+			Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(invokerProcessBufferInvalidatedStaleHWM))
 	}
 	return valid, nil
 }
@@ -431,7 +431,8 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 ) error {
 	scheduler := invoker.Scheduler.Get(ctx)
 	newTaggedMetricsHandler(h.metricsHandler, scheduler).
-		Counter(metrics.ScheduleInvokerProcessBufferFired.Name()).Record(1)
+		Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeFired))
 
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
