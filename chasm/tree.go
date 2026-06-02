@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -31,7 +32,6 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -205,6 +205,7 @@ type (
 	// where MutableState is defined.
 	NodeBackend interface {
 		// TODO: Add methods needed from MutateState here.
+		ExecutionStateUpdated() bool
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
@@ -1688,7 +1689,11 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if n.isActiveStateDirty {
+	// Normally, it's unnecessary to check rootLifecycleChanged as it implies
+	// isActiveStateDirty. However, workflow execution state is managed in the
+	// mutable state, and closeTransactionHandleRootLifecycleChange returns can
+	// return true without changing isActiveStateDirty.
+	if n.isActiveStateDirty || rootLifecycleChanged {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1762,7 +1767,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 ) (bool, error) {
 	if n.backend.IsWorkflow() {
 		// Workflow manages its lifecycle directly in mutable state.
-		return false, nil
+		return n.backend.ExecutionStateUpdated(), nil
 	}
 
 	if n.valueState != valueStateNeedSerialize {
