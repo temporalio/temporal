@@ -144,6 +144,27 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	}
 }
 
+// WithLogger sets a custom logger for the test's cluster, letting a test intercept
+// server log output. This implies a dedicated cluster, since a custom logger cannot
+// be shared across tests.
+func WithLogger(logger log.Logger) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
+		o.dedicatedReason = "custom logger used"
+	}
+}
+
+// WithHistoryShardCount sets the number of history shards for the test's cluster.
+// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
+func WithHistoryShardCount(n int32) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
+		o.dedicatedReason = "custom history shard count used"
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
