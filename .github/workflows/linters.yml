@@ -37,15 +37,9 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: read protoc version
-        id: protoc-version
-        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
-
       - uses: jdx/mise-action@v4
         with:
-          mise_toml: |
-            [tools]
-            protoc = "${{ steps.protoc-version.outputs.version }}"
+          working_directory: .github
           install_args: protoc
 
       - name: lint protobuf definitions
@@ -65,15 +59,9 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: read protoc version
-        id: protoc-version
-        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
-
       - uses: jdx/mise-action@v4
         with:
-          mise_toml: |
-            [tools]
-            protoc = "${{ steps.protoc-version.outputs.version }}"
+          working_directory: .github
           install_args: protoc
 
       - name: lint protobuf API definitions
@@ -93,15 +81,9 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: read protoc version
-        id: protoc-version
-        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
-
       - uses: jdx/mise-action@v4
         with:
-          mise_toml: |
-            [tools]
-            protoc = "${{ steps.protoc-version.outputs.version }}"
+          working_directory: .github
           install_args: protoc
 
       - name: lint system workflows with workflowcheck

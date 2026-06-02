@@ -277,15 +277,9 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: read protoc version
-        id: protoc-version
-        run: echo "version=$(make protoc-version)" >> "$GITHUB_OUTPUT"
-
       - uses: jdx/mise-action@v4
         with:
-          mise_toml: |
-            [tools]
-            protoc = "${{ steps.protoc-version.outputs.version }}"
+          working_directory: .github
           install_args: protoc
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins

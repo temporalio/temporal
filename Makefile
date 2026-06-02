@@ -27,7 +27,7 @@ clean: clean-bins clean-tools clean-test-output
 proto: lint-protos lint-api protoc proto-codegen
 ########################################################################
 
-.PHONY: proto protoc protoc-version install bins ci-build-misc clean
+.PHONY: proto protoc install bins ci-build-misc clean
 
 ##### Arguments ######
 GOOS        ?= $(shell go env GOOS)
@@ -78,7 +78,6 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 ROOT := $(shell git rev-parse --show-toplevel)
 LOCALBIN := .bin
 STAMPDIR := .stamp
-PROTOC_VER := 23.4
 export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
@@ -337,9 +336,6 @@ proto-codegen:
 	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
-
-protoc-version:
-	@printf '%s\n' "$(PROTOC_VER)"
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
