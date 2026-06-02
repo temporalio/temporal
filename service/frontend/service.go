@@ -169,6 +169,9 @@ type Config struct {
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Per-namespace percentage [0-100] of new schedules routed to CHASM when
+	// EnableCHASMSchedulerCreation is true. Default 0.
+	CHASMSchedulerCreationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
@@ -351,11 +354,12 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
-		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
-		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
-		EnableCHASMSchedulerSentinels: dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
+		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),

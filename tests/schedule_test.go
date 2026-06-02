@@ -3381,6 +3381,84 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	require.ErrorAs(t, err, &invalidArgBlob)
 }
 
+// TestScheduleCreationRolloutPercent verifies that
+// CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
+// after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
+// bucket on opposite sides of the rollout land on different stacks.
+func TestScheduleCreationRolloutPercent(t *testing.T) {
+	opts := append(scheduleCommonOpts(t),
+		// V1 worker is needed because at 50% rollout some schedules land on V1.
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerCreationRolloutPercent, 50),
+	)
+	s := testcore.NewEnv(t, opts...)
+	ctx := s.Context()
+	nsName := s.Namespace().String()
+	nsID := s.NamespaceID().String()
+
+	chasmSID, v1SID := testcore.PickRolloutSplit(t, nsName, 50)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: testcore.RandomizeStr("wt")},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	for _, sid := range []string{chasmSID, v1SID} {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Schedule:   mkSchedule(),
+			Identity:   testcore.RandomizeStr("identity"),
+			RequestId:  uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+
+	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
+	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
+	describeOnCHASM := func(sid string) error {
+		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		return err
+	}
+
+	require.Eventually(t, func() bool { return describeOnCHASM(chasmSID) == nil }, 15*time.Second, 250*time.Millisecond,
+		"schedule %q bucketed into CHASM should be describable via the CHASM handler", chasmSID)
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, describeOnCHASM(v1SID), &notFoundErr,
+		"schedule %q bucketed into V1 should not be present on the CHASM handler", v1SID)
+
+	// Both schedules must remain describable through the public frontend
+	// regardless of which stack they live on — the V1 schedule in particular
+	// must round-trip through the frontend's fallback path. The V1 workflow
+	// takes a moment to be queryable after creation, so poll.
+	for _, sid := range []string{chasmSID, v1SID} {
+		require.Eventually(t, func() bool {
+			_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+			})
+			return err == nil
+		}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for %q", sid)
+	}
+}
+
 // testSingleDateScheduleCloses verifies that a CHASM schedule configured with
 // a single calendar date closes after its one workflow completes.
 func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
