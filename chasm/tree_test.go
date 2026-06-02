@@ -4087,7 +4087,7 @@ func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
 	s.True(ok, "root node must appear in UpdatedNodes after staging metadata")
 	attrs := rootSerialized.GetMetadata().GetComponentAttributes()
 	s.NotNil(attrs)
-	s.Equal([]*commonpb.Link{link}, attrs.GetRequests()[requestID].GetLink())
+	s.Equal([]*commonpb.Link{link}, attrs.GetRequests()[requestID].GetLinks())
 	s.Equal(md.GetSummary().GetData(), attrs.GetUserMetadata().GetSummary().GetData())
 	s.Equal(int64(2), rootSerialized.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
 
@@ -4124,6 +4124,9 @@ func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
 	s.NoError(err)
 	s.False(root.IsStateDirty(), "CloseTransaction must clear the dirty flag")
 
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
 	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
 		Summary: &commonpb.Payload{Data: []byte("summary")},
 	}))
@@ -4214,8 +4217,8 @@ func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
 
 	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(attrs.GetRequests(), 2)
-	s.Equal([]*commonpb.Link{linkA}, attrs.GetRequests()["req-a"].GetLink())
-	s.Equal([]*commonpb.Link{linkB}, attrs.GetRequests()["req-b"].GetLink())
+	s.Equal([]*commonpb.Link{linkA}, attrs.GetRequests()["req-a"].GetLinks())
+	s.Equal([]*commonpb.Link{linkB}, attrs.GetRequests()["req-b"].GetLinks())
 }
 
 // TestSetRequestLinks_ReplacesEntryForSameRequestID verifies that two
@@ -4245,7 +4248,7 @@ func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 	s.Equal([]*commonpb.Link{linkB},
-		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLink(),
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
 		"second SetRequestLinks within a transaction must overwrite the first",
 	)
 
@@ -4259,7 +4262,7 @@ func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 	mutation, err = root.CloseTransaction()
 	s.NoError(err)
 	s.Equal([]*commonpb.Link{linkA},
-		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLink(),
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
 		"a follow-up transaction's SetRequestLinks must replace the persisted entry",
 	)
 }

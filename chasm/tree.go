@@ -1540,9 +1540,11 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 		if err != nil {
 			return err
 		}
-		node.updateLastUpdateVersionedTransition()
-		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
-		delete(n.mutation.DeletedNodes, encodedPath)
+		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+			node.updateLastUpdateVersionedTransition()
+			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+			delete(n.mutation.DeletedNodes, encodedPath)
+		}
 	}
 	if len(n.pendingRequestLinks) > 0 || len(n.pendingUserMetadata) > 0 {
 		n.logger.Warn(
@@ -2863,9 +2865,7 @@ func (n *Node) IsDirty() bool {
 func (n *Node) IsStateDirty() bool {
 	return n.isActiveStateDirty ||
 		len(n.mutation.UpdatedNodes) > 0 ||
-		len(n.mutation.DeletedNodes) > 0 ||
-		len(n.pendingRequestLinks) > 0 ||
-		len(n.pendingUserMetadata) > 0
+		len(n.mutation.DeletedNodes) > 0
 }
 
 func (n *Node) IsStale(
