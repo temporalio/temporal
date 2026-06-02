@@ -1,10 +1,14 @@
 package tdbg
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -872,45 +876,326 @@ func AdminReplicateWorkflow(
 	return nil
 }
 
-// AdminMigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM).
+// AdminMigrateSchedule migrates schedules between V1 (workflow-backed) and V2 (CHASM).
+//
+// It supports three mutually-exclusive selection modes, all sharing the required --target flag:
+//   - single:          --schedule-id <id> (performs immediately, as before)
+//   - from visibility: --from-visibility [--query <q>] (defaults to all running V2 schedules in --namespace)
+//   - stdin:           JSON lines piped on stdin, one {"namespace":..., "schedule_id":...} per line
+//
+// The from-visibility and stdin modes default to a dry-run; pass --execute to perform the migration.
 func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
+	target, targetStr, err := parseMigrateTarget(c)
+	if err != nil {
+		return err
+	}
+
+	fromVisibility := c.Bool(FlagFromVisibility)
+	scheduleID := c.String(FlagScheduleID)
+
+	switch {
+	case fromVisibility:
+		if scheduleID != "" {
+			return fmt.Errorf("--%s cannot be combined with --%s", FlagFromVisibility, FlagScheduleID)
+		}
+		return migrateSchedulesFromVisibility(c, clientFactory, target, targetStr)
+	case scheduleID != "":
+		return migrateSingleSchedule(c, clientFactory, target, targetStr, scheduleID)
+	case isStdinPiped():
+		return migrateSchedulesFromStdin(c, clientFactory, target, targetStr)
+	default:
+		return fmt.Errorf("specify one of: --%s, --%s, or pipe JSON lines on stdin", FlagScheduleID, FlagFromVisibility)
+	}
+}
+
+func parseMigrateTarget(c *cli.Context) (adminservice.MigrateScheduleRequest_SchedulerTarget, string, error) {
+	targetStr, err := getRequiredOption(c, FlagTarget)
+	if err != nil {
+		return 0, "", err
+	}
+	switch strings.ToLower(targetStr) {
+	case "chasm":
+		return adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM, targetStr, nil
+	case "workflow":
+		return adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, targetStr, nil
+	default:
+		return 0, "", fmt.Errorf("invalid target %q, valid values are: chasm, workflow", targetStr)
+	}
+}
+
+// migrateSingleSchedule migrates one schedule and performs the migration immediately.
+func migrateSingleSchedule(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	target adminservice.MigrateScheduleRequest_SchedulerTarget,
+	targetStr string,
+	scheduleID string,
+) error {
 	ns, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
-	}
-	scheduleID, err := getRequiredOption(c, FlagScheduleID)
-	if err != nil {
-		return err
-	}
-	targetStr, err := getRequiredOption(c, FlagTarget)
-	if err != nil {
-		return err
-	}
-	var target adminservice.MigrateScheduleRequest_SchedulerTarget
-	switch strings.ToLower(targetStr) {
-	case "chasm":
-		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM
-	case "workflow":
-		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW
-	default:
-		return fmt.Errorf("invalid target %q, valid values are: chasm, workflow", targetStr)
 	}
 
 	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	_, err = adminClient.MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+	if err := migrateScheduleRPC(ctx, adminClient, ns, scheduleID, target); err != nil {
+		return fmt.Errorf("unable to migrate schedule: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
+	return nil
+}
+
+// migrateSchedulesFromVisibility selects schedules via a visibility query and migrates each.
+// By default it targets all running V2 (CHASM) schedules in --namespace; --query overrides the query.
+func migrateSchedulesFromVisibility(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	target adminservice.MigrateScheduleRequest_SchedulerTarget,
+	targetStr string,
+) error {
+	ns, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query := c.String(FlagVisibilityQuery)
+	if query == "" {
+		// Default: all running V2 (CHASM) schedules. The explicit TemporalNamespaceDivision
+		// filter is required, otherwise the visibility query converter appends
+		// "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
+		query = fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+	}
+
+	execute := c.Bool(FlagExecute)
+	workers := c.Int(FlagWorkers)
+	if workers < 1 {
+		workers = 1
+	}
+	wfClient := clientFactory.WorkflowClient(c)
+	adminClient := clientFactory.AdminClient(c)
+
+	// Schedules are listed (paginated) on this goroutine and fed to a pool of workers
+	// that migrate them concurrently.
+	var summary migrateSummary
+	if logPath := c.String(FlagOutputLog); logPath != "" {
+		logFile, err := os.Create(logPath)
+		if err != nil {
+			return fmt.Errorf("unable to open output log %q: %w", logPath, err)
+		}
+		defer func() { _ = logFile.Close() }()
+		summary.logEnc = json.NewEncoder(logFile)
+	}
+	jobs := make(chan migrateJob)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
+			}
+		}()
+	}
+
+	var listErr error
+	var nextPageToken []byte
+	for {
+		ctx, cancel := newContext(c)
+		resp, err := wfClient.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     ns,
+			Query:         query,
+			NextPageToken: nextPageToken,
+		})
+		cancel()
+		if err != nil {
+			listErr = fmt.Errorf("unable to list schedules from visibility: %w", err)
+			break
+		}
+
+		for _, exec := range resp.GetExecutions() {
+			workflowID := exec.GetExecution().GetWorkflowId()
+			// CHASM scheduler executions store the schedule id directly as the workflow id;
+			// TrimPrefix is a no-op for them and handles any V1 records defensively.
+			scheduleID := strings.TrimPrefix(workflowID, primitives.ScheduleWorkflowIDPrefix)
+			jobs <- migrateJob{namespace: ns, scheduleID: scheduleID}
+		}
+
+		nextPageToken = resp.GetNextPageToken()
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+	close(jobs)
+	wg.Wait()
+
+	if listErr != nil {
+		return listErr
+	}
+
+	summary.print(c, execute)
+	return nil
+}
+
+type migrateJob struct {
+	namespace  string
+	scheduleID string
+}
+
+// migrateSchedulesFromStdin reads JSON lines from stdin, one {"namespace","schedule_id"} per line.
+func migrateSchedulesFromStdin(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	target adminservice.MigrateScheduleRequest_SchedulerTarget,
+	targetStr string,
+) error {
+	execute := c.Bool(FlagExecute)
+	adminClient := clientFactory.AdminClient(c)
+
+	var summary migrateSummary
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var record struct {
+			Namespace  string `json:"namespace"`
+			ScheduleID string `json:"schedule_id"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			return fmt.Errorf("invalid JSON line %q: %w", line, err)
+		}
+		if record.Namespace == "" || record.ScheduleID == "" {
+			return fmt.Errorf("each line must include non-empty \"namespace\" and \"schedule_id\": %q", line)
+		}
+		migrateOne(c, adminClient, record.Namespace, record.ScheduleID, target, targetStr, execute, &summary)
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading stdin: %w", err)
+	}
+
+	summary.print(c, execute)
+	return nil
+}
+
+// migrateOne migrates a single schedule (or prints the planned action in dry-run), updating
+// summary. It is safe to call concurrently from multiple workers: the migration RPC runs
+// outside the summary lock, while counter updates and output are serialized.
+func migrateOne(
+	c *cli.Context,
+	adminClient adminservice.AdminServiceClient,
+	ns string,
+	scheduleID string,
+	target adminservice.MigrateScheduleRequest_SchedulerTarget,
+	targetStr string,
+	execute bool,
+	summary *migrateSummary,
+) {
+	if !execute {
+		summary.recordDryRun(c, ns, scheduleID, targetStr)
+		return
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	err := migrateScheduleRPC(ctx, adminClient, ns, scheduleID, target)
+	summary.recordResult(c, ns, scheduleID, targetStr, err)
+}
+
+func migrateScheduleRPC(
+	ctx context.Context,
+	adminClient adminservice.AdminServiceClient,
+	ns string,
+	scheduleID string,
+	target adminservice.MigrateScheduleRequest_SchedulerTarget,
+) error {
+	_, err := adminClient.MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  ns,
 		ScheduleId: scheduleID,
 		Target:     target,
 		Identity:   getCurrentUserFromEnv(),
 		RequestId:  uuid.NewString(),
 	})
-	if err != nil {
-		return fmt.Errorf("unable to migrate schedule: %w", err)
-	}
+	return err
+}
 
-	_, _ = fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
-	return nil
+// migrateLogRecord is one structured entry written to --output-log per schedule.
+type migrateLogRecord struct {
+	Timestamp  string `json:"timestamp"`
+	Namespace  string `json:"namespace"`
+	ScheduleID string `json:"schedule_id"`
+	Target     string `json:"target"`
+	Status     string `json:"status"` // "migrated", "failed", or "dry-run"
+	Error      string `json:"error,omitempty"`
+}
+
+type migrateSummary struct {
+	mu       sync.Mutex
+	planned  int
+	migrated int
+	failed   int
+	logEnc   *json.Encoder // optional; writes one migrateLogRecord per result
+}
+
+func (s *migrateSummary) recordDryRun(c *cli.Context, ns, scheduleID, targetStr string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.planned++
+	_, _ = fmt.Fprintf(c.App.Writer, "[dry-run] would migrate %s/%s -> %s\n", ns, scheduleID, targetStr)
+	s.writeLogLocked(ns, scheduleID, targetStr, "dry-run", nil)
+}
+
+func (s *migrateSummary) recordResult(c *cli.Context, ns, scheduleID, targetStr string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.planned++
+	if err != nil {
+		s.failed++
+		_, _ = fmt.Fprintf(c.App.ErrWriter, "failed to migrate %s/%s: %v\n", ns, scheduleID, err)
+		s.writeLogLocked(ns, scheduleID, targetStr, "failed", err)
+		return
+	}
+	s.migrated++
+	_, _ = fmt.Fprintf(c.App.Writer, "migrated %s/%s -> %s\n", ns, scheduleID, targetStr)
+	s.writeLogLocked(ns, scheduleID, targetStr, "migrated", nil)
+}
+
+// writeLogLocked appends a structured record to the output log. Callers must hold s.mu.
+func (s *migrateSummary) writeLogLocked(ns, scheduleID, targetStr, status string, err error) {
+	if s.logEnc == nil {
+		return
+	}
+	rec := migrateLogRecord{
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Namespace:  ns,
+		ScheduleID: scheduleID,
+		Target:     targetStr,
+		Status:     status,
+	}
+	if err != nil {
+		rec.Error = err.Error()
+	}
+	_ = s.logEnc.Encode(&rec)
+}
+
+func (s *migrateSummary) print(c *cli.Context, execute bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !execute {
+		_, _ = fmt.Fprintf(c.App.Writer, "Dry-run: %d schedule(s) would be migrated. Re-run with --%s to perform.\n", s.planned, FlagExecute)
+		return
+	}
+	_, _ = fmt.Fprintf(c.App.Writer, "Done: %d migrated, %d failed (of %d).\n", s.migrated, s.failed, s.planned)
+}
+
+// isStdinPiped reports whether stdin is connected to a pipe or file rather than a terminal.
+func isStdinPiped() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) == 0
 }

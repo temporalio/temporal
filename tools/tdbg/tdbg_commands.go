@@ -304,15 +304,35 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 			Usage: "Migrate a schedule between V1 (workflow-backed) and V2 (CHASM)",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:     FlagScheduleID,
-					Aliases:  FlagScheduleIDAlias,
-					Usage:    "Schedule ID",
-					Required: true,
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage:   "Schedule ID (single-schedule mode)",
 				},
 				&cli.StringFlag{
 					Name:     FlagTarget,
 					Usage:    "Target scheduler implementation: chasm, workflow",
 					Required: true,
+				},
+				&cli.BoolFlag{
+					Name:  FlagFromVisibility,
+					Usage: "Select schedules from visibility instead of --schedule-id. Defaults to all running V2 (CHASM) schedules in --namespace; override with --query",
+				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query used with --from-visibility (overrides the default V2-schedule query)",
+				},
+				&cli.BoolFlag{
+					Name:  FlagExecute,
+					Usage: "Perform the migration. Without this flag, --from-visibility and stdin modes only print what they would do (dry-run)",
+				},
+				&cli.IntFlag{
+					Name:  FlagWorkers,
+					Value: defaultMigrateWorkers,
+					Usage: "Number of concurrent workers migrating schedules in --from-visibility mode",
+				},
+				&cli.StringFlag{
+					Name:  FlagOutputLog,
+					Usage: "Path to write a structured (JSON lines) log of each migration result in --from-visibility mode",
 				},
 			},
 			Action: func(c *cli.Context) error {
