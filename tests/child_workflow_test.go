@@ -33,12 +33,6 @@ type ChildWorkflowSuite struct {
 	parallelsuite.Suite[*ChildWorkflowSuite]
 }
 
-type testName string
-
-func (n testName) Name() string {
-	return string(n)
-}
-
 func TestChildWorkflowSuite(t *testing.T) {
 	parallelsuite.Run(t, &ChildWorkflowSuite{})
 }
@@ -966,9 +960,8 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFailedEvent() {
 	env := testcore.NewEnv(s.T())
-
-	tvParent := testvars.New(testName(s.T().Name() + "/parent"))
-	tvChild := testvars.New(testName(s.T().Name() + "/child"))
+	tvParent := env.Tv().WithWorkflowID("parent").WithTaskQueue("parent")
+	tvChild := env.Tv().WithWorkflowID("child").WithTaskQueue("child")
 
 	// Start a child workflow directly and leave it running so the parent's child-start transfer task
 	// hits a running workflow ID conflict with the default child conflict policy.
@@ -1054,9 +1047,8 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFa
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_TerminateIfRunningStartsNewChild() {
 	env := testcore.NewEnv(s.T())
-
-	tvParent := testvars.New(testName(s.T().Name() + "/parent"))
-	tvChild := testvars.New(testName(s.T().Name() + "/child"))
+	tvParent := env.Tv().WithWorkflowID("parent").WithTaskQueue("parent")
+	tvChild := env.Tv().WithWorkflowID("child").WithTaskQueue("child")
 
 	// Pre-create the child workflow ID so the parent's StartChild transfer task has to resolve
 	// a duplicate child ID through the history StartWorkflowExecution path.
