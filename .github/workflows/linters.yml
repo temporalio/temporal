@@ -37,9 +37,10 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint protobuf definitions
         run: |
@@ -58,9 +59,10 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint protobuf API definitions
         run: |
@@ -79,9 +81,10 @@ jobs:
           check-latest: true
           cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint system workflows with workflowcheck
         run: make workflowcheck
