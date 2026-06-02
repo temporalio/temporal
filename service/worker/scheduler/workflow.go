@@ -115,7 +115,6 @@ type (
 		specBuilder          *SpecBuilder
 		cspec                *CompiledSpec
 		enableCHASMMigration bool
-		retentionTime        time.Duration
 
 		tweakables TweakablePolicies
 
@@ -225,10 +224,10 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false, 0)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool, retentionTime time.Duration) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -240,7 +239,6 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		}),
 		specBuilder:          specBuilder,
 		enableCHASMMigration: enableCHASMMigration,
-		retentionTime:        retentionTime,
 	}
 	return scheduler.run()
 }
@@ -1268,15 +1266,9 @@ func (s *scheduler) checkConflict(token int64) error {
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
 	enableCHASMMigration := s.enableCHASMMigration
-	retentionTime := s.retentionTime
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
 		p.EnableCHASMMigration = enableCHASMMigration
-		// retentionTime == 0 means SchedulerWorkflow entry point (no dynamic
-		// config plumbed in): fall back to the package default.
-		if retentionTime != 0 {
-			p.RetentionTime = retentionTime
-		}
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
