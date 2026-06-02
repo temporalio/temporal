@@ -243,7 +243,7 @@ func (cfg execConfig) displayAttempt() string {
 
 func displayAttempt(attempt, retryOrdinal int) string {
 	if retryOrdinal > 0 {
-		return fmt.Sprintf("%d.%d", attempt, retryOrdinal)
+		return fmt.Sprintf("%d, retry %d", attempt, retryOrdinal)
 	}
 	return fmt.Sprintf("%d", attempt)
 }

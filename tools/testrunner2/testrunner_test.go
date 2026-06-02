@@ -115,9 +115,9 @@ func TestIntegration(t *testing.T) {
 				printed("always fails"),        // failure details shown in body
 				printed("$", ".test", "-test.run ^TestOK$"),
 				printed("✅ [1/2]", "TestOK", "attempt=1", "passed=1/1"),
-				printed("🚀", "TestAlwaysFails", "attempt 2.1"),
+				printed("🚀", "TestAlwaysFails", "attempt 2, retry 1"),
 				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
-				printed("❌️", "TestAlwaysFails", "attempt=2.1", "passed=0/1", "failure=failed"),
+				printed("❌️", "TestAlwaysFails", "attempt=2, retry 1", "passed=0/1", "failure=failed"),
 				notPrinted("test run completed"),
 			)
 			assertLogFiles(t, res, // attempt 1 + attempt 2 both fail
@@ -179,7 +179,7 @@ func TestIntegration(t *testing.T) {
 				printed("--- TestFlaky"),                     // failed test name shown in body
 				printed("intentional first-attempt failure"), // failure details shown in body
 				printed("$", ".test", "-test.run ^TestFlaky$"),
-				printed("✅ [2/2]", "TestFlaky", "attempt=2.1", "passed=1/1"),
+				printed("✅ [2/2]", "TestFlaky", "attempt=2, retry 1", "passed=1/1"),
 				printed("test run completed"),
 			)
 			assertLogFiles(t, res,
@@ -210,7 +210,7 @@ func TestIntegration(t *testing.T) {
 			printed("$", ".test",
 				"-test.run ^TestSuite$/^FailChild$",
 				"-test.skip ^TestSuite$/^PassChild$"),
-			printed("✅ [1/1]", "TestSuite", "attempt=2.1", "passed=2/2"),
+			printed("✅ [1/1]", "TestSuite", "attempt=2, retry 1", "passed=2/2"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
@@ -259,13 +259,13 @@ func TestIntegration(t *testing.T) {
 			printed("$", ".test",
 				"-test.run ^TestDeepSuite$/^GroupA$/^Fail$",
 				"-test.skip ^TestDeepSuite$/^GroupA$/^Pass$"),
-			printed("✅", "TestDeepSuite", "attempt=2.1", "passed=3/3"),
-			notPrintedLine("✅ [", "TestDeepSuite", "attempt=2.1"),
+			printed("✅", "TestDeepSuite", "attempt=2, retry 1", "passed=3/3"),
+			notPrintedLine("✅ [", "TestDeepSuite", "attempt=2, retry 1"),
 			// Second retry: GroupB/Fail, skipping GroupB/Pass
 			printed("$", ".test",
 				"-test.run ^TestDeepSuite$/^GroupB$/^Fail$",
 				"-test.skip ^TestDeepSuite$/^GroupB$/^Pass$"),
-			printed("✅ [1/1]", "TestDeepSuite", "attempt=2.2", "passed=3/3"),
+			printed("✅ [1/1]", "TestDeepSuite", "attempt=2, retry 2", "passed=3/3"),
 			notPrinted("[2/1]"),
 			printed("test run completed"),
 		)
@@ -287,7 +287,7 @@ func TestIntegration(t *testing.T) {
 			printed("PANIC:", "intentional crash"),
 			printed("🔄 scheduling retry:", "^TestCrash$"), // post-exit crash recovery
 			printed("$", ".test", "-test.run ^TestCrash$"),
-			printed("✅ [1/1]", "TestCrash", "attempt=2.1", "passed=1/1"),
+			printed("✅ [1/1]", "TestCrash", "attempt=2, retry 1", "passed=1/1"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res, // attempt 1 crashes
@@ -320,7 +320,7 @@ func TestIntegration(t *testing.T) {
 			printed("❌️", "TestSlowOnce", "attempt=1", "passed=0/?", "failure=timeout"),
 			printed("--- TIMEOUT:", "test stuck", "TestSlowOnce", "no progress for"),
 			printed("$", ".test", "-test.run ^TestSlowOnce$"),
-			printed("✅ [2/2]", "TestSlowOnce", "attempt=2.1", "passed=1/1"),
+			printed("✅ [2/2]", "TestSlowOnce", "attempt=2, retry 1", "passed=1/1"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
@@ -349,7 +349,7 @@ func TestIntegration(t *testing.T) {
 			notPrinted("— in TestWithSub\n"), // leaf shown, not parent
 			// Retry skips passed siblings
 			printed("$", ".test", "-test.run ^TestWithSub$/^Slow$", "-test.skip ^TestWithSub$/^(Pass"),
-			printed("✅ [1/1]", "TestWithSub", "attempt=2.1", "passed=2/2"),
+			printed("✅ [1/1]", "TestWithSub", "attempt=2, retry 1", "passed=2/2"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
@@ -377,7 +377,7 @@ func TestIntegration(t *testing.T) {
 			printed("--- TIMEOUT:", "TestParentStuck"),
 			// Retry skips passed children
 			printed("$", ".test", "-test.run ^TestParentStuck$", "-test.skip ^TestParentStuck$/^(Child"),
-			printed("✅ [1/1]", "TestParentStuck", "attempt=2.1", "passed=1/1"),
+			printed("✅ [1/1]", "TestParentStuck", "attempt=2, retry 1", "passed=1/1"),
 			printed("test run completed"),
 		)
 	})
@@ -402,7 +402,7 @@ func TestIntegration(t *testing.T) {
 			printed("$", ".test",
 				"-test.run ^TestDeepStuck$/^GroupB$/^Slow$",
 				"-test.skip ^TestDeepStuck$/^GroupB$/^Pass$"),
-			printed("✅", "TestDeepStuck", "attempt=2.1", "passed=3/3"),
+			printed("✅", "TestDeepStuck", "attempt=2, retry 1", "passed=3/3"),
 			printed("test run completed"),
 		)
 	})
