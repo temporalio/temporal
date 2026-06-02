@@ -116,6 +116,11 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 			tag.TaskID(e.TaskID()),
 			tag.ClusterName(currentCluster),
 		)
+		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+			1,
+			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
 		return nil
 	}
 
