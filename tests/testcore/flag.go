@@ -3,8 +3,10 @@ package testcore
 import (
 	"context"
 	"flag"
+	"time"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -34,6 +36,9 @@ var cliFlags struct {
 	faultRPCLatencyMeanMs float64
 	faultRPCLatencyStddev float64
 	faultRPCLatencyMaxMs  float64
+
+	faultMatchingUserDataFetchLatencyMs float64
+	faultMatchingUserDataFetchErrorRate float64
 }
 
 func init() {
@@ -56,6 +61,23 @@ func init() {
 	flag.Float64Var(&cliFlags.faultRPCLatencyMeanMs, "faultRPCLatencyMeanMs", 25, "mean latency in ms for the Latency fault")
 	flag.Float64Var(&cliFlags.faultRPCLatencyStddev, "faultRPCLatencyStddevMs", 15, "stddev latency in ms for the Latency fault")
 	flag.Float64Var(&cliFlags.faultRPCLatencyMaxMs, "faultRPCLatencyMaxMs", 250, "max latency clamp in ms for the Latency fault (0 = unbounded)")
+
+	flag.Float64Var(&cliFlags.faultMatchingUserDataFetchLatencyMs, "faultMatchingUserDataFetchLatencyMs", 0, "latency in ms injected before each matching user-data fetch (delays versioning propagation; 0 = off)")
+	flag.Float64Var(&cliFlags.faultMatchingUserDataFetchErrorRate, "faultMatchingUserDataFetchErrorRate", 0, "probability (0..1) a matching user-data fetch fails transiently (0 = off)")
+}
+
+// MatchingFaultDynamicConfig returns dynamic config overrides enabling the in-process matching
+// fault injection, or an empty map when the -faultMatching* flags are unset.
+func MatchingFaultDynamicConfig() map[dynamicconfig.Key]any {
+	overrides := map[dynamicconfig.Key]any{}
+	if cliFlags.faultMatchingUserDataFetchLatencyMs > 0 {
+		overrides[dynamicconfig.MatchingUserDataFetchFaultLatency.Key()] =
+			time.Duration(cliFlags.faultMatchingUserDataFetchLatencyMs * float64(time.Millisecond))
+	}
+	if cliFlags.faultMatchingUserDataFetchErrorRate > 0 {
+		overrides[dynamicconfig.MatchingUserDataFetchFaultErrorRate.Key()] = cliFlags.faultMatchingUserDataFetchErrorRate
+	}
+	return overrides
 }
 
 // RPCFaultInjectionConfig returns the gRPC fault injection config derived from CLI flags.

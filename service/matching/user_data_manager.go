@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"math/rand"
 	"slices"
 	"strings"
 	"sync"
@@ -289,6 +290,26 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 
 }
 
+// injectFetchFault optionally delays and/or fails a user-data fetch from the parent partition,
+// driven by the MatchingUserDataFetchFault* dynamic config. It's an in-process fault-injection
+// point (mirroring persistence/rpc fault injection) for reproducing versioning-data
+// propagation flakes; both knobs default to off in production.
+func (m *userDataManagerImpl) injectFetchFault(ctx context.Context) error {
+	if latency := m.config.UserDataFetchFaultLatency(); latency > 0 {
+		t := time.NewTimer(latency)
+		defer t.Stop()
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if rate := m.config.UserDataFetchFaultErrorRate(); rate > 0 && rand.Float64() < rate {
+		return serviceerror.NewUnavailable("matching: injected user-data fetch fault")
+	}
+	return nil
+}
+
 func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = m.callerInfoContext(ctx)
 
@@ -311,6 +332,10 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	op := func(ctx context.Context) error {
 		knownUserData, _, _ := m.GetUserData()
 		userDataVersionChanged = false
+
+		if err := m.injectFetchFault(ctx); err != nil {
+			return err
+		}
 
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()

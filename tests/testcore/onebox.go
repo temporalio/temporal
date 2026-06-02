@@ -248,6 +248,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	for k, v := range defaultDynamicConfigOverrides {
 		impl.overrideDynamicConfigForClusterLifetime(k, v)
 	}
+	// In-process matching fault injection (chaos), enabled via -faultMatching* flags.
+	for k, v := range MatchingFaultDynamicConfig() {
+		impl.overrideDynamicConfigForClusterLifetime(k, v)
+	}
 	// Override Nexus callback URL. This is parameterized on the frontend's HTTP address,
 	// so it can't be overriden in the loop above.
 	impl.setNexusCallbackURL()

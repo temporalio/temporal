@@ -82,6 +82,8 @@ type (
 		TaskQueueLimitPerBuildId                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
+		UserDataFetchFaultLatency                dynamicconfig.DurationPropertyFn
+		UserDataFetchFaultErrorRate              dynamicconfig.FloatPropertyFn
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogMetricsEmitInterval               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -180,11 +182,13 @@ type (
 		PriorityLevels                 priorityKey
 		DefaultPriorityKey             priorityKey
 
-		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
-		GetUserDataMinWaitTime     time.Duration
-		GetUserDataReturnBudget    time.Duration
-		GetUserDataInitialRefresh  time.Duration
-		GetUserDataRefresh         dynamicconfig.DurationPropertyFn
+		GetUserDataLongPollTimeout  dynamicconfig.DurationPropertyFn
+		GetUserDataMinWaitTime      time.Duration
+		GetUserDataReturnBudget     time.Duration
+		GetUserDataInitialRefresh   time.Duration
+		GetUserDataRefresh          dynamicconfig.DurationPropertyFn
+		UserDataFetchFaultLatency   dynamicconfig.DurationPropertyFn
+		UserDataFetchFaultErrorRate dynamicconfig.FloatPropertyFn
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
@@ -333,6 +337,8 @@ func NewConfig(
 		TaskQueueLimitPerBuildId:                 dynamicconfig.TaskQueuesPerBuildIdLimit.Get(dc),
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
+		UserDataFetchFaultLatency:                dynamicconfig.MatchingUserDataFetchFaultLatency.Get(dc),
+		UserDataFetchFaultErrorRate:              dynamicconfig.MatchingUserDataFetchFaultErrorRate.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
 		BacklogMetricsEmitInterval:               dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
@@ -458,13 +464,15 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels:             priorityLevels,
-		DefaultPriorityKey:         defaultPriorityKey,
-		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
-		GetUserDataMinWaitTime:     1 * time.Second,
-		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
-		GetUserDataInitialRefresh:  ioTimeout,
-		GetUserDataRefresh:         config.GetUserDataRefresh,
+		PriorityLevels:              priorityLevels,
+		DefaultPriorityKey:          defaultPriorityKey,
+		GetUserDataLongPollTimeout:  config.GetUserDataLongPollTimeout,
+		GetUserDataMinWaitTime:      1 * time.Second,
+		GetUserDataReturnBudget:     returnEmptyTaskTimeBudget,
+		GetUserDataInitialRefresh:   ioTimeout,
+		GetUserDataRefresh:          config.GetUserDataRefresh,
+		UserDataFetchFaultLatency:   config.UserDataFetchFaultLatency,
+		UserDataFetchFaultErrorRate: config.UserDataFetchFaultErrorRate,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},

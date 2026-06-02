@@ -28,6 +28,7 @@ const (
 	flagRPCMultiplier         = "rpc-multiplier"
 	flagPersistenceMultiplier = "persistence-multiplier"
 	flagRPCErrorMultiplier    = "rpc-error-multiplier"
+	flagMatchingMultiplier    = "matching-multiplier"
 )
 
 // Base latency in milliseconds at multiplier 1.0. Deliberately low: on a contended parallel
@@ -46,6 +47,10 @@ const (
 // baseRPCErrorRate is the transient-error probability at --rpc-error-multiplier 1.0; scaled by
 // that multiplier (default 0 = off) the same way latency is scaled by its multipliers.
 const baseRPCErrorRate = 0.05
+
+// baseMatchingUserDataFetchLatencyMs is the in-process matching user-data fetch latency at
+// --matching-multiplier 1.0 (delays versioning-data propagation); 0 = off.
+const baseMatchingUserDataFetchLatencyMs = 75
 
 // Main is the tool entrypoint.
 func Main() {
@@ -68,6 +73,7 @@ func NewCliApp() *cli.App {
 		&cli.Float64Flag{Name: flagRPCMultiplier, Usage: "scale gRPC latency (1.0 = aggressive base)", Value: 1.0},
 		&cli.Float64Flag{Name: flagPersistenceMultiplier, Usage: "scale persistence latency (1.0 = aggressive base)", Value: 1.0},
 		&cli.Float64Flag{Name: flagRPCErrorMultiplier, Usage: "scale the transient RPC-error rate from its base (0 = off, like the latency multipliers)", Value: 0},
+		&cli.Float64Flag{Name: flagMatchingMultiplier, Usage: "scale in-process matching user-data fetch latency from its base (0 = off)", Value: 0},
 	}
 	app.Action = run
 	return app
@@ -87,6 +93,11 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("--%s must be >= 0", flagRPCErrorMultiplier)
 	}
 	rpcErrorRate := min(baseRPCErrorRate*rpcErrorMul, 1.0)
+	matchingMul := c.Float64(flagMatchingMultiplier)
+	if matchingMul < 0 {
+		return fmt.Errorf("--%s must be >= 0", flagMatchingMultiplier)
+	}
+	matchingFetchLatencyMs := baseMatchingUserDataFetchLatencyMs * matchingMul
 
 	// Run budget: time-based (--duration), count-based (--rounds), or both (whichever ends
 	// first). When neither is set, default to a single round.
@@ -103,7 +114,7 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	faults := faultFlags(rpcMul, persMul, rpcErrorRate)
+	faults := faultFlags(rpcMul, persMul, rpcErrorRate, matchingFetchLatencyMs)
 	goArgs := append([]string{"test"}, testArgs...)
 	if !slices.Contains(goArgs, "-v") {
 		goArgs = append(goArgs, "-v") // required so go-junit-report can parse per-test results
@@ -119,7 +130,7 @@ func run(c *cli.Context) error {
 		goArgs:   goArgs,
 		rpcMul:   rpcMul,
 		persMul:  persMul,
-		baseNote: fmt.Sprintf("rpc %g/%g/%g, persistence %g/%g/%g (mean/stddev/max ms); rpc transient-error rate %g; GOMAXPROCS=1; per-test timeout %s", baseRPCMeanMs*rpcMul, baseRPCStddevMs*rpcMul, baseRPCMaxMs*rpcMul, basePersMeanMs*persMul, basePersStddevMs*persMul, basePersMaxMs*persMul, rpcErrorRate, time.Duration(float64(defaultPerTestTimeout)*max(rpcMul, persMul, 1))),
+		baseNote: fmt.Sprintf("rpc %g/%g/%g, persistence %g/%g/%g (mean/stddev/max ms); rpc transient-error rate %g; matching user-data fetch latency %gms; GOMAXPROCS=1; per-test timeout %s", baseRPCMeanMs*rpcMul, baseRPCStddevMs*rpcMul, baseRPCMaxMs*rpcMul, basePersMeanMs*persMul, basePersStddevMs*persMul, basePersMaxMs*persMul, rpcErrorRate, matchingFetchLatencyMs, time.Duration(float64(defaultPerTestTimeout)*max(rpcMul, persMul, 1))),
 	}
 
 	childEnv := testEnv(rpcMul, persMul)
@@ -255,9 +266,9 @@ func hasEnv(env []string, key string) bool {
 	return false
 }
 
-// faultFlags renders the go test fault-injection flags for the given multipliers and
-// transient-error rate.
-func faultFlags(rpcMul, persMul, rpcErrorRate float64) []string {
+// faultFlags renders the go test fault-injection flags for the given multipliers, transient
+// RPC-error rate, and in-process matching user-data fetch latency.
+func faultFlags(rpcMul, persMul, rpcErrorRate, matchingFetchLatencyMs float64) []string {
 	flags := []string{
 		"-faultRPC=true",
 		fmt.Sprintf("-faultRPCLatencyMeanMs=%g", baseRPCMeanMs*rpcMul),
@@ -270,6 +281,9 @@ func faultFlags(rpcMul, persMul, rpcErrorRate float64) []string {
 	}
 	if rpcErrorRate > 0 {
 		flags = append(flags, fmt.Sprintf("-faultRPCErrorRate=%g", rpcErrorRate))
+	}
+	if matchingFetchLatencyMs > 0 {
+		flags = append(flags, fmt.Sprintf("-faultMatchingUserDataFetchLatencyMs=%g", matchingFetchLatencyMs))
 	}
 	return flags
 }
