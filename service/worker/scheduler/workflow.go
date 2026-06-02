@@ -678,6 +678,7 @@ func (s *scheduler) processTimeRange(
 	}
 
 	lastAction := start
+	generatedCount := 0
 	var next GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
@@ -689,9 +690,20 @@ func (s *scheduler) processTimeRange(
 			// hasMinVersion because this condition couldn't happen in previous versions.
 			continue
 		}
+		if !manual && generatedCount == 0 {
+			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
+		}
+		generatedCount++
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
-			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
+			// Action's nominal time was already past the catchup window when
+			// the scheduler woke up. It was never buffered for execution.
+			// Note: workflow_running is not included here because
+			// RunningWorkflows has not been refreshed yet at this point
+			// (refresh happens later in processBuffer).
+			s.metrics.WithTags(map[string]string{
+				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
+			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
 		}
@@ -1346,6 +1358,13 @@ func (s *scheduler) processBuffer() bool {
 
 	s.State.BufferedStarts = action.NewBuffer
 	s.Info.OverlapSkipped += action.OverlapSkipped
+	if action.OverlapSkipped > 0 {
+		for overlapPolicy, count := range action.OverlapSkippedByPolicy {
+			s.metrics.WithTags(map[string]string{
+				metrics.ScheduleOverlapPolicyTag: overlapPolicy.String(),
+			}).Counter(metrics.ScheduleOverlapSkipped.Name()).Inc(count)
+		}
+	}
 
 	// Try starting whatever we're supposed to start now
 	allStarts := action.OverlappingStarts

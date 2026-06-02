@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -405,6 +406,19 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 		overlapSkipped:      result.overlapSkipped,
 		missedCatchupWindow: result.missedCatchupWindow,
 	})
+	if result.overlapSkipped > 0 {
+		for overlapPolicy, count := range result.overlapSkippedByPolicy {
+			newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+				metrics.StringTag(metrics.ScheduleOverlapPolicyTag, overlapPolicy.String()),
+			).Counter(metrics.ScheduleOverlapSkipped.Name()).Record(count)
+		}
+	}
+	if result.missedCatchupWindow > 0 {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
+			metrics.StringTag(metrics.ScheduleWorkflowRunningTag, strconv.FormatBool(result.hadRunningWorkflow)),
+		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(result.missedCatchupWindow)
+	}
 
 	// Update internal state and create new tasks.
 	invoker.recordProcessBufferResult(ctx, &result)
@@ -446,6 +460,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 
 	// Update result metrics.
 	result.overlapSkipped = action.OverlapSkipped
+	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others.
 	for _, start := range readyStarts {
@@ -457,8 +472,10 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		}
 
 		if ctx.Now(invoker).After(h.startWorkflowDeadline(ctx, scheduler, start)) {
-			// Drop expired starts.
+			// Action was buffered in time but expired before execution
+			// (e.g., due to overlap deferral, retries, or system delay).
 			result.missedCatchupWindow++
+			result.hadRunningWorkflow = result.hadRunningWorkflow || isRunning
 			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}

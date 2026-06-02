@@ -617,6 +617,11 @@ const (
 	ScheduleBackendChasm                 = "chasm"
 	ScheduleBackendLegacy                = "legacy"
 	ScheduleBackendWorkflow              = "workflow"
+	ScheduleOverlapPolicyTag              = "schedule_overlap_policy"
+	ScheduleMissedReasonTag              = "reason"
+	ScheduleMissedReasonNotBuffered      = "not_buffered"
+	ScheduleMissedReasonBufferExpired    = "buffer_expired"
+	ScheduleWorkflowRunningTag           = "workflow_running"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
@@ -1453,6 +1458,14 @@ var (
 	ScheduleMigrationFailed = NewCounterDef(
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
+	)
+	ScheduleOverlapSkipped = NewCounterDef(
+		"schedule_overlap_skipped",
+		WithDescription("The number of schedule actions skipped due to overlap policy"),
+	)
+ScheduleCallbackLatency = NewTimerDef(
+		"schedule_callback_latency",
+		WithDescription("Latency between a scheduled workflow closing and the scheduler receiving the completion callback"),
 	)
 
 	// Worker Versioning

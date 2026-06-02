@@ -61,10 +61,13 @@ type processBufferResult struct {
 	discardStarts []*schedulespb.BufferedStart
 
 	// Number of buffered starts dropped due to overlap policy during processing.
-	overlapSkipped int64
+	overlapSkipped         int64
+	overlapSkippedByPolicy map[enumspb.ScheduleOverlapPolicy]int64
 
-	// Nunmber of buffered starts dropped from missing the catchup window.
+	// Number of buffered starts dropped from missing the catchup window.
 	missedCatchupWindow int64
+	// Whether a workflow was running when buffered starts expired.
+	hadRunningWorkflow bool
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the

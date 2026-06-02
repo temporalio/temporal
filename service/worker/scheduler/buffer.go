@@ -22,7 +22,8 @@ type (
 		NeedCancel    bool
 		NeedTerminate bool
 		// Stats
-		OverlapSkipped int64
+		OverlapSkipped         int64
+		OverlapSkippedByPolicy map[enumspb.ScheduleOverlapPolicy]int64
 	}
 )
 
@@ -64,12 +65,20 @@ func ProcessBuffer[T Overlappable](
 		case enumspb.SCHEDULE_OVERLAP_POLICY_SKIP:
 			// just skip
 			action.OverlapSkipped++
+			if action.OverlapSkippedByPolicy == nil {
+				action.OverlapSkippedByPolicy = make(map[enumspb.ScheduleOverlapPolicy]int64)
+			}
+			action.OverlapSkippedByPolicy[overlapPolicy]++
 		case enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE:
 			// allow one (the first one) in the buffer
 			if len(action.NewBuffer) == 0 {
 				action.NewBuffer = append(action.NewBuffer, start)
 			} else {
 				action.OverlapSkipped++
+				if action.OverlapSkippedByPolicy == nil {
+					action.OverlapSkippedByPolicy = make(map[enumspb.ScheduleOverlapPolicy]int64)
+				}
+				action.OverlapSkippedByPolicy[overlapPolicy]++
 			}
 		case enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL:
 			// always add to buffer
