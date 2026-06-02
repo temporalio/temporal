@@ -475,7 +475,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	// Disable the minimal continue-as-new interval so the only backoff applied to the new run is the
 	// one we explicitly request. Otherwise the server enforces WorkflowIdReuseMinimalInterval and the
 	// observed backoff could come from there rather than from our requested delay.
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0)))
 
 	id := "functional-continue-as-new-delay-start-test"
 	wt := "functional-continue-as-new-delay-start-test-type"
@@ -487,7 +487,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -496,9 +496,9 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 		Identity:            identity,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	const delayStart = 1 * time.Second
 
@@ -538,7 +538,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	}
 
 	tv := testvars.New(s.T()).WithTaskQueue(tl)
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// Process the first workflow task: it issues a continue-as-new with a delayed start.
 	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
@@ -546,7 +546,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.False(workflowComplete)
 
 	// The original run's history must record the requested backoff on the continue-as-new event.
-	firstRunEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
+	firstRunEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.RunId})
 	continuedAsNewEvent := firstRunEvents[len(firstRunEvents)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, continuedAsNewEvent.GetEventType())
 	canAttrs := continuedAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
@@ -566,7 +566,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 	s.True(workflowComplete)
 
 	// The new run started with the requested first-workflow-task backoff and ran to completion.
-	finalEvents := s.GetHistory(s.Namespace().String(), newRunExecution)
+	finalEvents := env.GetHistory(env.Namespace().String(), newRunExecution)
 	startedAttrs := finalEvents[0].GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(delayStart, startedAttrs.GetFirstWorkflowTaskBackoff().AsDuration())
 	s.Equal(we.RunId, startedAttrs.GetContinuedExecutionRunId())
