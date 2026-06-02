@@ -2544,7 +2544,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError(), "workflow should complete after the dynamic flip triggers migration")
+	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after the dynamic flip triggers migration")
 	s.Equal(1, migrateCalls, "migration should fire exactly once, after the DC flips")
 }
 
