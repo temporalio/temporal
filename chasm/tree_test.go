@@ -4051,7 +4051,6 @@ func protoEq(x proto.Message) gomock.Matcher {
 	return protoMatcher{x: x}
 }
 
-
 // TestCloseTransaction_AppliesPendingComponentMetadata verifies that
 // SetRequestLinks/SetUserMetadata writes are written onto the root component's
 // ChasmComponentAttributes during CloseTransaction, that the touched node is
