@@ -178,7 +178,6 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
-	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -622,7 +621,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		redirectCounter,
 		suggestContinueAsNewReasons,
-		targetDeploymentVersionChanged,
 	)
 	if err != nil {
 		return nil, nil, err
