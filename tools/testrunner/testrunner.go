@@ -41,11 +41,24 @@ const (
 )
 
 type attempt struct {
-	runner           *runner
-	number           int
-	exitErr          *exec.ExitError
-	junitReport      *junitReport
-	coverProfilePath string
+	runner            *runner
+	number            int
+	retryFailureCount int
+	exitErr           *exec.ExitError
+	junitReport       *junitReport
+	coverProfilePath  string
+}
+
+func (a *attempt) label() string {
+	if a.retryFailureCount > 0 {
+		return fmt.Sprintf(
+			"attempt %d of %d (retrying %d failed test(s) from previous attempt)",
+			a.number,
+			a.runner.maxAttempts,
+			a.retryFailureCount,
+		)
+	}
+	return fmt.Sprintf("attempt %d of %d (full test set)", a.number, a.runner.maxAttempts)
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
@@ -56,8 +69,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 			args[i] = junitReportFlag + a.junitReport.path
 		}
 	}
-	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
+	log.Printf("starting test %s: %v %v",
+		a.label(), a.runner.gotestsumPath, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
@@ -323,8 +336,11 @@ func (r *runner) writeCurrentReport() {
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
 	var totalTimeoutFired bool
+	var retryFailureCount int
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
+		currentAttempt.retryFailureCount = retryFailureCount
+		retryFailureCount = 0
 
 		// Run tests.
 		stdout, err := currentAttempt.run(ctx, args)
@@ -404,6 +420,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				len(failures), fullRerunThreshold)
 			continue
 		}
+		retryFailureCount = len(failures)
 		args = stripRunFromArgs(args)
 		for i, failure := range failures {
 			failures[i] = goTestNameToRunFlagRegexp(failure)

@@ -181,6 +181,24 @@ func TestStripRunFromArgs(t *testing.T) {
 	})
 }
 
+func TestAttemptLabel(t *testing.T) {
+	r := newRunner()
+	r.maxAttempts = 3
+
+	fullAttempt := &attempt{
+		runner: r,
+		number: 1,
+	}
+	require.Equal(t, "attempt 1 of 3 (full test set)", fullAttempt.label())
+
+	retryAttempt := &attempt{
+		runner:            r,
+		number:            2,
+		retryFailureCount: 5,
+	}
+	require.Equal(t, "attempt 2 of 3 (retrying 5 failed test(s) from previous attempt)", retryAttempt.label())
+}
+
 func TestWriteCurrentReport(t *testing.T) {
 	out, err := os.CreateTemp("", "junit-report-*.xml")
 	require.NoError(t, err)
