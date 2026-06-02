@@ -267,11 +267,11 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	csaBool := "CustomBoolField"
 
 	wfMemo := payload.EncodeString("workflow memo")
-	wfSAValue := payload.EncodeString("workflow sa value")
+	wfSAValue := sadefs.MustEncodeValue("workflow sa value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	schMemo := payload.EncodeString("schedule memo")
-	schSAValue := payload.EncodeString("schedule sa value")
-	schSAIntValue, _ := payload.Encode(123)
-	schSABoolValue, _ := payload.Encode(true)
+	schSAValue := sadefs.MustEncodeValue("schedule sa value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	schSAIntValue := sadefs.MustEncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT)
+	schSABoolValue := sadefs.MustEncodeValue(true, enumspb.INDEXED_VALUE_TYPE_BOOL)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -470,12 +470,16 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.Equal(wt, ex0.Type.Name)
 	s.Nil(ex0.ParentExecution) // not a child workflow
 	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
-	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csaKeyword].Data)
-	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById].Data)
-	var ex0StartTime time.Time
-	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
-	s.WithinRange(ex0StartTime, createTime, time.Now())
-	s.Equal(int64(0), ex0StartTime.UnixNano()%int64(5*time.Second))
+	s.Equal(wfSAValue, payload.ToString(ex0.SearchAttributes.IndexedFields[csaKeyword]))
+	s.Equal(sid, payload.ToString(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
+	ex0StartTime, err := sadefs.DecodeValue(
+		ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime],
+		enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+		false,
+	)
+	s.NoError(err)
+	s.WithinRange(ex0StartTime.(time.Time), createTime, time.Now())
+	s.Equal(int64(0), ex0StartTime.(time.Time).UnixNano()%int64(5*time.Second))
 
 	// list schedules with search attribute filter
 

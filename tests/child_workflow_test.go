@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -102,10 +103,9 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 			"Info": payload.EncodeString("memo"),
 		},
 	}
-	attrValPayload := payload.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			saName: attrValPayload,
+			saName: sadefs.MustEncodeValue("attrVal", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 

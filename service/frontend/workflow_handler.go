@@ -3553,7 +3553,10 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// Phase 2: Write real V1 scheduler workflow.
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&request.SearchAttributes,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(scheduler.NamespaceDivision),
+	)
 
 	sa, err := wh.validator.UnaliasedSearchAttributesFrom(request.GetSearchAttributes(), request.Namespace)
 	if err != nil {
@@ -3647,6 +3650,14 @@ func (wh *WorkflowHandler) writeSchedulerWorkflowSentinel(
 	namespaceID string,
 	request *workflowservice.CreateScheduleRequest,
 ) error {
+	// Set TemporalNamespaceDivision so the dummy is hidden from
+	// ListWorkflowExecutions. Use a distinct value so it doesn't match the
+	// ListSchedules query (which filters on scheduler.NamespaceDivision).
+	var searchAttributes *commonpb.SearchAttributes
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value("TemporalSchedulerSentinel"),
+	)
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               scheduler.WorkflowIDPrefix + request.ScheduleId,
@@ -3656,14 +3667,7 @@ func (wh *WorkflowHandler) writeSchedulerWorkflowSentinel(
 		RequestId:                request.RequestId,
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		// Set TemporalNamespaceDivision so the dummy is hidden from
-		// ListWorkflowExecutions. Use a distinct value so it doesn't match the
-		// ListSchedules query (which filters on scheduler.NamespaceDivision).
-		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: map[string]*commonpb.Payload{
-				sadefs.TemporalNamespaceDivision: payload.EncodeString("TemporalSchedulerSentinel"),
-			},
-		},
+		SearchAttributes:         searchAttributes,
 	}
 	_, err := wh.historyClient.StartWorkflowExecution(
 		ctx,
@@ -5724,8 +5728,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	// Add pre-define search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.NamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,

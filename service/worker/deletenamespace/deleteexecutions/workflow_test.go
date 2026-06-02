@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -379,7 +378,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution1,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID1), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID1), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
@@ -388,7 +390,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution2,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID2), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID2), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
