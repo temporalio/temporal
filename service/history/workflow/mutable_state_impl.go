@@ -2700,6 +2700,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 			}
 		}
 	}
+	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
 	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
 
@@ -2751,14 +2752,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinuedFailure:       command.GetFailure(),
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
-		SourceVersionStamp:       sourceVersionStamp,
-		RootExecutionInfo:        rootExecutionInfo,
-		InheritedBuildId:         inheritedBuildId,
-		InheritedPinnedVersion:   inheritedPinnedVersion,
-		VersioningOverride:       pinnedOverride,
-		// TODO (Shivam): Revisit whether this can be derived closer to the versioning transition logic.
-		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
+		FirstWorkflowTaskBackoff:     previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:           sourceVersionStamp,
+		RootExecutionInfo:            rootExecutionInfo,
+		InheritedBuildId:             inheritedBuildId,
+		InheritedPinnedVersion:       inheritedPinnedVersion,
+		VersioningOverride:           pinnedOverride,
+		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		InitialSkippedDuration:       newRunInitialSkipped,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -2814,11 +2814,17 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 // computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
-// pass to the next run at continue-as-new time:
+// pass to the next run when it inherits PINNED behavior:
 //   - If the current run was signaled about a target change (last_notified is set),
 //     that becomes the declined value (the SDK saw it and chose not to upgrade).
 //   - Otherwise, preserve the existing declined value from a prior CaN chain.
-func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+func computeDeclinedTargetVersionUpgrade(
+	info *persistencespb.WorkflowExecutionInfo,
+	inheritPinnedVersion bool,
+) *historypb.DeclinedTargetVersionUpgrade {
+	if !inheritPinnedVersion {
+		return nil
+	}
 	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
 		return &historypb.DeclinedTargetVersionUpgrade{
 			DeploymentVersion: lastNotified.GetDeploymentVersion(),
