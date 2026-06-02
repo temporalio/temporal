@@ -446,30 +446,29 @@ func (s *Scheduler) updateConflictToken() {
 // An event here is the schedule getting created or updated, or an action. This
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
-//
-// Taking the max over recentActions (rather than indexing [last]) is required
-// because applyCompletedRetention re-sorts the slice by CloseTime, which can
-// put a workflow with an EARLIER StartTime at the tail and regress the
-// observed lastEventTime; the idle deadline must be monotonic.
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	latest := util.MaxTime(
 		s.Info.GetCreateTime().AsTime(),
 		s.Info.GetUpdateTime().AsTime(),
 	)
+
+	// The recentActions list is unsorted.
 	for _, a := range s.Invoker.Get(ctx).recentActions() {
 		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
 	}
+
 	return latest
 }
 
 // isHeldOpen reports whether the schedule must stay open regardless of having
-// no current work. Paused: customer expects to resume. Pending backfill: must
-// drain (unlike V1's inline processing, CHASM backfillers are separate
-// task-driven components, so any pending backfill - not just ALLOW_ALL -
-// blocks idle). Sentinels are exempt - they exist to reserve a schedule ID
-// and must close. Manual-only schedules (empty spec) idle out like any
-// other - matching V1's RetentionTime semantics, where lastEventTime is
-// advanced by manual triggers via recentActions.
+// no current work:
+// - Paused: customer expects to resume.
+// - Pending backfill: must drain (any pending backfill blocks idle).
+// - Sentinels are exempt .
+//
+// Manual-only schedules (empty spec, but active) idle out like any other -
+// matching V1's RetentionTime semantics, where lastEventTime is advanced by
+// manual triggers via recentActions.
 func (s *Scheduler) isHeldOpen() bool {
 	if s.IsSentinel() {
 		return false

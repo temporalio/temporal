@@ -103,12 +103,9 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	i.TerminateWorkflows = append(i.GetTerminateWorkflows(), result.terminateWorkflows...)
 	i.LastProcessedTime = timestamppb.New(ctx.Now(i))
 
-	// Re-arm tasks if this call changed state, or if the LastProcessedTime
-	// advance just unblocked backed-off starts. Without the second clause, a
-	// no-op ProcessBuffer that fires at a backed-off start's deadline strands
-	// the retry until some other event re-arms processing. Spurious re-arms
-	// from this clause are tolerated because recordExecuteResult is idempotent
-	// per RequestId.
+	// Re-arm tasks if this call changed state, or if the LastProcessedTime advance
+	// just unblocked backed-off starts. Spurious re-arms are tolerated
+	// because recordExecuteResult is idempotent per RequestId.
 	if len(result.startWorkflows) > 0 ||
 		len(result.discardStarts) > 0 ||
 		len(result.cancelWorkflows) > 0 ||
@@ -144,15 +141,11 @@ func (e *executeResult) Append(o executeResult) executeResult {
 	}
 }
 
-// recordExecuteResult updates the Invoker's internal state with the results of
-// a completed InvokerExecuteTask. It returns the number of *new* actions
-// recorded (starts that transitioned from "no RunId" to "has RunId" in this
-// call) and the number of completed results that were dropped because the
-// live start already had a RunId. Concurrent ExecuteTasks may both fire
-// StartWorkflow with the same RequestId; the server returns the same RunId
-// for the duplicate. The first recordExecuteResult to land assigns RunId on
-// the live buffer; subsequent calls observe RunId already set and skip -
-// keeping ActionCount accurate.
+// recordExecuteResult updates the Invoker's internal state with the results of a
+// completed InvokerExecuteTask. It returns the number of *new* actions recorded
+// (starts that transitioned from "no RunId" to "has RunId" in this call) and
+// the number of completed results that were dropped because they were previously
+// recorded.
 func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeResult) (newlyStarted, droppedDuplicates int) {
 	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
 	failed := make(map[string]bool)                          // request ID -> is present
@@ -187,11 +180,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		return terminated[we.RunId]
 	})
 
-	// Update BufferedStarts with results. The RunId guard makes both branches
-	// idempotent: a duplicate ExecuteTask carrying a CompletedStart or a
-	// RetryableStart for a request that's already been recorded as started
-	// must not stomp the live start's RunId/StartTime or rewind its
-	// Attempt/BackoffTime.
+	// Update BufferedStarts with results, dropping duplicates.
 	for _, start := range i.GetBufferedStarts() {
 		if start.RunId != "" {
 			if _, isDuplicate := completed[start.RequestId]; isDuplicate {
