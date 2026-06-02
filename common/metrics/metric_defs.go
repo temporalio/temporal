@@ -915,12 +915,17 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter        = NewCounterDef("queue_actions")
-	ActivityE2ELatency        = NewTimerDef(
+	TaskSchedulerThrottled       = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueuePredicateResolutionLoss = NewCounterDef(
+		"queue_predicate_resolution_loss",
+		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
+			"or falling back to the universal predicate, causing extra tasks to be reprocessed. Tagged by reason."),
+	)
+	ActivityE2ELatency = NewTimerDef(
 		"activity_end_to_end_latency",
 		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
 	)

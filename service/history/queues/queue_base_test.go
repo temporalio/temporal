@@ -568,7 +568,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	reader0Scopes := scopes[:3]
 	reader0Slices := make([]Slice, 0, len(reader0Scopes))
 	for _, scope := range reader0Scopes {
-		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		// manually set iterators to nil as we will be adding tasks directly to the slice
 		slice.iterators = nil
 		reader0Slices = append(reader0Slices, slice)
@@ -585,7 +585,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	reader1Scopes := scopes[3:4]
 	reader1Slices := make([]Slice, 0, len(reader1Scopes))
 	for _, scope := range reader1Scopes {
-		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		// manually set iterators to nil as we will be adding tasks directly to the slice
 		slice.iterators = nil
 		reader1Slices = append(reader1Slices, slice)

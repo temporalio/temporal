@@ -41,10 +41,11 @@ type (
 	}
 
 	ReaderOptions struct {
-		BatchSize            dynamicconfig.IntPropertyFn
-		MaxPendingTasksCount dynamicconfig.IntPropertyFn
-		PollBackoffInterval  dynamicconfig.DurationPropertyFn
-		MaxPredicateSize     dynamicconfig.IntPropertyFn
+		BatchSize                     dynamicconfig.IntPropertyFn
+		MaxPendingTasksCount          dynamicconfig.IntPropertyFn
+		PollBackoffInterval           dynamicconfig.DurationPropertyFn
+		MaxPredicateSize              dynamicconfig.IntPropertyFn
+		ShrinkPredicateMaxPendingKeys dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)

@@ -182,10 +182,11 @@ func (f *timerQueueFactory) CreateQueue(
 		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:            f.Config.TimerTaskBatchSize,
-				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
-				PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
-				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
+				BatchSize:                     f.Config.TimerTaskBatchSize,
+				MaxPendingTasksCount:          f.Config.QueuePendingTaskMaxCount,
+				PollBackoffInterval:           f.Config.TimerProcessorPollBackoffInterval,
+				MaxPredicateSize:              f.Config.QueueMaxPredicateSize,
+				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
