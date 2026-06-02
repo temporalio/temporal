@@ -277,9 +277,10 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
 
