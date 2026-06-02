@@ -635,13 +635,6 @@ func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.Wo
 	return s.GetHistoryFunc(namespace, execution)()
 }
 
-func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {
-	s.T().Helper()
-	var r string
-	s.NoError(payloads.Decode(ps, &r))
-	return r
-}
-
 func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
