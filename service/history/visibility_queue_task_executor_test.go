@@ -93,7 +93,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespace = tests.Namespace
-	s.version = tests.GlobalNamespaceEntry.FailoverVersion()
+	s.version = tests.GlobalNamespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -131,7 +131,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.NoError(err)
 	err = chasmRegistry.Register(&testChasmLibrary{})
 	s.NoError(err)
-	err = chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err = chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
@@ -184,6 +184,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config.VisibilityProcessorEnsureCloseBeforeDelete,
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
 		config.VisibilityProcessorRelocateAttributesMinBlobSize,
+		config.ExternalPayloadsEnabled,
 	)
 }
 
@@ -748,7 +749,8 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: visComponentTypeID,
+						TypeId:   visComponentTypeID,
+						Detached: true,
 					},
 				},
 			},

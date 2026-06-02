@@ -112,12 +112,12 @@ func Invoke(
 	clusterMetadata := shardContext.GetClusterMetadata()
 	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]
 
-	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(namespaceID))
+	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	activeClusterName := namespaceEntry.ActiveClusterName(request.ParentExecution.WorkflowId)
+	activeClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: request.ParentExecution.WorkflowId})
 	if activeClusterName == clusterMetadata.GetCurrentClusterName() {
 		return nil, errors.New("namespace becomes active when processing task as standby")
 	}
@@ -160,7 +160,9 @@ func Invoke(
 	}
 	err = engine.ReplicateVersionedTransition(ctx, chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, activeClusterName)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, consts.ErrDuplicate) {
+			return nil, err
+		}
 	}
 
 	// Verify child execution again after resending parent workflow

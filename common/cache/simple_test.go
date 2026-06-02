@@ -73,7 +73,7 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(2)
 
 		// concurrent get and put
@@ -82,7 +82,7 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 
 			<-start
 
-			for j := 0; j < 1000; j++ {
+			for range 1000 {
 				cache.Get("A")
 				cache.Put("A", "fooo")
 			}
@@ -94,7 +94,7 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 
 			<-start
 
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				it := cache.Iterator()
 				for it.HasNext() {
 					_ = it.Next()
@@ -111,7 +111,7 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 func TestSimpleRemoveFunc(t *testing.T) {
 	ch := make(chan bool)
 	cache := NewSimple(&SimpleOptions{
-		RemovedFunc: func(i interface{}) {
+		RemovedFunc: func(i any) {
 			_, ok := i.(*testing.T)
 			assert.True(t, ok)
 			ch <- true

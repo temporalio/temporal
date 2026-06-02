@@ -118,7 +118,7 @@ func stringPtr(v string) *string {
 
 // Scan implements sql.Scanner interface to allow this type to be
 // parsed transparently by database drivers
-func (u *UUID) Scan(src interface{}) error {
+func (u *UUID) Scan(src any) error {
 	if src == nil {
 		return nil
 	}

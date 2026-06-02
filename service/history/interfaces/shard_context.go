@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -80,7 +81,7 @@ type (
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
-		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
+		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
 
@@ -106,6 +107,9 @@ type (
 		GetFinalizer() *finalizer.Finalizer
 
 		ChasmRegistry() *chasm.Registry
+		EndpointRegistry() chasm.EndpointRegistry
+
+		BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

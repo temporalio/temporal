@@ -85,7 +85,8 @@ func (q faultyQueue) ListQueues(
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
-	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, serialization.NewSerializer())
+	serializer := serialization.NewSerializer()
+	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, serializer)
 	t.Run("ListQueues", func(t *testing.T) {
 		listqueuestest.TestInvoke(t, historyTaskQueueManager)
 	})
@@ -129,10 +130,11 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 
 func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.QueueV2) {
 	retErr := errors.New("test")
+	serializer := serialization.NewSerializer()
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:           queue,
 		createQueueErr: retErr,
-	}, serialization.NewSerializer())
+	}, serializer)
 	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
 		QueueKey: persistencetest.GetQueueKey(t),
 	})
@@ -155,7 +157,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	})
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		task := &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      int64(i + 1),
@@ -166,7 +168,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	}
 
 	var nextPageToken []byte
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		readRes, err := manager.ReadTasks(ctx, &persistence.ReadTasksRequest{
 			QueueKey:      queueKey,
 			PageSize:      1,
@@ -190,10 +192,11 @@ func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.
 	ctx := context.Background()
 
 	retErr := errors.New("test")
+	serializer := serialization.NewSerializer()
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:       queue,
 		enqueueErr: retErr,
-	}, serialization.NewSerializer())
+	}, serializer)
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
@@ -234,7 +237,7 @@ func testHistoryTaskQueueManagerDeleteTasks(t *testing.T, manager *persistence.H
 		QueueKey: queueKey,
 	})
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := enqueueTask(ctx, manager, queueKey, &tasks.WorkflowTask{
 			TaskID: int64(i + 1),
 		})
@@ -300,10 +303,11 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 	ctx := context.Background()
 
 	retErr := errors.New("test")
+	serializer := serialization.NewSerializer()
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:                   queue,
 		rangeDeleteMessagesErr: retErr,
-	}, serialization.NewSerializer())
+	}, serializer)
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,

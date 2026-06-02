@@ -10,13 +10,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
@@ -31,6 +30,11 @@ type (
 	// updateError is a wrapper to distinguish an update error from a start error.
 	updateError struct{ error }
 )
+
+// Unwrap returns the wrapped error to support errors.As() and errors.Is()
+func (e updateError) Unwrap() error {
+	return e.error
+}
 
 type (
 	updateWithStart struct {
@@ -55,7 +59,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache cache.Cache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
@@ -95,7 +100,8 @@ func Invoke(
 			tokenSerializer,
 			startReq,
 			matchingClient,
-			versionMembershipCache,
+			versionCache,
+			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
 		)
 		if err != nil {
@@ -133,7 +139,7 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry)
+		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -220,7 +226,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
+	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)
@@ -329,20 +335,7 @@ func (uws *updateWithStart) updateWorkflow(
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Link: &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					WorkflowId: wfKey.WorkflowID,
-					RunId:      wfKey.RunID,
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   common.FirstEventID,
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-						},
-					},
-				},
-			},
-		},
+		Link:    api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID),
 	}
 
 	return makeResponse(startResp, updateResp), nil
@@ -404,6 +397,12 @@ func makeResponse(
 }
 
 func newMultiOpError(startErr, updateErr error) error {
+	// Unwrap updateError wrapper if present to allow downstream error inspection
+	var ue updateError
+	if errors.As(updateErr, &ue) && ue.error != nil {
+		updateErr = ue.error
+	}
+
 	var message string
 	switch {
 	case startErr != nil && !errors.Is(startErr, multiOpAbortedErr):

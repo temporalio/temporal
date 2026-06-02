@@ -5,7 +5,6 @@ package ndc
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -107,7 +106,7 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// task.getVersion() > currentLastItem
 	// incoming replication task, after application, will become the current branch
 	// (because higher version wins), we need to Rebuild the mutable state for that
-	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.NewString())
+	rebuiltMutableState, err := r.rebuild(ctx, branchIndex)
 	if err != nil {
 		return nil, false, err
 	}
@@ -117,7 +116,6 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
-	requestID string,
 ) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -138,6 +136,8 @@ func (r *ConflictResolverImpl) rebuild(
 		executionState.RunId,
 	)
 	historySize := r.mutableState.GetHistorySize()
+	externalPayloadSize := r.mutableState.GetExternalPayloadSize()
+	externalPayloadCount := r.mutableState.GetExternalPayloadCount()
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
@@ -148,7 +148,7 @@ func (r *ConflictResolverImpl) rebuild(
 		util.Ptr(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
-		requestID,
+		findStartRequestID(executionState),
 	)
 	if err != nil {
 		return nil, err
@@ -173,6 +173,8 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
 	rebuildMutableState.AddHistorySize(historySize)
+	rebuildMutableState.AddExternalPayloadSize(externalPayloadSize)
+	rebuildMutableState.AddExternalPayloadCount(externalPayloadCount)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 

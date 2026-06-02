@@ -11,7 +11,7 @@ import (
 
 type (
 	SequentialBatchableTaskQueue struct {
-		id interface{}
+		id any
 
 		sync.Mutex
 		taskQueue                    collection.Queue[*batchedTask]
@@ -41,7 +41,7 @@ func NewSequentialBatchableTaskQueue(
 	}
 }
 
-func (q *SequentialBatchableTaskQueue) ID() interface{} {
+func (q *SequentialBatchableTaskQueue) ID() any {
 	return q.id
 }
 

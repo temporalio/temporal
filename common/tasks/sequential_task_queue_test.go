@@ -12,7 +12,7 @@ func newTestSequentialTaskQueue[T Task](id, capacity int) SequentialTaskQueue[T]
 	}
 }
 
-func (s *testSequentialTaskQueue[T]) ID() interface{} {
+func (s *testSequentialTaskQueue[T]) ID() any {
 	return s.id
 }
 

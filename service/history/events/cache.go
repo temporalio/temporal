@@ -212,7 +212,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	return nil, errEventNotFoundInBatch
 }
 
-func (e *CacheImpl) put(key EventKey, event *historypb.HistoryEvent) interface{} {
+func (e *CacheImpl) put(key EventKey, event *historypb.HistoryEvent) any {
 	return e.Put(key, newHistoryEventCacheItem(event))
 }
 

@@ -48,10 +48,13 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 
-	settingsContent, err := schema.ElasticsearchClusterSettings()
-	if err != nil {
-		logger.Error("Unable to load embedded cluster settings.", tag.Error(err))
-		return err
+	settingsContent := ""
+	if !cli.Bool(CLIOptSkipClusterSettings) {
+		settingsContent, err = schema.ElasticsearchClusterSettings()
+		if err != nil {
+			logger.Error("Unable to load embedded cluster settings.", tag.Error(err))
+			return err
+		}
 	}
 
 	templateContent, err := schema.ElasticsearchIndexTemplate()
@@ -215,22 +218,22 @@ func dropIndex(cli *cli.Context, logger log.Logger) error {
 	success, err := client.DeleteIndex(context.TODO(), indexName)
 	if err != nil {
 		if !failSilently {
-			logger.Error("Index deletion failed", tag.Error(err), tag.NewStringTag("indexName", indexName))
+			logger.Error("Index deletion failed", tag.Error(err), tag.String("indexName", indexName))
 			return err
 		}
-		logger.Warn("Index deletion failed", tag.Error(err), tag.NewStringTag("indexName", indexName))
+		logger.Warn("Index deletion failed", tag.Error(err), tag.String("indexName", indexName))
 		return nil
 	} else if !success {
 		err := errors.New("acknowledged=false")
 		if !failSilently {
-			logger.Error("Index deletion failed without error", tag.Error(err), tag.NewStringTag("indexName", indexName))
+			logger.Error("Index deletion failed without error", tag.Error(err), tag.String("indexName", indexName))
 			return err
 		}
-		logger.Warn("Index deletion failed without error", tag.Error(err), tag.NewStringTag("indexName", indexName))
+		logger.Warn("Index deletion failed without error", tag.Error(err), tag.String("indexName", indexName))
 		return nil
 	}
 
-	logger.Info("Index deleted successfully", tag.NewStringTag("indexName", indexName))
+	logger.Info("Index deleted successfully", tag.String("indexName", indexName))
 	return nil
 }
 

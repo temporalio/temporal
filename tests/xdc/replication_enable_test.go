@@ -44,13 +44,14 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
 	// Minimal dynamic config overrides required for replication enable/disable testing
-	dynamicConfigOverrides := map[dynamicconfig.Key]interface{}{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():        time.Second * 5,
 		dynamicconfig.EnableReplicationStream.Key():               true,
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():   true,
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 	}
 
+	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
 			ClusterMetadata: cluster.Config{
@@ -60,6 +61,7 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: 1,
 			},
+			Persistence: persistenceDefaults,
 		},
 		{
 			ClusterMetadata: cluster.Config{
@@ -69,6 +71,7 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: 1,
 			},
+			Persistence: persistenceDefaults,
 		},
 	}
 
@@ -82,7 +85,7 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[clusterIndex].Persistence.DBName = "func_tests_" + clusterName
+		clusterConfigs[clusterIndex].Persistence.DBName += "_" + clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
 			clusterName: {
 				Enabled:                true,

@@ -70,7 +70,7 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice
 	return response
 }
 
-func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowservice.PollWorkflowTaskQueueResponse, result interface{}) {
+func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowservice.PollWorkflowTaskQueueResponse, result any) {
 	dataConverter := converter.GetDefaultDataConverter()
 	payloads, err := dataConverter.ToPayloads(result)
 	s.Require().NoError(err)

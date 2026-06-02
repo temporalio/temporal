@@ -13,19 +13,22 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 // TODO: Rename all SQL Managers to Stores
 type SqlStore struct {
-	DB     sqlplugin.DB
-	logger log.Logger
+	DB         sqlplugin.DB
+	logger     log.Logger
+	serializer serialization.Serializer
 }
 
-func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
+func NewSQLStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
 	return SqlStore{
-		DB:     db,
-		logger: logger,
+		DB:         db,
+		logger:     logger,
+		serializer: serializer,
 	}
 }
 
@@ -77,7 +80,7 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 	return nil
 }
 
-func gobSerialize(x interface{}) ([]byte, error) {
+func gobSerialize(x any) ([]byte, error) {
 	b := bytes.Buffer{}
 	e := gob.NewEncoder(&b)
 	err := e.Encode(x)
@@ -87,7 +90,7 @@ func gobSerialize(x interface{}) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func gobDeserialize(a []byte, x interface{}) error {
+func gobDeserialize(a []byte, x any) error {
 	b := bytes.NewBuffer(a)
 	d := gob.NewDecoder(b)
 	err := d.Decode(x)

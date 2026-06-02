@@ -476,7 +476,7 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 	return i.ActivityInboundInterceptorBase.Init(i)
 }
 
-func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
+func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...any) {
 	d, ok := details[0].(heartbeatDetails)
 	require.True(i.T, ok, "invalid heartbeat details")
 	i.recordedHeartbeats = append(i.recordedHeartbeats, d)

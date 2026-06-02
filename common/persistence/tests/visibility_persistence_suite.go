@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -84,6 +85,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetBoolPropertyFn(true),
 		metrics.NoopMetricsHandler,
 		s.Logger,
+		serialization.NewSerializer(),
 	)
 
 	if err != nil {
@@ -703,7 +705,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 	startTime := closeTime.Add(-5 * time.Second)
 	executionTime := closeTime.Add(-4 * time.Second)
 	var startRequests []*manager.RecordWorkflowExecutionStartedRequest
-	for i := 0; i < openRows; i++ {
+	for range openRows {
 		startReq := s.createOpenWorkflowRecord(
 			testNamespaceUUID,
 			uuid.NewString(),
@@ -715,7 +717,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 		startRequests = append(startRequests, startReq)
 	}
 
-	for i := 0; i < closedRows; i++ {
+	for i := range closedRows {
 		s.createClosedWorkflowRecord(
 			startRequests[i],
 			closeTime,
@@ -865,7 +867,7 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 	startTime := closeTime.Add(-5 * time.Second)
 
 	var startRequests []*manager.RecordWorkflowExecutionStartedRequest
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		startRequests = append(
 			startRequests,
 			s.createOpenWorkflowRecord(
@@ -917,7 +919,7 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 	// Generate 5 workflow records, keep 2 open and 3 closed.
 	var startReqs []*manager.RecordWorkflowExecutionStartedRequest
 	var closeReqs []*manager.RecordWorkflowExecutionClosedRequest
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		startTime := time.Now()
 		startReq := s.createOpenWorkflowRecord(
 			testNamespaceUUID,
@@ -969,7 +971,7 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-5 * time.Second)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s.createOpenWorkflowRecord(
 			testNamespaceUUID,
 			"visibility-workflow-test",
@@ -998,7 +1000,7 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	startTime := closeTime.Add(-5 * time.Second)
 
 	var startRequests []*manager.RecordWorkflowExecutionStartedRequest
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		startRequests = append(
 			startRequests,
 			s.createOpenWorkflowRecord(
@@ -1012,7 +1014,7 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 		)
 	}
 
-	runningStatusPayload, _ := searchattribute.EncodeValue(
+	runningStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
@@ -1035,7 +1037,7 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 		resp.Groups,
 	)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		s.createClosedWorkflowRecord(
 			startRequests[i],
 			closeTime,

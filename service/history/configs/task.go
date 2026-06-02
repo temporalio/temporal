@@ -25,8 +25,8 @@ var (
 
 func ConvertWeightsToDynamicConfigValue(
 	weights map[tasks.Priority]int,
-) map[string]interface{} {
-	weightsForDC := make(map[string]interface{})
+) map[string]any {
+	weightsForDC := make(map[string]any)
 	for priority, weight := range weights {
 		weightsForDC[priority.String()] = weight
 	}
@@ -34,7 +34,7 @@ func ConvertWeightsToDynamicConfigValue(
 }
 
 func ConvertDynamicConfigValueToWeights(
-	weightsFromDC map[string]interface{},
+	weightsFromDC map[string]any,
 	logger log.Logger,
 ) map[tasks.Priority]int {
 	weights := make(map[tasks.Priority]int)

@@ -5,9 +5,9 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
 
@@ -39,22 +39,18 @@ type (
 	executionManagerDLQWriter struct {
 		executionManager ExecutionManager
 	}
-	// TaskParser is a trimmed version of [go.temporal.io/server/common/persistence/serialization.Serializer]
-	// that only provides the methods we need.
-	TaskParser interface {
-		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
-	}
 	// DLQWriterAdapter is a [DLQWriter] that uses the QueueV2 [queues.DLQWriter] object.
 	DLQWriterAdapter struct {
-		dlqWriter          *queues.DLQWriter
-		taskParser         TaskParser
-		currentClusterName string
+		dlqWriter                 *queues.DLQWriter
+		replicationTaskSerializer TaskSerializer
+		currentClusterName        string
 	}
 	dlqWriterToggleParams struct {
 		fx.In
 		Config                    *configs.Config
 		ExecutionManagerDLQWriter *executionManagerDLQWriter
 		DLQWriterAdapter          *DLQWriterAdapter
+		TestHooks                 testhooks.TestHooks
 	}
 	dlqWriterToggle struct {
 		*dlqWriterToggleParams
@@ -71,13 +67,13 @@ func NewExecutionManagerDLQWriter(executionManager ExecutionManager) *executionM
 // NewDLQWriterAdapter creates a new DLQWriter from a QueueV2 [queues.DLQWriter].
 func NewDLQWriterAdapter(
 	dlqWriter *queues.DLQWriter,
-	taskParser TaskParser,
+	replicationTaskSerializer TaskSerializer,
 	currentClusterName string,
 ) *DLQWriterAdapter {
 	return &DLQWriterAdapter{
-		dlqWriter:          dlqWriter,
-		taskParser:         taskParser,
-		currentClusterName: currentClusterName,
+		dlqWriter:                 dlqWriter,
+		replicationTaskSerializer: replicationTaskSerializer,
+		currentClusterName:        currentClusterName,
 	}
 }
 
@@ -94,10 +90,20 @@ func newDLQWriterToggle(
 // - QueueV1: [ExecutionManagerDLQWriter.WriteTaskToDLQ]
 // - QueueV2: [DLQWriterAdapter.WriteTaskToDLQ]
 func (d *dlqWriterToggle) WriteTaskToDLQ(ctx context.Context, request DLQWriteRequest) error {
-	if d.Config.HistoryReplicationDLQV2() {
-		return d.DLQWriterAdapter.WriteTaskToDLQ(ctx, request)
+	write := func() error {
+		if d.Config.HistoryReplicationDLQV2() {
+			return d.DLQWriterAdapter.WriteTaskToDLQ(ctx, request)
+		}
+		return d.ExecutionManagerDLQWriter.WriteTaskToDLQ(ctx, request)
 	}
-	return d.ExecutionManagerDLQWriter.WriteTaskToDLQ(ctx, request)
+	if hook, ok := testhooks.Get(
+		d.TestHooks,
+		testhooks.HistoryReplicationDLQWriteInterceptor,
+		testhooks.GlobalScope,
+	); ok {
+		return hook(request.ReplicationTaskInfo, write)
+	}
+	return write()
 }
 
 // WriteTaskToDLQ implements [DLQWriter.WriteTaskToDLQ] by calling [persistence.ExecutionManager.PutReplicationTaskToDLQ].
@@ -120,7 +126,7 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	ctx context.Context,
 	request DLQWriteRequest,
 ) error {
-	task, err := d.taskParser.ParseReplicationTask(request.ReplicationTaskInfo)
+	task, err := d.replicationTaskSerializer.DeserializeReplicationTask(request.ReplicationTaskInfo)
 	if err != nil {
 		return err
 	}

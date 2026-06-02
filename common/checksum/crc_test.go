@@ -36,11 +36,11 @@ func TestCRC32OverProto(t *testing.T) {
 	doneWG := sync.WaitGroup{}
 	doneWG.Add(parallism)
 
-	for i := 0; i < parallism; i++ {
+	for range parallism {
 		go func() {
 			defer doneWG.Done()
 			<-startC
-			for count := 0; count < loopCount; count++ {
+			for range loopCount {
 				csum, err := GenerateCRC32(obj, 1)
 				if err != nil {
 					return

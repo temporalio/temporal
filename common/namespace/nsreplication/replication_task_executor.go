@@ -13,7 +13,9 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 )
 
 var (
@@ -50,7 +52,10 @@ type (
 	taskExecutorImpl struct {
 		currentCluster  string
 		metadataManager persistence.MetadataManager
+		dataMerger      NamespaceDataMerger
+		admitter        NamespaceReplicationAdmitter
 		logger          log.Logger
+		testHooks       testhooks.TestHooks
 	}
 )
 
@@ -58,13 +63,18 @@ type (
 func NewTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
+	dataMerger NamespaceDataMerger,
+	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
+	testHooks testhooks.TestHooks,
 ) TaskExecutor {
-
 	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
+		dataMerger:      dataMerger,
+		admitter:        admitter,
 		logger:          logger,
+		testHooks:       testHooks,
 	}
 }
 
@@ -76,6 +86,22 @@ func (h *taskExecutorImpl) Execute(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
+	if hook, ok := testhooks.Get(
+		h.testHooks,
+		testhooks.NamespaceReplicationTaskInterceptor,
+		namespace.Name(task.GetInfo().GetName()),
+	); ok {
+		return hook(ctx, task, func() error {
+			return h.executeValidatedTask(ctx, task)
+		})
+	}
+	return h.executeValidatedTask(ctx, task)
+}
+
+func (h *taskExecutorImpl) executeValidatedTask(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) error {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
 		return err
 	}
@@ -90,15 +116,6 @@ func (h *taskExecutorImpl) Execute(
 	}
 }
 
-func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*replicationpb.ClusterReplicationConfig) bool {
-	for _, cluster := range repCfg {
-		if clusterName == cluster.ClusterName {
-			return true
-		}
-	}
-	return false
-}
-
 func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
@@ -109,14 +126,14 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 			h.logger.Error(
 				"namespace replication encountered UUID collision processing namespace replication task",
 				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
-				tag.NewStringTag("Task Namespace Id", task.GetId()),
-				tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()))
+				tag.String("Task Namespace Id", task.GetId()),
+				tag.String("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		return checkClusterIncludedInReplicationConfig(h.currentCluster, task.ReplicationConfig.Clusters), nil
+		return h.admitter.Admit(ctx, h.currentCluster, task), nil
 	default:
 		// return the original err
 		return false, err
@@ -155,6 +172,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				State:             task.ReplicationConfig.GetState(),
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
@@ -178,8 +196,8 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			if resp.Namespace.Info.Id != task.GetId() {
 				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
 					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
-					tag.NewStringTag("Task Namespace Id", task.GetId()),
-					tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()),
+					tag.String("Task Namespace Id", task.GetId()),
+					tag.String("Task Namespace Info Id", task.Info.GetId()),
 					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
@@ -205,7 +223,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				h.logger.Error(
 					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
 					tag.WorkflowNamespace(resp.Namespace.Info.Name),
-					tag.NewStringTag("Task Namespace Name", task.Info.GetName()),
+					tag.String("Task Namespace Name", task.Info.GetName()),
 					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
@@ -266,15 +284,26 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
+	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	if dataMerged {
+		recordUpdated = true
+		request.Namespace.Info.Data = mergedData
+	}
+
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
+		// Use merged data if available, otherwise use task data
+		data := task.Info.Data
+		if dataMerged {
+			data = mergedData
+		}
 		request.Namespace.Info = &persistencespb.NamespaceInfo{
 			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
 			State:       task.Info.GetState(),
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
-			Data:        task.Info.Data,
+			Data:        data,
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
@@ -293,6 +322,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
+		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
 		request.Namespace.FailoverNotificationVersion = notificationVersion
 		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())

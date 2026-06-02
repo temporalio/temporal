@@ -19,7 +19,7 @@ func (ri *RequestIssues) Append(issue string) {
 }
 
 // Appendf appends a formatted issue to the set.
-func (ri *RequestIssues) Appendf(format string, args ...interface{}) {
+func (ri *RequestIssues) Appendf(format string, args ...any) {
 	ri.Append(fmt.Sprintf(format, args...))
 }
 

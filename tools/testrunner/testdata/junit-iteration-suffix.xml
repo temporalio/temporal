@@ -1,0 +1,21 @@
+<testsuites time="5.000000" tests="4" failures="2">
+    <testsuite name="github.com/example/tests" tests="4" failures="2" errors="0" id="0" time="5.000000" timestamp="2024-11-18T14:05:44-08:00">
+        <properties>
+            <property name="go.version" value="go1.23.2 darwin/arm64"></property>
+        </properties>
+        <testcase name="TestDatanodeSuite/TestLineageFork" classname="github.com/example/tests" time="0.100000">
+            <failure message="Failed"><![CDATA[=== RUN   TestDatanodeSuite/TestLineageFork
+    datanode_test.go:99: Intentional failure
+--- FAIL: TestDatanodeSuite/TestLineageFork (0.10s)
+]]></failure>
+        </testcase>
+        <testcase name="TestDatanodeSuite/TestLineageFork#01" classname="github.com/example/tests" time="0.200000">
+            <failure message="Failed"><![CDATA[=== RUN   TestDatanodeSuite/TestLineageFork#01
+    datanode_test.go:99: Intentional failure iteration 1
+--- FAIL: TestDatanodeSuite/TestLineageFork#01 (0.20s)
+]]></failure>
+        </testcase>
+        <testcase name="TestDatanodeSuite/TestLineageFork#02" classname="github.com/example/tests" time="0.300000"></testcase>
+        <testcase name="TestDatanodeSuite/TestOtherTest" classname="github.com/example/tests" time="0.400000"></testcase>
+    </testsuite>
+</testsuites>

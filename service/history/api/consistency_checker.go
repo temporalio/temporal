@@ -301,7 +301,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 		return nil, err
 	}
 
-	// if consistencyPredicate is nill we assume it is not needed
+	// if consistencyPredicate is nil we assume it is not needed
 	if consistencyPredicate == nil || consistencyPredicate(mutableState) {
 		return NewWorkflowLease(wfContext, release, mutableState), nil
 	}

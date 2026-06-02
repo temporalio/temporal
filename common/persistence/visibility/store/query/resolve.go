@@ -37,18 +37,11 @@ func ResolveSearchAttributeAlias(
 			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
 			return sadefs.WorkflowID, saType, nil
 		}
+	}
 
-		// Handle ActivityId → WorkflowID transformation for standalone activities.
-		// TODO: Remove this hardcoded transformation.
-		if name == sadefs.ActivityID {
-			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
-			return sadefs.WorkflowID, saType, nil
-		}
-
-		fieldName, fieldType = tryChasmMapper(name, chasmMapper)
-		if fieldName != "" {
-			return fieldName, fieldType, nil
-		}
+	fieldName, fieldType := tryChasmMapper(name, chasmMapper)
+	if fieldName != "" {
+		return fieldName, fieldType, nil
 	}
 
 	fieldName, fieldType, found := tryDirectAndPrefixedLookup(name, saTypeMap)

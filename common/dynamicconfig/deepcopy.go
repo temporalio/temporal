@@ -3,6 +3,7 @@ package dynamicconfig
 import (
 	"fmt"
 	"reflect"
+	"time"
 )
 
 // deepCopyForMapstructure does a simple deep copy of T. Fancy cases (anything other than plain old data)
@@ -50,6 +51,15 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 		}
 		return nv
 	case reflect.Struct:
+		// Special case for time.Time: it has unexported fields so we can't copy it field by
+		// field, but we can copy zero values (which is all we need for default values).
+		if v.Type() == reflect.TypeFor[time.Time]() {
+			if v.Interface().(time.Time).IsZero() {
+				return reflect.ValueOf(time.Time{})
+			}
+			// nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
+			panic(fmt.Sprintf("Can't deep copy non-zero time.Time: %v", v.Interface()))
+		}
 		nv := reflect.New(v.Type()).Elem()
 		for i := range v.Type().NumField() {
 			nv.Field(i).Set(deepCopyValue(v.Field(i)))

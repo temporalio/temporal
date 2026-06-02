@@ -235,8 +235,8 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Debug(
 		"HTTP API call",
-		tag.NewStringTag("http-method", r.Method),
-		tag.NewAnyTag("http-url", r.URL),
+		tag.String("http-method", r.Method),
+		tag.Any("http-url", r.URL),
 	)
 
 	// Need to change the accept header based on whether pretty and/or
@@ -386,7 +386,7 @@ func newInlineClientConn(
 			fullMethod := "/" + qualifiedServerName + "/" + reflectMethod.Name
 			methods[fullMethod] = &serviceMethod{
 				info: grpc.UnaryServerInfo{Server: server, FullMethod: fullMethod},
-				handler: func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler: func(ctx context.Context, req any) (any, error) {
 					ret := methodVal.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
 					err, _ := ret[1].Interface().(error)
 					return ret[0].Interface(), err
@@ -487,7 +487,7 @@ func chainUnaryServerInterceptors(interceptors []grpc.UnaryServerInterceptor) gr
 }
 
 func chainUnaryInterceptors(interceptors []grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return interceptors[0](ctx, req, info, getChainUnaryHandler(interceptors, 0, info, handler))
 	}
 }
@@ -501,7 +501,7 @@ func getChainUnaryHandler(
 	if curr == len(interceptors)-1 {
 		return finalHandler
 	}
-	return func(ctx context.Context, req interface{}) (interface{}, error) {
+	return func(ctx context.Context, req any) (any, error) {
 		return interceptors[curr+1](ctx, req, info, getChainUnaryHandler(interceptors, curr+1, info, finalHandler))
 	}
 }

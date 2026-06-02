@@ -2,48 +2,51 @@ package scheduler
 
 import (
 	"fmt"
-	"time"
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	GeneratorTaskExecutorOptions struct {
+	GeneratorTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
 		MetricsHandler metrics.Handler
 		BaseLogger     log.Logger
 		SpecProcessor  SpecProcessor
+		SpecBuilder    *scheduler.SpecBuilder
 	}
 
-	GeneratorTaskExecutor struct {
+	GeneratorTaskHandler struct {
+		chasm.PureTaskHandlerBase
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
 		SpecProcessor  SpecProcessor
+		specBuilder    *scheduler.SpecBuilder
 	}
 )
 
-func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskExecutor {
-	return &GeneratorTaskExecutor{
+func NewGeneratorTaskHandler(opts GeneratorTaskHandlerOptions) *GeneratorTaskHandler {
+	return &GeneratorTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
 		SpecProcessor:  opts.SpecProcessor,
+		specBuilder:    opts.SpecBuilder,
 	}
 }
 
-func (g *GeneratorTaskExecutor) Execute(
+func (g *GeneratorTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
 	_ chasm.TaskAttributes,
@@ -51,16 +54,18 @@ func (g *GeneratorTaskExecutor) Execute(
 ) error {
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
-
+	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
+
+	now := ctx.Now(generator)
 
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
-		createdAt := timestamppb.New(ctx.Now(generator))
+		createdAt := timestamppb.New(now)
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
-		g.logSchedule(logger, "starting schedule", scheduler)
+		g.logSchedule(ctx, logger, "starting schedule", generator, scheduler)
 	}
 
 	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
@@ -71,11 +76,11 @@ func (g *GeneratorTaskExecutor) Execute(
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
-	t2 := ctx.Now(generator).UTC()
+	t2 := now.UTC()
 	if t2.Before(t1) {
-		logger.Warn("time went backwards",
-			tag.NewStringerTag("time", t1),
-			tag.NewStringerTag("time", t2))
+		logger.Error("time went backwards",
+			tag.Stringer("time", t1),
+			tag.Stringer("time", t2))
 		t2 = t1
 	}
 
@@ -94,6 +99,14 @@ func (g *GeneratorTaskExecutor) Execute(
 			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
 
+	// Emit metrics and update state for any dropped actions.
+	if result.DroppedCount > 0 {
+		logger.Warn("Buffer overrun, dropping actions",
+			tag.Int64("dropped-count", result.DroppedCount))
+		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
+		scheduler.Info.BufferDropped += result.DroppedCount
+	}
+
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
@@ -101,10 +114,7 @@ func (g *GeneratorTaskExecutor) Execute(
 
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
-	if err := g.updateFutureActionTimes(generator, scheduler); err != nil {
-		return queueerrors.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to update future action times: %s", err.Error()))
-	}
+	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	// Check if the schedule has gone idle.
 	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
@@ -129,64 +139,30 @@ func (g *GeneratorTaskExecutor) Execute(
 	}
 
 	// Another buffering task is added if we aren't completely out of actions or paused.
-	ctx.AddTask(generator, chasm.TaskAttributes{
-		ScheduledTime: result.NextWakeupTime,
-	}, &schedulerpb.GeneratorTask{})
+	generator.scheduleTask(ctx, result.NextWakeupTime)
 
 	return nil
 }
 
-func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
-	logger.Debug(msg,
-		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
-		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.Logger, msg string, generator *Generator, sched *Scheduler) {
+	spec := jsonStringer{sched.Schedule.Spec}
+	policies := jsonStringer{sched.Schedule.Policies}
+
+	tw := g.config.Tweakables(sched.Namespace)
+	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies), tw.EventLogMaxEntries, tw.EventLogMaxMessageLen)
+	logger.Info(msg,
+		tag.Stringer("spec", spec),
+		tag.Stringer("policies", policies))
 }
 
-func (g *GeneratorTaskExecutor) updateFutureActionTimes(
-	generator *Generator,
-	scheduler *Scheduler,
-) error {
-	nextTime := func(t time.Time) (time.Time, error) {
-		res, err := g.SpecProcessor.NextTime(scheduler, t)
-		return res.Next, err
-	}
-
-	// Make sure we don't emit more future times than are remaining.
-	count := recentActionCount
-	if scheduler.Schedule.State.LimitedActions {
-		count = min(int(scheduler.Schedule.State.RemainingActions), recentActionCount)
-	}
-
-	futureTimes := make([]*timestamppb.Timestamp, 0, count)
-	t := timestamp.TimeValue(generator.LastProcessedTime)
-	var err error
-	for len(futureTimes) < count {
-		t, err = nextTime(t)
-		if err != nil {
-			return err
-		}
-		if t.IsZero() {
-			break
-		}
-
-		if scheduler.Info.UpdateTime.AsTime().After(t) {
-			// Skip action times that occur before the schedule's update time.
-			continue
-		}
-
-		futureTimes = append(futureTimes, timestamppb.New(t))
-	}
-
-	generator.FutureActionTimes = futureTimes
-
-	return nil
-}
-
-func (g *GeneratorTaskExecutor) Validate(
+func (g *GeneratorTaskHandler) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		generator.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }

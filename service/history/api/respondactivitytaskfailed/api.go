@@ -7,12 +7,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -31,34 +30,6 @@ func Invoke(
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
-	}
-
-	// Handle standalone activity if component ref is present in the token
-	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
-		namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.ActivityId)
-		if err != nil {
-			return nil, err
-		}
-		response, _, err := chasm.UpdateComponent(
-			ctx,
-			componentRef,
-			(*activity.Activity).HandleFailed,
-			activity.RespondFailedEvent{
-				Request: req,
-				Token:   token,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     shard.GetMetricsHandler(),
-					NamespaceName:               namespaceEntry.Name().String(),
-					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
-				},
-			},
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
 	}
 
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
@@ -125,6 +96,11 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
+			// RetryActivity mutates ai in place and clears per-attempt timing fields when it resets the activity for retry.
+			// Capture the metric inputs before that mutation so we record the attempt that just finished.
+			attemptStartedTime = timestamp.TimeValue(ai.GetStartedTime())
+			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			taskQueue = ai.TaskQueue
 			mutableState.RecordLastActivityCompleteTime(ai)
 			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
@@ -144,9 +120,6 @@ func Invoke(
 				closed = false
 			}
 
-			attemptStartedTime = ai.StartedTime.AsTime()
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
-			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return postActions, nil
 		},

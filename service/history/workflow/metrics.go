@@ -173,8 +173,11 @@ func RecordActivityCompletionMetrics(
 		tags...,
 	)
 
-	if !completion.AttemptStartedTime.IsZero() && completion.Status != ActivityStatusTimeout {
-		latency := time.Since(completion.AttemptStartedTime)
+	now := shard.GetTimeSource().Now()
+	if completion.Status != ActivityStatusTimeout &&
+		!completion.AttemptStartedTime.IsZero() &&
+		!completion.AttemptStartedTime.After(now) {
+		latency := now.Sub(completion.AttemptStartedTime)
 		// ActivityE2ELatency is deprecated due to its inaccurate naming. It captures the attempt duration instead of an end-to-end duration as its name suggests. For now record both metrics
 		metrics.ActivityE2ELatency.With(metricsHandler).Record(latency)
 		metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
@@ -182,7 +185,7 @@ func RecordActivityCompletionMetrics(
 
 	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
 	if completion.Closed && !completion.FirstScheduledTime.IsZero() {
-		scheduleToCloseLatency := time.Since(completion.FirstScheduledTime)
+		scheduleToCloseLatency := now.Sub(completion.FirstScheduledTime)
 		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
 	}
 

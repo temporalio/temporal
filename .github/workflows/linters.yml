@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   lint-actions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -13,8 +13,9 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
 
       - name: lint actions
         run: |
@@ -24,7 +25,7 @@ jobs:
         shell: bash
 
   lint-protos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -32,19 +33,21 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint protobuf definitions
         run: |
           make lint-protos
 
   lint-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,20 +55,21 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint protobuf API definitions
         run: |
           make lint-api
-          
 
   lint-workflows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,18 +77,20 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - name: lint system workflows with workflowcheck
         run: make workflowcheck
 
-  fmt-imports:
-    runs-on: ubuntu-latest
+  fmt:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -92,12 +98,13 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
 
-      - name: format golang import statements
+      - name: apply formatters
         run: |
-          make fmt-imports
+          make fmt
 
       - name: check-is-dirty
         run: |
@@ -108,8 +115,8 @@ jobs:
             exit 1
           fi
 
-  golangci:
-    runs-on: ubuntu-latest
+  parallelize-tests:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -117,8 +124,35 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
+          cache: true
+
+      - name: check test parallelization
+        run: make parallelize-tests
+
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes after running parallelize-tests."
+            echo "Run 'make parallelize-tests' locally and commit the changes."
+            git status
+            git diff
+            exit 1
+          fi
+
+  golangci:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          check-latest: true
+          cache: true
 
       - name: lint code
         run: |
@@ -136,12 +170,13 @@ jobs:
   linters-succeed:
     name: All Linters Succeed
     needs:
+      - fmt
       - lint-api
       - lint-protos
       - lint-actions
-      - fmt-imports
       - golangci
-    runs-on: ubuntu-latest
+      - parallelize-tests
+    runs-on: ubuntu-24.04-arm
     if: always()
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}

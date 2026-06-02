@@ -43,10 +43,10 @@ func NewMaskInternalErrorDetailsInterceptor(
 
 func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 
 	resp, err := handler(ctx, req)
 
@@ -65,7 +65,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 }
 
 func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
-	req interface{}, fullMethodName string, err error,
+	req any, fullMethodName string, err error,
 ) error {
 	statusCode := serviceerror.ToStatus(err).Code()
 
@@ -103,9 +103,9 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 		logTags = []tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
 	}
 
-	logTags = append(logTags, tag.NewStringTag("hash", errorHash))
+	logTags = append(logTags, tag.String("hash", errorHash))
 
-	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
+	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, mi.workflowTags.Extract(req, fullMethod)...)
 
 	mi.logger.Error("masked service failures", append(logTags, tag.Error(err))...)

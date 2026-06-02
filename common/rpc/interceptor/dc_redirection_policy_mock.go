@@ -42,29 +42,29 @@ func (m *MockDCRedirectionPolicy) EXPECT() *MockDCRedirectionPolicyMockRecorder 
 }
 
 // WithNamespaceIDRedirect mocks base method.
-func (m *MockDCRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error {
+func (m *MockDCRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, req any, call func(string) error) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithNamespaceIDRedirect", ctx, namespaceID, apiName, call)
+	ret := m.ctrl.Call(m, "WithNamespaceIDRedirect", ctx, namespaceID, apiName, req, call)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WithNamespaceIDRedirect indicates an expected call of WithNamespaceIDRedirect.
-func (mr *MockDCRedirectionPolicyMockRecorder) WithNamespaceIDRedirect(ctx, namespaceID, apiName, call any) *gomock.Call {
+func (mr *MockDCRedirectionPolicyMockRecorder) WithNamespaceIDRedirect(ctx, namespaceID, apiName, req, call any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithNamespaceIDRedirect", reflect.TypeOf((*MockDCRedirectionPolicy)(nil).WithNamespaceIDRedirect), ctx, namespaceID, apiName, call)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithNamespaceIDRedirect", reflect.TypeOf((*MockDCRedirectionPolicy)(nil).WithNamespaceIDRedirect), ctx, namespaceID, apiName, req, call)
 }
 
 // WithNamespaceRedirect mocks base method.
-func (m *MockDCRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, arg1 namespace.Name, apiName string, call func(string) error) error {
+func (m *MockDCRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, req any, call func(string) error) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithNamespaceRedirect", ctx, arg1, apiName, call)
+	ret := m.ctrl.Call(m, "WithNamespaceRedirect", ctx, namespaceName, apiName, req, call)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WithNamespaceRedirect indicates an expected call of WithNamespaceRedirect.
-func (mr *MockDCRedirectionPolicyMockRecorder) WithNamespaceRedirect(ctx, arg1, apiName, call any) *gomock.Call {
+func (mr *MockDCRedirectionPolicyMockRecorder) WithNamespaceRedirect(ctx, namespaceName, apiName, req, call any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithNamespaceRedirect", reflect.TypeOf((*MockDCRedirectionPolicy)(nil).WithNamespaceRedirect), ctx, arg1, apiName, call)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithNamespaceRedirect", reflect.TypeOf((*MockDCRedirectionPolicy)(nil).WithNamespaceRedirect), ctx, namespaceName, apiName, req, call)
 }

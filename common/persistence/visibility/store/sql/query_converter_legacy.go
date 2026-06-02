@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -446,11 +445,17 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 
 	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
 	if err != nil {
-		return nil, query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saAlias,
-		)
+		if c.archetypeID != chasm.SchedulerArchetypeID || saAlias != "TemporalSystemExecutionStatus" {
+			return nil, query.NewConverterError(
+				"%s: column name '%s' is not a valid search attribute",
+				query.InvalidExpressionErrMessage,
+				saAlias,
+			)
+		}
+		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
+		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
+		saFieldName = sadefs.ExecutionStatus
+		saType, _ = c.saTypeMap.GetType(saFieldName)
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
@@ -478,13 +483,9 @@ func (c *QueryConverterLegacy) convertValueExpr(
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, name, saType)
+		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
-		}
-
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		switch v := value.(type) {
@@ -540,11 +541,12 @@ func (c *QueryConverterLegacy) convertValueExpr(
 // parseSQLVal handles values for specific search attributes.
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
-// For execution status, converts string to enum value.
+// For execution status, converts string to enum value (only for system ExecutionStatus field).
 // For execution duration, converts to nanoseconds.
 func (c *QueryConverterLegacy) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) (any, error) {
 	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
@@ -587,7 +589,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return tm.UTC().Format(c.getDatetimeFormat()), nil
 	}
 
-	if saName == sadefs.ExecutionStatus {
+	if saFieldName == sadefs.ExecutionStatus {
 		var status int64
 		switch v := value.(type) {
 		case int64:
@@ -613,7 +615,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return status, nil
 	}
 
-	if saName == sadefs.ExecutionDuration {
+	if saFieldName == sadefs.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {

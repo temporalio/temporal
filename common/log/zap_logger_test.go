@@ -95,8 +95,8 @@ func TestDefaultLogger(t *testing.T) {
 
 	// Test tags with duplicate keys are replaced
 	withLogger := With(logger,
-		tag.NewStringTag("xray", "alpha"), tag.NewStringTag("xray", "yankee")) // alpha will never be seen
-	withLogger = With(withLogger, tag.NewStringTag("xray", "zulu"))
+		tag.String("xray", "alpha"), tag.String("xray", "yankee")) // alpha will never be seen
+	withLogger = With(withLogger, tag.String("xray", "zulu"))
 	withLogger.Info("Log message with tag")
 
 	// put Stdout back to normal state

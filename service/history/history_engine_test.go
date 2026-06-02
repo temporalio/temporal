@@ -34,9 +34,11 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -228,6 +230,7 @@ func (s *engineSuite) SetupTest() {
 		throttledLogger:            log.NewNoopLogger(),
 		persistenceVisibilityMgr:   s.mockVisibilityMgr,
 		versionChecker:             headers.NewDefaultVersionChecker(),
+		workerDeploymentClient:     noopWorkerDeploymentClient{},
 	}
 	s.mockShard.SetEngineForTesting(h)
 
@@ -481,9 +484,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -493,6 +497,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -501,11 +506,20 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetResponse().GetQueryRejected().GetStatus())
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
@@ -515,9 +529,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -527,6 +542,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -535,12 +551,23 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetResponse().GetQueryRejected().GetStatus())
 
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
+
+	// Second query with different reject condition
+	ctx2 := contextutil.WithMetadataContext(context.Background())
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -549,11 +576,20 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
 		},
 	}
-	resp, err = s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err = s.historyEngine.QueryWorkflow(ctx2, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetResponse().GetQueryRejected().GetStatus())
+
+	// Verify context metadata was set for second query
+	contextWorkflowType, ok = contextutil.ContextMetadataGet(ctx2, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok = contextutil.ContextMetadataGet(ctx2, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
@@ -563,9 +599,10 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -575,6 +612,8 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeBytes([]byte{1, 2, 3})}, nil)
 	s.historyEngine.matchingClient = s.mockMatchingClient
+
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -584,7 +623,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.NotNil(resp.GetResponse().QueryResult)
 	s.Nil(resp.GetResponse().QueryRejected)
@@ -593,6 +632,15 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
@@ -602,8 +650,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -625,12 +674,22 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
+	var capturedWorkflowType any
+	var capturedWorkflowTypeOk bool
+	var capturedTaskQueue any
+	var capturedTaskQueueOk bool
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		metadataCtx := contextutil.WithMetadataContext(context.Background())
+		ctx, cancel := context.WithTimeout(metadataCtx, time.Second*2)
 		defer cancel()
 		resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 		s.Error(err)
 		s.Nil(resp)
+
+		// Capture context metadata to verify after goroutine completes
+		capturedWorkflowType, capturedWorkflowTypeOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
+		capturedTaskQueue, capturedTaskQueueOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
+
 		wg.Done()
 	}()
 
@@ -643,6 +702,12 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	s.False(qr.HasUnblockedQuery())
 	s.False(qr.HasFailedQuery())
 	wg.Wait()
+
+	// Verify context metadata was set even though query timed out
+	s.True(capturedWorkflowTypeOk, "context workflow type must be set")
+	s.Equal(workflowType, capturedWorkflowType)
+	s.True(capturedTaskQueueOk, "context task queue must be set")
+	s.Equal(taskqueue, capturedTaskQueue)
 	s.False(qr.HasBufferedQuery())
 	s.False(qr.HasCompletedQuery())
 	s.False(qr.HasUnblockedQuery())
@@ -656,8 +721,9 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -685,6 +751,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
 	release(nil)
 
+	metadataCtx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -692,9 +759,18 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 			Query:     &querypb.WorkflowQuery{},
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(metadataCtx, request)
 	s.Nil(resp)
 	s.Equal(consts.ErrConsistentQueryBufferExceeded, err)
+
+	// Verify context metadata was set even though query failed
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	// verify that after last query error, the previous pending query is still in the buffer
 	pendingBufferedQueries := qr.GetBufferedIDs()
@@ -709,8 +785,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -747,6 +824,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 		}
 	}
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -756,7 +834,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
 	start := time.Now().UTC()
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
@@ -764,6 +842,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
@@ -780,8 +867,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -810,6 +898,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 		}
 	}
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -819,7 +908,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
 	start := time.Now().UTC()
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
@@ -827,6 +916,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
@@ -4908,97 +5006,173 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 
 // Test signal workflow task by adding request ID
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wId2",
-		RunId:      tests.RunID,
-	}
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			WorkflowExecution: &we,
-		},
-	}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	// Verify error when namespace is missing (independent of CHASM flag).
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wId2",
+			RunId:      tests.RunID,
+		}},
+	})
 	s.EqualError(err, "Missing namespace UUID.")
 
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-	signalName := "my signal name 2"
-	input := payloads.EncodeString("test input 2")
-	requestID := uuid.NewString()
-	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         tests.NamespaceID.String(),
-			WorkflowExecution: &we,
-			Identity:          identity,
-			SignalName:        signalName,
-			Input:             input,
-			RequestId:         requestID,
-		},
+	for _, tc := range []struct {
+		name         string
+		chasmEnabled bool
+	}{
+		{name: "Legacy", chasmEnabled: false},
+		{name: "Chasm", chasmEnabled: true},
+	} {
+		tc := tc
+		s.Run(tc.name, func() {
+			// Use a unique RunId per sub-test to avoid workflow cache collisions
+			// between the Legacy and Chasm sub-tests.
+			we := commonpb.WorkflowExecution{
+				WorkflowId: "wId2",
+				RunId:      uuid.NewString(),
+			}
+
+			if tc.chasmEnabled {
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				reg := s.mockShard.ChasmRegistry()
+				s.NoError(reg.Register(&chasm.CoreLibrary{}))
+				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+			}
+
+			requestID := uuid.NewString()
+			signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         tests.NamespaceID.String(),
+					WorkflowExecution: &we,
+					Identity:          "testIdentity",
+					SignalName:        "my signal name 2",
+					Input:             payloads.EncodeString("test input 2"),
+					RequestId:         requestID,
+				},
+			}
+
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
+				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+			addWorkflowTaskScheduledEvent(ms)
+
+			if tc.chasmEnabled {
+				// CHASM path: populate the CHASM IncomingSignals map with the requestID so that
+				// IsSignalRequested returns true for this ID when the DB record is loaded.
+				s.NoError(ms.ApplyWorkflowExecutionSignaled(&historypb.HistoryEvent{
+					EventId:   common.BufferedEventID,
+					EventTime: timestamppb.New(time.Now()),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+						WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+							SignalName: "my signal name 2",
+							RequestId:  requestID,
+						},
+					},
+				}))
+			}
+
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
+			if !tc.chasmEnabled {
+				// Legacy path: dedup via the SignalRequestedIds set field.
+				wfMs.SignalRequestedIds = []string{requestID}
+			}
+			wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+
+			_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+			s.NoError(err)
+		})
 	}
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	// assume duplicate request id
-	wfMs.SignalRequestedIds = []string{requestID}
-	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
 }
 
 // Test signal workflow task by dedup request ID & workflow finished
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wId2",
-		RunId:      tests.RunID,
-	}
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			WorkflowExecution: &we,
-		},
-	}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	// Verify error when namespace is missing (independent of CHASM flag).
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wId2",
+			RunId:      tests.RunID,
+		}},
+	})
 	s.EqualError(err, "Missing namespace UUID.")
 
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-	signalName := "my signal name 2"
-	input := payloads.EncodeString("test input 2")
-	requestID := uuid.NewString()
-	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         tests.NamespaceID.String(),
-			WorkflowExecution: &we,
-			Identity:          identity,
-			SignalName:        signalName,
-			Input:             input,
-			RequestId:         requestID,
-		},
+	for _, tc := range []struct {
+		name         string
+		chasmEnabled bool
+	}{
+		{name: "Legacy", chasmEnabled: false},
+		{name: "Chasm", chasmEnabled: true},
+	} {
+		tc := tc
+		s.Run(tc.name, func() {
+			// Use a unique RunId per sub-test to avoid workflow cache collisions
+			// between the Legacy and Chasm sub-tests.
+			we := commonpb.WorkflowExecution{
+				WorkflowId: "wId2",
+				RunId:      uuid.NewString(),
+			}
+
+			if tc.chasmEnabled {
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				reg := s.mockShard.ChasmRegistry()
+				s.NoError(reg.Register(&chasm.CoreLibrary{}))
+				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+			}
+
+			requestID := uuid.NewString()
+			signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         tests.NamespaceID.String(),
+					WorkflowExecution: &we,
+					Identity:          "testIdentity",
+					SignalName:        "my signal name 2",
+					Input:             payloads.EncodeString("test input 2"),
+					RequestId:         requestID,
+				},
+			}
+
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
+				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+			addWorkflowTaskScheduledEvent(ms)
+
+			if tc.chasmEnabled {
+				// CHASM path: populate the CHASM IncomingSignals map with the requestID so that
+				// IsSignalRequested returns true for this ID when the DB record is loaded.
+				s.NoError(ms.ApplyWorkflowExecutionSignaled(&historypb.HistoryEvent{
+					EventId:   common.BufferedEventID,
+					EventTime: timestamppb.New(time.Now()),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+						WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+							SignalName: "my signal name 2",
+							RequestId:  requestID,
+						},
+					},
+				}))
+			}
+
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
+			if !tc.chasmEnabled {
+				// Legacy path: dedup via the SignalRequestedIds set field.
+				wfMs.SignalRequestedIds = []string{requestID}
+			}
+			wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
+			wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+
+			_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+			s.NoError(err)
+		})
 	}
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	// assume duplicate request id
-	wfMs.SignalRequestedIds = []string{requestID}
-	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
-	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
@@ -5179,13 +5353,13 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId())).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	ms := workflow.TestGlobalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
 		log.NewTestLogger(),
-		namespaceEntry.FailoverVersion(),
+		namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 	)
@@ -5284,13 +5458,13 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId())).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	ms := workflow.TestGlobalMutableState(
 		s.historyEngine.shardContext,
 		s.eventsCache,
 		log.NewTestLogger(),
-		namespaceEntry.FailoverVersion(),
+		namespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 	)
@@ -5312,7 +5486,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(),
 	).Return(nil)
@@ -5341,7 +5515,7 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
@@ -5380,7 +5554,7 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId:              tests.NamespaceID.String(),
@@ -5424,7 +5598,7 @@ func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
@@ -5758,23 +5932,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	branchToken := []byte{1, 2, 3}
 	persistenceToken := []byte("some random persistence token")
 	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-		RunId:            we.GetRunId(),
-		FirstEventId:     common.FirstEventID,
-		NextEventId:      5,
-		PersistenceToken: persistenceToken,
-		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
-			HistorySuffix: []*historypb.HistoryEvent{
-				{
-					EventId:   5,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-				},
-				{
-					EventId:   6,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-				},
-			},
-		},
-		BranchToken: branchToken,
+		RunId:             we.GetRunId(),
+		FirstEventId:      common.FirstEventID,
+		NextEventId:       5,
+		PersistenceToken:  persistenceToken,
+		BranchToken:       branchToken,
+		IsWorkflowRunning: true, // Workflow is running, so we'll query MS for transient events
 	})
 	s.NoError(err)
 	s.config.SendRawWorkflowHistory = func(string) bool { return true }
@@ -5791,6 +5954,40 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+
+	// Mock GetMutableState to return transient workflow task events
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				RunId:  we.RunId,
+			},
+			NextEventId: 5,
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                  tests.NamespaceID.String(),
+				WorkflowId:                   we.WorkflowId,
+				WorkflowTaskScheduledEventId: 5,
+				WorkflowTaskStartedEventId:   6,
+				WorkflowTaskAttempt:          2, // Attempt > 1 makes it transient
+				TaskQueue:                    "test-task-queue",
+				WorkflowTypeName:             "test-workflow-type",
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: branchToken,
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 4, Version: 0},
+							},
+						},
+					},
+				},
+			},
+		},
+		MutableStateStats: persistence.MutableStateStatistics{},
+	}, nil).Times(1)
+
 	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
 			{
@@ -6497,6 +6694,8 @@ func addWorkflowTaskStartedEventWithRequestID(ms historyi.MutableState, schedule
 		nil,
 		nil,
 		false,
+		nil,
+		0,
 	)
 
 	return event
@@ -6581,6 +6780,7 @@ func addActivityTaskStartedEvent(ms historyi.MutableState, scheduledEventID int6
 		nil,
 		nil,
 		nil,
+		"",
 	)
 	return event
 }

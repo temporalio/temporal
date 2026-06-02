@@ -414,7 +414,7 @@ func FuzzCalendar(f *testing.F) {
 			t.Errorf("next %v not before now %v (for %+v)", next, now, cal)
 		}
 		gap := int(next.Sub(now) / time.Second)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			ts1 := now.Add(time.Duration(rand.Intn(gap)) * time.Second)
 			if !cc.next(ts1).Equal(next) {
 				t.Errorf("next(%v) = %v should equal next(%v) = %v (for %+v)", ts1, cc.next(ts1), now, next, cal)

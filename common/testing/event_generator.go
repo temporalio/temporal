@@ -21,8 +21,8 @@ type (
 		name                 string
 		isStrictOnNextVertex bool
 		maxNextGeneration    int
-		dataFunc             func(...interface{}) interface{}
-		data                 interface{}
+		dataFunc             func(...any) any
+		data                 any
 	}
 
 	// HistoryEventModel is a graph represents relationships among history event types
@@ -50,7 +50,7 @@ type (
 	HistoryEventEdge struct {
 		startVertex Vertex
 		endVertex   Vertex
-		condition   func(...interface{}) bool
+		condition   func(...any) bool
 		action      func()
 	}
 
@@ -303,7 +303,7 @@ func (g *EventGenerator) randomNextVertex(
 	count := g.dice.Intn(nextVertex.GetMaxNextVertex()) + 1
 	res := make([]Vertex, 0)
 	latestVertex := g.previousVertices[len(g.previousVertices)-1]
-	for i := 0; i < count; i++ {
+	for range count {
 		endVertex := g.pickRandomVertex(nextVertex)
 		endVertex.GenerateData(nextVertex.GetData(), latestVertex.GetData(), g.version)
 		latestVertex = endVertex
@@ -374,14 +374,14 @@ func (c HistoryEventEdge) GetEndVertex() Vertex {
 
 // SetCondition sets the condition to access this edge
 func (c *HistoryEventEdge) SetCondition(
-	condition func(...interface{}) bool,
+	condition func(...any) bool,
 ) {
 
 	c.condition = condition
 }
 
 // GetCondition returns the condition
-func (c HistoryEventEdge) GetCondition() func(...interface{}) bool {
+func (c HistoryEventEdge) GetCondition() func(...any) bool {
 
 	return c.condition
 }
@@ -476,22 +476,22 @@ func (he HistoryEventVertex) GetMaxNextVertex() int {
 
 // SetDataFunc sets the data generation function
 func (he *HistoryEventVertex) SetDataFunc(
-	dataFunc func(...interface{}) interface{},
+	dataFunc func(...any) any,
 ) {
 
 	he.dataFunc = dataFunc
 }
 
 // GetDataFunc returns the data generation function
-func (he HistoryEventVertex) GetDataFunc() func(...interface{}) interface{} {
+func (he HistoryEventVertex) GetDataFunc() func(...any) any {
 
 	return he.dataFunc
 }
 
 // GenerateData generates the data and return
 func (he *HistoryEventVertex) GenerateData(
-	input ...interface{},
-) interface{} {
+	input ...any,
+) any {
 
 	if he.dataFunc == nil {
 		return nil
@@ -502,7 +502,7 @@ func (he *HistoryEventVertex) GenerateData(
 }
 
 // GetData returns the vertex data
-func (he HistoryEventVertex) GetData() interface{} {
+func (he HistoryEventVertex) GetData() any {
 
 	return he.data
 }

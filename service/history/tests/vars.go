@@ -164,7 +164,7 @@ func NewDynamicConfig() *configs.Config {
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	return config
 }

@@ -41,7 +41,7 @@ func NewAdaptivePool(
 		ch:           make(chan func()),
 		stopCh:       make(chan struct{}),
 	}
-	for i := 0; i < minWorkers; i++ {
+	for range minWorkers {
 		go p.work()
 	}
 	p.workers.Store(int64(minWorkers))

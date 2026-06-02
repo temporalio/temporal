@@ -11,9 +11,16 @@ This document describes the project's testing setup, utilities and best practice
 
 ### Environment variables
 - `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
-- `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
-- `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
+- `TEMPORAL_TEST_LOG_FORMAT`: Controls the console output format for test logs. Available options: `json` or `console` (default)
+- `TEMPORAL_TEST_LOG_LEVEL`: Sets the minimum verbosity level written to console output. Available levels: `debug` (default), `info`, `warn`, `error`, `fatal`
+- `TEMPORAL_TEST_LOG_FILE`: Path to a file that receives a separate copy of test logs. When unset (default), file logging is disabled. Useful in CI to route debug-level logs to a downloadable artifact without flooding the job log.
+- `TEMPORAL_TEST_LOG_FILE_FORMAT`: Output format for the log file. Available options: `json` (default) or `console`
+- `TEMPORAL_TEST_LOG_FILE_LEVEL`: Minimum verbosity level written to the log file. Available levels: `debug` (default), `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
+- `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
+- `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
+- `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`. The timeout is multiplied by `debug.TimeoutMultiplier` when debugging.
+- `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 
 ### Debugging via IDE
 
@@ -26,9 +33,79 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 -tags disable_grpc_modules,test_dep
 ```
 
+## Best Practices
+
+### Use `require` instead of `assert`
+
+Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoassert.X`).
+`assert` records a failure but lets the test continue, which often leads to confusing
+cascading errors.
+
+### Polling with await.Require
+
+For polling/retry loops in tests, use `await.Require` (or `await.Requiref`)
+from `common/testing/await` instead of testify's `EventuallyWithT`.
+
+Use `t.Context()` inside the callback for a context derived from the parent
+context and canceled when the parent context is canceled or the await timeout
+expires.
+
+```go
+await.Require(ctx, t, func(t *await.T) {
+    resp, err := client.GetStatus(t.Context())
+    require.NoError(t, err)
+    require.Equal(t, "ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Use `RequireTrue` instead of testify's `Eventually` for simple local bool-returning predicates.
+
+```go
+await.RequireTrue(t, func() bool {
+    return cache.Ready()
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+`RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
+
+### Parallelization
+
+All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
+unless there is a reason not to.
+
+`make parallelize-tests` can be used to automatically add `t.Parallel()`.
+Use `//parallelize:ignore` to opt your test out of it.
+
 ## Test helpers
 
 Test helpers can be found in the [common/testing](../../common/testing) package.
+
+### parallelsuite package
+
+Use `parallelsuite.Suite` to ensure your test suite is fast and safe: it runs all test methods and sub-tests in parallel by default;
+and provides assertion helpers and safety mechanisms.
+
+It replaces all use of `testify`'s `Suite`.
+
+#### Context shorthand
+
+```go
+ctx := s.Context()
+```
+
+`s.Context()` returns the subtest-scoped context - equivalent to `testcontext.New(s.T())`.
+
+#### Await shorthand
+
+```go
+s.Await(func(s *MySuite) {
+    resp, err := client.GetStatus(s.Context())
+    s.NoError(err)
+    s.Equal("ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Inside an `s.Await` callback, `s.Context()` is capped to that await's timeout.
 
 ### testvars package
 
@@ -54,7 +131,7 @@ func TestFoo(t *testing.T) {
 Later you can assert on the generated values. `testvars` guarantees to provide the same value every time you call the same method. 
 
 ```go
-assert.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
+require.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
 ```
 
 If you need more than one value for the same entity in one test, you can use `WithEntityNumber()` method to
@@ -96,6 +173,10 @@ func TestFoo(t *testing.T) {
 If you don't care about specific value, you can use `Any()` method to generate a random value.
 It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
 
+### testcontext package
+
+There's no need to create your own `context.Context` via `context.WithTimeout`; use `testcontext.New(t)` instead. It returns a test-scoped `context.Context`, memoized per `*testing.T` and canceled on test end or timeout.
+
 ### taskpoller package
 
 For end-to-end testing, consider using `taskpoller.TaskPoller` to handle workflow tasks. This is
@@ -106,6 +187,20 @@ You'll find a fully initialized task poller in any functional test suite, look f
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
 
+### testhooks package
+
+The `testhooks` package injects test-specific behavior into production code paths that are otherwise
+difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
+
+**Example:**
+
+The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
+another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
+hook lets tests inject a callback at this exact point, making it possible to reliably test
+conflict handling.
+
+_NOTE: Tests using testhooks must be run with `-tags=test_dep`._
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.
@@ -115,6 +210,73 @@ It is *not* a substitute for regular error handling, validation, or control flow
 
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
+
+### protorequire package
+
+Use `protorequire.ProtoEqual` to compare proto messages with proto semantics.
+Prefer a single `ProtoEqual` call over asserting fields one-by-one, since it catches unexpected field changes and keeps the expected value next to the assertion.
+
+To ignore specific fields on the top-level message (e.g. non-deterministic timestamps), pass `protorequire.IgnoreFields`:
+
+```go
+protorequire.ProtoEqual(t, expected, actual,
+    protorequire.IgnoreFields(
+        "execution_duration",
+        "schedule_time",
+    ),
+)
+```
+
+### historyrequire package
+
+`historyrequire` has assertions to verify workflow event histories.
+
+Use `EqualHistoryEvents` to assert the full event sequence:
+
+```go
+events := env.GetHistory(env.Namespace().String(), workflowExecution)
+s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled {"Attempt": 1}
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
+```
+
+Optional inline JSON (e.g. `{"Attempt": 1}`) can be used to assert on specific attributes.
+
+Use `ContainsHistoryEvents` when you only care about a particular segment:
+
+```go
+s.ContainsHistoryEvents(`
+  4 WorkflowTaskFailed {"Identity": "worker-1"}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, events)
+```
+
+Use `RequireHistoryEvent` when you only care about a single event type:
+
+```go
+completed := s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+require.Equal(t, "expected-result", completed.GetWorkflowExecutionCompletedEventAttributes().Result)
+```
+
+Or use `RequireNoHistoryEvent` when you expect no event of a given type to be present.
+
+### Test Cluster
+
+Use `testcore.NewEnv(t)` to create a test environment with access to a Temporal cluster for end-to-end testing.
+
+```go
+func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
+    s := testcore.NewEnv(t)
+    // ...
+}
+```
+
+Note that each test has its own namespace (`s.Namespace()`) for isolation.
+
+> **Note:** The legacy `FunctionalTestBase` (using testify's `suite`) has been deprecated for new tests.
 
 ## OpenTelemetry (OTEL)
 

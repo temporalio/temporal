@@ -64,7 +64,7 @@ func NewExecutableSyncVersionedTransitionTask(
 	}
 }
 
-func (e *ExecutableSyncVersionedTransitionTask) QueueID() interface{} {
+func (e *ExecutableSyncVersionedTransitionTask) QueueID() any {
 	return e.WorkflowKey
 }
 
@@ -72,6 +72,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -117,6 +118,12 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.SyncVersionedTransitionTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -213,6 +220,18 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			return err
 		}
 		return e.Execute()
+
+	case *serviceerror.NotFound:
+		e.Logger.Error(
+			"workflow not found in source cluster, proceed to cleanup",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+		)
+		// Workflow is not found in source cluster, cleanup workflow in target cluster.
+		// This handles workflow deletion from source cluster and this is optional as deletion operation will replicate to target clusters.
+		deletionTask := NewExecutableDeleteExecutionTask(e.ProcessToolBox, e.TaskID(), e.TaskCreationTime(), e.SourceClusterName(), e.SourceShardKey(), e.ReplicationTask())
+		return deletionTask.Execute()
 	default:
 		return err
 	}

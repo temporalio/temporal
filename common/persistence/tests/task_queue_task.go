@@ -146,9 +146,9 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 	taskQueue := s.createTaskQueue(rangeID)
 
 	var expectedTasks []*persistencespb.AllocatedTaskInfo
-	for i := 0; i < numCreateBatch; i++ {
+	for i := range numCreateBatch {
 		var tasks []*persistencespb.AllocatedTaskInfo
-		for j := 0; j < createBatchSize; j++ {
+		for j := range createBatchSize {
 			taskID := minTaskID + int64(i*numCreateBatch+j)
 			task := s.randomTask(taskID)
 			tasks = append(tasks, task)
@@ -193,9 +193,9 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	rangeID := rand.Int63()
 	taskQueue := s.createTaskQueue(rangeID)
 
-	for i := 0; i < numCreateBatch; i++ {
+	for i := range numCreateBatch {
 		var tasks []*persistencespb.AllocatedTaskInfo
-		for j := 0; j < createBatchSize; j++ {
+		for j := range createBatchSize {
 			taskID := minTaskID + int64(i*numCreateBatch+j)
 			task := s.randomTask(taskID)
 			tasks = append(tasks, task)

@@ -225,7 +225,7 @@ func (s *queueV2Store) CreateQueue(
 		bytes,
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		0,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2CreateQueue", err)
 	}
@@ -320,7 +320,7 @@ func (s *queueV2Store) updateQueue(
 		queueType,
 		queueName,
 		version,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2UpdateQueueMetadata", err)
 	}
@@ -350,7 +350,7 @@ func (s *queueV2Store) tryInsert(
 		messageID,
 		blob.Data,
 		blob.EncodingType.String(),
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
 	}
@@ -471,45 +471,60 @@ func (s *queueV2Store) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	iter := s.session.Query(
-		templateGetQueueNamesQuery,
-		request.QueueType,
-	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
 
+	// The ALLOW FILTERING query may return fewer rows than PageSize per CQL
+	// page because the partition key is (queue_type, queue_name) and we filter
+	// only on queue_type. Keep fetching pages until we have enough rows or
+	// exhaust the result set.
 	var queues []persistence.QueueInfo
-	for {
-		var (
-			queueName        string
-			metadataBytes    []byte
-			metadataEncoding string
-			version          int64
-		)
-		if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+	pageToken := request.NextPageToken
+
+	for len(queues) < request.PageSize {
+		remaining := request.PageSize - len(queues)
+		iter := s.session.Query(
+			templateGetQueueNamesQuery,
+			request.QueueType,
+		).PageSize(remaining).PageState(pageToken).WithContext(ctx).Iter()
+
+		for {
+			var (
+				queueName        string
+				metadataBytes    []byte
+				metadataEncoding string
+				version          int64
+			)
+			if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+				break
+			}
+			q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
+			if err != nil {
+				return nil, err
+			}
+			partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
+			if err != nil {
+				return nil, err
+			}
+			messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
+			if err != nil {
+				return nil, err
+			}
+			queues = append(queues, persistence.QueueInfo{
+				QueueName:     queueName,
+				MessageCount:  messageCount,
+				LastMessageID: lastMessageID,
+			})
+		}
+		pageToken = iter.PageState()
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("QueueV2ListQueues", err)
+		}
+		if len(pageToken) == 0 {
 			break
 		}
-		q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
-		if err != nil {
-			return nil, err
-		}
-		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
-		if err != nil {
-			return nil, err
-		}
-		messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
-		if err != nil {
-			return nil, err
-		}
-		queues = append(queues, persistence.QueueInfo{
-			QueueName:     queueName,
-			MessageCount:  messageCount,
-			LastMessageID: lastMessageID,
-		})
 	}
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("QueueV2ListQueues", err)
-	}
+
 	return &persistence.InternalListQueuesResponse{
 		Queues:        queues,
-		NextPageToken: iter.PageState(),
+		NextPageToken: pageToken,
 	}, nil
 }

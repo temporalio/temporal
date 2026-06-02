@@ -75,22 +75,13 @@ func Invoke(
 		executionInfo := resp.State.GetExecutionInfo()
 		histories := executionInfo.GetVersionHistories().GetHistories()
 		branchTokens = make([][]byte, 0, len(histories))
-		for _, historyItem := range histories {
-			branchTokens = append(branchTokens, historyItem.GetBranchToken())
+		for _, versionHistory := range histories {
+			branchToken := versionHistory.GetBranchToken()
+			if len(branchToken) != 0 {
+				// non-workflow executions have empty version history and empty branch token
+				branchTokens = append(branchTokens, branchToken)
+			}
 		}
-	}
-
-	// NOTE: the deletion is best effort, for sql visibility implementation,
-	// we can't guarantee there's no update or record close request for this workflow since
-	// visibility queue processing is async. Operator can call this api again to delete visibility
-	// record again if this happens.
-	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespace.ID(request.GetNamespaceId()),
-		WorkflowID:  execution.GetWorkflowId(),
-		RunID:       execution.GetRunId(),
-		TaskID:      math.MaxInt64,
-	}); err != nil {
-		return nil, err
 	}
 
 	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
@@ -122,6 +113,19 @@ func Invoke(
 			logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
 			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
 		}
+	}
+
+	// NOTE: the deletion is best effort, for sql visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api again to delete visibility
+	// record again if this happens.
+	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
+		TaskID:      math.MaxInt64,
+	}); err != nil {
+		return nil, err
 	}
 
 	return &historyservice.ForceDeleteWorkflowExecutionResponse{

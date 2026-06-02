@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -82,6 +81,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetRequestId(),
 			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err
@@ -113,6 +113,8 @@ func NewWorkflowWithSignal(
 			nil,
 			nil,
 			false,
+			nil,
+			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
@@ -236,7 +238,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}
@@ -251,7 +253,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return common.ErrMemoSizeExceedsLimit
 	}

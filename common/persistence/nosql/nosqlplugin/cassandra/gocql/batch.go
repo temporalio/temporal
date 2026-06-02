@@ -32,7 +32,7 @@ func newBatch(
 	}
 }
 
-func (b *Batch) Query(stmt string, args ...interface{}) {
+func (b *Batch) Query(stmt string, args ...any) {
 	b.gocqlBatch.Query(stmt, args...)
 }
 

@@ -2,27 +2,41 @@ package workers
 
 import (
 	"container/list"
+	"encoding/json"
 	"hash/maphash"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 )
+
+// listWorkersPageToken is the cursor for paginating ListWorkers results.
+type listWorkersPageToken struct {
+	// LastWorkerInstanceKey is the WorkerInstanceKey of the last worker returned in the previous page.
+	// The next page will return workers with keys > this value.
+	LastWorkerInstanceKey string `json:"l"`
+}
 
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
-		nsID     namespace.ID
-		hb       *workerpb.WorkerHeartbeat
-		lastSeen time.Time
-		elem     *list.Element
+		nsID           namespace.ID
+		hb             *workerpb.WorkerHeartbeat
+		lastSeen       time.Time
+		elem           *list.Element
+		isSystemWorker bool
 	}
 	// bucket holds part of the keyspace: a map from namespace → (map of instanceKey → entry),
 	// plus a recency list for eviction.
@@ -36,27 +50,27 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets                   []*bucket                        // buckets for partitioning the keyspace
-		maxItemsFn                dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
-		ttlFn                     dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
-		minEvictAgeFn             dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
-		evictionIntervalFn        dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
-		total                     atomic.Int64                     // atomic counter of total entries
-		quit                      chan struct{}                    // channel to signal shutdown of the eviction loop
-		seed                      maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler            metrics.Handler                  // metrics handler for recording registry metrics
-		enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
+		buckets            []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn         dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn              dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn      dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total              atomic.Int64                     // atomic counter of total entries
+		quit               chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed               maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler     metrics.Handler                  // metrics handler for recording registry metrics
+		metricsEmitter     *workerMetricsEmitter            // emitter for heartbeat-derived metrics
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets          dynamicconfig.IntPropertyFn
-		TTL                 dynamicconfig.DurationPropertyFn
-		MinEvictAge         dynamicconfig.DurationPropertyFn
-		MaxItems            dynamicconfig.IntPropertyFn
-		EvictionInterval    dynamicconfig.DurationPropertyFn
-		MetricsHandler      metrics.Handler
-		EnablePluginMetrics dynamicconfig.BoolPropertyFn
+		NumBuckets       dynamicconfig.IntPropertyFn
+		TTL              dynamicconfig.DurationPropertyFn
+		MinEvictAge      dynamicconfig.DurationPropertyFn
+		MaxItems         dynamicconfig.IntPropertyFn
+		EvictionInterval dynamicconfig.DurationPropertyFn
+		MetricsHandler   metrics.Handler
+		MetricsConfig    WorkerMetricsConfig
 	}
 )
 
@@ -68,14 +82,13 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns the net change in entry count (positive for new entries, negative for removals).
+// Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
 	now := time.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var delta int64
 
 	mp, ok := b.namespaces[nsID]
 	if !ok {
@@ -91,35 +104,41 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			if e, exists := mp[key]; exists {
 				b.order.Remove(e.elem)
 				delete(mp, key)
-				delta--
+				removed++
 			}
 			continue
 		}
+
+		isSystemWorker := isSystemWorker(principal, hb.GetTaskQueue())
 
 		// Normal upsert
 		if e, exists := mp[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
+			e.isSystemWorker = isSystemWorker
 			b.order.MoveToBack(e.elem)
 		} else {
 			e = &entry{
-				nsID:     nsID,
-				hb:       hb,
-				lastSeen: now,
+				nsID:           nsID,
+				hb:             hb,
+				lastSeen:       now,
+				isSystemWorker: isSystemWorker,
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
-			delta++
+			added++
 		}
 	}
 
-	return delta
+	return added, removed
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (b *bucket) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b.mu.Lock()
@@ -131,6 +150,9 @@ func (b *bucket) filterWorkers(
 	}
 	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
 	for _, e := range mp {
+		if !includeSystemWorkers && e.isSystemWorker {
+			continue
+		}
 		if predicate(e.hb) {
 			out = append(out, e.hb)
 		}
@@ -204,15 +226,18 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:                   make([]*bucket, params.NumBuckets()),
-		maxItemsFn:                params.MaxItems,
-		ttlFn:                     params.TTL,
-		minEvictAgeFn:             params.MinEvictAge,
-		evictionIntervalFn:        params.EvictionInterval,
-		seed:                      maphash.MakeSeed(),
-		quit:                      make(chan struct{}),
-		metricsHandler:            params.MetricsHandler,
-		enableWorkerPluginMetrics: params.EnablePluginMetrics,
+		buckets:            make([]*bucket, params.NumBuckets()),
+		maxItemsFn:         params.MaxItems,
+		ttlFn:              params.TTL,
+		minEvictAgeFn:      params.MinEvictAge,
+		evictionIntervalFn: params.EvictionInterval,
+		seed:               maphash.MakeSeed(),
+		quit:               make(chan struct{}),
+		metricsHandler:     params.MetricsHandler,
+		metricsEmitter: &workerMetricsEmitter{
+			handler: params.MetricsHandler,
+			config:  params.MetricsConfig,
+		},
 	}
 
 	for i := range m.buckets {
@@ -234,10 +259,16 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	delta := b.upsertHeartbeats(nsID, heartbeats)
-	m.total.Add(delta)
+	added, removed := b.upsertHeartbeats(nsID, principal, heartbeats)
+	m.total.Add(added - removed)
+	if added > 0 {
+		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
+	}
+	if removed > 0 {
+		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
+	}
 	m.recordUtilizationMetric()
 }
 
@@ -261,37 +292,12 @@ func (m *registryImpl) recordEvictionMetric() {
 	}
 }
 
-// recordPluginMetric sets a value of 1 for each unique plugin name present in the heartbeats.
-func (m *registryImpl) recordPluginMetric(nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
-	// Check if plugin metrics are enabled via dynamic config
-	if !m.enableWorkerPluginMetrics() {
-		return
-	}
-
-	// Track which plugins we've already recorded
-	recordedPlugins := make(map[string]bool)
-
-	for _, hb := range heartbeats {
-		for _, pluginInfo := range hb.Plugins {
-			pluginName := pluginInfo.Name
-			if !recordedPlugins[pluginName] {
-				metrics.WorkerPluginNameMetric.
-					With(m.metricsHandler).
-					Record(
-						1,
-						metrics.NamespaceIDTag(nsName.String()),
-						metrics.WorkerPluginNameTag(pluginName),
-					)
-				recordedPlugins[pluginName] = true
-			}
-		}
-	}
-}
-
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (m *registryImpl) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b := m.getBucket(nsID)
@@ -299,7 +305,7 @@ func (m *registryImpl) filterWorkers(
 	if b == nil {
 		return nil
 	}
-	return b.filterWorkers(nsID, predicate)
+	return b.filterWorkers(nsID, includeSystemWorkers, predicate)
 }
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
@@ -326,6 +332,7 @@ func (m *registryImpl) evictByTTL() {
 	}
 	if removed > 0 {
 		m.total.Add(-removed)
+		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
 	}
 }
 
@@ -349,6 +356,7 @@ func (m *registryImpl) evictByCapacity() {
 			if b.evictByCapacity(threshold) {
 				removedAny = true
 				m.total.Add(-1)
+				metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(1)
 			}
 		}
 
@@ -369,26 +377,99 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeats(nsID, workerHeartbeat)
-	m.recordPluginMetric(nsName, workerHeartbeat)
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+	m.upsertHeartbeats(nsID, principal, workerHeartbeat)
+	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
-	if query == "" {
-		return m.filterWorkers(nsID, func(_ *workerpb.WorkerHeartbeat) bool { return true }), nil
+func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
+	// Build the predicate for filtering
+	var predicate func(*workerpb.WorkerHeartbeat) bool
+	if params.Query == "" {
+		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
+	} else {
+		queryEngine, err := newWorkerQueryEngine(nsID.String(), params.Query)
+		if err != nil {
+			return ListWorkersResponse{}, err
+		}
+		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
+			result, err := queryEngine.EvaluateWorker(heartbeat)
+			return err == nil && result
+		}
 	}
 
-	queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
-	if err != nil {
-		return nil, err
+	// Get all matching workers and paginate
+	workers := m.filterWorkers(nsID, params.IncludeSystemWorkers, predicate)
+	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
+}
+
+// paginateWorkers applies cursor-based pagination to a list of workers.
+// Workers are sorted by WorkerInstanceKey for deterministic ordering.
+// Returns the paginated slice and a token for the next page (nil if no more pages).
+func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPageToken []byte) (ListWorkersResponse, error) {
+	if len(workers) == 0 {
+		return ListWorkersResponse{Workers: workers}, nil
 	}
 
-	predicate := func(heartbeat *workerpb.WorkerHeartbeat) bool {
-		result, err := queryEngine.EvaluateWorker(heartbeat)
-		return err == nil && result
+	// If pagination is not requested, return all workers without sorting.
+	if pageSize == 0 && len(nextPageToken) == 0 {
+		return ListWorkersResponse{Workers: workers}, nil
 	}
-	return m.filterWorkers(nsID, predicate), nil
+
+	// Sort by WorkerInstanceKey for deterministic pagination
+	slices.SortFunc(workers, func(a, b *workerpb.WorkerHeartbeat) int {
+		return strings.Compare(a.WorkerInstanceKey, b.WorkerInstanceKey)
+	})
+
+	// Decode page token to find the cursor
+	var cursor string
+	if len(nextPageToken) > 0 {
+		var token listWorkersPageToken
+		if err := json.Unmarshal(nextPageToken, &token); err != nil {
+			return ListWorkersResponse{}, serviceerror.NewInvalidArgument("invalid next_page_token")
+		}
+		cursor = token.LastWorkerInstanceKey
+	}
+
+	// Find the starting index using binary search (O(log n))
+	startIdx := 0
+	if cursor != "" {
+		// BinarySearchFunc returns the index where cursor would be inserted.
+		// We want the first worker with key > cursor.
+		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(worker *workerpb.WorkerHeartbeat, target string) int {
+			return strings.Compare(worker.WorkerInstanceKey, target)
+		})
+		// If exact match found, move past it to get first key > cursor
+		if startIdx < len(workers) && workers[startIdx].WorkerInstanceKey == cursor {
+			startIdx++
+		}
+		// If we've gone past the end, return empty
+		if startIdx >= len(workers) {
+			return ListWorkersResponse{}, nil
+		}
+	}
+
+	// Apply page size (0 means no limit)
+	endIdx := len(workers)
+	if pageSize > 0 {
+		endIdx = min(startIdx+pageSize, len(workers))
+	}
+
+	result := workers[startIdx:endIdx]
+
+	// Generate next page token if there are more results
+	var newNextPageToken []byte
+	if endIdx < len(workers) {
+		token := listWorkersPageToken{
+			LastWorkerInstanceKey: result[len(result)-1].WorkerInstanceKey,
+		}
+		newNextPageToken, _ = json.Marshal(token)
+	}
+
+	return ListWorkersResponse{
+		Workers:       result,
+		NextPageToken: newNextPageToken,
+	}, nil
 }
 
 func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error) {
@@ -397,4 +478,15 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 		return nil, serviceerror.NewNotFoundf("namespace not found: %s", nsID.String())
 	}
 	return b.getWorkerHeartbeat(nsID, workerInstanceKey)
+}
+
+// isSystemWorker determines if a worker is a system worker.
+// If a principal is available, it checks whether the principal identifies
+// the Temporal server itself (type="temporal"). Otherwise, it falls back to
+// checking the task queue name prefix.
+func isSystemWorker(principal *commonpb.Principal, taskQueue string) bool {
+	if principal != nil {
+		return principal.GetType() == authorization.InternalPrincipalType
+	}
+	return primitives.IsInternalTaskQueue(taskQueue)
 }

@@ -150,7 +150,7 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomReplicationTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)
@@ -273,7 +273,7 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertDeleteSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomReplicationTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)

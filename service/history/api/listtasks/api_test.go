@@ -137,7 +137,7 @@ func (s *apiSuite) TestGetHistoryTasks() {
 
 	respNextPageToken := []byte("resp-next-page-token")
 	fakeTasks := make([]tasks.Task, 0, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		fakeTask := tasks.NewFakeTask(
 			tests.WorkflowKey,
 			tasks.CategoryTransfer,

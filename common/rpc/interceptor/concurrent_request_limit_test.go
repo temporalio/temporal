@@ -211,7 +211,7 @@ func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *Conc
 }
 
 // noopHandler is a grpc.UnaryHandler which does nothing.
-func noopHandler(context.Context, interface{}) (interface{}, error) {
+func noopHandler(context.Context, any) (any, error) {
 	return nil, nil
 }
 
@@ -227,7 +227,7 @@ func (h testRequestHandler) Unblock() {
 }
 
 // Handle signals that the request has started and then blocks until signaled to respond.
-func (h testRequestHandler) Handle(context.Context, interface{}) (interface{}, error) {
+func (h testRequestHandler) Handle(context.Context, any) (any, error) {
 	h.started <- struct{}{}
 	<-h.respond
 

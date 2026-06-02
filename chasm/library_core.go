@@ -11,7 +11,7 @@ func (b *CoreLibrary) Name() string {
 
 func (b *CoreLibrary) Components() []*RegistrableComponent {
 	return []*RegistrableComponent{
-		NewRegistrableComponent[*Visibility]("vis"),
+		NewRegistrableComponent[*Visibility]("vis", WithDetached()),
 	}
 }
 
@@ -19,7 +19,6 @@ func (b *CoreLibrary) Tasks() []*RegistrableTask {
 	return []*RegistrableTask{
 		NewRegistrableSideEffectTask(
 			"visTask",
-			defaultVisibilityTaskHandler,
 			defaultVisibilityTaskHandler,
 		),
 	}

@@ -138,7 +138,7 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 	for _, c := range []struct {
 		name         string
 		cfg          *Config
-		expectedType interface{}
+		expectedType any
 	}{
 		{
 			name:         "nil config",

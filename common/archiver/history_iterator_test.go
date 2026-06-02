@@ -56,7 +56,7 @@ type (
 	testSizeEstimator struct{}
 )
 
-func (e *testSizeEstimator) EstimateSize(v interface{}) (int, error) {
+func (e *testSizeEstimator) EstimateSize(v any) (int, error) {
 	historyBatch, ok := v.(*historypb.History)
 	if !ok {
 		return -1, errors.New("test size estimator only estimate the size of history batches")
@@ -420,11 +420,11 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 
 func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 	var batchInfo []int
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		batchInfo = append(batchInfo, []int{1, 2, 3, 4, 4, 3, 2, 1}...)
 	}
 	var pages []page
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		p := page{
 			firstbatchIdx:             i * 8,
 			numBatches:                8,
@@ -440,7 +440,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		FinishedIteration: false,
 		NextEventID:       common.FirstEventID,
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s.assertStateMatches(expectedIteratorState, itr)
 		s.True(itr.HasNext())
 		blob, err := itr.Next(context.Background())
@@ -641,7 +641,7 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 	eventsID := firstEventID
 	for batchIdx, numEvents := range batchInfo[page.firstbatchIdx : page.firstbatchIdx+page.numBatches] {
 		var events []*historypb.HistoryEvent
-		for i := 0; i < numEvents; i++ {
+		for range numEvents {
 			event := &historypb.HistoryEvent{
 				EventId: eventsID,
 				Version: page.firstEventFailoverVersion,

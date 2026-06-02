@@ -6,12 +6,12 @@ import (
 
 type (
 	// HashFunc represents a hash function for string
-	HashFunc func(interface{}) uint32
+	HashFunc func(any) uint32
 
 	// IDMutex is an interface which can lock on specific comparable identifier
 	IDMutex interface {
-		LockID(identifier interface{})
-		UnlockID(identifier interface{})
+		LockID(identifier any)
+		UnlockID(identifier any)
 	}
 
 	// idMutexShardImpl is the implementation of IDMutex shard
@@ -24,7 +24,7 @@ type (
 	// idMutexShardImpl is the implementation of IDMutex shard
 	idMutexShardImpl struct {
 		sync.Mutex
-		mutexInfos map[interface{}]*mutexInfo
+		mutexInfos map[any]*mutexInfo
 	}
 
 	mutexInfo struct {
@@ -45,9 +45,9 @@ func NewIDMutex(numShard uint32, hashFn HashFunc) IDMutex {
 		hashFn:   hashFn,
 		shards:   make(map[uint32]*idMutexShardImpl),
 	}
-	for i := uint32(0); i < numShard; i++ {
+	for i := range numShard {
 		impl.shards[i] = &idMutexShardImpl{
-			mutexInfos: make(map[interface{}]*mutexInfo),
+			mutexInfos: make(map[any]*mutexInfo),
 		}
 	}
 
@@ -61,7 +61,7 @@ func newMutexInfo() *mutexInfo {
 }
 
 // LockID lock by specific identifier
-func (idMutex *idMutexImpl) LockID(identifier interface{}) {
+func (idMutex *idMutexImpl) LockID(identifier any) {
 	shard := idMutex.shards[idMutex.getShardIndex(identifier)]
 
 	shard.Lock()
@@ -80,7 +80,7 @@ func (idMutex *idMutexImpl) LockID(identifier interface{}) {
 }
 
 // UnlockID unlock by specific identifier
-func (idMutex *idMutexImpl) UnlockID(identifier interface{}) {
+func (idMutex *idMutexImpl) UnlockID(identifier any) {
 	shard := idMutex.shards[idMutex.getShardIndex(identifier)]
 
 	shard.Lock()
@@ -97,6 +97,6 @@ func (idMutex *idMutexImpl) UnlockID(identifier interface{}) {
 	}
 }
 
-func (idMutex *idMutexImpl) getShardIndex(key interface{}) uint32 {
+func (idMutex *idMutexImpl) getShardIndex(key any) uint32 {
 	return idMutex.hashFn(key) % idMutex.numShard
 }

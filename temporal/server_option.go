@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
@@ -70,7 +72,7 @@ func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) Ser
 }
 
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
-func InterruptOn(interruptCh <-chan interface{}) ServerOption {
+func InterruptOn(interruptCh <-chan any) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.startupSynchronizationMode.blockingStart = true
 		s.startupSynchronizationMode.interruptCh = interruptCh
@@ -154,6 +156,22 @@ func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFa
 	})
 }
 
+// WithCustomHistoryArchiverFactory sets a custom history archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customHistoryArchiverFactory = factory
+	})
+}
+
+// WithCustomVisibilityArchiverFactory sets a custom visibility archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityArchiverFactory = factory
+	})
+}
+
 // WithClientFactoryProvider sets a custom ClientFactoryProvider
 // NOTE: this option is experimental and may be changed or removed in future release.
 func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
@@ -178,6 +196,13 @@ func WithChainedFrontendGrpcInterceptors(
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customFrontendInterceptors = interceptors
+	})
+}
+
+// WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
+func WithTokenProvider(tp auth.TokenProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.tokenProvider = tp
 	})
 }
 

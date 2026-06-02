@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -144,6 +145,46 @@ func (c *metricClient) QueryWorkflow(
 	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
+func (c *metricClient) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientDispatchNexusTaskScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	c.emitForwardedSourceStats(
+		scope,
+		request.GetForwardInfo().GetSourcePartition(),
+		request.TaskQueue,
+	)
+
+	return c.client.DispatchNexusTask(ctx, request, opts...)
+}
+
+func (c *metricClient) PollNexusTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollNexusTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	if request.Request != nil {
+		c.emitForwardedSourceStats(
+			scope,
+			request.GetForwardedSource(),
+			request.Request.TaskQueue,
+		)
+	}
+
+	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) emitForwardedSourceStats(
 	metricsHandler metrics.Handler,
 	forwardedFrom string,
@@ -161,7 +202,7 @@ func (c *metricClient) emitForwardedSourceStats(
 		// it means some mangled name come here; need to check why
 		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.NewStringsTag("proto", []string{taskQueue.GetName()}))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueue.GetName()))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}
@@ -191,7 +232,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.NewerBuildExists,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.ResourceExhausted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ServiceErrorType(err))
@@ -199,4 +241,15 @@ func (c *metricClient) finishMetricsRecording(
 		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
 	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+}
+
+func (c *metricClient) Route(p tqid.Partition) (string, error) {
+	// Ideally we wouldn't do a type-check here and require c.client to have
+	// Route, but it would require changing too many types all over the place.
+	// This isn't called in a hot path.
+	rc, ok := c.client.(RoutingClient)
+	if !ok {
+		return "", errors.New("not routing client")
+	}
+	return rc.Route(p)
 }

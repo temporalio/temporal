@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -578,4 +579,71 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess(
 	response, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.NotNil(response)
 	s.NoError(err)
+}
+
+// Test_updateActivityOptions_PerNSTQ_Blocked verifies that a workflow running on a normal task queue
+// cannot update an activity's task queue to the internal per-namespace task queue.
+func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Blocked() {
+	s.executionInfo.TaskQueue = "normal-task-queue"
+
+	activityInfo := &persistencespb.ActivityInfo{
+		ActivityId:   "activity_id",
+		ActivityType: &commonpb.ActivityType{Name: "activity_type"},
+		// TaskQueue:           "normal-task-queue",
+		StartToCloseTimeout: durationpb.New(time.Second),
+	}
+
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+			ActivityOptions: &activitypb.ActivityOptions{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{
+				Paths: []string{"task_queue.name"},
+			},
+		},
+	}
+
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
+
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	s.Error(err)
+	s.Contains(err.Error(), "internal per-namespace task queue")
+}
+
+// Test_updateActivityOptions_PerNSTQ_Allowed verifies that a workflow running on the internal
+// per-namespace task queue can update an activity's task queue to the same internal task queue.
+func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Allowed() {
+	s.executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
+
+	activityInfo := &persistencespb.ActivityInfo{
+		ActivityId:          "activity_id",
+		ActivityType:        &commonpb.ActivityType{Name: "activity_type"},
+		TaskQueue:           primitives.PerNSWorkerTaskQueue,
+		StartToCloseTimeout: durationpb.New(time.Second),
+	}
+
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+			ActivityOptions: &activitypb.ActivityOptions{
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				StartToCloseTimeout: durationpb.New(2 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{
+				Paths: []string{"task_queue.name", "start_to_close_timeout"},
+			},
+		},
+	}
+
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
+	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
+
+	resp, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	s.NoError(err)
+	s.NotNil(resp)
 }

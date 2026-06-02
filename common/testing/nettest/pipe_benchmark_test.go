@@ -168,7 +168,7 @@ func (bi socketBenchmark) runClient(b *testing.B) {
 
 	buf := make([]byte, len(msg))
 
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		_, err = c.Write([]byte(msg))
 		if err != nil {
 			b.Fatal(err)

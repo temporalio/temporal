@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -29,7 +30,6 @@ func TestWorkerRegistryTestSuite(t *testing.T) {
 }
 
 func (s *WorkerRegistryTestSuite) SetupTest() {
-	s.OverrideDynamicConfig(dynamicconfig.ListWorkersEnabled, true)
 	s.OverrideDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true)
 	s.FunctionalTestBase.SetupTest()
 
@@ -118,6 +118,37 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 	}
 }
 
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace: s.Namespace().String(),
+		Query:     "TaskQueue='no-heartbeats-recorded-on-this-queue'",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
+	s.Empty(resp.GetWorkers())
+}
+
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
+		Namespace:         s.Namespace().String(),
+		WorkerInstanceKey: "nonexistent-worker",
+	})
+	s.Require().Error(err)
+	var notFound *serviceerror.NotFound
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	s.True(
+		errors.As(err, &notFound) || errors.As(err, &namespaceNotFound),
+		"expected NotFound or NamespaceNotFound, got: %v", err,
+	)
+}
+
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -154,10 +185,17 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NotNil(resp)
 		s.Len(resp.GetWorkersInfo(), 1)
 
+		// Verify deprecated WorkersInfo field (backward compatibility)
 		workerHeartbeat := resp.GetWorkersInfo()[0].GetWorkerHeartbeat()
 		s.Equal(worker1Key, workerHeartbeat.WorkerInstanceKey)
 		s.Equal(sharedTaskQueue, workerHeartbeat.TaskQueue)
 		s.Equal(int32(1), workerHeartbeat.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		s.Len(resp.GetWorkers(), 1)
+		workerListInfo := resp.GetWorkers()[0]
+		s.Equal(worker1Key, workerListInfo.GetWorkerInstanceKey())
+		s.Equal(sharedTaskQueue, workerListInfo.GetTaskQueue())
 	}
 	{
 		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
@@ -167,28 +205,40 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NoError(err)
 		s.NotNil(resp)
 
+		// Verify deprecated WorkersInfo field
 		workers := resp.GetWorkersInfo()
-		// Collect workers by their instance key
 		workersByKey := make(map[string]*workerpb.WorkerHeartbeat)
 		for _, workerInfo := range workers {
 			heartbeat := workerInfo.GetWorkerHeartbeat()
 			workersByKey[heartbeat.WorkerInstanceKey] = heartbeat
 		}
-
-		// Verify we have exactly the workers we expect
 		s.Len(workersByKey, 2)
 
-		// Verify worker1
 		worker1, exists := workersByKey[worker1Key]
 		s.True(exists, "worker1 should exist")
 		s.Equal(sharedTaskQueue, worker1.TaskQueue)
 		s.Equal(int32(1), worker1.TotalStickyCacheHit)
 
-		// Verify worker2
 		worker2, exists := workersByKey[worker2Key]
 		s.True(exists, "worker2 should exist")
 		s.Equal(sharedTaskQueue, worker2.TaskQueue)
 		s.Equal(int32(2), worker2.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		listInfos := resp.GetWorkers()
+		s.Len(listInfos, 2)
+		listInfoByKey := make(map[string]*workerpb.WorkerListInfo)
+		for _, info := range listInfos {
+			listInfoByKey[info.GetWorkerInstanceKey()] = info
+		}
+
+		listInfo1, exists := listInfoByKey[worker1Key]
+		s.True(exists, "worker1 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo1.GetTaskQueue())
+
+		listInfo2, exists := listInfoByKey[worker2Key]
+		s.True(exists, "worker2 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo2.GetTaskQueue())
 	}
 	{
 		nonExistentWorkerKey := s.tv.WorkerIdentity() + "_nonexistent"
@@ -198,8 +248,75 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetWorkersInfo(), 0)
+		s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
+		s.Empty(resp.GetWorkers())
 	}
+}
+
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	sharedTaskQueue := s.tv.TaskQueue().Name
+
+	// Create 5 workers with predictable keys for pagination testing
+	workerKeys := make([]string, 5)
+	heartbeats := make([]*workerpb.WorkerHeartbeat, 5)
+	for i := range 5 {
+		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", s.tv.WorkerIdentity(), i)
+		heartbeats[i] = &workerpb.WorkerHeartbeat{
+			WorkerInstanceKey:   workerKeys[i],
+			TaskQueue:           sharedTaskQueue,
+			TotalStickyCacheHit: int32(i),
+		}
+	}
+
+	// Record all worker heartbeats
+	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace:       s.Namespace().String(),
+		WorkerHeartbeat: heartbeats,
+	})
+	s.NoError(err)
+	s.NotNil(hbResp)
+
+	query := fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue)
+
+	// Page 1: Request first 2 workers
+	resp1, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace: s.Namespace().String(),
+		Query:     query,
+		PageSize:  2,
+	})
+	s.NoError(err)
+	s.Len(resp1.GetWorkersInfo(), 2)
+	s.NotEmpty(resp1.GetNextPageToken(), "should have next page token")
+	s.Equal(workerKeys[0], resp1.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
+	s.Equal(workerKeys[1], resp1.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
+
+	// Page 2: Request next 2 workers using token from page 1
+	resp2, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace:     s.Namespace().String(),
+		Query:         query,
+		PageSize:      2,
+		NextPageToken: resp1.GetNextPageToken(),
+	})
+	s.NoError(err)
+	s.Len(resp2.GetWorkersInfo(), 2)
+	s.NotEmpty(resp2.GetNextPageToken(), "should have next page token")
+	s.Equal(workerKeys[2], resp2.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
+	s.Equal(workerKeys[3], resp2.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
+
+	// Page 3: Request remaining workers using token from page 2
+	resp3, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace:     s.Namespace().String(),
+		Query:         query,
+		PageSize:      2,
+		NextPageToken: resp2.GetNextPageToken(),
+	})
+	s.NoError(err)
+	s.Len(resp3.GetWorkersInfo(), 1, "last page should have 1 worker")
+	s.Empty(resp3.GetNextPageToken(), "should not have next page token on last page")
+	s.Equal(workerKeys[4], resp3.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTask() {

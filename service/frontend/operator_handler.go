@@ -37,10 +37,8 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -214,8 +212,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		} else {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(visibilityIndexNameTagName, indexName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(visibilityIndexNameTagName, indexName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 		}
 	}
@@ -281,8 +279,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		if _, ok := aliasToFieldMap[saName]; ok {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(namespaceTagName, nsName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(namespaceTagName, nsName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 			continue
 		}
@@ -629,6 +627,20 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := clustermetadata.ValidateClusterInformation(
+		resp.GetClusterName(),
+		clustermetadata.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		h.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
@@ -684,6 +696,10 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	}
 	if !isClusterNameExist {
 		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
+	}
+
+	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, request.GetClusterName()); err != nil {
+		return nil, err
 	}
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
@@ -745,6 +761,10 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
+	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()
 		large := remoteShardCount
@@ -775,9 +795,6 @@ func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	request *operatorservice.CreateNexusEndpointRequest,
 ) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Create(ctx, request)
 }
 
@@ -786,9 +803,6 @@ func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	request *operatorservice.UpdateNexusEndpointRequest,
 ) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Update(ctx, request)
 }
 
@@ -797,9 +811,6 @@ func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	request *operatorservice.DeleteNexusEndpointRequest,
 ) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Delete(ctx, request)
 }
 
@@ -808,9 +819,6 @@ func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	request *operatorservice.GetNexusEndpointRequest,
 ) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.Get(ctx, request)
 }
 
@@ -819,8 +827,5 @@ func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	request *operatorservice.ListNexusEndpointsRequest,
 ) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
 	return h.nexusEndpointClient.List(ctx, request)
 }

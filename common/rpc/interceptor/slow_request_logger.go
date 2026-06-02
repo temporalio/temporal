@@ -32,10 +32,10 @@ func NewSlowRequestLoggerInterceptor(
 
 func (i *SlowRequestLoggerInterceptor) Intercept(
 	ctx context.Context,
-	request interface{},
+	request any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	// Long-polled methods aren't useful logged.
 	if api.GetMethodMetadata(info.FullMethod).Polling == api.PollingNone {
 		startTime := time.Now()
@@ -52,15 +52,15 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 }
 
 func (i *SlowRequestLoggerInterceptor) logSlowRequest(
-	request interface{},
+	request any,
 	info *grpc.UnaryServerInfo,
 	elapsed time.Duration,
 ) {
 	method := info.FullMethod
 
 	tags := i.workflowTags.Extract(request, method)
-	tags = append(tags, tag.NewDurationTag("duration", elapsed))
-	tags = append(tags, tag.NewStringTag("method", method))
+	tags = append(tags, tag.Duration("duration", elapsed))
+	tags = append(tags, tag.String("method", method))
 
 	i.logger.Warn("Slow gRPC call", tags...)
 }

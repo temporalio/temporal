@@ -116,23 +116,23 @@ func (p *LoggedHTTPClientTraceProvider) newClientTrace(logger log.Logger, hooks 
 			clientTrace.GotConn = func(info httptrace.GotConnInfo) {
 				logger.Info("got HTTP connection for Nexus request",
 					tag.Timestamp(time.Now().UTC()),
-					tag.NewBoolTag("reused", info.Reused),
-					tag.NewBoolTag("was-idle", info.WasIdle),
-					tag.NewDurationTag("idle-time", info.IdleTime))
+					tag.Bool("reused", info.Reused),
+					tag.Bool("was-idle", info.WasIdle),
+					tag.Duration("idle-time", info.IdleTime))
 			}
 		case "ConnectStart":
 			clientTrace.ConnectStart = func(network, addr string) {
 				logger.Info("starting dial for new connection for Nexus request",
 					tag.Timestamp(time.Now().UTC()),
 					tag.Address(addr),
-					tag.NewStringTag("network", network))
+					tag.String("network", network))
 			}
 		case "ConnectDone":
 			clientTrace.ConnectDone = func(network, addr string, err error) {
 				logger.Info("finished dial for new connection for Nexus request",
 					tag.Timestamp(time.Now().UTC()),
 					tag.Address(addr),
-					tag.NewStringTag("network", network),
+					tag.String("network", network),
 					tag.Error(err))
 			}
 		case "DNSStart":
@@ -151,7 +151,7 @@ func (p *LoggedHTTPClientTraceProvider) newClientTrace(logger log.Logger, hooks 
 					tag.Timestamp(time.Now().UTC()),
 					tag.Addresses(addresses),
 					tag.Error(info.Err),
-					tag.NewBoolTag("coalesced", info.Coalesced))
+					tag.Bool("coalesced", info.Coalesced))
 			}
 		case "TLSHandshakeStart":
 			clientTrace.TLSHandshakeStart = func() {
@@ -161,7 +161,7 @@ func (p *LoggedHTTPClientTraceProvider) newClientTrace(logger log.Logger, hooks 
 			clientTrace.TLSHandshakeDone = func(state tls.ConnectionState, err error) {
 				logger.Info("finished TLS handshake for Nexus request",
 					tag.Timestamp(time.Now().UTC()),
-					tag.NewBoolTag("handshake-complete", state.HandshakeComplete),
+					tag.Bool("handshake-complete", state.HandshakeComplete),
 					tag.Error(err))
 			}
 		case "WroteRequest":

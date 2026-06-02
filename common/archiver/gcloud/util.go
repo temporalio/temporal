@@ -86,7 +86,7 @@ func extractCloseFailoverVersion(filename string) (int64, int, error) {
 	return failoverVersion, highestPart, err
 }
 
-func serializeToken(token interface{}) ([]byte, error) {
+func serializeToken(token any) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -140,7 +140,7 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 }
 
 func newRunIDPrecondition(runID string) connector.Precondition {
-	return func(subject interface{}) bool {
+	return func(subject any) bool {
 
 		if runID == "" {
 			return true
@@ -164,7 +164,7 @@ func newRunIDPrecondition(runID string) connector.Precondition {
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
-	return func(subject interface{}) bool {
+	return func(subject any) bool {
 
 		if workflowID == "" {
 			return true
@@ -188,7 +188,7 @@ func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 }
 
 func newWorkflowTypeNamePrecondition(workflowTypeName string) connector.Precondition {
-	return func(subject interface{}) bool {
+	return func(subject any) bool {
 
 		if workflowTypeName == "" {
 			return true

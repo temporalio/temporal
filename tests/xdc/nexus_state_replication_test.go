@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,6 +26,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -69,9 +71,16 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		// tests use external endpoints so we need to allow them
-		callbacks.AllowedAddresses.Key(): []any{map[string]any{
+		callback.AllowedAddresses.Key(): []any{map[string]any{
 			"Pattern": "*", "AllowInsecure": true,
 		}},
+		// Cap callback retry backoff to avoid long waits after failover.
+		callbacks.RetryPolicyMaximumInterval.Key(): 1 * time.Second,
+		// Set a short circuit breaker timeout so it recovers quickly from bursts of failures.
+		dynamicconfig.OutboundQueueCircuitBreakerSettings.Key(): dynamicconfig.CircuitBreakerSettings{
+			MaxRequests: 1,
+			Timeout:     1 * time.Second,
+		},
 	}
 	s.setupSuite()
 }
@@ -121,7 +130,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Set URL template after httpAPIAddress is set, see commonnexus.RouteCompletionCallback.
 	for _, cluster := range s.clusters {
 		cluster.OverrideDynamicConfig(
 			s.T(),
@@ -201,7 +210,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
 	}, time.Second*20, time.Millisecond*100)
@@ -274,7 +283,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Set URL template after httpAPIAddress is set, see commonnexus.RouteCompletionCallback.
 	// We don't actually want to deliver callbacks in this test, the config just has to be set for nexus task execution.
 	for _, cluster := range s.clusters {
 		cluster.OverrideDynamicConfig(
@@ -360,7 +369,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient0.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		fmt.Println(op.CancellationInfo)
 		s.NotNil(op.CancellationInfo)
@@ -591,7 +600,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 			break
 		}
 	}
-	s.Greater(scheduledEventID, int64(0))
+	s.Positive(scheduledEventID)
 
 	// Allow operation to complete synchronously during next retry attempt
 	allowCompletion.Store(true)
@@ -706,49 +715,36 @@ func (s *NexusStateReplicationSuite) waitCallback(
 	execution *commonpb.WorkflowExecution,
 	condition func(callback *workflowpb.CallbackInfo) bool,
 ) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)
-		s.NoError(err)
-		s.Len(descResp.GetCallbacks(), 1)
-		return condition(descResp.GetCallbacks()[0])
+		require.NoError(t, err)
+		require.Len(t, descResp.GetCallbacks(), 1)
+		require.True(t, condition(descResp.GetCallbacks()[0]))
 	}, time.Second*20, time.Millisecond*100)
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
-	completion, err := nexusrpc.NewOperationCompletionSuccessful(s.mustToPayload(result), nexusrpc.OperationCompletionSuccessfulOptions{
+	completion := nexusrpc.CompleteOperationOptions{
+		Result: testcore.MustToPayload(s.T(), result),
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+	}
+	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
+	err := client.CompleteOperation(ctx, callbackUrl, completion)
 	s.NoError(err)
-	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
-	s.NoError(err)
-	if callbackToken != "" {
-		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	s.NoError(err)
-	defer res.Body.Close()
-	_, err = io.ReadAll(res.Body)
-	s.NoError(err)
-	s.Equal(http.StatusOK, res.StatusCode)
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion, err := nexusrpc.NewOperationCompletionUnsuccessful(
-		nexus.NewOperationCanceledError("operation canceled"),
-		nexusrpc.OperationCompletionUnsuccessfulOptions{},
-	)
-	s.NoError(err)
-	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
-	s.NoError(err)
-	if callbackToken != "" {
-		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
+	completion := nexusrpc.CompleteOperationOptions{
+		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	}
-
-	res, err := http.DefaultClient.Do(req)
+	if callbackToken != "" {
+		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+	}
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	err := c.CompleteOperation(ctx, callbackUrl, completion)
 	s.NoError(err)
-	defer res.Body.Close()
-	_, err = io.ReadAll(res.Body)
-	s.NoError(err)
-	s.Equal(http.StatusOK, res.StatusCode)
 }

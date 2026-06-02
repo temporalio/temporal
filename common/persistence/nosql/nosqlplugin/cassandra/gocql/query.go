@@ -30,25 +30,25 @@ func (q *query) Exec() (retError error) {
 }
 
 func (q *query) Scan(
-	dest ...interface{},
+	dest ...any,
 ) (retError error) {
 	return q.gocqlQuery.Scan(dest...)
 }
 
 func (q *query) ScanCAS(
-	dest ...interface{},
+	dest ...any,
 ) (_ bool, retError error) {
 	return q.gocqlQuery.ScanCAS(dest...)
 }
 
 func (q *query) MapScan(
-	m map[string]interface{},
+	m map[string]any,
 ) (retError error) {
 	return q.gocqlQuery.MapScan(m)
 }
 
 func (q *query) MapScanCAS(
-	dest map[string]interface{},
+	dest map[string]any,
 ) (_ bool, retError error) {
 	return q.gocqlQuery.MapScanCAS(dest)
 }
@@ -86,7 +86,7 @@ func (q *query) WithContext(ctx context.Context) Query {
 	return newQuery(q.session, q2)
 }
 
-func (q *query) Bind(v ...interface{}) Query {
+func (q *query) Bind(v ...any) Query {
 	q.gocqlQuery.Bind(v...)
 	return newQuery(q.session, q.gocqlQuery)
 }

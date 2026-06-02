@@ -82,6 +82,7 @@ func NewPrioritySemaphore(n int) *PrioritySemaphoreImpl {
 // ctx.Err() and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
 	if priority >= NumPriorities {
+		// nolint:forbidigo
 		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
 	}
 
@@ -99,7 +100,7 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 	default:
 	}
 	// Check if acquisition can proceed without waiting
-	if s.size-s.cur >= n && s.noWaiters() {
+	if s.size-s.cur >= n && s.noWaiters(priority) {
 		// Since we hold s.mu and haven't synchronized since checking done, if
 		// ctx becomes done before we return here, it becoming done must have
 		// "happened concurrently" with this call - it cannot "happen before"
@@ -156,10 +157,15 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 
 // TryAcquire acquires the semaphore with a weight of n without blocking.
 // On success, returns true. On failure, returns false and leaves the semaphore unchanged.
-func (s *PrioritySemaphoreImpl) TryAcquire(n int) bool {
+func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
+	if priority >= NumPriorities {
+		// nolint:forbidigo
+		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.size-s.cur >= n && s.noWaiters() {
+	if s.size-s.cur >= n && s.noWaiters(priority) {
 		s.cur += n
 		return true
 	}
@@ -211,9 +217,9 @@ func (s *PrioritySemaphoreImpl) notifyWaiters() {
 	}
 }
 
-// noWaiters return true if all waitLists are empty, and false otherwise.
-func (s *PrioritySemaphoreImpl) noWaiters() bool {
-	for _, l := range s.waitLists {
+// noWaiters returns if there is no waiter that has priority higher or equal to lowestPriority.
+func (s *PrioritySemaphoreImpl) noWaiters(lowestPriority Priority) bool {
+	for _, l := range s.waitLists[:lowestPriority+1] {
 		if l.Len() > 0 {
 			return false
 		}

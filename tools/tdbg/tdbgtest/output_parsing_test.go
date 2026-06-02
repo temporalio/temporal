@@ -39,7 +39,8 @@ func TestParseDLQMessages(t *testing.T) {
 		},
 		TaskID: 13,
 	}
-	blob, err := serialization.NewTaskSerializer().SerializeTask(task)
+	taskSerializer := serialization.NewSerializer()
+	blob, err := taskSerializer.SerializeTask(task)
 	require.NoError(t, err)
 	client := &testClient{
 		getDLQTasksFn: func(request *adminservice.GetDLQTasksRequest) (*adminservice.GetDLQTasksResponse, error) {

@@ -94,10 +94,10 @@ func getBuildIdTaskReachability(
 	reachability, exitPoint, err := rc.run(ctx, buildId)
 	handler := metrics.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
 	metrics.ReachabilityExitPointCounter.With(handler).Record(1,
-		metrics.WorkerBuildIdTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
+		metrics.WorkerVersionTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
 		metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
 	logger.Info("Calculated reachability for build id",
-		tag.WorkerBuildId(buildId),
+		tag.WorkerVersion(buildId),
 		tag.BuildIdTaskReachabilityTag(reachability.String()),
 		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
 		tag.WorkflowNamespace(rc.nsName.String()),
@@ -317,7 +317,7 @@ func newReachabilityCache(
 // Get retrieves the Workflow Count existence value based on the query-string key.
 func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (exists, hit bool, err error) {
 	// try cache
-	var result interface{}
+	var result any
 	if open {
 		result = c.openWFCache.Get(countRequest)
 	} else {

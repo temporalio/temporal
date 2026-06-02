@@ -78,12 +78,12 @@ func (pq *priorityQueueImpl[T]) Swap(i, j int) {
 }
 
 // Push push an item to priority queue, used by go internal heap implementation
-func (pq *priorityQueueImpl[T]) Push(item interface{}) {
+func (pq *priorityQueueImpl[T]) Push(item any) {
 	pq.items = append(pq.items, item.(T))
 }
 
 // Pop pop an item from priority queue, used by go internal heap implementation
-func (pq *priorityQueueImpl[T]) Pop() interface{} {
+func (pq *priorityQueueImpl[T]) Pop() any {
 	pqItem := pq.items[pq.Len()-1]
 	pq.items = pq.items[0 : pq.Len()-1]
 	return pqItem

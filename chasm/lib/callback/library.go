@@ -9,28 +9,31 @@ type (
 	Library struct {
 		chasm.UnimplementedLibrary
 
-		InvocationTaskExecutor *InvocationTaskExecutor
-		BackoffTaskExecutor    *BackoffTaskExecutor
+		InvocationTaskHandler *invocationTaskHandler
+		BackoffTaskHandler    *backoffTaskHandler
 	}
 )
 
 func newLibrary(
-	InvocationTaskExecutor *InvocationTaskExecutor,
-	BackoffTaskExecutor *BackoffTaskExecutor,
+	InvocationTaskHandler *invocationTaskHandler,
+	BackoffTaskHandler *backoffTaskHandler,
 ) *Library {
 	return &Library{
-		InvocationTaskExecutor: InvocationTaskExecutor,
-		BackoffTaskExecutor:    BackoffTaskExecutor,
+		InvocationTaskHandler: InvocationTaskHandler,
+		BackoffTaskHandler:    BackoffTaskHandler,
 	}
 }
 
 func (l *Library) Name() string {
-	return "callback"
+	return chasm.CallbackLibraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Callback]("callback"),
+		chasm.NewRegistrableComponent[*Callback](
+			chasm.CallbackComponentName,
+			chasm.WithDetached(),
+		),
 	}
 }
 
@@ -38,13 +41,11 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask(
 			"invoke",
-			l.InvocationTaskExecutor,
-			l.InvocationTaskExecutor,
+			l.InvocationTaskHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"backoff",
-			l.BackoffTaskExecutor,
-			l.BackoffTaskExecutor,
+			l.BackoffTaskHandler,
 		),
 	}
 }

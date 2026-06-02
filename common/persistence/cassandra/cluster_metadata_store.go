@@ -144,7 +144,7 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 		).WithContext(ctx)
 	}
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return false, gocql.ConvertError("SaveClusterMetadata", err)
@@ -171,7 +171,7 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	request *p.GetClusterMembersRequest,
 ) (*p.GetClusterMembersResponse, error) {
 	var queryString strings.Builder
-	var operands []interface{}
+	var operands []any
 	queryString.WriteString(templateGetClusterMembership)
 	operands = append(operands, constMembershipPartition)
 

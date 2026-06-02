@@ -142,7 +142,7 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 		waitGroup.Done()
 	}
 
-	for count := 0; count < subscriberCount; count++ {
+	for range subscriberCount {
 		go watchFunc()
 	}
 

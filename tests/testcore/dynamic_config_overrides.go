@@ -25,8 +25,9 @@ var (
 	//        But that means tests in the same suite can't be run in parallel. This is not a problem because testify
 	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it is allowed,
 	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
-	dynamicConfigOverrides = map[dynamicconfig.Key]any{
+	defaultDynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():         1000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
@@ -51,9 +52,9 @@ var (
 		// TODO (prathyush): remove this after setting it to true by default.
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 
-		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
-		dynamicconfig.EnableTransitionHistory.Key():             true,
+		dynamicconfig.RetentionTimerJitterDuration.Key(): time.Second,
+
+		dynamicconfig.EnableTransitionHistory.Key(): true,
 
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,
@@ -62,8 +63,16 @@ var (
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		nexusoperations.UseSystemCallbackURL.Key():                          true,
+
+		// CHASM scheduler rollout percents default to 0 in production; in tests we
+		// dial them to 100 so existing tests that only flip the binary enable flag
+		// continue to route every schedule through CHASM. Tests that want to
+		// exercise the percent gate can override per-test.
+		dynamicconfig.CHASMSchedulerCreationRolloutPercent.Key():  100,
+		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
 	}
 )

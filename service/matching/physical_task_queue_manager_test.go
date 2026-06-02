@@ -67,11 +67,6 @@ func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
 
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
-	if s.fairness {
-		useFairness(s.config)
-	} else if s.newMatcher {
-		useNewMatcher(s.config)
-	}
 	s.controller = gomock.NewController(s.T())
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
@@ -85,15 +80,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	prtn := s.physicalTaskQueueKey.Partition()
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
-	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
 	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
 	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
+	if s.fairness {
+		prtnMgr.config.EnableFairness = true
+	} else if !s.newMatcher {
+		prtnMgr.config.NewMatcher = false
+	}
+
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
-	prtnMgr.defaultQueue = s.tqMgr
+	prtnMgr.defaultQueueFuture.Set(s.tqMgr, nil)
 }
 
 /*
@@ -133,9 +134,9 @@ func TestReaderSignaling(t *testing.T) {
 	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	}, nil)
-	sync, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
+	outcome, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
-	require.True(t, sync)
+	require.Equal(t, syncMatchSuccess, outcome)
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }
@@ -151,8 +152,8 @@ func makePollMetadata(rps float64) *pollMetadata {
 
 // runOneShotPoller spawns a goroutine to call tqMgr.PollTask on the provided tqMgr.
 // The second return value is a channel of either error or *internalTask.
-func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
-	out := make(chan interface{}, 1)
+func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan any) {
+	out := make(chan any, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.PollTask(ctx, makePollMetadata(rpsInf))
 		if task == nil {
@@ -173,6 +174,15 @@ func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
+// getTaskManager returns the underlying testTaskManager (which is accessed differently
+// depending on mode)
+func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
+	if s.fairness {
+		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
+	}
+	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
 // TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	if s.newMatcher {
@@ -190,21 +200,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		assert.InDelta(collect, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		assert.InDelta(collect, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		assert.Equalf(collect, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -238,7 +248,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	startTaskID := int64(1)
 	taskCount := int64(3)
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		blm.taskAckManager.addTask(startTaskID + i)
 	}
 
@@ -264,7 +274,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// Add a poller and complete all tasks
 	pollerIdent := pollerIdentity("test-poll")
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, &pollMetadata{})
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
 		blm.db.updateBacklogStats(-numAcked, time.Time{})
 	}
@@ -334,28 +344,29 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.tqMgr.namespaceRegistry = mockNamespaceCache
 
 	s.tqMgr.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err := s.tqMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
+	cancel()
 
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
 	s.tqMgr.tqCtxCancel()
 
-	err := s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
+	err = s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	})
 	s.Equal(errShutdown, err) // task writer was stopped above
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	tm := s.getTaskManager()
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
 		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
@@ -365,17 +376,13 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	var tm *testTaskManager
-	if s.fairness {
-		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
-	} else {
-		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
-	}
+	tm := s.getTaskManager()
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock
@@ -496,4 +503,110 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
+}
+
+// TestDrainCompletionNoReloadDraining tests that after drain completes:
+// 1. OtherHasTasks is set to false in persisted metadata
+// 2. On reload, no draining is set up and no persistence calls are made to the migration table
+func TestDrainCompletionNoReloadDraining(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	config := defaultTestConfig()
+	config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(50 * time.Millisecond)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+
+	nsName := namespace.Name("ns-name")
+	ns, registry := createMockNamespaceCache(controller, nsName)
+
+	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+	engine.metricsHandler = metricstest.NewCaptureHandler()
+
+	// Get the test task managers
+	priTm := engine.taskManager.(*testTaskManager)
+	fairTm := engine.fairTaskManager.(*testTaskManager)
+
+	physicalTaskQueueKey := defaultTqId()
+	prtn := physicalTaskQueueKey.Partition()
+	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	require.NoError(t, err)
+	engine.partitions[prtn.Key()] = prtnMgr
+
+	prtnMgr.config.NewMatcher = true
+	prtnMgr.config.EnableFairness = true
+
+	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, physicalTaskQueueKey)
+	require.NoError(t, err)
+	prtnMgr.defaultQueueFuture.Set(tqMgr, nil)
+
+	tqMgr.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = tqMgr.WaitUntilInitialized(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	// grab referencs to these to peek inside
+	priQueueData := priTm.getQueueDataByKey(physicalTaskQueueKey)
+	fairQueueData := fairTm.getQueueDataByKey(physicalTaskQueueKey)
+
+	// wait for both to be loaded
+	require.Eventually(t, func() bool {
+		pri, fair := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
+		return (pri.updateCount > 0 || pri.createCount > 0) && (fair.updateCount > 0 || fair.createCount > 0)
+	}, 2*time.Second, 10*time.Millisecond, "both tables should be loaded")
+
+	// since the pri table is empty, drain should complete quickly.
+	// wait for drain completion (drainbacklogmgr becomes nil) and
+	// otherhastasks is false in persistence
+	require.Eventually(t, func() bool {
+		fairQueueData.Lock()
+		otherHasTasks := fairQueueData.info.OtherHasTasks
+		fairQueueData.Unlock()
+		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks
+	}, 5*time.Second, 50*time.Millisecond, "drain should complete")
+
+	// unload
+	prtnMgr.Stop(unloadCauseUnspecified)
+
+	// record current counts
+	prevPriStats, prevFairStats := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
+
+	// create a new manager (reload)
+	prtnMgr2, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	require.NoError(t, err)
+	engine.partitions[prtn.Key()] = prtnMgr2
+
+	prtnMgr2.config.NewMatcher = true
+	prtnMgr2.config.EnableFairness = true
+
+	tqMgr2, err := newPhysicalTaskQueueManager(prtnMgr2, physicalTaskQueueKey)
+	require.NoError(t, err)
+	prtnMgr2.defaultQueueFuture.Set(tqMgr2, nil)
+
+	tqMgr2.Start()
+	defer tqMgr2.Stop(unloadCauseShuttingDown)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	err = tqMgr2.WaitUntilInitialized(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	// wait for fair queue to be updated on reload
+	require.Eventually(t, func() bool {
+		return fairQueueData.persistenceStats().updateCount > prevFairStats.updateCount
+	}, 2*time.Second, 10*time.Millisecond, "fair table should be updated on reload")
+
+	// verify no draining is set up on reload
+	require.Nil(t, tqMgr2.getDrainBacklogMgr(), "draining should not be set up after reload")
+
+	// verify no new persistence calls on pri queue
+	assert.Equal(t, prevPriStats.updateCount, priQueueData.persistenceStats().updateCount,
+		"no new UpdateTaskQueue calls should be made to drained table after reload")
 }

@@ -81,7 +81,7 @@ func TestInvoke(t *testing.T) {
 					return nil
 				}).Times(2)
 				params.req.Tasks = nil
-				for i := 0; i < numWorkflows; i++ {
+				for i := range numWorkflows {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
 						strconv.Itoa(i),
@@ -99,7 +99,7 @@ func TestInvoke(t *testing.T) {
 							WorkflowKey: workflowKey,
 						},
 					} {
-						serializer := serialization.NewTaskSerializer()
+						serializer := serialization.NewSerializer()
 						blob, err := serializer.SerializeTask(task)
 						require.NoError(t, err)
 						params.req.Tasks = append(params.req.Tasks, &historyservice.AddTasksRequest_Task{
@@ -237,7 +237,7 @@ func getDefaultTestParams(t *testing.T) *testParams {
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(string(tests.NamespaceID), tests.WorkflowID, tests.RunID),
 	}
-	serializer := serialization.NewTaskSerializer()
+	serializer := serialization.NewSerializer()
 	blob, err := serializer.SerializeTask(task)
 	require.NoError(t, err)
 	ctrl := gomock.NewController(t)

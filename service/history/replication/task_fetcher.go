@@ -201,7 +201,7 @@ func newReplicationTaskFetcher(
 	)
 
 	workers := make(map[int]*replicationTaskFetcherWorker)
-	for i := 0; i < numWorker; i++ {
+	for i := range numWorker {
 		workers[i] = newReplicationTaskFetcherWorker(
 			logger,
 			sourceCluster,

@@ -21,35 +21,35 @@ func TestSDKVersionRecorder(t *testing.T) {
 
 	// Record first tuple
 	ctx := headers.SetVersionsForTests(context.Background(), sdkVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	_, err := interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err := interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		return nil, nil
 	})
 	assert.NoError(t, err)
 
 	// Record second tuple
 	ctx = headers.SetVersionsForTests(context.Background(), sdkVersion, headers.ClientNameTypeScriptSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		return nil, nil
 	})
 	assert.NoError(t, err)
 
 	// Do not record when over capacity
 	ctx = headers.SetVersionsForTests(context.Background(), sdkVersion, headers.ClientNameJavaSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		return nil, nil
 	})
 	assert.NoError(t, err)
 
 	// Empty SDK version should not be recorded
 	ctx = headers.SetVersionsForTests(context.Background(), "", headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		return nil, nil
 	})
 	assert.NoError(t, err)
 
 	// Empty SDK name should not be recorded
 	ctx = headers.SetVersionsForTests(context.Background(), sdkVersion, "", headers.SupportedServerVersions, headers.AllFeatures)
-	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = interceptor.Intercept(ctx, nil, nil, func(ctx context.Context, req any) (any, error) {
 		return nil, nil
 	})
 	assert.NoError(t, err)

@@ -40,6 +40,7 @@ func newReplicationMessageProcessor(
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceTaskExecutor nsreplication.TaskExecutor,
+	customTaskHandler func(ctx context.Context, task *replicationspb.ReplicationTask) error,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -59,6 +60,7 @@ func newReplicationMessageProcessor(
 		logger:                    logger,
 		remotePeer:                remotePeer,
 		namespaceTaskExecutor:     namespaceTaskExecutor,
+		customTaskHandler:         customTaskHandler,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
 		retryPolicy:               retryPolicy,
 		lastProcessedMessageID:    -1,
@@ -80,6 +82,7 @@ type (
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
 		namespaceTaskExecutor     nsreplication.TaskExecutor
+		customTaskHandler         func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		metricsHandler            metrics.Handler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64
@@ -198,6 +201,9 @@ func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 				metrics.NamespaceTag(ns.Name().String()),
 			)
 	default:
+		if p.customTaskHandler != nil {
+			return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
+		}
 		return serviceerror.NewUnavailable(
 			fmt.Sprintf("Namespace replication task type not supported: %v", task.TaskType),
 		)
@@ -236,6 +242,9 @@ func (p *replicationMessageProcessor) handleReplicationTask(
 		}
 		return err
 	default:
+		if p.customTaskHandler != nil {
+			return p.customTaskHandler(ctx, task)
+		}
 		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
 	}
 }

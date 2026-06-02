@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -52,21 +53,41 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/stream_batcher"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
+
+	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
+	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
+	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
+	forwardedPollJitterRatio = 1.0 / 6
+	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
+	// the interval never drops below this value; if the interval is already at or below
+	// this floor, no jitter is applied.
+	forwardedPollMinInterval = common.CriticalLongPollTimeout
+
+	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
+	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
+	// workers shut down. Even with aggressive autoscaling, a single matching node is
+	// unlikely to see more than a few hundred worker shutdowns within the TTL window.
+	// LRU eviction ensures the oldest entries (least likely to re-poll) are evicted first.
+	shutdownWorkersCacheMaxSize = 10000
+	shutdownWorkersCacheTTL     = 30 * time.Second
 	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
 	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
 	versioningPollerSeenWindow        = 70 * time.Second
@@ -90,8 +111,11 @@ type (
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
+		conditions                *matchingservice.PollConditions
 		forwardedFrom             string
 		localPollStartTime        time.Time
+		workerInstanceKey         string
+		workerControlTaskQueue    string
 	}
 
 	userDataUpdate struct {
@@ -105,6 +129,14 @@ type (
 		loadedTaskQueuePartitionCount map[taskQueueCounterKey]int
 		loadedPhysicalTaskQueueCount  map[taskQueueCounterKey]int
 		lock                          sync.Mutex
+	}
+
+	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
+	// during worker shutdown. Thread-safe via internal mutex.
+	// The inner map uses a UUID key (not pollerID) because pollerID is reused when forwarded.
+	workerPollerTracker struct {
+		lock    sync.Mutex
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerTrackerKey -> cancel
 	}
 
 	// Implements matching.Engine
@@ -127,7 +159,7 @@ type (
 		timeSource                    clock.TimeSource
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
-		nexusEndpointsOwnershipLostCh chan struct{}
+		nexusEndpointsOwnershipLostCh atomic.Value // stores chan struct{}
 		saMapperProvider              searchattribute.MapperProvider
 		saProvider                    searchattribute.Provider
 		metricsHandler                metrics.Handler
@@ -152,6 +184,12 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
+		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
+		workerInstancePollers workerPollerTracker
+		// shutdownWorkers is a TTL cache of recently-shutdown worker instance keys.
+		// Polls from workers in this cache are rejected immediately to prevent
+		// zombie re-polls from stealing tasks after ShutdownWorker.
+		shutdownWorkers cache.Cache
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -162,12 +200,42 @@ type (
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
 		rateLimiter TaskDispatchRateLimiter
+
+		taskHookFactories []hooks.TaskHookFactory
 	}
 )
 
+// Add registers a poller for a worker instance. Thread-safe.
+func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.GetOrSetMap(t.pollers, workerKey)[pollerID] = cancel
+}
+
+// Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
+func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.DeleteFromMap(t.pollers, workerKey, pollerID)
+}
+
+// CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
+func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
+	t.lock.Lock()
+	pollerCancels := t.pollers[workerKey]
+	delete(t.pollers, workerKey)
+	t.lock.Unlock()
+
+	// Cancel all pollers for the worker.
+	for _, cancel := range pollerCancels {
+		cancel()
+	}
+	return int32(len(pollerCancels))
+}
+
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
-	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{}
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
@@ -177,7 +245,7 @@ var (
 	identityKey identityCtxKey = "identity"
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
-	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
+	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
 
 	// Options for batching user data updates.
 	userDataBatcherOptions = stream_batcher.BatcherOptions{
@@ -212,32 +280,34 @@ func NewEngine(
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
+	historySerializer serialization.Serializer,
+	taskHookFactories []hooks.TaskHookFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:                        common.DaemonStatusInitialized,
-		taskManager:                   taskManager,
-		fairTaskManager:               fairTaskManager,
-		historyClient:                 historyClient,
-		matchingRawClient:             matchingRawClient,
-		tokenSerializer:               tasktoken.NewSerializer(),
-		workerDeploymentClient:        workerDeploymentClient,
-		historySerializer:             serialization.NewSerializer(),
-		logger:                        log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:             namespaceRegistry,
-		hostInfoProvider:              hostInfoProvider,
-		serviceResolver:               resolver,
-		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:                   clusterMeta,
-		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
-		nexusEndpointsOwnershipLostCh: make(chan struct{}),
-		saProvider:                    saProvider,
-		saMapperProvider:              saMapperProvider,
-		metricsHandler:                scopedMetricsHandler,
-		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		status:                 common.DaemonStatusInitialized,
+		taskManager:            taskManager,
+		fairTaskManager:        fairTaskManager,
+		historyClient:          historyClient,
+		matchingRawClient:      matchingRawClient,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		workerDeploymentClient: workerDeploymentClient,
+		historySerializer:      historySerializer,
+		logger:                 log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:      namespaceRegistry,
+		hostInfoProvider:       hostInfoProvider,
+		serviceResolver:        resolver,
+		membershipChangedCh:    make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:            clusterMeta,
+		timeSource:             clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:      visibilityManager,
+		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		// nexusEndpointsOwnershipLostCh initialized below
+		saProvider:       saProvider,
+		saMapperProvider: saMapperProvider,
+		metricsHandler:   scopedMetricsHandler,
+		partitions:       make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -250,10 +320,14 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
+		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		shutdownWorkers:           cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
+		taskHookFactories:         taskHookFactories,
 	}
+	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
 		visibilityManager,
@@ -300,6 +374,16 @@ func (e *matchingEngineImpl) listenerKey() string {
 
 func (e *matchingEngineImpl) watchMembership() {
 	self := e.hostInfoProvider.HostInfo().Identity()
+	rc, ok := e.matchingRawClient.(matching.RoutingClient)
+	if !ok {
+		e.logger.Warn("watchMembership found non-routing matching client")
+		return // this should only happen in unit tests
+	}
+	ownedByOther := func(p tqid.Partition) bool {
+		addr, err := rc.Route(p)
+		// don't take action on lookup error
+		return err == nil && addr != self
+	}
 
 	for range e.membershipChangedCh {
 		delay := e.config.MembershipUnloadDelay()
@@ -317,10 +401,7 @@ func (e *matchingEngineImpl) watchMembership() {
 		}
 		e.partitionsLock.RUnlock()
 
-		partitions = util.FilterSlice(partitions, func(p tqid.Partition) bool {
-			owner, err := e.serviceResolver.Lookup(p.RoutingKey())
-			return err == nil && owner.Identity() != self
-		})
+		partitions = util.FilterSlice(partitions, ownedByOther)
 
 		const batchSize = 100
 		for i := 0; i < len(partitions); i += batchSize {
@@ -337,8 +418,7 @@ func (e *matchingEngineImpl) watchMembership() {
 				}
 				for _, p := range batch {
 					// maybe ownership changed again
-					owner, err := e.serviceResolver.Lookup(p.RoutingKey())
-					if err != nil || owner.Identity() == self {
+					if !ownedByOther(p) {
 						return
 					}
 					// now we can unload
@@ -382,26 +462,12 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	create bool,
 	loadCause loadCause,
 ) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
-	var newPM *taskQueuePartitionManagerImpl
-
 	defer func() {
 		if retErr != nil || retPM == nil {
 			return
 		}
-
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
-			return
-		}
-
-		if retCreated {
-			// Whenever a root partition is loaded, we need to force all child partitions to load.
-			// If there is a backlog of tasks on any child partitions, force loading will ensure
-			// that they can forward their tasks the poller which caused the root partition to be
-			// loaded. These partitions could be managed by this matchingEngineImpl, but are most
-			// likely not. We skip checking and just make gRPC requests to force loading them all.
-			// Note that if retCreated is true, retPM must be newPM, so we can use newPM here.
-			newPM.ForceLoadAllChildPartitions()
 		}
 	}()
 
@@ -422,16 +488,19 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, err
 	}
 
+	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
-	onUserDataChanged := func() { newPM.userDataChanged() }
+	onUserDataChanged := func(to *persistencespb.VersionedTaskQueueUserData) { newPM.userDataChanged(to) }
+	onEphemeralDataChanged := func(data *taskqueuespb.EphemeralData) { newPM.ephemeralDataChanged(data) }
 	userDataManager := newUserDataManager(
 		e.taskManager,
 		e.matchingRawClient,
 		onFatalErr,
 		onUserDataChanged,
+		onEphemeralDataChanged,
 		partition,
 		tqConfig,
 		logger,
@@ -512,9 +581,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"AddWorkflowTask called with unexpected partition kind") {
+		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
+	}
+
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
@@ -593,7 +666,7 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	req *matchingservice.PollWorkflowTaskQueueRequest,
 	opMetrics metrics.Handler,
-) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
@@ -625,7 +698,10 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -636,7 +712,8 @@ pollLoop:
 		}
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollWorkflowTaskQueueResponse(), nil
+			// no need to emit task dispatch latency metric because the parent partition already did it.
+			return e.convertPollWorkflowTaskQueueResponse(task.pollWorkflowTaskQueueResponse(), task.namespace)
 		}
 
 		if task.isQuery() {
@@ -683,6 +760,8 @@ pollLoop:
 				NextPageToken:              nextPageToken,
 			}
 
+			// Local query match. Emit the dispatch latency metric. This metric does not include the query response time.
+			e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 		}
 
@@ -768,12 +847,11 @@ pollLoop:
 		}
 
 		task.finish(nil, true)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
 
-// getHistoryForQueryTask retrieves history associated with a query task returned
-// by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky
 func (e *matchingEngineImpl) getHistoryForQueryTask(
 	ctx context.Context,
 	nsID namespace.ID,
@@ -816,6 +894,9 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		ns,
 		false,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	hist := resp.GetResponse().GetHistory()
 	if resp.GetResponse().GetRawHistory() != nil {
@@ -830,7 +911,7 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		hist = &historypb.History{Events: historyEvents}
 	}
 
-	return hist, resp.GetResponse().GetNextPageToken(), err
+	return hist, resp.GetResponse().GetNextPageToken(), nil
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
@@ -890,7 +971,10 @@ pollLoop:
 			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1002,6 +1086,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil, true)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -1022,7 +1107,11 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"QueryWorkflow called with unexpected partition kind") {
+		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
+	}
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
@@ -1115,6 +1204,54 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	return nil
 }
 
+func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	if request.WorkerInstanceKey != "" {
+		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	}
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	e.removePollerFromHistory(ctx, request)
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// removePollerFromHistory eagerly removes the worker from pollerHistory so
+// DescribeTaskQueue doesn't show stale pollers after worker shutdown.
+func (e *matchingEngineImpl) removePollerFromHistory(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) {
+	workerIdentity := request.GetWorkerIdentity()
+	if workerIdentity == "" {
+		return
+	}
+
+	taskQueueName := request.GetTaskQueue().GetName()
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		e.logger.Warn("Invalid task queue for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
+	if err != nil {
+		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+	if pm == nil {
+		e.logger.Debug("Partition manager not loaded, skipping poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName))
+		return
+	}
+
+	pm.RemovePoller(pollerIdentity(workerIdentity))
+}
+
 func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
@@ -1128,7 +1265,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
-		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !rootPartition.IsRoot() || rootPartition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		userData, err := e.getUserDataClone(ctx, rootPartition, loadCauseDescribe)
@@ -1183,7 +1320,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			}
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 			for _, taskQueueType := range req.TaskQueueTypes {
-				for i := 0; i < numPartitions; i++ {
+				for i := range numPartitions {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1215,16 +1352,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							if req.GetReportStats() {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-								mergedStats = &taskqueuepb.TaskQueueStats{
-									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
-									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
-									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
-								}
+								mergedStats = cloneTaskQueueStats(totalStats)
+								taskqueue.MergeStats(mergedStats, partitionStats)
 							}
 
 							physicalTqInfos[buildId][taskQueueType] = &taskqueuespb.PhysicalTaskQueueInfo{
-								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+								Pollers:        taskqueue.DedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 								TaskQueueStats: mergedStats,
 							}
 						}
@@ -1301,9 +1434,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		var buildIds []string
+		var reportUnversioned bool
+
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
@@ -1344,6 +1479,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						buildIds = append(buildIds, deploymentVersion)
 					}
 				}
+
+				// Report stats from the unversioned queue here
+				reportUnversioned = true
+			}
+
+			if reportUnversioned {
+				buildIds = append(buildIds, "")
 			}
 
 			// query each partition for stats
@@ -1359,7 +1501,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
 							BuildIds:    buildIds,
-							Unversioned: true,
+							Unversioned: reportUnversioned,
 						},
 						ReportStats: true,
 					})
@@ -1372,8 +1514,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						mergeStats(taskQueueStats, priorityStats)
-						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+						taskqueue.MergeStats(taskQueueStats, priorityStats)
+						taskqueue.MergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
 				}
 			}
@@ -1452,18 +1594,6 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	pm.PutCache(cacheKey, resp)
 	return resp, nil
-}
-
-func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
-	allKeys := make(map[string]bool)
-	var list []*taskqueuepb.PollerInfo
-	for _, item := range pollerInfos {
-		if _, value := allKeys[item.GetIdentity()]; !value {
-			allKeys[item.GetIdentity()] = true
-			list = append(list, item)
-		}
-	}
-	return list
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
@@ -1959,7 +2089,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						deploymentData.UnversionedRampData = vd
 
 					}
-				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindOldDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1981,19 +2111,17 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					clearVersionFromRoutingConfig(workerDeploymentData, nil, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
+				// Go through the new and old deployment data format for this deployment and remove the version if present.
+				workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
+				deleted := removeDeploymentVersions(
+					deploymentData,
+					v.GetDeploymentName(),
+					workerDeploymentData,
+					[]string{v.GetBuildId()},
+					/* removeOldFormat */ true,
+				)
+				if deleted {
 					changed = true
-					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
-
-					// Go through the new deployment data format for this deployment and remove the version if present.
-					workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
-					_ = removeDeploymentVersions(
-						deploymentData,
-						v.GetDeploymentName(),
-						workerDeploymentData,
-						[]string{v.GetBuildId()},
-						/* removeOldFormat */ false,
-					)
 				}
 			} else {
 
@@ -2008,7 +2136,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				rc := req.GetUpdateRoutingConfig()
 				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 
-				ignoreRevCheck, _ := testhooks.Get[bool](e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck)
+				ignoreRevCheck, _ := testhooks.Get(e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck, namespace.ID(req.NamespaceId))
 				if ignoreRevCheck || rc.GetRevisionNumber() > tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
 					changed = true
 					// Update routing config when newer or equal revision is provided
@@ -2390,8 +2518,14 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 			return nil, result.internalError
 		}
 		if result.failedWorkerResponse != nil {
-			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
-				HandlerError: result.failedWorkerResponse.GetRequest().GetError(),
+			if result.failedWorkerResponse.GetRequest().GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+				// Deprecated case. Kept for backwards-compatibility with older SDKs that are sending errors instead of failures.
+				return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
+					HandlerError: result.failedWorkerResponse.GetRequest().GetError(), // nolint:staticcheck // checking deprecated field for backwards compatibility
+				}}, nil
+			}
+			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+				Failure: result.failedWorkerResponse.GetRequest().GetFailure(),
 			}}, nil
 		}
 
@@ -2415,7 +2549,10 @@ func (e *matchingEngineImpl) PollNexusTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.Request
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollNexusTaskQueue for taskQueue", tag.Name(taskQueueName))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2433,7 +2570,9 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2461,6 +2600,9 @@ pollLoop:
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
 		nexusReq := task.nexus.request.GetRequest()
+		if nexusReq.Header == nil {
+			nexusReq.Header = make(map[string]string)
+		}
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
 		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
 		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
@@ -2468,6 +2610,7 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2598,7 +2741,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct{}, error) {
 	// Get the channel before checking the condition to prevent the channel from being closed while we're running this
 	// check.
-	ch := e.nexusEndpointsOwnershipLostCh
+	ch := e.nexusEndpointsOwnershipLostCh.Load().(chan struct{}) //nolint:revive // type is always chan struct{}
 	self := e.hostInfoProvider.HostInfo().Identity()
 	owner, err := e.serviceResolver.Lookup(nexusEndpointsTablePartitionRoutingKey)
 	if err != nil {
@@ -2616,8 +2759,7 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 		return
 	}
 	if !isOwner {
-		close(e.nexusEndpointsOwnershipLostCh)
-		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
+		close(e.nexusEndpointsOwnershipLostCh.Swap(make(chan struct{})).(chan struct{})) //nolint:revive // type is always chan struct{}
 	}
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
@@ -2679,7 +2821,7 @@ func (e *matchingEngineImpl) getAllPartitionRpcNames(
 	}
 
 	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
 	return partitionKeys, nil
@@ -2701,14 +2843,115 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	workerInstanceKey := pollMetadata.workerInstanceKey
+	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
+		e.logger.Info("Rejecting poll from recently-shutdown worker",
+			tag.WorkflowNamespaceID(partition.NamespaceId()),
+			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+			tag.WorkflowTaskQueueType(partition.TaskType()),
+			tag.NewStringTag("worker-instance-key", workerInstanceKey),
+		)
+		return nil, false, errNoTasks
+	}
+
+	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
+	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
+	// interval never falls below forwardedPollMinInterval.
+	longPollInterval := pm.LongPollExpirationInterval()
+	if pollMetadata.forwardedFrom == "" {
+		jitterMax := time.Duration(float64(longPollInterval) * forwardedPollJitterRatio)
+		if longPollInterval-jitterMax < forwardedPollMinInterval {
+			jitterMax = longPollInterval - forwardedPollMinInterval
+		}
+		if jitterMax > 0 {
+			longPollInterval -= backoff.FullJitter(jitterMax)
+		}
+	}
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+
+		// Also track by worker instance key for bulk cancellation during shutdown.
+		// Use UUID (not pollerID) because pollerID is reused when forwarded.
+		pollerTrackerKey := uuid.NewString()
+		if workerInstanceKey != "" {
+			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		}
+
+		defer func() {
+			e.outstandingPollers.Delete(pollerID)
+			if workerInstanceKey != "" {
+				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+			}
+		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
+}
+
+// emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
+// Here is what task_dispatch_latency measures vs schedule_to_start_latency:
+//
+// Latency                                          | task_dispatch    | schedule_to_start
+//
+// -------------------------------------------------+------------------+------------------
+//
+// transfer task processing                         | excluded         | included
+// record*TaskStarted latency                       | included         | partial
+// task forward latency                             | included         | included
+// poll forward latency                             | excluded for now | excluded
+// backlog delay                                    | included         | included
+// sync match delay                                 | included         | included
+// rescheduling of the same task attempt by History | resets latency   | does not reset
+//
+// ----------------------------------------------------------------------------------------
+func (e *matchingEngineImpl) emitTaskDispatchLatency(
+	task *internalTask,
+	partition tqid.Partition,
+	namespaceID string,
+	namespaceName string,
+	pollMetadata *pollMetadata,
+) {
+	tqName := partition.TaskQueue().Name()
+	taskType := partition.TaskType()
+
+	if !e.config.EmitTaskDispatchLatencyAtPoll(namespaceName, tqName, taskType) {
+		return
+	}
+
+	taskCreateTime := task.getCreateTime()
+	if taskCreateTime == nil {
+		return
+	}
+
+	// Determine origin partition: for forwarded tasks use the origin partition from
+	// forward info; for local tasks use the current partition.
+	originPartition := partition
+	if task.isForwarded() && task.forwardInfo.GetOriginPartition() != "" {
+		o, err := tqid.NormalPartitionFromRpcName(task.forwardInfo.GetOriginPartition(), namespaceID, taskType)
+		if err == nil {
+			originPartition = o
+		} // else ignore the error and use the current partition
+	}
+
+	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions))
+
+	handler := metrics.GetPerTaskQueuePartitionIDScope(
+		e.metricsHandler,
+		namespaceName,
+		originPartition,
+		e.config.BreakdownMetricsByTaskQueue(namespaceName, tqName, taskType),
+		e.config.BreakdownMetricsByPartition(namespaceName, tqName, taskType),
+	)
+
+	metrics.TaskDispatchLatencyPerTaskQueue.With(handler).Record(
+		time.Since(timestamp.TimeValue(taskCreateTime)),
+		metrics.TaskSourceTag(task.source),
+		metrics.ForwardedTag(task.isForwarded()),
+		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+		metrics.WorkerVersionTag(workerVersion, e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)),
+	)
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
@@ -2851,7 +3094,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
 	metricsHandler metrics.Handler,
-) *matchingservice.PollWorkflowTaskQueueResponse {
+) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
 
 	var serializedToken []byte
 	if task.isQuery() {
@@ -2895,6 +3138,57 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	}
 	response.PollerScalingDecision = task.pollerScalingDecision
 	return response
+}
+
+// convertPollWorkflowTaskQueueResponse converts a PollWorkflowTaskQueueResponse to
+// PollWorkflowTaskQueueResponseWithRawHistory. This is used when forwarding tasks
+// from remote matching nodes where the client has already deserialized the response.
+// This function processes search attributes if the history came from raw bytes
+// (RawHistory field), since raw history hasn't been processed yet.
+// If history came from the History field, it's already been processed by history service.
+func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
+	resp *matchingservice.PollWorkflowTaskQueueResponse,
+	ns namespace.Name,
+) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error) {
+	if resp == nil {
+		return nil, nil
+	}
+	// RawHistory from forwarded response contains deserialized History (auto-deserialized by gRPC).
+	// We don't re-serialize it back to bytes. The History field is used instead.
+	// Use RawHistory only if History is not available (backward compat with old matching services).
+	history := resp.History
+	if history == nil && resp.RawHistory != nil { //nolint:staticcheck
+		history = resp.RawHistory //nolint:staticcheck
+		// Process search attributes only when using RawHistory.
+		// RawHistory contains auto-deserialized raw bytes that bypass history service's SA processing.
+		// History field means it was already processed by history service.
+		if err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, history.Events, ns, e.visibilityManager); err != nil {
+			return nil, err
+		}
+	}
+	newResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
+		TaskToken:                  resp.TaskToken,
+		WorkflowExecution:          resp.WorkflowExecution,
+		WorkflowType:               resp.WorkflowType,
+		PreviousStartedEventId:     resp.PreviousStartedEventId,
+		StartedEventId:             resp.StartedEventId,
+		Attempt:                    resp.Attempt,
+		NextEventId:                resp.NextEventId,
+		BacklogCountHint:           resp.BacklogCountHint,
+		StickyExecutionEnabled:     resp.StickyExecutionEnabled,
+		Query:                      resp.Query,
+		TransientWorkflowTask:      resp.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue: resp.WorkflowExecutionTaskQueue,
+		BranchToken:                resp.BranchToken,
+		ScheduledTime:              resp.ScheduledTime,
+		StartedTime:                resp.StartedTime,
+		Queries:                    resp.Queries,
+		Messages:                   resp.Messages,
+		History:                    history,
+		NextPageToken:              resp.NextPageToken,
+		PollerScalingDecision:      resp.PollerScalingDecision,
+	}
+	return newResp, nil
 }
 
 // Populate the activity task response based on context and scheduled/started events.
@@ -2941,6 +3235,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
+		ActivityRunId:               historyResponse.GetActivityRunId(),
 		Header:                      attributes.Header,
 		Input:                       attributes.Input,
 		WorkflowExecution:           task.workflowExecution(),
@@ -2988,6 +3283,8 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
+	sentTargetVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
+
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
@@ -2999,24 +3296,44 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
-		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 		Stamp:                      task.event.Data.GetStamp(),
+		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		TargetDeploymentVersion:    sentTargetVersion,
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
 	if err != nil {
 		return nil, err
 	}
-	// History service can send history events in response.RawHistory. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
-	// In that case use that directly. This is done to avoid deserializing history event blobs in history service.
-	// We need to process search attributes here since history service will not be able to do that on raw events.
-	if resp.RawHistory != nil {
-		resp.History = resp.RawHistory
-		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.History.Events, task.namespace, e.visibilityManager)
-		if err != nil {
+
+	// History service returns RecordWorkflowTaskStartedResponseWithRawHistory on the wire,
+	// but the gRPC client deserializes it as RecordWorkflowTaskStartedResponse.
+	// Due to wire compatibility:
+	// - Server's RawHistory (repeated bytes, field 20) -> Client's RawHistory (*History, auto-deserialized)
+	// - Server's RawHistoryBytes (repeated bytes, field 21) -> Client's RawHistoryBytes ([][]byte, stays as raw)
+	//
+	// Handle history fields - check which one has data:
+	// 1. RawHistoryBytes (new path) - raw bytes, pass through to frontend
+	// 2. RawHistory (old path) - auto-deserialized to *History by gRPC wire compatibility
+	// 3. History - use directly (raw history disabled)
+	if len(resp.RawHistoryBytes) > 0 {
+		// New path: raw bytes in field 21, pass through to frontend without processing.
+		// Search attributes will be processed by frontend.
+	} else if resp.RawHistory != nil { //nolint:staticcheck
+		// Old path: history service using deprecated RawHistory field (field 20).
+		// The gRPC client auto-deserializes repeated bytes into *History via wire compatibility.
+		// Since this came from raw bytes, search attributes haven't been processed yet.
+		// Process them here before moving to History field.
+		ns := namespace.Name(pollReq.Namespace)
+		if err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.RawHistory.Events, ns, e.visibilityManager); err != nil { //nolint:staticcheck
 			return nil, err
 		}
+		// Move to History field for consistent handling downstream.
+		resp.History = resp.RawHistory //nolint:staticcheck
+		resp.RawHistory = nil          //nolint:staticcheck
 	}
+	// If neither RawHistoryBytes nor RawHistory is set, resp.History should already have the data.
+
 	return resp, nil
 }
 
@@ -3167,8 +3484,25 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	}
 
 	typedUserData := userData.GetData().GetPerType()[int32(request.GetTaskQueueType())]
-	present := worker_versioning.HasDeploymentVersion(typedUserData.GetDeploymentData(), request.GetVersion())
-	return &matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: present}, nil
+	deploymentData := typedUserData.GetDeploymentData()
+	present := worker_versioning.HasDeploymentVersion(deploymentData, request.GetVersion())
+
+	// Report whether the version is active-or-draining so callers can skip sending
+	// reactivation signals to versions that don't need one (CURRENT/RAMPING/DRAINING —
+	// see worker_versioning.ShouldSkipReactivation). The revision number flows back
+	// so history can compose a cluster-wide-deterministic RequestId on the reactivation
+	// signal for receiver-side dedup.
+	shouldSkipReactivation, revisionNumber := worker_versioning.ShouldSkipReactivation(
+		deploymentData,
+		request.GetVersion().GetDeploymentName(),
+		request.GetVersion().GetBuildId(),
+	)
+
+	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
+		IsMember:               present,
+		ShouldSkipReactivation: shouldSkipReactivation,
+		RevisionNumber:         revisionNumber,
+	}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(
@@ -3257,6 +3591,50 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	}, nil
 }
 
+func (e *matchingEngineImpl) UpdateFairnessState(
+	ctx context.Context,
+	req *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := old
+		if data != nil {
+			data = common.CloneProto(old)
+		} else {
+			data = &persistencespb.TaskQueueUserData{}
+		}
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		typ := int32(req.GetTaskQueueType())
+		perType := data.PerType[typ]
+		if perType == nil {
+			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
+			perType = data.PerType[typ]
+		}
+		perType.FairnessState = req.FairnessState
+		return data, true, nil
+	}
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateFairnessStateResponse{}, nil
+}
+
+func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
+	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
+}
+
 // migrateOldFormatVersions moves versions present in the given deployment from the
 // deprecated old-format slice into the new per-deployment map.
 //
@@ -3297,15 +3675,15 @@ func removeDeploymentVersions(
 	buildIDs []string,
 	removeOldFormat bool,
 ) bool {
-	if workerDeploymentData == nil {
+	if workerDeploymentData == nil && !removeOldFormat {
 		return false
 	}
 	changed := false
 	deletedInNew := false
 
 	for _, buildID := range buildIDs {
-		if _, exists := workerDeploymentData.Versions[buildID]; exists {
-			delete(workerDeploymentData.Versions, buildID)
+		if _, exists := workerDeploymentData.GetVersions()[buildID]; exists {
+			delete(workerDeploymentData.GetVersions(), buildID)
 			deletedInNew = true
 			changed = true
 		}
@@ -3324,7 +3702,7 @@ func removeDeploymentVersions(
 	}
 
 	// Only remove the deployment entry if versions were actually deleted from the new-format map.
-	if deletedInNew && len(workerDeploymentData.Versions) == 0 {
+	if workerDeploymentData != nil && deletedInNew && len(workerDeploymentData.GetVersions()) == 0 {
 		delete(deploymentData.GetDeploymentsData(), deploymentName)
 	}
 	return changed

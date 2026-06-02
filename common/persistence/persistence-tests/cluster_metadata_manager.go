@@ -87,7 +87,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 // TestClusterMembershipUpsertCanPageRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	expectedIds := make(map[string]int, 100)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		hostID := uuid.New()
 
 		expectedIds[hostID.String()]++

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,10 +18,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -90,8 +93,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: nil,
-		logger:         nil,
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          nil,
+		logger:                  nil,
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -314,8 +318,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -341,6 +346,103 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.ErrorCount)
 	require.Equal(t, 3, result.SuccessCount)
+}
+
+func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	execution1 := &commonpb.WorkflowExecution{
+		WorkflowId: "workflow-id-1",
+		RunId:      "run-id-1",
+	}
+	archetypeID1 := 12345
+	execution2 := &commonpb.WorkflowExecution{
+		WorkflowId: "workflow-id-2",
+		RunId:      "run-id-2",
+	}
+	archetypeID2 := 54321
+
+	ctrl := gomock.NewController(t)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   "namespace-id",
+		Namespace:     "namespace",
+		PageSize:      2,
+		NextPageToken: nil,
+		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+	}).Return(&manager.ListWorkflowExecutionsResponse{
+		Executions: []*workflowpb.WorkflowExecutionInfo{
+			{
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Execution: execution1,
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID1), 10)),
+					},
+				},
+			},
+			{
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Execution: execution2,
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID2), 10)),
+					},
+				},
+			},
+		},
+	}, nil).Times(2)
+
+	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
+		NamespaceId: "namespace-id",
+		Execution:   execution1,
+		ArchetypeId: uint32(archetypeID1),
+		Reason:      "Namespace delete",
+	}).Return(nil, nil).Times(1)
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
+		NamespaceId: "namespace-id",
+		Execution:   execution2,
+		ArchetypeId: uint32(archetypeID2),
+		Reason:      "Namespace delete",
+	}).Return(nil, nil).Times(1)
+
+	a := &Activities{
+		visibilityManager: visibilityManager,
+		historyClient:     historyClient,
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		useChasmDeleteExecution: func() bool { return true },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
+	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metrics.NoopMetricsHandler,
+		logger:            log.NewTestLogger(),
+	}
+
+	env.RegisterActivity(la.GetNextPageTokenActivity)
+	env.RegisterActivity(a.DeleteExecutionsActivity)
+
+	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 2,
+		},
+	})
+
+	ctrl.Finish()
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result DeleteExecutionsResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 0, result.ErrorCount)
+	require.Equal(t, 2, result.SuccessCount)
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing.T) {
@@ -413,8 +515,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,

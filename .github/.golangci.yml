@@ -33,11 +33,25 @@ linters:
     forbidigo:
       forbid:
         - pattern: time.Sleep
-          msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-        - pattern: panic
+          msg: "Please use await.Require / s.Await unless there's no better option"
+        - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
+        - pattern: "^Unix$"
+          msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: "^UnixMilli$"
+          msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
+        - pattern: "^UnixNano$"
+          msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: FunctionalTestBase
+          msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
+        - pattern: context\.Background\(\)
+          msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
+        - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)(\(|$)'
+          msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
+        - pattern: 'assert\.\w+'
+          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
     depguard:
       rules:
         main:
@@ -59,6 +73,9 @@ linters:
         # internal server pbs have their own suffix to avoid naming conflicts
         - pkg: go.temporal.io/server/api/(\w+)/v1
           alias: ${1}spb
+    testifylint:
+      disable:
+        - suite-method-signature # parallelsuite.Run supports extra args passed to Test* methods
     exhaustive:
       # Presence of "default" case in switch statements satisfies exhaustiveness,
       # even if all enum members are not listed.
@@ -165,8 +182,39 @@ linters:
         text: "time.Now"
         linters:
           - forbidigo
+      # Cassandra timestamp rules only apply to cassandra persistence package
+      - path-except: common/persistence/cassandra/.*\.go$
+        text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
+      # Allow in tests
+      - path: _test\.go$
+        text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
         text: "panic"
+        linters:
+          - forbidigo
+      - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
+        text: "FunctionalTestBase"
+        linters:
+          - forbidigo
+      - path-except: tests/.+_test\.go # only enforce in test files
+        text: "context.Background"
+        linters:
+          - forbidigo
+      # Existing legacy call sites are tracked separately; keep this PR scoped
+      # to preventing new usage while migrating touched tests.
+      - path: tests/(nexus_standalone|nexus_workflow|schedule|schedule_migration)_test\.go$
+        text: "Eventually"
+        linters:
+          - forbidigo
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
+        text: "assert\\.CollectT"
+        linters:
+          - forbidigo
+      - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/

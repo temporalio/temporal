@@ -165,7 +165,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 		s.lock.UnlockHigh()
 		endWaitGroup.Done()
 	}
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go lowFn()
 		go highFn()
 	}

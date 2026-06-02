@@ -92,7 +92,7 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 	runID := primitives.NewUUID()
 
 	var buffers []sqlplugin.BufferedEventsRow
-	for i := 0; i < numBufferedEvents; i++ {
+	for range numBufferedEvents {
 		buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 		buffers = append(buffers, buffer)
 	}
@@ -145,7 +145,7 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 	runID := primitives.NewUUID()
 
 	var buffers []sqlplugin.BufferedEventsRow
-	for i := 0; i < numBufferedEvents; i++ {
+	for range numBufferedEvents {
 		buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 		buffers = append(buffers, buffer)
 	}

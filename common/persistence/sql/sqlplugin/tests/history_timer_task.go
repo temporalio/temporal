@@ -161,7 +161,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 	maxTimestamp := timestamp.Add(time.Duration(numTasks) * time.Millisecond)
 
 	var tasks []sqlplugin.TimerTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
 		timestamp = timestamp.Add(time.Millisecond)
 		taskID++
@@ -295,7 +295,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 	maxTimestamp := timestamp.Add(time.Duration(numTasks) * time.Millisecond)
 
 	var tasks []sqlplugin.TimerTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
 		timestamp = timestamp.Add(time.Millisecond)
 		taskID++

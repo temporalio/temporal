@@ -1,11 +1,15 @@
 package searchattribute
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
 )
 
 func Test_AliasFields(t *testing.T) {
@@ -136,4 +140,116 @@ func Test_UnaliasFields(t *testing.T) {
 	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
 	require.NoError(t, err)
 	require.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+}
+
+type staticSearchAttributesProvider struct {
+	nameTypeMaps map[string]NameTypeMap
+	err          error
+}
+
+func (s staticSearchAttributesProvider) GetSearchAttributes(indexName string, _ bool) (NameTypeMap, error) {
+	if s.err != nil {
+		return NameTypeMap{}, s.err
+	}
+	if nameTypeMap, ok := s.nameTypeMaps[indexName]; ok {
+		return nameTypeMap, nil
+	}
+	return NameTypeMap{}, nil
+}
+
+func Test_BackCompMapperFallsBackToClusterMetadataFields(t *testing.T) {
+	mapper := &backCompMapper{
+		mapper:              &TestMapper{},
+		fallbackNameTypeMap: TestNameTypeMap(),
+	}
+
+	alias, err := mapper.GetAlias("Keyword02", "error-namespace")
+	require.NoError(t, err)
+	require.Equal(t, "Keyword02", alias)
+
+	fieldName, err := mapper.GetFieldName("Keyword02", "error-namespace")
+	require.NoError(t, err)
+	require.Equal(t, "Keyword02", fieldName)
+}
+
+func TestMapperProviderUsesConfiguredVisibilityIndexForBackCompatFallback(t *testing.T) {
+	controller := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(controller)
+	nsRegistry.EXPECT().
+		GetCustomSearchAttributesMapper(namespace.Name("test-namespace")).
+		Return(namespace.CustomSearchAttributesMapper{}, nil)
+
+	mapperProvider := NewMapperProvider(
+		nil,
+		nsRegistry,
+		staticSearchAttributesProvider{
+			nameTypeMaps: map[string]NameTypeMap{
+				"test-visibility-index": NewNameTypeMap(map[string]enumspb.IndexedValueType{
+					"LegacyKeyword": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				}),
+			},
+		},
+		"test-visibility-index",
+	)
+
+	mapper, err := mapperProvider.GetMapper(namespace.Name("test-namespace"))
+	require.NoError(t, err)
+
+	alias, err := mapper.GetAlias("LegacyKeyword", "error-namespace")
+	require.NoError(t, err)
+	require.Equal(t, "LegacyKeyword", alias)
+
+	fieldName, err := mapper.GetFieldName("LegacyKeyword", "error-namespace")
+	require.NoError(t, err)
+	require.Equal(t, "LegacyKeyword", fieldName)
+}
+
+func TestMapperProviderDoesNotTreatPreallocatedFieldsAsLegacyCustomAttributes(t *testing.T) {
+	controller := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(controller)
+	nsRegistry.EXPECT().
+		GetCustomSearchAttributesMapper(namespace.Name("test-namespace")).
+		Return(namespace.CustomSearchAttributesMapper{}, nil)
+
+	mapperProvider := NewMapperProvider(
+		nil,
+		nsRegistry,
+		staticSearchAttributesProvider{
+			nameTypeMaps: map[string]NameTypeMap{
+				"test-visibility-index": TestNameTypeMap(),
+			},
+		},
+		"test-visibility-index",
+	)
+
+	mapper, err := mapperProvider.GetMapper(namespace.Name("test-namespace"))
+	require.NoError(t, err)
+
+	_, err = mapper.GetFieldName("Text01", "error-namespace")
+	require.Error(t, err)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgumentErr)
+}
+
+func TestMapperProviderReturnsFallbackLookupError(t *testing.T) {
+	controller := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(controller)
+	nsRegistry.EXPECT().
+		GetCustomSearchAttributesMapper(namespace.Name("test-namespace")).
+		Return(namespace.CustomSearchAttributesMapper{}, nil)
+
+	expectedErr := errors.New("boom")
+	mapperProvider := NewMapperProvider(
+		nil,
+		nsRegistry,
+		staticSearchAttributesProvider{
+			err: expectedErr,
+		},
+		"test-visibility-index",
+	)
+
+	_, err := mapperProvider.GetMapper(namespace.Name("test-namespace"))
+	require.Error(t, err)
+	require.ErrorContains(t, err, `failed to load search attributes for fallback index "test-visibility-index"`)
+	require.ErrorContains(t, err, expectedErr.Error())
 }

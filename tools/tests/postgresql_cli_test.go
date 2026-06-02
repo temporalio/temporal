@@ -34,10 +34,6 @@ func (p *PostgresqlSuite) TestPostgreSQLHandlerTestSuite() {
 }
 
 func (p *PostgresqlSuite) TestPostgreSQLSetupSchemaTestSuite() {
-	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	p.T().Setenv("SQL_USER", testUser)
-	p.T().Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(p.T(), clitest.NewSetupSchemaTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -47,10 +43,6 @@ func (p *PostgresqlSuite) TestPostgreSQLSetupSchemaTestSuite() {
 }
 
 func (p *PostgresqlSuite) TestPostgreSQLUpdateSchemaTestSuite() {
-	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	p.T().Setenv("SQL_USER", testUser)
-	p.T().Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(p.T(), clitest.NewUpdateSchemaTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -64,8 +56,6 @@ func (p *PostgresqlSuite) TestPostgreSQLUpdateSchemaTestSuite() {
 }
 
 func (p *PostgresqlSuite) TestPostgreSQLVersionTestSuite() {
-	p.T().Setenv("SQL_USER", testUser)
-	p.T().Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(p.T(), clitest.NewVersionTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -76,11 +66,13 @@ func (p *PostgresqlSuite) TestPostgreSQLVersionTestSuite() {
 }
 
 func TestPostgres(t *testing.T) {
+	t.Parallel()
 	s := &PostgresqlSuite{pluginName: postgresql.PluginName}
 	suite.Run(t, s)
 }
 
 func TestPostgresPGX(t *testing.T) {
+	t.Parallel()
 	s := &PostgresqlSuite{pluginName: postgresql.PluginNamePGX}
 	suite.Run(t, s)
 }

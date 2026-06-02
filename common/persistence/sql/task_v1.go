@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -31,9 +32,10 @@ func newTaskManagerV1(
 	uds userDataStore,
 	tqs taskQueueStore,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (*sqlTaskManagerV1, error) {
 	return &sqlTaskManagerV1{
-		SqlStore:       NewSqlStore(db, logger),
+		SqlStore:       NewSQLStore(db, logger, serializer),
 		userDataStore:  uds,
 		taskQueueStore: tqs,
 	}, nil

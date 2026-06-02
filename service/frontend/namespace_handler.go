@@ -4,6 +4,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ type (
 	namespaceHandler struct {
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
+		namespaceRegistry      namespace.Registry
 		clusterMetadata        cluster.Metadata
 		namespaceReplicator    nsreplication.Replicator
 		namespaceAttrValidator *nsmanager.Validator
@@ -66,6 +68,7 @@ var (
 func newNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -76,6 +79,7 @@ func newNamespaceHandler(
 	return &namespaceHandler{
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
+		namespaceRegistry:      namespaceRegistry,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
@@ -107,7 +111,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		}
 	}
 
-	if err := validateRetentionDuration(
+	if err := d.validateRetentionDuration(
 		registerRequest.WorkflowExecutionRetentionPeriod,
 		registerRequest.IsGlobalNamespace,
 	); err != nil {
@@ -254,6 +258,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -316,6 +321,10 @@ func (d *namespaceHandler) DescribeNamespace(
 	describeRequest *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
 
+	if describeRequest.GetWeakConsistency() {
+		return d.describeNamespaceFromRegistry(describeRequest)
+	}
+
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetNamespace(),
@@ -332,6 +341,35 @@ func (d *namespaceHandler) DescribeNamespace(
 	}
 	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
 		d.createResponse(resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
+	return response, nil
+}
+
+// describeNamespaceFromRegistry serves DescribeNamespace from the in-memory namespace registry. The response may be stale,
+// and may return NamespaceNotFound for namespaces created within the registry's refresh window.
+func (d *namespaceHandler) describeNamespaceFromRegistry(request *workflowservice.DescribeNamespaceRequest) (*workflowservice.DescribeNamespaceResponse, error) {
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	var ns *namespace.Namespace
+	var err error
+	switch {
+	case request.GetId() != "" && request.GetNamespace() != "":
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed. Both ID and Name specified in request.")
+	case request.GetId() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceByIDWithOptions(namespace.ID(request.GetId()), opts)
+	case request.GetNamespace() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceWithOptions(namespace.Name(request.GetNamespace()), opts)
+	default:
+		return nil, errNamespaceNotSet
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.DescribeNamespaceResponse{
+		IsGlobalNamespace: ns.IsGlobalNamespace(),
+		FailoverVersion:   ns.FailoverVersion(namespace.EmptyBusinessID),
+	}
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
+		d.createResponse(ns.Info(), ns.Config(), ns.ReplicationConfig())
 	return response, nil
 }
 
@@ -441,7 +479,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			configurationChanged = true
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
-			if err := validateRetentionDuration(
+			if err := d.validateRetentionDuration(
 				config.Retention,
 				isGlobalNamespace,
 			); err != nil {
@@ -594,6 +632,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		failoverVersion,
 		isGlobalNamespace,
 		failoverHistory,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -863,6 +902,12 @@ func (d *namespaceHandler) createResponse(
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
+			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
+			StandaloneNexusOperation:        d.config.EnableChasm(info.Name) && d.config.StandaloneNexusOperationsEnabled(info.Name),
+			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
+			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
+			WorkflowUpdateCallbacks:         d.config.EnableWorkflowUpdateCallbacks(info.Name),
+			PollerAutoscaling:               true,
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
@@ -941,13 +986,19 @@ func (d *namespaceHandler) upsertCustomSearchAttributesAliases(
 	upsert map[string]string,
 ) (map[string]string, error) {
 	result := util.CloneMapNonNil(current)
+	currentAliasToField := util.InverseMap(current)
 	for key, value := range upsert {
 		if value == "" {
 			delete(result, key)
-		} else if _, ok := current[key]; !ok {
-			result[key] = value
-		} else {
+		} else if _, aliasExists := currentAliasToField[value]; aliasExists {
+			d.logger.Warn(
+				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, value),
+				tag.String("visibility-search-attribute", value),
+			)
+		} else if _, ok := current[key]; ok {
 			return nil, errCustomSearchAttributeFieldAlreadyAllocated
+		} else {
+			result[key] = value
 		}
 	}
 	return result, nil
@@ -1028,9 +1079,9 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 ) []*persistencespb.FailoverStatus {
 	d.logger.Debug(
 		"maybeUpdateFailoverHistory",
-		tag.NewAnyTag("failoverHistory", failoverHistory),
-		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
-		tag.NewAnyTag("namespaceDetail", namespaceDetail),
+		tag.Any("failoverHistory", failoverHistory),
+		tag.Any("updateReplConfig", updateReplicationConfig),
+		tag.Any("namespaceDetail", namespaceDetail),
 	)
 	if updateReplicationConfig == nil {
 		d.logger.Debug("updateReplicationConfig was nil")
@@ -1057,16 +1108,19 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
-func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
+func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
 	if err := timestamp.ValidateAndCapProtoDuration(retention); err != nil {
 		return errInvalidRetentionPeriod
 	}
 
-	min := namespace.MinRetentionLocal
+	var minRetention time.Duration
 	if isGlobalNamespace {
-		min = namespace.MinRetentionGlobal
+		minRetention = d.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = d.config.NamespaceMinRetentionLocal()
 	}
-	if timestamp.DurationValue(retention) < min {
+
+	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
 	return nil

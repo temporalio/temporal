@@ -28,10 +28,10 @@ func NewFrontendServiceErrorInterceptor(
 ) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
-		req interface{},
+		req any,
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	) (any, error) {
 		resp, err := handler(ctx, req)
 		if err == nil {
 			return resp, nil

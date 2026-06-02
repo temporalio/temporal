@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,6 +47,18 @@ type (
 		IsRoot() bool
 		Kind() enumspb.TaskQueueKind
 		IsChild() bool
+		// PersistenceTTL returns the TTL for the partition's persistence metadata.
+		// A zero value means no TTL (metadata persists indefinitely).
+		PersistenceTTL() time.Duration
+		SupportsFairness() bool
+		SupportsVersioning() bool
+		// SupportsPartitions returns true for partition types that can be split into
+		// multiple partitions for load distribution. When false, partition count must be 1.
+		SupportsPartitions() bool
+		// MetricTag returns a label for this partition kind to be used in metrics.
+		// When partitionIDBreakdown is true, partitions that support multiple partitions
+		// return their partition ID instead of the kind label.
+		MetricTag(partitionIDBreakdown bool) string
 
 		// RpcName returns the mangled name of the task queue partition, to be used in RPCs.
 		//
@@ -62,8 +75,11 @@ type (
 		// use mangled names, they use the bare base name.
 		RpcName() string
 		Key() PartitionKey
-		// RoutingKey returns the string that should be used to find the owner of a task queue partition.
-		RoutingKey() string
+		// RoutingKey returns the key and index within the key that should be used to find the
+		// owner of a task queue partition.
+		RoutingKey(int) (string, int)
+		// GradualChangeKey returns an identifier that can be used with gradual changes.
+		GradualChangeKey() []byte
 	}
 
 	// NormalPartition is used to distribute load of a TaskQueue in multiple Matching instances. A normal partition is
@@ -81,6 +97,13 @@ type (
 		taskQueue  *TaskQueue
 	}
 
+	// WorkerCommandsPartition is used for server-to-worker communication (e.g. activity cancellations).
+	// These queues are per-worker-process and only exist for the lifetime of the worker process. The SDK sets
+	// Kind=TASK_QUEUE_KIND_WORKER_COMMANDS when polling on these queues.
+	WorkerCommandsPartition struct {
+		taskQueue *TaskQueue
+	}
+
 	// PartitionKey uniquely identifies a task queue partition, to be used in maps.
 	// Note that task queue kind (sticky vs normal) and normal name for sticky task queues are not
 	// part of the task queue partition identity.
@@ -94,6 +117,7 @@ type (
 
 var _ Partition = (*NormalPartition)(nil)
 var _ Partition = (*StickyPartition)(nil)
+var _ Partition = (*WorkerCommandsPartition)(nil)
 
 var (
 	ErrNoParent      = errors.New("root task queue partition has no parent")
@@ -127,11 +151,13 @@ func UnsafePartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, 
 	if err == nil {
 		return p
 	}
-	kind := proto.GetKind()
-	switch kind { //nolint:exhaustive
+	switch proto.GetKind() { //nolint:exhaustive
 	case enumspb.TASK_QUEUE_KIND_STICKY:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetNormalName()}, taskType}
 		return tq.StickyPartition(proto.GetName())
+	case enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS:
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetName()}, taskType}
+		return tq.WorkerCommandsPartition()
 	default:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetName()}, taskType}
 		return tq.RootPartition()
@@ -157,6 +183,15 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 		}
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, normalName}, taskType}
 		return tq.StickyPartition(baseName), nil
+	case enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS:
+		if partition != 0 {
+			return nil, serviceerror.NewInvalidArgumentf("worker-commands partitions cannot have non-zero partition ID. base name: %s", baseName)
+		}
+		if taskType != enumspb.TASK_QUEUE_TYPE_NEXUS {
+			return nil, serviceerror.NewInvalidArgumentf("worker-commands partitions must have nexus task type, got: %v. base name: %s", taskType, baseName)
+		}
+		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
+		return tq.WorkerCommandsPartition(), nil
 	default:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
 		return tq.NormalPartition(partition), nil
@@ -168,6 +203,8 @@ func PartitionFromPartitionProto(proto *taskqueuespb.TaskQueuePartition, namespa
 	switch proto.GetPartitionId().(type) {
 	case *taskqueuespb.TaskQueuePartition_StickyName:
 		return tq.StickyPartition(proto.GetStickyName())
+	case *taskqueuespb.TaskQueuePartition_WorkerCommands:
+		return tq.WorkerCommandsPartition()
 	default:
 		return tq.NormalPartition(int(proto.GetNormalPartitionId()))
 	}
@@ -232,6 +269,10 @@ func (n *TaskQueue) StickyPartition(stickyName string) *StickyPartition {
 	return &StickyPartition{stickyName, n}
 }
 
+func (n *TaskQueue) WorkerCommandsPartition() *WorkerCommandsPartition {
+	return &WorkerCommandsPartition{n}
+}
+
 func (n *TaskQueue) RootPartition() *NormalPartition {
 	return n.NormalPartition(0)
 }
@@ -268,6 +309,12 @@ func (s *StickyPartition) IsChild() bool {
 	return false
 }
 
+func (s *StickyPartition) PersistenceTTL() time.Duration { return 24 * time.Hour }
+func (s *StickyPartition) SupportsFairness() bool        { return false }
+func (s *StickyPartition) SupportsVersioning() bool      { return false }
+func (s *StickyPartition) SupportsPartitions() bool      { return false }
+func (s *StickyPartition) MetricTag(bool) string         { return "__sticky__" }
+
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
 }
@@ -280,8 +327,64 @@ func (s *StickyPartition) Key() PartitionKey {
 	}
 }
 
-func (s *StickyPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
+func (s *StickyPartition) RoutingKey(int) (string, int) {
+	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType()), 0
+}
+
+func (s *StickyPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
+	return []byte(key)
+}
+
+func (w *WorkerCommandsPartition) TaskType() enumspb.TaskQueueType {
+	return w.taskQueue.TaskType()
+}
+
+func (w *WorkerCommandsPartition) Kind() enumspb.TaskQueueKind {
+	return enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
+}
+
+func (w *WorkerCommandsPartition) NamespaceId() string { //nolint:stylecheck,staticcheck // matches Partition interface
+	return w.taskQueue.family.NamespaceId()
+}
+
+func (w *WorkerCommandsPartition) TaskQueue() *TaskQueue {
+	return w.taskQueue
+}
+
+func (w *WorkerCommandsPartition) IsRoot() bool {
+	return false
+}
+
+func (w *WorkerCommandsPartition) IsChild() bool {
+	return false
+}
+
+func (w *WorkerCommandsPartition) PersistenceTTL() time.Duration { return 24 * time.Hour }
+func (w *WorkerCommandsPartition) SupportsFairness() bool        { return false }
+func (w *WorkerCommandsPartition) SupportsVersioning() bool      { return false }
+func (w *WorkerCommandsPartition) SupportsPartitions() bool      { return false }
+func (w *WorkerCommandsPartition) MetricTag(bool) string         { return "__worker_commands__" }
+
+func (w *WorkerCommandsPartition) RpcName() string { //nolint:stylecheck,staticcheck // matches Partition interface
+	return w.taskQueue.Name()
+}
+
+func (w *WorkerCommandsPartition) Key() PartitionKey {
+	return PartitionKey{
+		namespaceId: w.NamespaceId(),
+		name:        w.taskQueue.Name(),
+		taskType:    w.TaskType(),
+	}
+}
+
+func (w *WorkerCommandsPartition) RoutingKey(int) (string, int) {
+	return fmt.Sprintf("%s:%s:%d", w.NamespaceId(), w.RpcName(), w.TaskType()), 0
+}
+
+func (w *WorkerCommandsPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", w.NamespaceId(), w.RpcName(), w.TaskType())
+	return []byte(key)
 }
 
 func (p *NormalPartition) TaskQueue() *TaskQueue {
@@ -294,6 +397,17 @@ func (p *NormalPartition) IsRoot() bool {
 
 func (p *NormalPartition) IsChild() bool {
 	return !p.IsRoot()
+}
+
+func (p *NormalPartition) PersistenceTTL() time.Duration { return 0 }
+func (p *NormalPartition) SupportsFairness() bool        { return true }
+func (p *NormalPartition) SupportsVersioning() bool      { return true }
+func (p *NormalPartition) SupportsPartitions() bool      { return true }
+func (p *NormalPartition) MetricTag(partitionIDBreakdown bool) string {
+	if partitionIDBreakdown {
+		return strconv.Itoa(p.partitionId)
+	}
+	return "__normal__"
 }
 
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {
@@ -339,8 +453,27 @@ func (p *NormalPartition) Key() PartitionKey {
 	}
 }
 
-func (p *NormalPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+func (p *NormalPartition) RoutingKey(batchSize int) (string, int) {
+	if batchSize == 0 {
+		return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType()), 0
+	}
+	// We want to use LookupN to spread partitions across available nodes, but LookupN takes O(n)
+	// time and space, so we should limit the n that we pass to it. Reduce the partition id by some
+	// factor and move that factor into the name.
+	batch := p.partitionId / batchSize
+	if batch == 0 {
+		// For the first batch, omit the batch number as if batchSize==0 so that the root
+		// partition (id 0, batch number 0) doesn't move if we turn on/off spreading.
+		return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.TaskQueue().Name(), p.TaskType()), p.partitionId
+	}
+	// For subsequent batches, put the batch number in the key to hash.
+	return fmt.Sprintf("%s:%s:%d:%d", p.NamespaceId(), p.TaskQueue().Name(), batch, p.TaskType()),
+		p.partitionId % batchSize
+}
+
+func (p *NormalPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+	return []byte(key)
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

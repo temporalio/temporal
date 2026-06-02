@@ -141,3 +141,78 @@ func TestSlackMessageStructure(t *testing.T) {
 	infoBlock := msg.Blocks[1]
 	assert.Len(t, infoBlock.Fields, 4)
 }
+
+func TestFilterCompleted(t *testing.T) {
+	tests := []struct {
+		name     string
+		runs     []WorkflowRunSummary
+		expected int
+	}{
+		{
+			name:     "empty slice",
+			runs:     []WorkflowRunSummary{},
+			expected: 0,
+		},
+		{
+			name: "all completed",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "mixed with in-progress",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: ""}, // in-progress
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "with cancelled and skipped",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: "cancelled"},
+				{Conclusion: "skipped"},
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "only in-progress",
+			runs: []WorkflowRunSummary{
+				{Conclusion: ""},
+				{Conclusion: ""},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterCompleted(tt.runs)
+			assert.Len(t, result, tt.expected)
+		})
+	}
+}
+
+func TestSlowestRuns(t *testing.T) {
+	report := &DigestReport{
+		Runs: []WorkflowRunSummary{
+			{DisplayTitle: "medium", Duration: 20 * time.Minute},
+			{DisplayTitle: "ignored", Duration: 0},
+			{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+			{DisplayTitle: "fastest", Duration: 5 * time.Minute},
+			{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		},
+	}
+
+	result := report.slowestRuns(3)
+
+	require.Len(t, result, 3)
+	require.Equal(t, "slowest", result[0].DisplayTitle)
+	require.Equal(t, "second slowest", result[1].DisplayTitle)
+	require.Equal(t, "medium", result[2].DisplayTitle)
+}

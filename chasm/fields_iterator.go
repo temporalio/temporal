@@ -152,3 +152,26 @@ func fieldName(f reflect.StructField) string {
 	}
 	return f.Name
 }
+
+// visibilityFieldT is the reflect.Type for Field[*Visibility], used to detect
+// components that use Visibility at registration time.
+var visibilityFieldT = reflect.TypeFor[Field[*Visibility]]()
+
+// hasVisibilityField returns true if the given component type has a Field[*Visibility].
+// This is used at registration time to validate that archetypes using Visibility
+// have configured a businessID alias.
+func hasVisibilityField(componentT reflect.Type) bool {
+	if componentT.Kind() == reflect.Pointer {
+		componentT = componentT.Elem()
+	}
+	if componentT.Kind() != reflect.Struct {
+		return false
+	}
+	for i := range componentT.NumField() {
+		fieldT := componentT.Field(i).Type
+		if fieldT == visibilityFieldT {
+			return true
+		}
+	}
+	return false
+}

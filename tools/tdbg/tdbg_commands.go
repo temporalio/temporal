@@ -23,10 +23,10 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:        "workflow",
-			Aliases:     []string{"w"},
-			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
+			Name:        "execution",
+			Aliases:     []string{"e", "w", "workflow"},
+			Usage:       "Run admin operation on an execution (workflow)",
+			Subcommands: newAdminExecutionCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -65,6 +65,12 @@ func getCommands(
 			},
 		},
 		{
+			Name:        "schedule",
+			Aliases:     []string{"sch"},
+			Usage:       "Run admin operation on a schedule",
+			Subcommands: newAdminScheduleCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -72,7 +78,7 @@ func getCommands(
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -130,7 +136,12 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "output file",
-				}},
+				},
+				&cli.BoolFlag{
+					Name:  FlagDecode,
+					Usage: "Automatically decode payload data to JSON",
+				},
+			},
 			Action: func(c *cli.Context) error {
 				return AdminShowWorkflow(c, clientFactory)
 			},
@@ -138,26 +149,30 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe internal information of workflow execution",
+			Usage:   "Describe internal information of Temporal execution",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow ID",
+					Name:    FlagBusinessID,
+					Aliases: FlagBusinessIDAlias,
+					Usage:   "Business ID (Workflow ID)",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID",
+					Usage:   "Run ID (optional, uses latest if not specified)",
 				},
 				&cli.StringFlag{
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c, clientFactory)
+				return AdminDescribeExecution(c, clientFactory)
 			},
 		},
 		{
@@ -180,9 +195,25 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c, clientFactory)
+				return adminRefreshWorkflowTasks(c, clientFactory, prompterFactory(c))
 			},
 		},
 		{
@@ -225,6 +256,10 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -250,9 +285,38 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "migrate",
+			Usage: "Migrate a schedule between V1 (workflow-backed) and V2 (CHASM)",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagScheduleID,
+					Aliases:  FlagScheduleIDAlias,
+					Usage:    "Schedule ID",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTarget,
+					Usage:    "Target scheduler implementation: chasm, workflow",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
 	}
@@ -616,6 +680,35 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "get-user-data",
+			Usage: "Get per-type user data stored for a task queue",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID to fetch user data from (default 0 = root partition)",
+					Value: 0,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminGetTaskQueueUserData(c, clientFactory)
 			},
 		},
 	}

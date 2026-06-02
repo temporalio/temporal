@@ -13,7 +13,7 @@ type (
 	}
 )
 
-func getSize(value interface{}) int {
+func getSize(value any) int {
 	if v, ok := value.(SizeGetter); ok {
 		return v.CacheSize()
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -22,7 +23,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func prettyPrintJSONObject(c *cli.Context, o interface{}) {
+var envKeysForUserName = []string{
+	"USER",
+	"LOGNAME",
+	"HOME",
+}
+
+func getCurrentUserFromEnv() string {
+	for _, n := range envKeysForUserName {
+		if len(os.Getenv(n)) > 0 {
+			return os.Getenv(n)
+		}
+	}
+	return "unknown"
+}
+
+func prettyPrintJSONObject(c *cli.Context, o any) {
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -197,7 +213,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 	isTableView := !c.Bool(FlagPrintJSON)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var pageItems []interface{}
+	var pageItems []any
 	for iter.HasNext() {
 		item, err := iter.Next()
 		if err != nil {
@@ -226,7 +242,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 
 var exportRgx = regexp.MustCompile("^[A-Z]")
 
-func printTable(items []interface{}, writer io.Writer) error {
+func printTable(items []any, writer io.Writer) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -251,7 +267,7 @@ func printTable(items []interface{}, writer io.Writer) error {
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
 	table.SetHeaderLine(false)
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Ptr {
 			item = item.Elem()
@@ -293,13 +309,14 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
 }
 
-func getArchetypeWithDefault(
-	c *cli.Context,
-	defaultAchetype chasm.Archetype,
-) chasm.Archetype {
+func getArchetype(c *cli.Context) chasm.Archetype {
+	if c.IsSet(FlagArchetypeID) {
+		return ""
+	}
+
 	archetype := c.String(FlagArchetype)
 	if archetype != "" {
 		return archetype
 	}
-	return defaultAchetype
+	return chasm.WorkflowArchetype
 }

@@ -25,7 +25,7 @@ var (
 type (
 	// Precondition is a function that allow you to filter a query result.
 	// If subject match params conditions then return true, else return false.
-	Precondition func(subject interface{}) bool
+	Precondition func(subject any) bool
 
 	// Client is a wrapper around Google cloud storages client library.
 	Client interface {
@@ -73,11 +73,10 @@ func NewClientWithParams(clientD GcloudStorageClient) (Client, error) {
 func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) (err error) {
 	bucket := s.client.Bucket(URI.Hostname())
 	writer := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewWriter(ctx)
+	defer func() {
+		err = multierr.Combine(err, writer.Close())
+	}()
 	_, err = io.Copy(writer, bytes.NewReader(file))
-	if err == nil {
-		err = writer.Close()
-	}
-
 	return err
 }
 

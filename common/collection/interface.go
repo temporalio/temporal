@@ -16,37 +16,37 @@ type (
 	}
 
 	// HashFunc represents a hash function for string
-	HashFunc func(interface{}) uint32
+	HashFunc func(any) uint32
 
 	// ActionFunc take a key and value, do calculation and return err
-	ActionFunc func(key interface{}, value interface{}) error
+	ActionFunc func(key any, value any) error
 	// PredicateFunc take a key and value, do calculation and return boolean
-	PredicateFunc func(key interface{}, value interface{}) bool
+	PredicateFunc func(key any, value any) bool
 
 	// ConcurrentTxMap is a generic interface for any implementation of a dictionary
 	// or a key value lookup table that is thread safe, and providing functionality
 	// to modify key / value pair inside within a transaction
 	ConcurrentTxMap interface {
 		// Get returns the value for the given key
-		Get(key interface{}) (interface{}, bool)
+		Get(key any) (any, bool)
 		// Contains returns true if the key exist and false otherwise
-		Contains(key interface{}) bool
+		Contains(key any) bool
 		// Put records the mapping from given key to value
-		Put(key interface{}, value interface{})
+		Put(key any, value any)
 		// PutIfNotExist records the key value mapping only
 		// if the mapping does not already exist
-		PutIfNotExist(key interface{}, value interface{}) bool
+		PutIfNotExist(key any, value any) bool
 		// Remove deletes the key from the map
-		Remove(key interface{})
+		Remove(key any)
 		// GetAndDo returns the value corresponding to the key, and apply fn to key value before return value
 		// return (value, value exist or not, error when evaluation fn)
-		GetAndDo(key interface{}, fn ActionFunc) (interface{}, bool, error)
+		GetAndDo(key any, fn ActionFunc) (any, bool, error)
 		// PutOrDo put the key value in the map, if key does not exists, otherwise, call fn with existing key and value
 		// return (value, fn evaluated or not, error when evaluation fn)
-		PutOrDo(key interface{}, value interface{}, fn ActionFunc) (interface{}, bool, error)
+		PutOrDo(key any, value any, fn ActionFunc) (any, bool, error)
 		// RemoveIf deletes the given key from the map if fn return true
 		// return whether the key is removed or not
-		RemoveIf(key interface{}, fn PredicateFunc) bool
+		RemoveIf(key any, fn PredicateFunc) bool
 		// Iter returns an iterator to the map
 		Iter() MapIterator
 		// Len returns the number of items in the map
@@ -66,9 +66,9 @@ type (
 	// MapEntry represents a key-value entry within the map
 	MapEntry struct {
 		// Key represents the key
-		Key interface{}
+		Key any
 		// Value represents the value
-		Value interface{}
+		Value any
 	}
 )
 

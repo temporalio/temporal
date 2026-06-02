@@ -180,7 +180,7 @@ func BenchmarkAckManager_AddTask(b *testing.B) {
 	ackMgr := newTestAckMgr(log.NewTestLogger())
 
 	tasks := make([]int, 1000)
-	for i := 0; i < len(tasks); i++ {
+	for i := range tasks {
 		tasks[i] = i
 	}
 	b.ResetTimer()
@@ -192,7 +192,7 @@ func BenchmarkAckManager_AddTask(b *testing.B) {
 			tasks[i], tasks[j] = tasks[j], tasks[i]
 		})
 		b.StartTimer()
-		for i := 0; i < len(tasks); i++ {
+		for i := range tasks {
 			tasks[i] = i
 			ackMgr.addTask(int64(i))
 		}
@@ -208,7 +208,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 		// Add 1000 tasks in order and complete them in a random order.
 		// This will cause our ack level to jump as we complete them
 		b.StopTimer()
-		for i := 0; i < len(tasks); i++ {
+		for i := range tasks {
 			tasks[i] = i
 			ackMgr.addTask(int64(i))
 			ackMgr.db.updateBacklogStats(1, time.Time{}) // Increment the backlog so that we don't under-count
@@ -218,7 +218,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 		})
 		b.StartTimer()
 
-		for i := 0; i < len(tasks); i++ {
+		for i := range tasks {
 			ackMgr.completeTask(int64(i))
 		}
 	}

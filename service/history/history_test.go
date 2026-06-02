@@ -67,7 +67,7 @@ func (s *historyAPISuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 
 	s.chasmRegistry = chasm.NewRegistry(s.logger)
-	err := s.chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := s.chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 }
 
@@ -118,6 +118,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 					{BranchToken: []byte("branch1")},
 					{BranchToken: []byte("branch2")},
 					{BranchToken: []byte("branch3")},
+					{BranchToken: []byte{}},
 				},
 			},
 		},
@@ -151,7 +152,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 		RunID:       runID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil)
-	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(3)
 
 	_, err = forcedeleteworkflowexecution.Invoke(
 		context.Background(),

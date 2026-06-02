@@ -30,6 +30,26 @@ func (c *clientImpl) AddTasks(
 	return response, nil
 }
 
+func (c *clientImpl) CancelNexusOperation(
+	ctx context.Context,
+	request *historyservice.CancelNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CancelNexusOperationResponse, error) {
+	shardID := request.GetShardId()
+	var response *historyservice.CancelNexusOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CancelNexusOperation(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -107,6 +127,26 @@ func (c *clientImpl) DeleteDLQTasks(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.DeleteDLQTasks(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.DeleteExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DeleteExecution(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
@@ -748,8 +788,21 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RecordActivityTaskHeartbeatResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -993,8 +1046,21 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RespondActivityTaskCanceledResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1018,8 +1084,21 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RespondActivityTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1043,8 +1122,21 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RespondActivityTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1068,8 +1160,21 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RespondWorkflowTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1093,8 +1198,21 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), taskToken.GetWorkflowId())
-
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = request.GetNamespaceId()
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	
 	var response *historyservice.RespondWorkflowTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1161,6 +1279,26 @@ func (c *clientImpl) SignalWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.SignalWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) StartNexusOperation(
+	ctx context.Context,
+	request *historyservice.StartNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.StartNexusOperationResponse, error) {
+	shardID := request.GetShardId()
+	var response *historyservice.StartNexusOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.StartNexusOperation(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -163,15 +162,15 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
-		Logger  log.Logger
+		Session    gocql.Session
+		serializer serialization.Serializer
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session, logger log.Logger) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, serializer serialization.Serializer) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
-		Logger:  logger,
+		Session:    session,
+		serializer: serializer,
 	}
 }
 
@@ -201,7 +200,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return gocql.ConvertError("AddTasks", err)
@@ -218,7 +217,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
-			return serviceerror.NewUnavailable("AddTasks operation failed: %v")
+			return serviceerror.NewUnavailable("AddTasks operation failed because of conditional failure.")
 		}
 	}
 	return nil
@@ -510,7 +509,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
-	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
+	datablob, err := d.serializer.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}

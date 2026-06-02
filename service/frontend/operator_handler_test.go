@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -1106,7 +1107,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Nil(resp)
 
 	// Success case.
-	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr any) error {
 		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
 		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
 		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
@@ -1122,7 +1123,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
 
 	// Success case with id.
-	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr any) error {
 		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
 		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
 		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
@@ -1141,6 +1142,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -1153,6 +1155,7 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -1162,6 +1165,69 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	s.Error(err)
 }
 
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
+	var clusterName = "cluster"
+	globalNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "global-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			Clusters:          []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{globalNS})
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.Contains(err.Error(), "global-ns")
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_DeletedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	deletedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name:  "deleted-ns",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+		},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			Clusters:          []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{deletedNS})
+	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_LocalNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	localNS := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "temporal-system"},
+		nil,
+		clusterName,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS})
+	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() {
 	var rpcAddress = uuid.NewString()
 	var httpAddress = uuid.NewString()
@@ -1169,7 +1235,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1180,8 +1246,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1195,8 +1261,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
@@ -1213,7 +1279,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1224,8 +1290,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1239,8 +1305,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
@@ -1325,7 +1391,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1336,8 +1402,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 			ClusterName:              clusterName,
 			HistoryShardCount:        16,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1351,8 +1417,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
@@ -1412,6 +1478,59 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Ini
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardCountZero() {
+	var rpcAddress = uuid.NewString()
+	var clusterName = uuid.NewString()
+	var clusterID = uuid.NewString()
+
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10))
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
+		&adminservice.DescribeClusterResponse{
+			ClusterId:                clusterID,
+			ClusterName:              clusterName,
+			HistoryShardCount:        0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
+			IsGlobalNamespaceEnabled: true,
+		}, nil)
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
+	s.Contains(err.Error(), "HistoryShardCount must be positive")
+}
+
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyRPCAddressWhenEnabled() {
+	var clusterName = uuid.NewString()
+	var clusterID = uuid.NewString()
+
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout("", gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
+		&adminservice.DescribeClusterResponse{
+			ClusterId:                clusterID,
+			ClusterName:              clusterName,
+			HistoryShardCount:        4,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
+			IsGlobalNamespaceEnabled: true,
+		}, nil)
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:               "",
+		EnableRemoteClusterConnection: true,
+	})
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
+	s.Contains(err.Error(), "RPCAddress must not be empty when Enabled=true")
+}
+
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
 
@@ -1431,7 +1550,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1441,8 +1560,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_
 			ClusterId:                clusterID,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1459,7 +1578,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1470,8 +1589,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1485,8 +1604,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
@@ -1503,7 +1622,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1514,8 +1633,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -1529,8 +1648,8 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              httpAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,

@@ -24,10 +24,12 @@ type SetupSchemaTestBase struct {
 	DBName     string
 	db         DB
 	pluginName string
+	conn       ConnectParams
 }
 
 // SetupSuiteBase sets up the test suite
-func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
+func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string, conn ConnectParams) {
+	tb.conn = conn
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	tb.Logger = log.NewTestLogger()
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -78,7 +80,7 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 
 		ver := convert.Int32ToString(tb.rand.Int31())
 		versioningEnabled := (i%2 == 0)
@@ -131,11 +133,9 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 func (tb *SetupSchemaTestBase) getCommandBase() []string {
 	command := []string{"./tool"}
 	if tb.pluginName != "" {
-		command = append(command, []string{
-			"-pl", tb.pluginName,
-		}...)
+		command = append(command, "-pl", tb.pluginName)
 	}
-	return command
+	return append(command, tb.conn.CLIFlags()...)
 }
 
 func getExpectedTables(versioningEnabled bool, wantTables []string) map[string]struct{} {

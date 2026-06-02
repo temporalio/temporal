@@ -15,7 +15,6 @@ import (
 	"weak"
 
 	"github.com/mitchellh/mapstructure"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -36,10 +35,9 @@ type (
 
 		cancelClientSubscription func()
 
-		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
+		subscriptionLock sync.Mutex          // protects subscriptions and subscriptionIdx
 		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
-		callbackPool     *goro.AdaptivePool
 
 		poller goro.Group
 
@@ -101,10 +99,11 @@ var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
-	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
-	errorType     = reflect.TypeOf((*error)(nil)).Elem()
-	durationType  = reflect.TypeOf(time.Duration(0))
-	stringType    = reflect.TypeOf("")
+	protoEnumType = reflect.TypeFor[protoreflect.Enum]()
+	errorType     = reflect.TypeFor[error]()
+	durationType  = reflect.TypeFor[time.Duration]()
+	timeType      = reflect.TypeFor[time.Time]()
+	stringType    = reflect.TypeFor[string]()
 
 	usingDefaultValue any = defaultValue{}
 )
@@ -126,10 +125,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 }
 
 func (c *Collection) Start() {
-	s := DynamicConfigSubscriptionCallback.Get(c)()
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
 	if notifyingClient, ok := c.client.(NotifyingClient); ok {
 		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
 	} else {
@@ -143,10 +140,6 @@ func (c *Collection) Stop() {
 	if c.cancelClientSubscription != nil {
 		c.cancelClientSubscription()
 	}
-	c.subscriptionLock.Lock()
-	defer c.subscriptionLock.Unlock()
-	c.callbackPool.Stop()
-	c.callbackPool = nil
 }
 
 // Implement pingable.Pingable
@@ -157,14 +150,8 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 			Timeout: 5 * time.Second,
 			Ping: func() []pingable.Pingable {
 				c.subscriptionLock.Lock()
-				defer c.subscriptionLock.Unlock()
-				if c.callbackPool == nil {
-					return nil
-				}
-				var wg sync.WaitGroup
-				wg.Add(1)
-				c.callbackPool.Do(wg.Done)
-				wg.Wait()
+				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
+				c.subscriptionLock.Unlock()
 				return nil
 			},
 		},
@@ -183,9 +170,6 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, subs := range c.subscriptions {
 		setting := queryRegistry(key)
@@ -202,9 +186,6 @@ func (c *Collection) pollOnce() {
 func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, cvs := range changed {
 		setting := queryRegistry(key)
@@ -535,7 +516,7 @@ func dispatchUpdate[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 // called with subscriptionLock
@@ -562,7 +543,7 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
@@ -709,6 +690,7 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			Result: &out,
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
 				mapstructureHookDuration,
+				mapstructureHookTimestamp,
 				mapstructureHookProtoEnum,
 				mapstructureHookGeneric,
 			),
@@ -728,6 +710,31 @@ func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses string or int into time.Time.
+func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
+	if t != timeType {
+		return data, nil
+	}
+	switch v := data.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		ts, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to parse time: %v", err)
+		}
+		return ts, nil
+	}
+	// treat numeric values as seconds
+	if ival, err := convertInt(data); err == nil {
+		return time.Unix(int64(ival), 0), nil
+	} else if fval, err := convertFloat(data); err == nil {
+		ipart, fpart := math.Modf(fval)
+		return time.Unix(int64(ipart), int64(fpart*float64(time.Second))), nil
+	}
+	return time.Time{}, errors.New("value not convertible to Time")
 }
 
 // Parses proto enum values from strings.

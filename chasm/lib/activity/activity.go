@@ -1,11 +1,14 @@
 package activity
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -17,11 +20,17 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -32,23 +41,21 @@ const (
 	// metric labeling between workflows and activities.
 	WorkflowTypeTag = "__temporal_standalone_activity__"
 
-	TypeSAAlias      = "ActivityType"
-	StatusSAAlias    = "ActivityStatus"
-	TaskQueueSAAlias = "ActivityTaskQueue"
+	// ByIDTokenAttempt is used in synthesized tokens for by-ID API calls where the caller does not specify the attempt.
+	// The validator skips the attempt check when it sees this value.
+	// 0 is safe because polled tokens always carry Count >= 1 (TransitionScheduled increments from 0).
+	ByIDTokenAttempt int32 = 0
 )
 
 var (
-	TypeSearchAttribute      = chasm.NewSearchAttributeKeyword(TypeSAAlias, chasm.SearchAttributeFieldKeyword01)
-	StatusSearchAttribute    = chasm.NewSearchAttributeKeyword(StatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	TaskQueueSearchAttribute = chasm.NewSearchAttributeKeyword(TaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
+	TypeSearchAttribute   = chasm.NewSearchAttributeKeyword("ActivityType", chasm.SearchAttributeFieldKeyword01)
+	StatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
+var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
-	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
-	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error
-
 	// RecordCompleted applies the provided function to record activity completion
 	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
 }
@@ -69,9 +76,12 @@ type Activity struct {
 	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
 	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
 	// implements the ActivityStore interface).
-	// TODO(saa-preview): revisit a standalone activity pointing to itself once we handle storing it more efficiently.
 	// TODO(saa-preview): figure out better naming.
-	Store chasm.Field[ActivityStore]
+	Store chasm.ParentPtr[ActivityStore]
+
+	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
+	// for workflow-embedded activities as the workflow handles its own callbacks.
+	Callbacks chasm.Map[string, *callback.Callback]
 }
 
 // WithToken wraps a request with its deserialized task token.
@@ -80,46 +90,25 @@ type WithToken[R any] struct {
 	Request R
 }
 
-// MetricsHandlerBuilderParams contains parameters for building/enriching  a metrics handler for activity operations
-type MetricsHandlerBuilderParams struct {
-	Handler                     metrics.Handler
-	NamespaceName               string
-	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
-}
-
 // RespondCompletedEvent wraps the RespondActivityTaskCompletedRequest with context-specific data.
 type RespondCompletedEvent struct {
-	Request                     *historyservice.RespondActivityTaskCompletedRequest
-	Token                       *tokenspb.Task
-	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
+	Request *historyservice.RespondActivityTaskCompletedRequest
+	Token   *tokenspb.Task
 }
 
 // RespondFailedEvent wraps the RespondActivityTaskFailedRequest with context-specific data.
 type RespondFailedEvent struct {
-	Request                     *historyservice.RespondActivityTaskFailedRequest
-	Token                       *tokenspb.Task
-	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
+	Request *historyservice.RespondActivityTaskFailedRequest
+	Token   *tokenspb.Task
 }
 
 // RespondCancelledEvent wraps the RespondActivityTaskCanceledRequest with context-specific data.
 type RespondCancelledEvent struct {
-	Request                     *historyservice.RespondActivityTaskCanceledRequest
-	Token                       *tokenspb.Task
-	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
+	Request *historyservice.RespondActivityTaskCanceledRequest
+	Token   *tokenspb.Task
 }
 
-// requestCancelEvent wraps the RequestCancelActivityExecutionRequest with context-specific data.
-type requestCancelEvent struct {
-	request                     *activitypb.RequestCancelActivityExecutionRequest
-	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
-}
-
-// terminateEvent wraps the TerminateActivityExecutionRequest with context-specific data.
-type terminateEvent struct {
-	request                     *activitypb.TerminateActivityExecutionRequest
-	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
-}
-
+// LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
@@ -132,6 +121,20 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
+	md := make(map[string]string, 2)
+	if actType := a.GetActivityType().GetName(); actType != "" {
+		md[contextutil.MetadataKeyStandaloneActivityType] = actType
+	}
+	if tq := a.GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyStandaloneActivityTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
@@ -155,6 +158,7 @@ func NewStandaloneActivity(
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
+			StartDelay:             request.GetStartDelay(),
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -193,6 +197,7 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
+		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
 	}, nil
 }
 
@@ -200,48 +205,194 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
+	lastAttempt := a.LastAttempt.Get(ctx)
+	// If already started, return existing response if request ID matches to make retry idempotent, else error.
+	if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED && request.GetRequestId() == lastAttempt.GetStartRequestId() {
+		return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
+	}
+	if lastAttempt.GetStamp() != request.GetStamp() {
+		return nil, serviceerrors.NewObsoleteMatchingTask("activity attempt stamp mismatch")
+	}
 	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
+		if errors.Is(err, chasm.ErrInvalidTransition) {
+			return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
+		}
 		return nil, err
 	}
-	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
-	return response, err
+	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
 }
 
-// PopulateRecordStartedResponse populates the response for HandleStarted.
-func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+// GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
+func (a *Activity) GenerateRecordActivityTaskStartedResponse(
+	ctx chasm.Context,
+	namespace string,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	key := ctx.ExecutionKey()
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
-	if lastHeartbeat != nil {
-		response.HeartbeatDetails = lastHeartbeat.GetDetails()
-	}
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
-	response.StartedTime = attempt.GetStartedTime()
-	response.Attempt = attempt.GetCount()
-	response.Priority = a.GetPriority()
-	response.RetryPolicy = a.GetRetryPolicy()
-	response.ScheduledEvent = &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-				ActivityId:             key.BusinessID,
-				ActivityType:           a.GetActivityType(),
-				Input:                  requestData.GetInput(),
-				Header:                 requestData.GetHeader(),
-				TaskQueue:              a.GetTaskQueue(),
-				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
-				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
-				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
-				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+
+	return &historyservice.RecordActivityTaskStartedResponse{
+		StartedTime:                 attempt.GetStartedTime(),
+		Attempt:                     attempt.GetCount(),
+		Priority:                    a.GetPriority(),
+		RetryPolicy:                 a.GetRetryPolicy(),
+		ActivityRunId:               key.RunID,
+		WorkflowNamespace:           namespace,
+		HeartbeatDetails:            lastHeartbeat.GetDetails(),
+		CurrentAttemptScheduledTime: a.attemptScheduleTime(attempt),
+		ScheduledEvent: &historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+			EventTime: a.GetScheduleTime(),
+			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+					ActivityId:             key.BusinessID,
+					ActivityType:           a.GetActivityType(),
+					Input:                  requestData.GetInput(),
+					Header:                 requestData.GetHeader(),
+					TaskQueue:              a.GetTaskQueue(),
+					ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+					ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+					StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+					HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+				},
 			},
 		},
+	}, nil
+}
+
+// attemptScheduleTime returns when the given attempt was scheduled to run:
+// the activity's schedule time plus start delay for the first attempt, or
+// calculated from attemptScheduleTimeForRetry on retries.
+func (a *Activity) attemptScheduleTime(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	if attempt.GetCount() == 1 {
+		return timestamppb.New(a.firstDispatchTime())
+	}
+	return attemptScheduleTimeForRetry(attempt)
+}
+
+// attemptScheduleTimeForRetry computes the time a retried attempt is scheduled to start,
+// as complete_time + retry_interval. Returns nil if either field is missing or zero.
+func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	retryInterval := attempt.GetCurrentRetryInterval()
+	completeTime := attempt.GetCompleteTime()
+	if retryInterval != nil && retryInterval.AsDuration() > 0 && completeTime != nil {
+		return timestamppb.New(completeTime.AsTime().Add(retryInterval.AsDuration()))
 	}
 	return nil
 }
 
 // RecordCompleted applies the provided function to record activity completion.
+// For standalone activities, it also triggers any registered completion callbacks.
 func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
-	return applyFn(ctx)
+	if err := applyFn(ctx); err != nil {
+		return err
+	}
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+func (a *Activity) addCompletionCallbacks(
+	ctx chasm.MutableContext,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacks int,
+) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
+	if a.LifecycleState(ctx).IsClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
+	}
+
+	currentCount := len(a.Callbacks)
+	if len(completionCallbacks)+currentCount > maxCallbacks {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
+			maxCallbacks,
+			currentCount,
+		)
+	}
+
+	if a.Callbacks == nil {
+		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	registrationTime := timestamppb.New(ctx.Now(a))
+
+	for idx, cb := range completionCallbacks {
+		chasmCB := &callbackspb.Callback{
+			Links: cb.GetLinks(),
+		}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			chasmCB.Variant = &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		}
+
+		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		id := fmt.Sprintf("%s-%d", requestID, idx)
+		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+	}
+	return nil
+}
+
+// GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
+// Implements callback.CompletionSource.
+func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
+	if !a.LifecycleState(ctx).IsClosed() {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
+	}
+
+	opts := nexusrpc.CompleteOperationOptions{
+		StartTime: a.GetScheduleTime().AsTime(),
+		CloseTime: ctx.ExecutionInfo().CloseTime,
+	}
+
+	outcome := a.Outcome.Get(ctx)
+	if successful := outcome.GetSuccessful(); successful != nil {
+		// Successful completion: return the first output payload as the result as Nexus supports only a single payload
+		var p *commonpb.Payload
+		if payloads := successful.GetOutput().GetPayloads(); len(payloads) > 0 {
+			p = payloads[0]
+		}
+		opts.Result = p
+		return opts, nil
+	}
+
+	failure := a.terminalFailure(ctx)
+	if failure != nil {
+		state := nexus.OperationStateFailed
+		message := "operation failed"
+		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED {
+			state = nexus.OperationStateCanceled
+			message = "operation canceled"
+		}
+
+		nf, err := commonnexus.TemporalFailureToNexusFailure(failure)
+		if err != nil {
+			return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("failed to convert failure: %v", err)
+		}
+
+		opErr := &nexus.OperationError{
+			State:   state,
+			Message: message,
+			Cause:   &nexus.FailureError{Failure: nf},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		opts.Error = opErr
+		return opts, nil
+	}
+
+	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("activity in status %v has no outcome", a.Status)
 }
 
 // HandleCompleted updates the activity on activity completion.
@@ -249,17 +400,14 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
-	metricsHandler := enrichMetricsHandler(
-		a,
-		event.MetricsHandlerBuilderParams.Handler,
-		event.MetricsHandlerBuilderParams.NamespaceName,
-		metrics.HistoryRespondActivityTaskCompletedScope,
-		event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := TransitionCompleted.Apply(a, ctx, completeEvent{
 		req:            event.Request,
@@ -277,18 +425,14 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
-	metricsHandler := enrichMetricsHandler(
-		a,
-		event.MetricsHandlerBuilderParams.Handler,
-		event.MetricsHandlerBuilderParams.NamespaceName,
-		metrics.HistoryRespondActivityTaskFailedScope,
-		event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
-
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
+	if err != nil {
+		return nil, err
+	}
 	failure := event.Request.GetFailedRequest().GetFailure()
 
 	appFailure := failure.GetApplicationFailureInfo()
@@ -323,17 +467,14 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
-	metricsHandler := enrichMetricsHandler(
-		a,
-		event.MetricsHandlerBuilderParams.Handler,
-		event.MetricsHandlerBuilderParams.NamespaceName,
-		metrics.HistoryRespondActivityTaskCanceledScope,
-		event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 		details:    event.Request.GetCancelRequest().GetDetails(),
@@ -346,29 +487,33 @@ func (a *Activity) HandleCanceled(
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent) (
-	*activitypb.TerminateActivityExecutionResponse, error,
-) {
-	frontendReq := req.request.GetFrontendRequest()
-
+// Terminate implements the chasm.RootComponent interface.
+func (a *Activity) Terminate(
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
 	// If already in terminated state, fail if request ID is different, else no-op
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
-		newReqID := frontendReq.GetRequestId()
+		newReqID := req.RequestID
 		existingReqID := a.GetTerminateState().GetRequestId()
 
 		if existingReqID != newReqID {
-			return nil, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("already terminated with request ID %s", existingReqID))
+			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
+				"already terminated with request ID %s", existingReqID)
 		}
 
-		return &activitypb.TerminateActivityExecutionResponse{}, nil
+		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
-		return nil, err
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityTerminatedScope)
+	if err != nil {
+		return chasm.TerminateComponentResponse{}, err
 	}
-
-	return &activitypb.TerminateActivityExecutionResponse{}, nil
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
+		request:        req,
+		metricsHandler: metricsHandler,
+		fromStatus:     a.GetStatus(),
+	})
 }
 
 // getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
@@ -382,10 +527,10 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 	return heartbeat
 }
 
-func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, event requestCancelEvent) (
+func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
 	*activitypb.RequestCancelActivityExecutionResponse, error,
 ) {
-	req := event.request.GetFrontendRequest()
+	req := request.GetFrontendRequest()
 	newReqID := req.GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
@@ -413,14 +558,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, event r
 			},
 		}
 
-		metricsHandler := enrichMetricsHandler(
-			a,
-			event.MetricsHandlerBuilderParams.Handler,
-			event.MetricsHandlerBuilderParams.NamespaceName,
-			metrics.HistoryRespondActivityTaskCanceledScope,
-			event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
-
-		err := TransitionCanceled.Apply(a, ctx, cancelEvent{
+		metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+		if err != nil {
+			return nil, err
+		}
+		err = TransitionCanceled.Apply(a, ctx, cancelEvent{
 			details:    details,
 			handler:    metricsHandler,
 			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, // if we're here the original status was scheduled
@@ -527,8 +669,22 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		return true, retryInterval
 	}
 
-	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
+	deadline := a.scheduleToCloseDeadline()
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval
+}
+
+func (a *Activity) firstDispatchTime() time.Time {
+	return a.ScheduleTime.AsTime().Add(a.GetStartDelay().AsDuration())
+}
+
+// scheduleToCloseDeadline returns the absolute time at which the ScheduleToClose timeout expires,
+// accounting for start delay. Returns zero time if no ScheduleToClose timeout is set.
+func (a *Activity) scheduleToCloseDeadline() time.Time {
+	timeout := a.GetScheduleToCloseTimeout().AsDuration()
+	if timeout == 0 {
+		return time.Time{}
+	}
+	return a.firstDispatchTime().Add(timeout)
 }
 
 func createStartToCloseTimeoutFailure() *failurepb.Failure {
@@ -558,23 +714,27 @@ func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	err := a.validateActivityTaskToken(ctx, input.Token)
+	err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
+	prevHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
-		RecordedTime: timestamppb.New(ctx.Now(a)),
-		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
+		RecordedTime:        timestamppb.New(ctx.Now(a)),
+		Details:             input.Request.GetHeartbeatRequest().GetDetails(),
+		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
 	})
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: ctx.Now(a).Add(a.GetHeartbeatTimeout().AsDuration()),
-		},
-		&activitypb.HeartbeatTimeoutTask{
-			Attempt: a.LastAttempt.Get(ctx).GetCount(),
-		},
-	)
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: ctx.Now(a).Add(heartbeatTimeout),
+			},
+			&activitypb.HeartbeatTimeoutTask{
+				Stamp: a.LastAttempt.Get(ctx).GetStamp(),
+			},
+		)
+	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(saa-preview): ActivityPaused, ActivityReset
@@ -625,7 +785,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	}
 }
 
-func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb.ActivityExecutionInfo, error) {
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
 	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
@@ -634,29 +794,22 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 	attempt := a.LastAttempt.Get(ctx)
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
-
-	// TODO(saa-preview): debating if we should persist next attempt schedule time for stronger consistency
-	var nextAttemptScheduleTime *timestamppb.Timestamp
-	interval := attempt.GetCurrentRetryInterval()
-	completeTime := attempt.GetCompleteTime()
-	if interval != nil && interval.AsDuration() > 0 && completeTime != nil {
-		nextAttemptScheduleTime = timestamppb.New(completeTime.AsTime().Add(interval.AsDuration()))
-	}
+	executionInfo := ctx.ExecutionInfo()
 
 	var closeTime *timestamppb.Timestamp
-	var executionDuration = durationpb.New(0)
-	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && attempt.GetCompleteTime() != nil {
-		closeTime = attempt.GetCompleteTime()
-		executionDuration = durationpb.New(closeTime.AsTime().Sub(a.GetScheduleTime().AsTime()))
+	var executionDuration *durationpb.Duration
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+		executionDuration = durationpb.New(executionInfo.CloseTime.Sub(a.GetScheduleTime().AsTime()))
+		closeTime = timestamppb.New(executionInfo.CloseTime)
 	}
 
 	var expirationTime *timestamppb.Timestamp
-	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		expirationTime = timestamppb.New(deadline)
 	}
 
 	sa := &commonpb.SearchAttributes{
-		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
+		IndexedFields: a.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 	}
 
 	info := &apiactivitypb.ActivityExecutionInfo{
@@ -671,12 +824,15 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
+		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
-		NextAttemptScheduleTime: nextAttemptScheduleTime,
+		SdkName:                 attempt.GetSdkName(),
+		SdkVersion:              attempt.GetSdkVersion(),
+		NextAttemptScheduleTime: attemptScheduleTimeForRetry(attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,
@@ -685,15 +841,15 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
-		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
-		// TODO(saa-preview): StateSizeBytes?
-		SearchAttributes: sa,
-		Status:           status,
-		TaskQueue:        a.GetTaskQueue().GetName(),
-		UserMetadata:     requestData.GetUserMetadata(),
+		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
+		StateTransitionCount:    executionInfo.StateTransitionCount,
+		SearchAttributes:        sa,
+		Status:                  status,
+		TaskQueue:               a.GetTaskQueue().GetName(),
+		UserMetadata:            requestData.GetUserMetadata(),
 	}
 
-	return info, nil
+	return info
 }
 
 func (a *Activity) buildDescribeActivityExecutionResponse(
@@ -707,14 +863,16 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 		return nil, err
 	}
 
-	info, err := a.buildActivityExecutionInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
+	info := a.buildActivityExecutionInfo(ctx)
 
 	var input *commonpb.Payloads
 	if request.GetIncludeInput() {
 		input = a.RequestData.Get(ctx).GetInput()
+	}
+
+	callbackInfos, err := a.buildCallbackInfos(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	response := &workflowservice.DescribeActivityExecutionResponse{
@@ -722,6 +880,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 		RunId:         ctx.ExecutionKey().RunID,
 		Input:         input,
 		LongPollToken: token,
+		Callbacks:     callbackInfos,
 	}
 
 	if request.GetIncludeOutcome() {
@@ -733,15 +892,65 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}, nil
 }
 
+func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.CallbackInfo, error) {
+	if len(a.Callbacks) == 0 {
+		return nil, nil
+	}
+
+	cbInfos := make([]*apiactivitypb.CallbackInfo, 0, len(a.Callbacks))
+	for _, field := range a.Callbacks {
+		cb := field.Get(ctx)
+
+		cbSpec, err := cb.ToAPICallback()
+		if err != nil {
+			return nil, err
+		}
+
+		var state enumspb.CallbackState
+		switch cb.Status {
+		case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+			return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
+		case callbackspb.CALLBACK_STATUS_STANDBY:
+			state = enumspb.CALLBACK_STATE_STANDBY
+		case callbackspb.CALLBACK_STATUS_SCHEDULED:
+			state = enumspb.CALLBACK_STATE_SCHEDULED
+		case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+			state = enumspb.CALLBACK_STATE_BACKING_OFF
+		case callbackspb.CALLBACK_STATUS_FAILED:
+			state = enumspb.CALLBACK_STATE_FAILED
+		case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+			state = enumspb.CALLBACK_STATE_SUCCEEDED
+		default:
+			return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
+		}
+
+		cbInfos = append(cbInfos, &apiactivitypb.CallbackInfo{
+			Trigger: &apiactivitypb.CallbackInfo_Trigger{
+				Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
+			},
+			Info: &callbackpb.CallbackInfo{
+				Callback:                cbSpec,
+				RegistrationTime:        cb.RegistrationTime,
+				State:                   state,
+				Attempt:                 cb.Attempt,
+				LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
+				LastAttemptFailure:      cb.LastAttemptFailure,
+				NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+			},
+		})
+	}
+	return cbInfos, nil
+}
+
 func (a *Activity) buildPollActivityExecutionResponse(
 	ctx chasm.Context,
-) (*activitypb.PollActivityExecutionResponse, error) {
+) *activitypb.PollActivityExecutionResponse {
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
 			RunId:   ctx.ExecutionKey().RunID,
 			Outcome: a.outcome(ctx),
 		},
-	}, nil
+	}
 }
 
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.
@@ -756,15 +965,23 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
 		}
 	}
-	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
+	if failure := a.terminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
 			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
 		}
 	}
+	return nil
+}
+
+// terminalFailure returns the failure for a closed activity. The failure may be stored in Outcome.Failed
+// (terminated, canceled, timed out) or in LastAttempt.LastFailureDetails (failed after exhausting retries).
+// Returns nil if no failure is found.
+func (a *Activity) terminalFailure(ctx chasm.Context) *failurepb.Failure {
+	if f := a.Outcome.Get(ctx).GetFailed(); f != nil {
+		return f.GetFailure()
+	}
 	if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
-		}
+		return details.GetFailure()
 	}
 	return nil
 }
@@ -783,35 +1000,51 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 func (a *Activity) validateActivityTaskToken(
 	ctx chasm.Context,
 	token *tokenspb.Task,
+	requestNamespaceID string,
 ) error {
 	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
 		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
+	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
+
+	ref, err := chasm.DeserializeComponentRef(token.GetComponentRef())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("malformed token")
+	}
+
+	// Validate that the request namespace matches the token's namespace.
+	// This prevents cross-namespace token reuse attacks where an attacker could use a valid token from namespace B to
+	// complete an activity in namespace A.
+	if requestNamespaceID != ref.NamespaceID {
+		return serviceerror.NewInvalidArgument("token does not match namespace")
+	}
+
 	return nil
 }
 
-func enrichMetricsHandler(
-	a *Activity,
-	handler metrics.Handler,
-	namespaceName string,
-	operationTag string,
-	breakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool],
-) metrics.Handler {
+func (a *Activity) enrichMetricsHandler(ctx chasm.Context, operationTag string) (metrics.Handler, error) {
+	// activityContextFromChasm panics if the context value is missing; this is intentional and
+	// indicates a library registration bug rather than a runtime error.
+	actCtx := activityContextFromChasm(ctx)
+	namespaceName, err := actCtx.namespaceRegistry.GetNamespaceName(namespace.ID(ctx.ExecutionKey().NamespaceID))
+	if err != nil {
+		return nil, err
+	}
+	breakdownMetricsByTaskQueue := actCtx.config.BreakdownMetricsByTaskQueue
 	taskQueueFamily := a.GetTaskQueue().GetName()
 	return metrics.GetPerTaskQueueFamilyScope(
-		handler,
-		namespaceName,
-		tqid.UnsafeTaskQueueFamily(namespaceName, taskQueueFamily),
-		breakdownMetricsByTaskQueue(namespaceName, taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		ctx.MetricsHandler(),
+		namespaceName.String(),
+		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
+		breakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		metrics.OperationTag(operationTag),
 		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
-	)
+	), nil
 }
 
 func (a *Activity) emitOnAttemptTimedOutMetrics(ctx chasm.Context, handler metrics.Handler, timeoutType enumspb.TimeoutType) {
@@ -862,6 +1095,14 @@ func (a *Activity) emitOnFailedMetrics(ctx chasm.Context, handler metrics.Handle
 	metrics.ActivityFail.With(handler).Record(1)
 }
 
+func (a *Activity) emitOnTerminatedMetrics(
+	handler metrics.Handler,
+) {
+	// Terminated activities do not count as properly finished activities so we do not
+	// record any of the latency metrics.
+	metrics.ActivityTerminate.With(handler).Record(1)
+}
+
 func (a *Activity) emitOnCanceledMetrics(
 	ctx chasm.Context,
 	handler metrics.Handler,
@@ -907,6 +1148,6 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 	return []chasm.SearchAttributeKeyValue{
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
 		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
-		TaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
+		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 	}
 }

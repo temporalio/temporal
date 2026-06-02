@@ -11,7 +11,7 @@ import (
 
 type (
 	SequentialTaskQueue struct {
-		id interface{}
+		id any
 
 		sync.Mutex
 		taskQueue collection.Queue[TrackableExecutableTask]
@@ -28,7 +28,7 @@ func NewSequentialTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQ
 	}
 }
 
-func NewSequentialTaskQueueWithID(id interface{}) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+func NewSequentialTaskQueueWithID(id any) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialTaskQueue{
 		id: id,
 
@@ -38,7 +38,7 @@ func NewSequentialTaskQueueWithID(id interface{}) ctasks.SequentialTaskQueue[Tra
 	}
 }
 
-func (q *SequentialTaskQueue) ID() interface{} {
+func (q *SequentialTaskQueue) ID() any {
 	return q.id
 }
 
@@ -77,7 +77,7 @@ func SequentialTaskQueueCompareLess(this TrackableExecutableTask, that Trackable
 }
 
 func WorkflowKeyHashFn(
-	item interface{},
+	item any,
 ) uint32 {
 	workflowKey, ok := item.(definition.WorkflowKey)
 	if !ok {

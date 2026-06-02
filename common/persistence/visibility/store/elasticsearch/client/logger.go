@@ -20,7 +20,7 @@ func newErrorLogger(logger log.Logger) *errorLogger {
 	return &errorLogger{logger}
 }
 
-func (l *errorLogger) Printf(format string, v ...interface{}) {
+func (l *errorLogger) Printf(format string, v ...any) {
 	l.Error(fmt.Sprintf(format, v...))
 }
 
@@ -28,6 +28,6 @@ func newInfoLogger(logger log.Logger) *infoLogger {
 	return &infoLogger{logger}
 }
 
-func (l *infoLogger) Printf(format string, v ...interface{}) {
+func (l *infoLogger) Printf(format string, v ...any) {
 	l.Info(fmt.Sprintf(format, v...))
 }

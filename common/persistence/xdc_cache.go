@@ -36,9 +36,8 @@ type (
 	}
 
 	XDCCacheImpl struct {
-		cache      cache.Cache
-		logger     log.Logger
-		serializer serialization.Serializer
+		cache  cache.Cache
+		logger log.Logger
 	}
 )
 
@@ -99,8 +98,7 @@ func NewEventsBlobCache(
 				Pin: false,
 			},
 		),
-		logger:     logger,
-		serializer: serialization.NewSerializer(),
+		logger: logger,
 	}
 }
 
@@ -114,7 +112,7 @@ func (e *XDCCacheImpl) Put(
 			events := make([][]*historypb.HistoryEvent, len(blobs))
 			for i, blob := range blobs {
 				var err error
-				events[i], err = e.serializer.DeserializeEvents(blob)
+				events[i], err = serialization.DefaultDecoder.DeserializeEvents(blob)
 				if err != nil {
 					e.logger.Error("Error deserializing events", tag.Error(err))
 					return nil

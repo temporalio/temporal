@@ -8,7 +8,9 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
@@ -25,11 +27,12 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean        client.Bean
-		SdkClientFactory  sdk.ClientFactory
-		HistoryRawClient  resource.HistoryRawClient
-		MatchingRawClient resource.MatchingRawClient
-		VisibilityManager manager.VisibilityManager
+		ClientBean             client.Bean
+		SdkClientFactory       sdk.ClientFactory
+		HistoryRawClient       resource.HistoryRawClient
+		MatchingRawClient      resource.MatchingRawClient
+		VisibilityManager      manager.VisibilityManager
+		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	transferQueueFactory struct {
@@ -51,11 +54,22 @@ func NewTransferQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled:          params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+						QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+						QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
-			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.NamespaceRegistry,
+				params.ClusterMetadata.GetCurrentClusterName(),
+			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
@@ -77,23 +91,21 @@ func (f *transferQueueFactory) CreateQueue(
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			currentClusterName,
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			f.ChasmRegistry,
-			logger,
-			metricsHandler,
-		)
-	}
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		currentClusterName,
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
@@ -113,6 +125,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 		f.ChasmEngine,
+		f.VersionMembershipCache,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -189,5 +202,6 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

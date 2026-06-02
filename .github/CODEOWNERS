@@ -1,4 +1,95 @@
 # Syntax is here:
 # https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*                @temporalio/server @temporalio/cgs
+*                @temporalio/server @temporalio/cgs @temporalio/nexus
+
+# CHASM
+
+# This only matching files directly in /chasm/ folder, but not any nested files
+/chasm/* @temporalio/oss-foundations
+
+/chasm/lib/activity/ @temporalio/act
+/chasm/lib/scheduler/ @temporalio/act
+
+/chasm/lib/nexusoperation/ @temporalio/act @temporalio/nexus
+/chasm/lib/callback/ @temporalio/act @temporalio/nexus
+
+# Service Clients
+
+/client/matching/ @temporalio/oss-matching
+
+# Common
+
+/common/taskqueue/ @temporalio/oss-matching
+/common/worker_versioning/ @temporalio/oss-matching
+/common/tqid/ @temporalio/oss-matching
+
+/common/archiver/ @temporalio/oss-foundations
+/common/searchattribute/ @temporalio/oss-foundations
+
+/common/nexus/ @temporalio/act @temporalio/nexus
+
+/common/tasks/ @temporalio/oss-foundations @temporalio/cgs
+/common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
+
+# Components
+
+/components/ @temporalio/act @temporalio/nexus
+
+# Proto Definitions
+
+/proto/internal/temporal/server/api/schedule/ @temporalio/act
+
+/proto/internal/temporal/server/api/deployment/ @temporalio/oss-matching
+/proto/internal/temporal/server/api/matchingservice/ @temporalio/oss-matching
+/proto/internal/temporal/server/api/taskqueue/ @temporalio/oss-matching
+
+/proto/internal/temporal/server/api/archiver/ @temporalio/oss-foundations
+
+/proto/internal/temporal/server/api/replication/ @temporalio/cgs
+
+# DB Schema
+/schema/**/visibility/ @temporalio/oss-foundations
+
+# History Service
+
+/service/history/archival/ @temporalio/oss-foundations
+/service/history/*archival* @temporalio/oss-foundations
+/service/history/*chasm* @temporalio/oss-foundations
+/service/history/deletemanager/ @temporalio/oss-foundations
+/service/history/queues/ @temporalio/oss-foundations
+/service/history/shard/ @temporalio/oss-foundations
+/service/history/*queue_factory* @temporalio/oss-foundations
+/service/history/*statemachine* @temporalio/oss-foundations
+/service/history/*visibility* @temporalio/oss-foundations
+
+/service/history/ndc/ @temporalio/cgs
+/service/history/replication/ @temporalio/cgs
+
+# Matching Service
+
+/service/matching/ @temporalio/oss-matching
+
+# Worker Service
+
+/service/worker/batcher/ @temporalio/act
+/service/worker/scheduler/ @temporalio/act
+
+/service/worker/workerdeployment/ @temporalio/oss-matching
+
+/service/worker/addsearchattributes/ @temporalio/oss-foundations
+/service/worker/deletenamespace/ @temporalio/oss-foundations
+/service/worker/dlq/ @temporalio/oss-foundations
+
+/service/worker/scanner/ @temporalio/oss-foundations @temporalio/oss-matching
+/service/worker/scanner/executions/ @temporalio/oss-foundations 
+/service/worker/scanner/history/ @temporalio/oss-foundations
+/service/worker/scanner/build_ids/ @temporalio/oss-matching
+/service/worker/scanner/taskqueue/ @temporalio/oss-matching
+
+/service/worker/migration/ @temporalio/cgs
+/service/worker/replicator/ @temporalio/cgs
+
+/service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
+
+/tools/ @temporalio/server

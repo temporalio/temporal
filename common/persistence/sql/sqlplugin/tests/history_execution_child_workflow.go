@@ -124,7 +124,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var childWorkflows []sqlplugin.ChildExecutionInfoMapsRow
-	for i := 0; i < numChildWorkflows; i++ {
+	for range numChildWorkflows {
 		childWorkflow := s.newRandomExecutionChildWorkflowRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		childWorkflows = append(childWorkflows, childWorkflow)
 	}
@@ -291,7 +291,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceDeleteSelect_Multiple() 
 
 	var childWorkflows []sqlplugin.ChildExecutionInfoMapsRow
 	var childWorkflowInitiatedIDs []int64
-	for i := 0; i < numChildWorkflows; i++ {
+	for range numChildWorkflows {
 		childWorkflowInitiatedID := rand.Int63()
 		childWorkflow := s.newRandomExecutionChildWorkflowRow(shardID, namespaceID, workflowID, runID, childWorkflowInitiatedID)
 		childWorkflowInitiatedIDs = append(childWorkflowInitiatedIDs, childWorkflowInitiatedID)
@@ -336,7 +336,7 @@ func (s *historyExecutionChildWorkflowSuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var childWorkflows []sqlplugin.ChildExecutionInfoMapsRow
-	for i := 0; i < numChildWorkflows; i++ {
+	for range numChildWorkflows {
 		childWorkflow := s.newRandomExecutionChildWorkflowRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 		childWorkflows = append(childWorkflows, childWorkflow)
 	}

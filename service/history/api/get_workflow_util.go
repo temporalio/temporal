@@ -3,12 +3,12 @@ package api
 import (
 	"context"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -23,8 +23,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
-
-const longPollSoftTimeout = time.Second
 
 //nolint:revive // cognitive complexity 39 (> max enabled 25)
 func GetOrPollWorkflowMutableState(
@@ -190,7 +188,7 @@ func GetOrPollWorkflowMutableState(
 
 		// Send back response just before caller context would time out.
 		longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, longPollSoftTimeout)
+		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, common.DefaultLongPollBuffer)
 		defer cancel()
 
 		for {
@@ -248,6 +246,13 @@ func GetOrPollWorkflowMutableState(
 					return response, nil
 				}
 			case <-longPollCtx.Done():
+				return response, nil
+			case <-ctx.Done():
+				// Fallback for when ctx.Deadline() returns false but ctx is still cancelled.
+				// This can happen when gRPC timeout header isn't propagated (e.g., stripped
+				// by proxy) but the client still disconnects/cancels when its timeout fires.
+				// In normal operation where ctx.Deadline() returns true, longPollCtx.Done()
+				// fires first and this case is never reached.
 				return response, nil
 			}
 		}
@@ -366,6 +371,14 @@ func MutableStateToGetResponse(
 		}
 	}
 
+	// Get transient/speculative workflow task events if present
+	var transientOrSpeculativeTasks *historyspb.TransientWorkflowTaskInfo
+	if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil {
+		transientOrSpeculativeTasks = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
+	} else if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
+		transientOrSpeculativeTasks = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
+	}
+
 	return &historyservice.GetMutableStateResponse{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
@@ -398,6 +411,7 @@ func MutableStateToGetResponse(
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
-		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		VersioningInfo:               common.CloneProto(mutableState.GetExecutionInfo().VersioningInfo),
+		TransientOrSpeculativeTasks:  transientOrSpeculativeTasks,
 	}, nil
 }

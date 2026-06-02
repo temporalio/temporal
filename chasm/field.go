@@ -39,14 +39,22 @@ func NewComponentField[C Component](
 	c C,
 	options ...ComponentFieldOption,
 ) Field[C] {
+	opts := &componentFieldOptions{}
+	for _, o := range options {
+		o(opts)
+	}
+	internal := newFieldInternalWithValue(fieldTypeComponent, c)
+	internal.detached = opts.detached
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypeComponent, c),
+		Internal: internal,
 	}
 }
 
 // ComponentPointerTo returns a CHASM field populated with a pointer to the given
-// component. Pointers are resolved at the time the transaction is closed, and the
-// transaction will fail if any pointers cannot be resolved.
+// component. The target component must be a proper ancestor of the referring
+// component within the same component tree. Pointers to non-ancestor components
+// (e.g., siblings, descendants, or components from a different tree) will cause
+// the transaction to fail when it is closed.
 func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,

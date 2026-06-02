@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -21,9 +22,10 @@ func newShardPersistence(
 	db sqlplugin.DB,
 	currentClusterName string,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (persistence.ShardStore, error) {
 	return &sqlShardStore{
-		SqlStore:           NewSqlStore(db, logger),
+		SqlStore:           NewSQLStore(db, logger, serializer),
 		currentClusterName: currentClusterName,
 	}, nil
 }

@@ -149,7 +149,7 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomVisibilityTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)
@@ -275,7 +275,7 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		task := s.newRandomVisibilityTaskRow(shardID, taskID)
 		taskID++
 		tasks = append(tasks, task)

@@ -56,7 +56,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	// Applying replication messages through fetcher is Async.
 	// So we need to retry a couple of times.
 Loop:
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		time.Sleep(time.Second)
 
 		actualDLQMsgs := map[int64]bool{}

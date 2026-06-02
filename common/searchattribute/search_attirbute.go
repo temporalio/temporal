@@ -4,7 +4,6 @@ package searchattribute
 
 import (
 	"context"
-	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -24,11 +23,6 @@ type (
 		Provider
 		SaveSearchAttributes(ctx context.Context, indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
 	}
-)
-
-var (
-	ErrInvalidName = errors.New("invalid search attribute name")
-	ErrInvalidType = errors.New("invalid search attribute type")
 )
 
 // ApplyTypeMap set type for all valid search attributes which don't have it.

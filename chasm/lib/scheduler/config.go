@@ -12,10 +12,12 @@ type (
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
+		GeneratorBufferReserveSize        int           // Minimum number of spaces in `BufferedStarts` reserved for automated actions.
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
-		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
 		IdleTime                          time.Duration // How long to keep schedules after they're done
+		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
+		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
 	}
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
@@ -28,36 +30,43 @@ type (
 
 var (
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
-		"chasm.scheduler.tweakables",
+		"scheduler.tweakables",
 		DefaultTweakables,
 		"A set of tweakable parameters for the CHASM scheduler.")
 
 	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.retryPolicy.initialInterval",
+		"scheduler.retryPolicy.initialInterval",
 		time.Second,
 		`The initial backoff interval when retrying a failed task.`,
 	)
 
 	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.retryPolicy.maxInterval",
+		"scheduler.retryPolicy.maxInterval",
 		time.Minute,
 		`The maximum backoff interval when retrying a failed task.`,
 	)
 
 	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.serviceCallTimeout",
+		"scheduler.serviceCallTimeout",
 		2*time.Second,
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
+
+	// SentinelIdleTime is how long a CHASM sentinel reserves the schedule ID
+	// before auto-closing via the idle task mechanism. Matches the dummy
+	// workflow's duration.
+	SentinelIdleTime = 15 * time.Minute
 
 	DefaultTweakables = Tweakables{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
 		MaxBufferSize:                     1000,
+		GeneratorBufferReserveSize:        50,
 		CanceledTerminatedCountAsFailures: false,
-		RecentActionCount:                 10,
 		MaxActionsPerExecution:            5,
 		IdleTime:                          7 * 24 * time.Hour,
+		EventLogMaxEntries:                30,
+		EventLogMaxMessageLen:             1000,
 	}
 )
 

@@ -40,15 +40,15 @@ func (h *OpenAPIHTTPHandler) RegisterRoutes(r *mux.Router) {
 
 			rdr, err := gzip.NewReader(bytes.NewReader(spec))
 			if err != nil {
-				h.logger.Error("failed to initialize openapi spec reader", tag.NewInt("version", version), tag.Error(err))
+				h.logger.Error("failed to initialize openapi spec reader", tag.Int("version", version), tag.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			if _, err := io.Copy(w, rdr); err != nil {
-				h.logger.Error("failed to send openapi spec", tag.NewInt("version", version), tag.Error(err))
+				h.logger.Error("failed to send openapi spec", tag.Int("version", version), tag.Error(err))
 			}
 			if err := rdr.Close(); err != nil {
-				h.logger.Error("failed to verify openapi spec checksum", tag.NewInt("version", version), tag.Error(err))
+				h.logger.Error("failed to verify openapi spec checksum", tag.Int("version", version), tag.Error(err))
 			}
 		}
 	}

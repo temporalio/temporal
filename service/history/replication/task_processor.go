@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -64,6 +65,7 @@ type (
 		config                  *configs.Config
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
+		testHooks               testhooks.TestHooks
 		replicationTaskExecutor TaskExecutor
 		dlqWriter               DLQWriter
 
@@ -99,6 +101,7 @@ func NewTaskProcessor(
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
+	testHooks testhooks.TestHooks,
 	dlqWriter DLQWriter,
 ) TaskProcessor {
 	shardID := shardContext.GetShardID()
@@ -125,6 +128,7 @@ func NewTaskProcessor(
 		config:                  config,
 		metricsHandler:          metricsHandler,
 		logger:                  shardContext.GetLogger(),
+		testHooks:               testHooks,
 		replicationTaskExecutor: replicationTaskExecutor,
 		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -313,7 +317,15 @@ func (p *taskProcessorImpl) handleReplicationTask(
 	operationTagValue := p.getOperationTagValue(replicationTask)
 
 	operation := func() error {
-		err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		var err error
+		// Tests use this hook to pause replication tasks before they are applied.
+		if hook, ok := testhooks.Get(p.testHooks, testhooks.HistoryReplicationTaskInterceptor, testhooks.GlobalScope); ok {
+			err = hook(replicationTask, func() error {
+				return p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+			})
+		} else {
+			err = p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		}
 		p.emitTaskMetrics(operationTagValue, err)
 		return err
 	}
@@ -471,7 +483,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	}
 }
 
-func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
+func (p *taskProcessorImpl) paginationFn(_ []byte) ([]any, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	var lastProcessedVisTime *timestamppb.Timestamp
 	if !p.maxRxProcessedTimestamp.IsZero() {
@@ -501,7 +513,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 			// since sync shard status are periodically updated
 		}
 
-		var tasks []interface{}
+		var tasks []any
 		for _, task := range resp.GetReplicationTasks() {
 			tasks = append(tasks, task)
 		}

@@ -13,7 +13,7 @@ type AudienceMapper struct {
 }
 
 // Audience returns the configured audience string.
-func (m *AudienceMapper) Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string {
+func (m *AudienceMapper) Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string {
 	return m.JwtAudience
 }
 

@@ -101,7 +101,7 @@ func (d *ShardStore) GetOrCreateShard(
 		rangeID,
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return nil, gocql.ConvertError("GetOrCreateShard", err)
@@ -134,7 +134,7 @@ func (d *ShardStore) UpdateShard(
 		request.PreviousRangeID,
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return gocql.ConvertError("UpdateShard", err)

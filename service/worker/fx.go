@@ -4,43 +4,59 @@ import (
 	"context"
 	"os"
 
+	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 var Module = fx.Options(
 	migration.Module,
 	resource.Module,
 	deletenamespace.Module,
+	chasmscheduler.Module,
+	callback.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
+	wcicomponent.Module,
 	dlq.Module,
+	dummy.Module,
+	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
@@ -73,17 +89,26 @@ var Module = fx.Options(
 	fx.Provide(func(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
+		dataMerger nsreplication.NamespaceDataMerger,
+		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		testHooks testhooks.TestHooks,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
+			dataMerger,
+			admitter,
 			logger,
+			testHooks,
 		)
 	}),
+	fx.Provide(nsreplication.NewNoopDataMerger),
+	fx.Provide(nsreplication.NewDefaultAdmitter),
+	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
-	fx.Provide(NewPerNamespaceWorkerManager),
+	fx.Provide(PerNamespaceWorkerManagerProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -142,6 +167,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -164,9 +190,42 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+type perNamespaceWorkerManagerInitParams struct {
+	fx.In
+	Logger            log.Logger
+	SdkClientFactory  sdk.ClientFactory
+	NamespaceRegistry namespace.Registry
+	HostName          resource.HostName
+	Config            *Config
+	ClusterMetadata   cluster.Metadata
+	Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
+}
+
+func PerNamespaceWorkerManagerProvider(params perNamespaceWorkerManagerInitParams) *PerNamespaceWorkerManager {
+	return NewPerNamespaceWorkerManager(
+		params.Logger,
+		params.SdkClientFactory,
+		params.NamespaceRegistry,
+		params.HostName,
+		params.Config,
+		params.ClusterMetadata,
+		params.Components,
+		primitives.PerNSWorkerTaskQueue,
+	)
+}
+
+func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) *grpc.Server {
+	opts, err := rpcFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("Failed to get gRPC server options", tag.Error(err))
+	}
+	return grpc.NewServer(opts...)
 }

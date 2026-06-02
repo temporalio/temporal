@@ -26,6 +26,21 @@ func (c *retryableClient) AddTasks(
 	return resp, err
 }
 
+func (c *retryableClient) CancelNexusOperation(
+	ctx context.Context,
+	request *historyservice.CancelNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CancelNexusOperationResponse, error) {
+	var resp *historyservice.CancelNexusOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelNexusOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -95,6 +110,21 @@ func (c *retryableClient) DeleteDLQTasks(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DeleteDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteExecutionResponse, error) {
+	var resp *historyservice.DeleteExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -920,6 +950,21 @@ func (c *retryableClient) SignalWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.SignalWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) StartNexusOperation(
+	ctx context.Context,
+	request *historyservice.StartNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.StartNexusOperationResponse, error) {
+	var resp *historyservice.StartNexusOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.StartNexusOperation(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

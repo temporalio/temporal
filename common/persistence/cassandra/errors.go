@@ -38,25 +38,27 @@ type (
 // Resulting value will be converted to a pointer of underlying type (i.e. *int) and stored in the map.
 // We do it only for "type" field which is checked for `nil` value.
 // All other fields are created automatically by gocql with non-pointer types (i.e. int).
-func newConflictRecord() map[string]interface{} {
+func newConflictRecord() map[string]any {
 	t := new(int)
-	return map[string]interface{}{
+	return map[string]any{
 		"type": &t,
 	}
 }
 
 func convertErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	conflictIter gocql.Iter,
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
 	requestExecutionCASConditions []executionCASCondition,
 ) error {
 
-	conflictRecords := []map[string]interface{}{conflictRecord}
+	conflictRecords := []map[string]any{conflictRecord}
 	errors := extractErrors(
 		conflictRecord,
+		currentRecordRunID,
 		requestShardID,
 		requestRangeID,
 		requestCurrentRunID,
@@ -73,6 +75,7 @@ func convertErrors(
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
 			conflictRecord,
+			currentRecordRunID,
 			requestShardID,
 			requestRangeID,
 			requestCurrentRunID,
@@ -101,7 +104,8 @@ func convertErrors(
 }
 
 func extractErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
@@ -119,6 +123,7 @@ func extractErrors(
 
 	if err := extractCurrentWorkflowConflictError(
 		conflictRecord,
+		currentRecordRunID,
 		requestCurrentRunID,
 	); err != nil {
 		errors = append(errors, err)
@@ -156,7 +161,7 @@ func sortErrors(
 }
 
 func extractShardOwnershipLostError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestShardID int32,
 	requestRangeID int64,
 ) error {
@@ -183,7 +188,8 @@ func extractShardOwnershipLostError(
 }
 
 func extractCurrentWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
+	currentRecordRunID string,
 	requestCurrentRunID string,
 ) error {
 	rowType, ok := conflictRecord["type"].(*int)
@@ -194,7 +200,7 @@ func extractCurrentWorkflowConflictError(
 	if *rowType != rowTypeExecution {
 		return nil
 	}
-	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != permanentRunID {
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != currentRecordRunID {
 		return nil
 	}
 
@@ -203,7 +209,7 @@ func extractCurrentWorkflowConflictError(
 		binary, _ := conflictRecord["execution_state"].([]byte)
 		encoding, _ := conflictRecord["execution_state_encoding"].(string)
 		executionState := &persistencespb.WorkflowExecutionState{}
-		if state, err := serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
+		if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
 			executionState = state
 		}
 		// if err != nil, this means execution state cannot be parsed, just use default values
@@ -229,7 +235,7 @@ func extractCurrentWorkflowConflictError(
 }
 
 func extractWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestRunID string,
 	requestDBVersion int64,
 	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
@@ -278,7 +284,7 @@ func extractWorkflowConflictError(
 }
 
 func printRecords(
-	records []map[string]interface{},
+	records []map[string]any,
 ) string {
 	binary, _ := json.MarshalIndent(records, "", "  ")
 	return string(binary)

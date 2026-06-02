@@ -120,8 +120,17 @@ func (vc *VersionChecker) performVersionCheck(
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
-	return metadata.VersionInfo == nil || (metadata.VersionInfo.LastUpdateTime != nil &&
-		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour)))
+	if metadata.VersionInfo == nil {
+		return true
+	}
+	// Check if the server version has changed since last version check.
+	// This ensures upgrade notifications are cleared after cluster upgrade.
+	if metadata.VersionInfo.Current == nil ||
+		metadata.VersionInfo.Current.Version != headers.ServerVersion {
+		return true
+	}
+	return metadata.VersionInfo.LastUpdateTime != nil &&
+		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour))
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*versioninfo.VersionCheckRequest, error) {

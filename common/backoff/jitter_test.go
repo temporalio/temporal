@@ -28,7 +28,7 @@ func (s *jitterSuite) TestJitter_Int64() {
 	lowerBound := int64(float64(input) * (1 - coefficient))
 	upperBound := int64(float64(input) * (1 + coefficient))
 
-	for i := 0; i < 1048576; i++ {
+	for range 1048576 {
 		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
@@ -45,7 +45,7 @@ func (s *jitterSuite) TestJitter_Float64() {
 	lowerBound := float64(input) * (1 - coefficient)
 	upperBound := float64(input) * (1 + coefficient)
 
-	for i := 0; i < 1048576; i++ {
+	for range 1048576 {
 		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
@@ -62,7 +62,7 @@ func (s *jitterSuite) TestJitter_Duration() {
 	lowerBound := time.Duration(int64(float64(input.Nanoseconds()) * (1 - coefficient)))
 	upperBound := time.Duration(int64(float64(input.Nanoseconds()) * (1 + coefficient)))
 
-	for i := 0; i < 1048576; i++ {
+	for range 1048576 {
 		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)

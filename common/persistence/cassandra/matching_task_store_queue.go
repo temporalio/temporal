@@ -76,6 +76,19 @@ const (
 		`AND task_id = ? ` +
 		`IF range_id = ?`
 
+	// templateCheckRangeIDQuery is a lightweight transaction that checks
+	// the range_id without updating the metadata blob. Used for write
+	// fencing on task appends when a full metadata update is not needed.
+	templateCheckRangeIDQuery = `UPDATE tasks_v2 SET ` +
+		`range_id = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND pass = 0 ` +
+		`AND task_id = ? ` +
+		`IF range_id = ?`
+
 	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks_v2 ` +
 		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id) ` +
 		`VALUES (?, ?, ?, ?, 0, ?) USING TTL ?`
@@ -123,7 +136,7 @@ func (d *taskQueueStore) CreateTaskQueue(
 		request.TaskQueueInfo.EncodingType.String(),
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return gocql.ConvertError("CreateTaskQueue", err)
@@ -171,7 +184,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 ) (*p.UpdateTaskQueueResponse, error) {
 	var err error
 	var applied bool
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
@@ -261,7 +274,7 @@ func (d *taskQueueStore) DeleteTaskQueue(
 		request.RangeID,
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return gocql.ConvertError("DeleteTaskQueue", err)

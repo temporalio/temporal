@@ -12,8 +12,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -43,22 +41,8 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
-		response, _, err := chasm.UpdateComponent(
-			ctx,
-			activityRefProto,
-			(*activity.Activity).HandleStarted,
-			request,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
-	}
-
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var rejectCode rejectCode
@@ -78,7 +62,7 @@ func Invoke(
 			}
 
 			response, rejectCode, err = recordActivityTaskStarted(
-				ctx, shardContext, mutableState, request, matchingClient,
+				ctx, shardContext, mutableState, request, matchingClient, routingInfoCache,
 			)
 			if err != nil {
 				return nil, err
@@ -123,6 +107,7 @@ func recordActivityTaskStarted(
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
@@ -167,6 +152,16 @@ func recordActivityTaskStarted(
 		if ai.RequestId == requestID {
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
+			if ai.StartedClock != nil {
+				response.Clock = ai.StartedClock
+			} else {
+				// Activity started before the StartedClock field was added.
+				// Create a fresh clock for the shard staleness check.
+				response.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, rejectCodeUndefined, err
+				}
+			}
 			return response, rejectCodeAccepted, nil
 		}
 
@@ -219,6 +214,7 @@ func recordActivityTaskStarted(
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			matchingClient,
+			routingInfoCache,
 			mutableState.GetWorkflowKey().WorkflowID,
 		)
 		if err != nil {
@@ -252,10 +248,22 @@ func recordActivityTaskStarted(
 		}
 	}
 
-	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
+	// Create the shard clock before recording the start event. Matching uses the returned clock
+	// to build the task token sent to the worker. We store it in ActivityInfo so that history
+	// can later reconstruct the same task token that matching created (e.g. for cancel worker
+	// commands). On retries of this RPC, we return the stored clock from the early return
+	// path above.
+	clock, err := shardContext.NewVectorClock()
+	if err != nil {
+		return nil, rejectCodeUndefined, err
+	}
+	ai.StartedClock = clock
+
+	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions) //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
+		request.PollRequest.GetWorkerControlTaskQueue(),
 	); err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -273,6 +281,8 @@ func recordActivityTaskStarted(
 				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
 	).Record(scheduleToStartLatency)
+
+	response.Clock = clock
 
 	response.StartedTime = ai.StartedTime
 	response.Attempt = ai.Attempt
@@ -294,32 +304,52 @@ func recordActivityTaskStarted(
 }
 
 // TODO (Shahab): move this method to a better place
-// TODO: cache this result (especially if the answer is true)
 func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	workflowId string,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
-	resp, err := matchingClient.GetTaskQueueUserData(ctx,
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     taskQueueName,
-			TaskQueueType: taskQueueType,
-		})
-	if err != nil {
-		return nil, 0, err
-	}
-	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+	// Check cache first for task queue routing info (independent of workflow ID)
+	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
+
 	if !ok {
-		// The TQ is unversioned
-		return nil, 0, nil
+		// Cache miss, fetch from matching
+		resp, err := matchingClient.GetTaskQueueUserData(ctx,
+			&matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   namespaceID,
+				TaskQueue:     taskQueueName,
+				TaskQueueType: taskQueueType,
+			})
+		if err != nil {
+			return nil, 0, err
+		}
+		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+		if ok {
+			// Calculate the routing info for versioned task queue
+			routingInfo.Current, routingInfo.CurrentRevisionNumber, _, routingInfo.Ramping, _, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+		}
+		// else: routingInfo fields are all zero/nil (unversioned)
+
+		// Store routing info in cache (without workflow ID) - even for unversioned task queues
+		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber)
 	}
 
-	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	// Apply workflow-specific routing logic
+	// Note: Passing false useRampingVersionForInitialTask because activity is never the initial task.
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+		routingInfo.Current,
+		routingInfo.CurrentRevisionNumber,
+		routingInfo.Ramping,
+		routingInfo.RampPercentage,
+		routingInfo.RampingRevisionNumber,
+		workflowId,
+		false,
+	)
+
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 
@@ -358,10 +388,7 @@ func processActivityWorkflowRules(
 
 	// activity was paused, need to update activity
 	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-		activityInfo.StartedEventId = common.EmptyEventID
-		activityInfo.StartVersion = common.EmptyVersion
-		activityInfo.StartedTime = nil
-		activityInfo.RequestId = ""
+		workflow.ClearActivityStartedState(activityInfo)
 		return nil
 	}); err != nil {
 		return rejectCodeUndefined, err

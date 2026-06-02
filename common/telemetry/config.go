@@ -55,7 +55,7 @@ type (
 	connection struct {
 		Kind     string
 		Metadata metadata
-		Spec     interface{} `yaml:"-"`
+		Spec     any `yaml:"-"`
 	}
 
 	grpcconn struct {
@@ -86,7 +86,7 @@ type (
 			Protocol string
 		}
 		Metadata metadata
-		Spec     interface{} `yaml:"-"`
+		Spec     any `yaml:"-"`
 	}
 
 	otlpGrpcExporter struct {

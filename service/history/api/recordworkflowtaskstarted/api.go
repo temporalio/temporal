@@ -165,10 +165,12 @@ func Invoke(
 				requestID,
 				pollerTaskQueue,
 				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions), //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				req.TargetDeploymentVersion,
+				req.TaskDispatchRevisionNumber,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -335,12 +337,11 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
+			RunId:            workflowKey.GetRunID(),
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
+			PersistenceToken: persistenceToken,
+			BranchToken:      response.GetBranchToken(),
 		})
 		if err != nil {
 			return err
@@ -351,7 +352,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
-		response.RawHistory = historyBlobs
+		if shardContext.GetConfig().SendRawHistoryBytesToMatchingService() {
+			response.RawHistoryBytes = historyBlobs
+		} else {
+			response.RawHistory = historyBlobs //nolint:staticcheck // SA1019: Using deprecated field for backwards compatibility during rollout
+		}
 	} else {
 		response.History = history
 	}
@@ -371,7 +376,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
+	return &historyservice.RecordWorkflowTaskStartedResponse{
 		WorkflowType:               rawResp.WorkflowType,
 		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
 		ScheduledEventId:           rawResp.ScheduledEventId,
@@ -389,8 +394,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
-	}
-	return resp, nil
+	}, nil
 }
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(

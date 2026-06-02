@@ -1,214 +1,178 @@
 package tests
 
 import (
-	"context"
+	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 )
 
 type (
 	PurgeDLQTasksSuite struct {
-		testcore.FunctionalTestBase
-
-		dlq              *faultyDLQ
-		sdkClientFactory sdk.ClientFactory
-	}
-	purgeDLQTasksTestCase struct {
-		name      string
-		configure func(p *purgeDLQTasksTestParams)
-	}
-	purgeDLQTasksTestParams struct {
-		category                 tasks.Category
-		sourceCluster            string
-		targetCluster            string
-		maxMessageID             int64
-		apiCallErrorExpectation  func(err error)
-		workflowErrorExpectation func(err error)
-		deleteTasksErr           error
-	}
-	faultyDLQ struct {
-		persistence.HistoryTaskQueueManager
-		err error
+		parallelsuite.Suite[*PurgeDLQTasksSuite]
 	}
 )
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(PurgeDLQTasksSuite))
-}
-
-func (q *faultyDLQ) DeleteTasks(
-	ctx context.Context,
-	request *persistence.DeleteTasksRequest,
-) (*persistence.DeleteTasksResponse, error) {
-	if q.err != nil {
-		return nil, q.err
-	}
-
-	return q.HistoryTaskQueueManager.DeleteTasks(ctx, request)
-}
-
-func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
-		testcore.WithFxOptionsForService(primitives.HistoryService,
-			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
-				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
-				return s.dlq
-			}),
-		),
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Populate(&s.sdkClientFactory),
-		),
-	)
+	parallelsuite.Run(t, &PurgeDLQTasksSuite{})
 }
 
 func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
-	for _, tc := range []purgeDLQTasksTestCase{
+	var deleteTasksFaultCount atomic.Int32
+	for _, tc := range []struct {
+		name          string
+		envOptions    []testcore.TestOption
+		mutateRequest func(*adminservice.PurgeDLQTasksRequest)
+		apiErr        string
+		workflowErr   string
+		faultCount    *atomic.Int32
+	}{
 		{
-			name: "HappyPath",
+			name:       "HappyPath",
+			envOptions: []testcore.TestOption{testcore.WithWorkerService("purge DLQ workflow")},
 		},
 		{
 			name: "MissingSourceCluster",
-			configure: func(p *purgeDLQTasksTestParams) {
-				p.sourceCluster = ""
-				p.apiCallErrorExpectation = func(err error) {
-					s.Error(err)
-					s.ErrorContains(err, "SourceCluster")
-					s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-				}
+			mutateRequest: func(request *adminservice.PurgeDLQTasksRequest) {
+				request.DlqKey.SourceCluster = ""
 			},
+			apiErr: "SourceCluster",
 		},
 		{
 			name: "MissingTargetCluster",
-			configure: func(p *purgeDLQTasksTestParams) {
-				p.targetCluster = ""
-				p.apiCallErrorExpectation = func(err error) {
-					s.Error(err)
-					s.ErrorContains(err, "TargetCluster")
-					s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-				}
+			mutateRequest: func(request *adminservice.PurgeDLQTasksRequest) {
+				request.DlqKey.TargetCluster = ""
 			},
+			apiErr: "TargetCluster",
 		},
 		{
-			name: "QueueDoesNotExist",
-			configure: func(p *purgeDLQTasksTestParams) {
-				p.targetCluster = "does-not-exist"
-				p.workflowErrorExpectation = func(err error) {
-					s.Error(err)
-					s.ErrorContains(err, "queue not found")
-				}
+			name:       "QueueDoesNotExist",
+			envOptions: []testcore.TestOption{testcore.WithWorkerService("purge DLQ workflow")},
+			mutateRequest: func(request *adminservice.PurgeDLQTasksRequest) {
+				request.DlqKey.TargetCluster = "does-not-exist"
 			},
+			workflowErr: "queue not found",
 		},
 		{
 			name: "DeleteTasksUnavailableError",
-			configure: func(p *purgeDLQTasksTestParams) {
-				p.deleteTasksErr = serviceerror.NewUnavailable("DLQ unavailable")
-				p.workflowErrorExpectation = func(err error) {
-					s.NoError(err)
-				}
+			envOptions: []testcore.TestOption{
+				testcore.WithWorkerService("purge DLQ workflow"),
+				testcore.WithPersistenceFaultInjection(&config.FaultInjection{
+					Injector: func(target config.FaultInjectionTarget) error {
+						if target.Store == config.QueueV2Name &&
+							target.Method == "RangeDeleteMessages" &&
+							deleteTasksFaultCount.CompareAndSwap(0, 1) {
+							return serviceerror.NewUnavailable("DLQ unavailable")
+						}
+						return nil
+					},
+				}),
 			},
+			faultCount: &deleteTasksFaultCount,
 		},
 	} {
-		s.Run(tc.name, func() {
-			defaultParams := s.defaultDlqTestParams()
-
-			params := defaultParams
-			if tc.configure != nil {
-				tc.configure(&params)
-			}
-
-			ctx := context.Background()
-
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
+		s.Run(tc.name, func(s *PurgeDLQTasksSuite) {
+			env := testcore.NewEnv(s.T(), tc.envOptions...)
+			defaultQueueKey := persistencetest.GetQueueKey(s.T())
 
 			queueKey := persistence.QueueKey{
 				QueueType:     persistence.QueueTypeHistoryDLQ,
-				Category:      defaultParams.category,
-				SourceCluster: defaultParams.sourceCluster,
-				TargetCluster: defaultParams.targetCluster,
+				Category:      tasks.CategoryTransfer,
+				SourceCluster: defaultQueueKey.SourceCluster,
+				TargetCluster: defaultQueueKey.TargetCluster,
 			}
-			s.enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{})
+			dlq := s.enqueueTasks(env, queueKey, &tasks.WorkflowTask{})
 
-			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+			request := &adminservice.PurgeDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
-					TaskCategory:  int32(params.category.ID()),
-					SourceCluster: params.sourceCluster,
-					TargetCluster: params.targetCluster,
+					TaskCategory:  int32(tasks.CategoryTransfer.ID()),
+					SourceCluster: defaultQueueKey.SourceCluster,
+					TargetCluster: defaultQueueKey.TargetCluster,
 				},
 				InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 					MessageId: persistence.FirstQueueMessageID + 1,
 				},
-			})
-			if params.apiCallErrorExpectation != nil {
-				params.apiCallErrorExpectation(err)
-				return
+			}
+			if tc.mutateRequest != nil {
+				tc.mutateRequest(request)
 			}
 
+			purgeDLQTasksResponse, err := env.AdminClient().PurgeDLQTasks(s.Context(), request)
+			if tc.apiErr != "" {
+				s.Error(err)
+				s.ErrorContains(err, tc.apiErr)
+				s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+				return
+			}
 			s.NoError(err)
-			client := s.sdkClientFactory.GetSystemClient()
+
+			client, err := sdkclient.NewClientFromExisting(env.SdkClient(), sdkclient.Options{
+				Namespace: primitives.SystemLocalNamespace,
+			})
+			s.NoError(err)
 
 			var jobToken adminservice.DLQJobToken
 			err = jobToken.Unmarshal(purgeDLQTasksResponse.JobToken)
 			s.NoError(err)
 
-			workflow := client.GetWorkflow(ctx, jobToken.WorkflowId, jobToken.RunId)
-
-			err = workflow.Get(ctx, nil)
-			if params.workflowErrorExpectation != nil {
-				params.workflowErrorExpectation(err)
+			workflow := client.GetWorkflow(s.Context(), jobToken.WorkflowId, jobToken.RunId)
+			err = workflow.Get(s.Context(), nil)
+			if tc.workflowErr != "" {
+				s.Error(err)
+				s.ErrorContains(err, tc.workflowErr)
 				return
 			}
-
 			s.NoError(err)
-			readRawTasksResponse, err := s.dlq.ReadRawTasks(ctx, &persistence.ReadRawTasksRequest{
+
+			if tc.faultCount != nil {
+				s.Equal(int32(1), tc.faultCount.Load())
+			}
+
+			readRawTasksResponse, err := dlq.ReadRawTasks(s.Context(), &persistence.ReadRawTasksRequest{
 				QueueKey: queueKey,
 				PageSize: 10,
 			})
 			s.NoError(err)
 			s.Len(readRawTasksResponse.Tasks, 1)
-			s.Assert().Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
+			s.Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
 		})
 	}
 }
 
-func (s *PurgeDLQTasksSuite) defaultDlqTestParams() purgeDLQTasksTestParams {
-	queueKey := persistencetest.GetQueueKey(s.T())
+func (s *PurgeDLQTasksSuite) enqueueTasks(
+	env *testcore.TestEnv,
+	queueKey persistence.QueueKey,
+	task *tasks.WorkflowTask,
+) persistence.HistoryTaskQueueManager {
+	dlq, err := env.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
+	s.NoError(err)
 
-	return purgeDLQTasksTestParams{
-		category:      tasks.CategoryTransfer,
-		sourceCluster: queueKey.SourceCluster,
-		targetCluster: queueKey.TargetCluster,
-	}
-}
-
-func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persistence.QueueKey, task *tasks.WorkflowTask) {
-	_, err := s.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
+	_, err = dlq.CreateQueue(s.Context(), &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
 	s.NoError(err)
 
-	for i := 0; i < 3; i++ {
-		_, err := s.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+	for range 3 {
+		_, err = dlq.EnqueueTask(s.Context(), &persistence.EnqueueTaskRequest{
 			QueueType:     queueKey.QueueType,
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
+			SourceShardID: tasks.GetShardIDForTask(task, int(env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}
+
+	return dlq
 }

@@ -17,13 +17,13 @@ func TestCapturePanic(t *testing.T) {
 	assert.Equal(t, "error: bar", barErr.Error())
 }
 
-func testCapture(panicObj interface{}) (retErr error) {
+func testCapture(panicObj any) (retErr error) {
 	defer CapturePanic(NewNoopLogger(), &retErr)
 
 	testPanic(panicObj)
 	return nil
 }
 
-func testPanic(panicObj interface{}) {
+func testPanic(panicObj any) {
 	panic(panicObj)
 }

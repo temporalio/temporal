@@ -26,14 +26,14 @@ persistence:
       customDatastore:
         name: "elasticsearch"
         options:
-          version: "v7" 
+          version: "v7"
           logLevel: "error"
           urls:
             - scheme: "http"
               host: "127.0.0.1:9200"
           indices:
             visibility: temporal_visibility_v1_secondary
-            
+
 global:
   membership:
     maxJoinDuration: 30s
@@ -42,8 +42,8 @@ global:
     port: 7936
   metrics:
     prometheus:
-#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-#      framework: "opentelemetry"
+      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+      # framework: "opentelemetry"
       framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"

@@ -39,12 +39,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -98,13 +96,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.serializer = serialization.NewSerializer()
 
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.AllServices,
-			fx.Decorate(
-				func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-					return config.DCRedirectionPolicy{Policy: "noop"}
-				},
-			),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
 	)
 }
 
@@ -297,17 +289,16 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		AnyTimes()
 	mockClientBean.EXPECT().GetRemoteAdminClient("cluster2").Return(s.clusters[1].AdminClient(), nil).AnyTimes()
 
-	serializer := serialization.NewSerializer()
 	cluster1Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 	cluster2Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
@@ -515,7 +506,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wfExec, err := client1.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{

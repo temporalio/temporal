@@ -1,7 +1,4 @@
-# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
-# - docker/docker-bake.hcl (variable "ALPINE_TAG")
-# - docker/targets/server.Dockerfile (ARG ALPINE_TAG)
-ARG ALPINE_TAG=3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d
+ARG ALPINE_TAG
 
 FROM alpine:${ALPINE_TAG}
 
@@ -9,7 +6,9 @@ ARG TARGETARCH
 
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata && addgroup -g 1000 temporal && \
+    tzdata && \
+    apk upgrade --no-cache zlib && \
+    addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
 # Copy all admin tool binaries:
@@ -30,4 +29,22 @@ COPY ./build/temporal/schema /etc/temporal/schema
 
 USER temporal
 
-CMD ["sh", "-c", "trap exit INT HUP TERM; sleep infinity"]
+# Keep the container running idle so users can exec into it for admin tasks.
+#
+#   trap exit INT HUP TERM
+#     Register a signal handler so that when the shell receives SIGINT, SIGHUP,
+#     or SIGTERM it runs "exit" instead of the default PID 1 behavior (ignore).
+#
+#   sleep infinity &
+#     Start a never-ending process to keep the container alive. It runs in the
+#     background ("&") so the shell remains the foreground process.
+#
+#   wait
+#     Block the shell until background jobs finish. Unlike a foreground "sleep",
+#     "wait" is a shell builtin that gets interrupted when a signal arrives,
+#     giving the shell a chance to run the trap handler and exit immediately.
+#
+# Without the "& wait" pattern, the shell is blocked on the foreground sleep and
+# never processes signals, causing the container to hang until the kubelet
+# termination deadline before being force-killed.
+CMD ["sh", "-c", "trap exit INT HUP TERM; sleep infinity & wait"]

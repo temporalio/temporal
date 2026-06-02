@@ -62,6 +62,10 @@ func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string)
 	return valNSetter(v.(T), n.(int))
 }
 
+func (tv *TestVars) Sub(name string) *TestVars {
+	return newFromName(tv.testName + "/" + name)
+}
+
 func (tv *TestVars) stringNSetter(v string, n int) string {
 	return fmt.Sprintf("%s_%d", v, n)
 }
@@ -258,7 +262,7 @@ func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVe
 // SDKDeploymentVersion returns SDK worker deployment version
 func (tv *TestVars) SDKDeploymentVersion() worker.WorkerDeploymentVersion {
 	return worker.WorkerDeploymentVersion{
-		BuildId:        tv.BuildID(),
+		BuildID:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}
 }
@@ -282,20 +286,14 @@ func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionT
 	return ret
 }
 
-func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
-	if useV32 {
-		return &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  tv.ExternalDeploymentVersion(),
-				},
-			},
-		}
-	}
+func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
 	return &workflowpb.VersioningOverride{
-		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-		PinnedVersion: tv.DeploymentVersionString(),
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		},
 	}
 }
 
@@ -316,6 +314,10 @@ func (tv *TestVars) WithDeploymentSeries(deploymentSeries string) *TestVars {
 
 func (tv *TestVars) WithBuildID(buildID string) *TestVars {
 	return tv.cloneSetVal("build_id", buildID)
+}
+
+func (tv *TestVars) WithWorkflowID(workflowID string) *TestVars {
+	return tv.cloneSetVal("workflow_id", workflowID)
 }
 
 func (tv *TestVars) WithTaskQueueNumber(n int) *TestVars {
@@ -390,6 +392,15 @@ func (tv *TestVars) ClientIdentity() string {
 
 func (tv *TestVars) WorkerIdentity() string {
 	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WorkerInstanceKey() string {
+	return getOrCreate(tv, "worker_instance_key", tv.uniqueString, tv.stringNSetter)
+}
+
+// ControlQueueName returns the Nexus task queue name used to deliver control tasks to this worker.
+func (tv *TestVars) ControlQueueName(ns string) string {
+	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s", ns, tv.WorkerInstanceKey())
 }
 
 func (tv *TestVars) TimerID() string {

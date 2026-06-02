@@ -160,7 +160,7 @@ func (r *ReplicationStreamRecorder) UnaryInterceptor(clusterName string) grpc.Un
 	return func(
 		ctx context.Context,
 		method string,
-		req, reply interface{},
+		req, reply any,
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
@@ -225,7 +225,7 @@ type recordingClientStream struct {
 	targetAddress string
 }
 
-func (s *recordingClientStream) SendMsg(m interface{}) error {
+func (s *recordingClientStream) SendMsg(m any) error {
 	if msg, ok := m.(proto.Message); ok {
 		// SendMsg means this cluster is SENDING a message (could be request or ack)
 		s.recorder.recordMessage(s.method, msg, DirectionSend, s.clusterName, s.targetAddress, true)
@@ -233,7 +233,7 @@ func (s *recordingClientStream) SendMsg(m interface{}) error {
 	return s.ClientStream.SendMsg(m)
 }
 
-func (s *recordingClientStream) RecvMsg(m interface{}) error {
+func (s *recordingClientStream) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
 	if err == nil {
 		if msg, ok := m.(proto.Message); ok {
@@ -248,10 +248,10 @@ func (s *recordingClientStream) RecvMsg(m interface{}) error {
 func (r *ReplicationStreamRecorder) UnaryServerInterceptor(clusterName string) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
-		req interface{},
+		req any,
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	) (any, error) {
 		// Capture incoming request if it's a replication-related call
 		if isReplicationMethod(info.FullMethod) {
 			if protoReq, ok := req.(proto.Message); ok {
@@ -275,7 +275,7 @@ func (r *ReplicationStreamRecorder) UnaryServerInterceptor(clusterName string) g
 // StreamServerInterceptor returns a gRPC stream server interceptor that captures stream messages
 func (r *ReplicationStreamRecorder) StreamServerInterceptor(clusterName string) grpc.StreamServerInterceptor {
 	return func(
-		srv interface{},
+		srv any,
 		ss grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
@@ -302,7 +302,7 @@ type recordingServerStream struct {
 	clusterName string
 }
 
-func (s *recordingServerStream) SendMsg(m interface{}) error {
+func (s *recordingServerStream) SendMsg(m any) error {
 	if msg, ok := m.(proto.Message); ok {
 		// Server SendMsg means this server is SENDING a message to the client
 		s.recorder.recordMessage(s.method, msg, DirectionServerSend, s.clusterName, "server", true)
@@ -310,7 +310,7 @@ func (s *recordingServerStream) SendMsg(m interface{}) error {
 	return s.ServerStream.SendMsg(m)
 }
 
-func (s *recordingServerStream) RecvMsg(m interface{}) error {
+func (s *recordingServerStream) RecvMsg(m any) error {
 	err := s.ServerStream.RecvMsg(m)
 	if err == nil {
 		if msg, ok := m.(proto.Message); ok {

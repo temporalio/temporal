@@ -12,11 +12,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const (
-	defaultMonitorTickerDuration = time.Minute
-	defaultMonitorTickerJitter   = 0.15
-)
-
 var _ Scheduler[Task] = (*FIFOScheduler[Task])(nil)
 
 type (
@@ -146,7 +141,7 @@ func (f *FIFOScheduler[T]) updateWorkerCount(targetWorkerNum int) {
 func (f *FIFOScheduler[T]) startWorkers(
 	count int,
 ) {
-	for i := 0; i < count; i++ {
+	for range count {
 		shutdownCh := make(chan struct{})
 		f.workerShutdownCh = append(f.workerShutdownCh, shutdownCh)
 

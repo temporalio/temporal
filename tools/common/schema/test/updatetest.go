@@ -24,10 +24,12 @@ type UpdateSchemaTestBase struct {
 	DBName     string
 	db         DB
 	pluginName string
+	conn       ConnectParams
 }
 
 // SetupSuiteBase sets up the test suite
-func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
+func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB, pluginName string, conn ConnectParams) {
+	tb.conn = conn
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	tb.Logger = log.NewTestLogger()
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -153,9 +155,7 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 func (tb *UpdateSchemaTestBase) getCommandBase() []string {
 	command := []string{"./tool"}
 	if tb.pluginName != "" {
-		command = append(command, []string{
-			"-pl", tb.pluginName,
-		}...)
+		command = append(command, "-pl", tb.pluginName)
 	}
-	return command
+	return append(command, tb.conn.CLIFlags()...)
 }

@@ -3,13 +3,20 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"errors"
 	"sync"
 
+	computepb "go.temporal.io/api/compute/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -140,16 +147,37 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.WorkerDeploymentClient.DeleteVersionFromWorkerDeployment(
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
+	if err != nil {
+		return err
+	}
+
+	workflowID := GenerateVersionWorkflowID(args.DeploymentName, versionObj.GetBuildId())
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
+		Identity:         identity,
+		Version:          args.Version,
+		SkipDrainage:     args.SkipDrainage,
+		AsyncPropagation: args.AsyncPropagation,
+	})
+	if err != nil {
+		return err
+	}
+
+	outcome, err := updateWorkflow(
 		ctx,
+		a.HistoryClient,
 		a.namespace,
-		args.DeploymentName,
-		args.Version,
-		identity,
-		args.RequestId,
-		args.SkipDrainage,
-		args.AsyncPropagation,
+		workflowID,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: args.RequestId, Identity: identity},
+		},
 	)
+	if err != nil {
+		return err
+	}
+
+	err = extractApplicationErrorOrInternal(outcome.GetFailure())
 	if err != nil {
 		return err
 	}
@@ -247,6 +275,26 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 ) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId)
+	startIdentity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.GetIdentity(), input.GetComputeConfig())
+}
+
+func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	if err != nil {
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+		}
+		return nil, err
+	}
+	if resp == nil {
+		return nil, nil
+	}
+	return wciSpecToComputeConfigSummary(resp.Spec), nil
+}
+
+func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

@@ -95,11 +95,11 @@ func TestPredefinedTasks(t *testing.T) {
 		&tasks.ArchiveExecutionTask{},
 		&tasks.StateMachineOutboundTask{},
 	}
-	serializer := serialization.NewTaskSerializer()
+	taskSerializer := serialization.NewSerializer()
 	expectedTaskTypes := make([]string, len(historyTasks))
 	for i, task := range historyTasks {
 		expectedTaskTypes[i] = enumsspb.TaskType_name[int32(task.GetType())]
-		blob, err := serializer.SerializeTask(task)
+		blob, err := taskSerializer.SerializeTask(task)
 		require.NoError(t, err)
 		err = encoder.Encode(&buf, task.GetCategory().ID(), blob)
 		require.NoError(t, err)

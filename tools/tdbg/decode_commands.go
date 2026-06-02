@@ -10,9 +10,6 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/codec"
 	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 func AdminDecodeProto(c *cli.Context) error {
@@ -60,14 +57,9 @@ func AdminDecodeProto(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter data flag")
 	}
 
-	messageType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(protoType))
+	message, err := unmarshalProtoByTypeName(protoType, protoData)
 	if err != nil {
-		return fmt.Errorf("unable to find %s type: %w", protoType, err)
-	}
-
-	message := messageType.New().Interface()
-	if err = proto.Unmarshal(protoData, message); err != nil {
-		return fmt.Errorf("unable to unmarshal to %s", protoType)
+		return err
 	}
 
 	encoder := codec.NewJSONPBIndentEncoder(" ")

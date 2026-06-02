@@ -1,66 +1,65 @@
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/server/api/enums/v1/predicate.proto";
 import "temporal/server/api/enums/v1/task.proto";
 
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
 message Predicate {
-    temporal.server.api.enums.v1.PredicateType predicate_type = 1;
-    oneof attributes {
-        UniversalPredicateAttributes universal_predicate_attributes = 2;
-        EmptyPredicateAttributes empty_predicate_attributes = 3;
-        AndPredicateAttributes and_predicate_attributes = 4;
-        OrPredicateAttributes or_predicate_attributes = 5;
-        NotPredicateAttributes not_predicate_attributes = 6;
-        NamespaceIdPredicateAttributes namespace_id_predicate_attributes = 7;
-        TaskTypePredicateAttributes task_type_predicate_attributes = 8;
-        DestinationPredicateAttributes destination_predicate_attributes = 9;
-        OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10;
-        OutboundTaskPredicateAttributes outbound_task_predicate_attributes = 11;
-    }
+  temporal.server.api.enums.v1.PredicateType predicate_type = 1;
+  oneof attributes {
+    UniversalPredicateAttributes universal_predicate_attributes = 2;
+    EmptyPredicateAttributes empty_predicate_attributes = 3;
+    AndPredicateAttributes and_predicate_attributes = 4;
+    OrPredicateAttributes or_predicate_attributes = 5;
+    NotPredicateAttributes not_predicate_attributes = 6;
+    NamespaceIdPredicateAttributes namespace_id_predicate_attributes = 7;
+    TaskTypePredicateAttributes task_type_predicate_attributes = 8;
+    DestinationPredicateAttributes destination_predicate_attributes = 9;
+    OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10;
+    OutboundTaskPredicateAttributes outbound_task_predicate_attributes = 11;
+  }
 }
 
-message UniversalPredicateAttributes {
-}
+message UniversalPredicateAttributes {}
 
-message EmptyPredicateAttributes {
-}
+message EmptyPredicateAttributes {}
 
 message AndPredicateAttributes {
-    repeated Predicate predicates = 1;
+  repeated Predicate predicates = 1;
 }
 
 message OrPredicateAttributes {
-    repeated Predicate predicates = 1;
+  repeated Predicate predicates = 1;
 }
 
 message NotPredicateAttributes {
-    Predicate predicate = 1;
+  Predicate predicate = 1;
 }
 
 message NamespaceIdPredicateAttributes {
-    repeated string namespace_ids = 1;
+  repeated string namespace_ids = 1;
 }
 
 message TaskTypePredicateAttributes {
-    repeated temporal.server.api.enums.v1.TaskType task_types = 1;
+  repeated temporal.server.api.enums.v1.TaskType task_types = 1;
 }
 
 message DestinationPredicateAttributes {
-    repeated string destinations = 1;
+  repeated string destinations = 1;
 }
 
 message OutboundTaskGroupPredicateAttributes {
-    repeated string groups = 1;
+  repeated string groups = 1;
 }
 
 message OutboundTaskPredicateAttributes {
-    message Group {
-        string task_group = 1;
-        string namespace_id = 2;
-        string destination = 3;
-    }
-    repeated Group groups = 1;
+  message Group {
+    string task_group = 1;
+    string namespace_id = 2;
+    string destination = 3;
+  }
+  repeated Group groups = 1;
 }

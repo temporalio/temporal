@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,11 +14,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -47,6 +48,9 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	// Human-readable event history used for debugging.
+	EventLog chasm.Field[*EventLog]
+
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
@@ -59,6 +63,20 @@ var (
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
 )
 
+var (
+	executionStatusRunning   = "Running"
+	executionStatusCompleted = "Completed"
+)
+
+const ScheduleNextActionTimeName = "ScheduleNextActionTime"
+
+var (
+	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+)
+
+var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
+
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
@@ -68,12 +86,22 @@ const (
 
 	// Field in which the schedule's memo is stored.
 	visibilityMemoFieldInfo = "ScheduleInfo"
+
+	// Maximum number of matching times to return.
+	maxListMatchingTimesCount = 1000
+
+	// Maximum number of backfillers allowed on a single scheduler.
+	maxBackfillers = 100
 )
 
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
-	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
+	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
+	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
+	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
+	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
+	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -82,7 +110,7 @@ func NewScheduler(
 	namespace, namespaceID, scheduleID string,
 	input *schedulepb.Schedule,
 	patch *schedulepb.SchedulePatch,
-) *Scheduler {
+) (*Scheduler, error) {
 	var zero time.Time
 
 	sched := &Scheduler{
@@ -99,6 +127,7 @@ func NewScheduler(
 		cacheConflictToken:   scheduler.InitialConflictToken,
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
@@ -110,11 +139,58 @@ func NewScheduler(
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
 	// Create backfillers to fulfill initialPatch.
-	sched.handlePatch(ctx, patch)
+	if err := sched.handlePatch(ctx, patch); err != nil {
+		return nil, err
+	}
 	visibility := chasm.NewVisibility(ctx)
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
-	return sched
+	return sched, nil
+}
+
+// NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
+// the schedule ID. Sentinels have no sub-components (other than Info for idle
+// tracking) and return NotFound on all API operations. An idle task auto-closes
+// the sentinel after SentinelIdleTime.
+func NewSentinel(
+	ctx chasm.MutableContext,
+	namespace, namespaceID, scheduleID string,
+) *Scheduler {
+	s := &Scheduler{
+		SchedulerState: &schedulerpb.SchedulerState{
+			Namespace:     namespace,
+			NamespaceId:   namespaceID,
+			ScheduleId:    scheduleID,
+			Sentinel:      true,
+			ConflictToken: scheduler.InitialConflictToken,
+			Info:          &schedulepb.ScheduleInfo{},
+		},
+		cacheConflictToken: scheduler.InitialConflictToken,
+	}
+	now := ctx.Now(s)
+	s.Info.CreateTime = timestamppb.New(now)
+
+	ctx.AddTask(s, chasm.TaskAttributes{
+		ScheduledTime: now.Add(SentinelIdleTime),
+	}, &schedulerpb.SchedulerIdleTask{
+		IdleTimeTotal: durationpb.New(SentinelIdleTime),
+	})
+
+	return s
+}
+
+// CreateSentinelFn is the chasm.StartExecution factory for creating sentinel
+// schedulers. Used by the V1 path to reserve the CHASM key space.
+func CreateSentinelFn(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateSentinelRequest,
+) (*Scheduler, error) {
+	return NewSentinel(ctx, req.Namespace, req.NamespaceId, req.ScheduleId), nil
+}
+
+// IsSentinel returns true if this is a sentinel scheduler.
+func (s *Scheduler) IsSentinel() bool {
+	return s.Sentinel
 }
 
 // setNullableFields sets fields that are nullable in API requests.
@@ -128,24 +204,35 @@ func (s *Scheduler) setNullableFields() {
 }
 
 // handlePatch creates backfillers to fulfill the given patch request.
-func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
-	if patch != nil {
-		if patch.TriggerImmediately != nil {
-			s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
-		}
-
-		for _, backfill := range patch.BackfillRequest {
-			s.NewRangeBackfiller(ctx, backfill)
-		}
+func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) error {
+	if patch == nil {
+		return nil
 	}
+
+	// Each TriggerImmediately and BackfillRequest creates exactly one backfiller.
+	newCount := len(patch.BackfillRequest)
+	if patch.TriggerImmediately != nil {
+		newCount++
+	}
+	if len(s.Backfillers)+newCount > maxBackfillers {
+		return ErrTooManyBackfillers
+	}
+
+	if patch.TriggerImmediately != nil {
+		s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
+	}
+	for _, backfill := range patch.BackfillRequest {
+		s.NewRangeBackfiller(ctx, backfill)
+	}
+	return nil
 }
 
 // CreateScheduler initializes a new Scheduler for CreateSchedule requests.
 func CreateScheduler(
 	ctx chasm.MutableContext,
 	req *schedulerpb.CreateScheduleRequest,
-) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
-	sched := NewScheduler(
+) (*Scheduler, error) {
+	sched, err := NewScheduler(
 		ctx,
 		req.FrontendRequest.Namespace,
 		req.NamespaceId,
@@ -153,19 +240,67 @@ func CreateScheduler(
 		req.FrontendRequest.Schedule,
 		req.FrontendRequest.InitialPatch,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
-	return sched, &schedulerpb.CreateScheduleResponse{
-		FrontendResponse: &workflowservice.CreateScheduleResponse{
-			ConflictToken: sched.generateConflictToken(),
-		},
-	}, nil
+	return sched, nil
 }
 
+// CreateSchedulerFromMigration initializes a CHASM scheduler from migrated V1 state.
+// Unlike CreateScheduler, this preserves the conflict token and other state from V1.
+//
+// The migrated state components (scheduler, generator, invoker, backfillers) are
+// directly initialized from the request, preserving all state including the
+// conflict token for client compatibility.
+func CreateSchedulerFromMigration(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateFromMigrationStateRequest,
+) (*Scheduler, error) {
+	state := req.GetState()
+
+	sched := &Scheduler{
+		SchedulerState:       state.GetSchedulerState(),
+		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
+		Backfillers:          make(chasm.Map[string, *Backfiller]),
+		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
+	}
+	sched.setNullableFields()
+
+	// These components won't start with any tasks, as stale running workflow entries
+	// can cause immediate computation after migration to drop actions due to overlap
+	// policy. Instead, SchedulerCallbacksTask fires both tasks after ensuring cached
+	// running workflow state is up-to-date.
+	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
+	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
+
+	for backfillID, backfillerState := range state.GetBackfillers() {
+		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, newBackfillerWithState(ctx, backfillerState))
+	}
+
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
+	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
+	visibility.MergeCustomMemo(ctx, state.GetMemo())
+
+	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
+	// state; if there are none, generate directly.
+	if slices.ContainsFunc(state.GetInvokerState().GetBufferedStarts(), needsCallback) {
+		ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	} else {
+		sched.Generator.Get(ctx).Generate(ctx)
+	}
+
+	return sched, nil
+}
+
+// LifecycleState implements the chasm.Component interface.
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
 		return chasm.LifecycleStateCompleted
@@ -174,17 +309,39 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
+func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
+	md := make(map[string]string, 2)
+	if wfType := s.Schedule.GetAction().GetStartWorkflow().GetWorkflowType().GetName(); wfType != "" {
+		md[contextutil.MetadataKeyWorkflowType] = wfType
+	}
+	if tq := s.Schedule.GetAction().GetStartWorkflow().GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyWorkflowTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (s *Scheduler) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 // NewRangeBackfiller returns an intialized Backfiller component, which should
 // be parented under a Scheduler root node.
 func (s *Scheduler) NewRangeBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.BackfillRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -194,11 +351,10 @@ func (s *Scheduler) NewImmediateBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.TriggerImmediatelyRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -306,14 +462,18 @@ func (s *Scheduler) updateConflictToken() {
 // An event here is the schedule getting created or updated, or an action. This
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
-func (s *Scheduler) getLastEventTime() time.Time {
-	var lastEvent time.Time
-	if len(s.Info.RecentActions) > 0 {
-		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].GetActualTime().AsTime()
+func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
+	invoker := s.Invoker.Get(ctx)
+	recentActions := invoker.recentActions()
+
+	latest := util.MaxTime(
+		s.Info.GetCreateTime().AsTime(),
+		s.Info.GetUpdateTime().AsTime(),
+	)
+	if len(recentActions) > 0 {
+		latest = util.MaxTime(latest, recentActions[len(recentActions)-1].GetActualTime().AsTime())
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
-	return lastEvent
+	return latest
 }
 
 // getIdleExpiration returns an idle close time and the boolean value of 'true'
@@ -326,13 +486,16 @@ func (s *Scheduler) getIdleExpiration(
 	// The idle timer to close off the component is started only for schedules with
 	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.Schedule.State.Paused ||
+		s.GetSchedule().GetState().GetPaused() ||
 		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
 		s.hasMoreAllowAllBackfills(ctx) {
 		return time.Time{}, false
 	}
 
-	return s.getLastEventTime().Add(idleTime), true
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
+	}
+	return s.getLastEventTime(ctx).Add(idleTime), true
 }
 
 func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
@@ -359,48 +522,15 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 type schedulerActionResult struct {
 	overlapSkipped      int64
 	missedCatchupWindow int64
-	starts              []*schedulepb.ScheduleActionResult
+	actionCount         int64
 }
 
-// recordActionResult updates the Scheduler's customer-facing metadata with execution results.
+// recordActionResult updates the Scheduler's customer-facing metrics.
+// RunningWorkflows and RecentActions are computed from BufferedStarts.
 func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
-	s.Info.ActionCount += int64(len(result.starts))
+	s.Info.ActionCount += result.actionCount
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
-
-	// Filter any actions being recorded that may have already been recorded/completed.
-	newActions := util.FilterSlice(result.starts, func(incoming *schedulepb.ScheduleActionResult) bool {
-		wid := incoming.StartWorkflowResult.WorkflowId
-		recentIdx := slices.IndexFunc(s.Info.RecentActions, func(existing *schedulepb.ScheduleActionResult) bool {
-			recorded := existing.StartWorkflowResult.WorkflowId == wid
-			return recorded
-		})
-
-		return recentIdx < 0
-	})
-	if len(newActions) > 0 {
-		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, newActions...), recentActionCount)
-	}
-
-	// Update RunningWorkflows.
-	for _, start := range result.starts {
-		completed := start.StartWorkflowStatus >= enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-
-		if !completed {
-			// Add running workflows to the list (duplicates are acceptable for ALLOW_ALL policy)
-			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
-		} else {
-			// Remove completed workflows by WorkflowId+RunId
-			wid := start.StartWorkflowResult.WorkflowId
-			rid := start.StartWorkflowResult.RunId
-			runningIdx := slices.IndexFunc(s.Info.RunningWorkflows, func(wfe *commonpb.WorkflowExecution) bool {
-				return wfe.WorkflowId == wid && wfe.RunId == rid
-			})
-			if runningIdx >= 0 {
-				s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, runningIdx, runningIdx+1)
-			}
-		}
-	}
 }
 
 var _ chasm.NexusCompletionHandler = &Scheduler{}
@@ -424,7 +554,7 @@ func (s *Scheduler) HandleNexusCompletion(
 ) error {
 	invoker := s.Invoker.Get(ctx)
 
-	workflowID := invoker.WorkflowID(info.RequestId)
+	workflowID := invoker.runningWorkflowID(info.RequestId)
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
@@ -463,88 +593,36 @@ func (s *Scheduler) HandleNexusCompletion(
 		)
 	}
 
-	// Record the completed action in the Invoker to queue off any
-	// sequentially-buffered starts. This also updates BufferedStarts.
-	scheduleTime := invoker.recordCompletedAction(ctx, info.CloseTime.AsTime(), info.RequestId)
+	// Record the completed action in the Invoker.
+	completed := &schedulespb.CompletedResult{
+		Status:    wfStatus,
+		CloseTime: info.CloseTime,
+	}
+	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
-	// Record the completed action into Scheduler's metadata. This updates
-	// RecentActions and RunningWorkflows.
-	s.recordCompletedAction(scheduleTime, workflowID, wfStatus)
+	// Generate immediately after recording completions, so that an idle task
+	// can be scheduled if no more actions are remaining. Necessary as
+	// additional events invalidate in-flight idle tasks.
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return nil
-}
-
-// recordCompletedAction ensures that the given action is recorded in
-// RecentActions and cleaned up from other state.
-func (s *Scheduler) recordCompletedAction(
-	scheduleTime time.Time,
-	workflowID string,
-	workflowStatus enumspb.WorkflowExecutionStatus,
-) {
-	// Clear out closed workflows from RunningWorkflows.
-	s.Info.RunningWorkflows = slices.DeleteFunc(s.Info.RunningWorkflows, func(wf *commonpb.WorkflowExecution) bool {
-		// We don't evaluate RunId here, since the action may have retried.
-		return wf.WorkflowId == workflowID
-	})
-
-	// Update the RecentActions entry's status.
-	idx := slices.IndexFunc(s.Info.RecentActions, func(action *schedulepb.ScheduleActionResult) bool {
-		return action.StartWorkflowResult.WorkflowId == workflowID
-	})
-
-	if idx >= 0 {
-		s.Info.RecentActions[idx].StartWorkflowStatus = workflowStatus
-	} else {
-		// If we didn't find an entry in RecentActions, add one.
-		if scheduleTime.IsZero() {
-			// We're completing a workflow that wasn't in BufferedStarts, RunningWorkflows,
-			// or RecentActions, but *did* have a request ID entry. That shouldn't be possible.
-			//
-			// TODO - softassert here when we have a logger wired into CHASM. Skip recording
-			// the action for now.
-			return
-		}
-
-		actionResult := &schedulepb.ScheduleActionResult{
-			ScheduleTime: timestamppb.New(scheduleTime),
-			ActualTime:   timestamppb.New(scheduleTime), // best guess, as we're recording complete before start was recorded
-			StartWorkflowResult: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-		}
-
-		s.Info.RecentActions = util.SliceTail(
-			append(s.Info.RecentActions, actionResult), recentActionCount)
-	}
-}
-
-// isActionCompleted returns true for when the given action has already been
-// recorded as complete in the Scheduler's state. Side effect tasks should use
-// this function to determine if a started action was marked as completed before
-// the action was even marked as started.
-func (s *Scheduler) isActionCompleted(workflowID string) bool {
-	for _, action := range s.Info.RecentActions {
-		if action.StartWorkflowResult.WorkflowId == workflowID {
-			return true
-		}
-	}
-
-	// A workflow could have completed and subsequently truncated from RecentActions,
-	// but we don't care about that case.
-	return false
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.
 func (s *Scheduler) Describe(
 	ctx chasm.Context,
 	req *schedulerpb.DescribeScheduleRequest,
+	specBuilder *scheduler.SpecBuilder,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	if s.Closed {
 		return nil, ErrClosed
 	}
 
 	visibility := s.Visibility.Get(ctx)
-	memo := visibility.GetMemo(ctx)
+	memo := visibility.CustomMemo(ctx)
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
@@ -558,13 +636,34 @@ func (s *Scheduler) Describe(
 	schedule := common.CloneProto(s.Schedule)
 	cleanSpec(schedule.Spec)
 
+	generator := s.Generator.Get(ctx)
+	if generator.GetFutureActionTimes() == nil {
+		// FutureActionTimes is populated asynchronously by the GeneratorTask. If a
+		// newly-created schedule is described before the task executes, this field may be
+		// nil. In that case, compute it on-demand.
+		generator.UpdateFutureActionTimes(ctx, specBuilder)
+	}
+
+	// Populate computed views from Invoker's BufferedStarts.
+	invoker := s.Invoker.Get(ctx)
+	info := common.CloneProto(s.Info)
+	info.RunningWorkflows = invoker.runningWorkflowExecutions()
+	info.RecentActions = invoker.recentActions()
+	info.FutureActionTimes = generator.GetFutureActionTimes()
+	// BufferedStarts holds waiting, running, and recently-completed entries; only the
+	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+
+	executionInfo := ctx.ExecutionInfo()
+	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
+
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
 			Schedule:         schedule,
-			Info:             common.CloneProto(s.Info),
+			Info:             info,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.GetSearchAttributes(ctx)},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
 		},
 	}, nil
 }
@@ -598,15 +697,94 @@ func cleanSpec(spec *schedulepb.ScheduleSpec) {
 	}
 }
 
+// ListMatchingTimes returns the upcoming times that the schedule will trigger
+// within the given time range.
+func (s *Scheduler) ListMatchingTimes(
+	ctx chasm.Context,
+	req *schedulerpb.ListScheduleMatchingTimesRequest,
+	specBuilder *scheduler.SpecBuilder,
+) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+	if s.Closed {
+		return nil, ErrClosed
+	}
+
+	frontendReq := req.FrontendRequest
+	if frontendReq == nil || frontendReq.StartTime == nil || frontendReq.EndTime == nil {
+		return nil, ErrInvalidQuery
+	}
+
+	cspec, err := s.getCompiledSpec(specBuilder)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid schedule: %v", err)
+	}
+
+	var out []*timestamppb.Timestamp
+	t1 := timestamp.TimeValue(frontendReq.StartTime)
+	for range maxListMatchingTimesCount {
+		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
+		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
+			break
+		}
+		out = append(out, timestamppb.New(t1))
+	}
+
+	return &schedulerpb.ListScheduleMatchingTimesResponse{
+		FrontendResponse: &workflowservice.ListScheduleMatchingTimesResponse{
+			StartTime: out,
+		},
+	}, nil
+}
+
 // Delete marks the Scheduler as closed without an idle timer.
 func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	s.Closed = true
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
 	}, nil
+}
+
+// MigrateToWorkflow pauses the schedule and schedules a side-effect task to
+// start the V1 workflow. This is the CHASM-side operation for V2-to-V1 migration.
+// It is idempotent: if a migration is already pending, it returns success
+// without taking any action.
+func (s *Scheduler) MigrateToWorkflow(
+	ctx chasm.MutableContext,
+	req *schedulerpb.MigrateToWorkflowRequest,
+) (*schedulerpb.MigrateToWorkflowResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+	if s.Closed {
+		return nil, ErrClosed
+	}
+	if s.WorkflowMigration != nil {
+		return &schedulerpb.MigrateToWorkflowResponse{}, nil
+	}
+
+	// Save pre-migration paused state, mark migration as pending, then pause.
+	s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{
+		PreMigrationPaused: s.Schedule.State.Paused,
+		PreMigrationNotes:  s.Schedule.State.Notes,
+	}
+	s.Schedule.State.Paused = true
+	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
+
+	// Schedule a side-effect task to export state and start the V1 workflow.
+	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+
+	return &schedulerpb.MigrateToWorkflowResponse{}, nil
 }
 
 // Update replaces the schedule with a new one for UpdateSchedule requests.
@@ -614,14 +792,19 @@ func (s *Scheduler) Update(
 	ctx chasm.MutableContext,
 	req *schedulerpb.UpdateScheduleRequest,
 ) (*schedulerpb.UpdateScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
 
 	// Update custom search attributes.
-	//
-	// TODO - we could also easily support allowing the customer to update their
-	// memo here.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
 		// of search attributes, dropping any that aren't a part of the update's
@@ -631,14 +814,27 @@ func (s *Scheduler) Update(
 
 		// Preserve the old custom memo in the new Visibility component.
 		oldVisibility := s.Visibility.Get(ctx)
-		oldMemo := oldVisibility.GetMemo(ctx)
+		oldMemo := oldVisibility.CustomMemo(ctx)
 
 		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 
+	// Reject updates outright when a migration is pending so that changes are
+	// not silently lost during the migration window.
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
+
+	// Update custom memo.
+	if req.FrontendRequest.GetMemo() != nil {
+		visibility := s.Visibility.Get(ctx)
+		visibility.ReplaceCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	}
+
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
@@ -656,17 +852,31 @@ func (s *Scheduler) Patch(
 	ctx chasm.MutableContext,
 	req *schedulerpb.PatchScheduleRequest,
 ) (*schedulerpb.PatchScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
+		if s.WorkflowMigration != nil {
+			return nil, ErrMigrationPending
+		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+		s.Generator.Get(ctx).Generate(ctx)
 	}
 
-	s.handlePatch(ctx, req.FrontendRequest.Patch)
+	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
+		return nil, err
+	}
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
@@ -677,9 +887,7 @@ func (s *Scheduler) Patch(
 }
 
 func (s *Scheduler) generateConflictToken() []byte {
-	token := make([]byte, 8)
-	binary.LittleEndian.PutUint64(token, uint64(s.ConflictToken))
-	return token
+	return serializeConflictToken(s.ConflictToken)
 }
 
 func (s *Scheduler) validateConflictToken(token []byte) bool {
@@ -692,17 +900,39 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 	return bytes.Equal(current, token)
 }
 
+func (s *Scheduler) executionStatus() string {
+	if s.Closed {
+		return executionStatusCompleted
+	}
+	return executionStatusRunning
+}
+
 // SearchAttributes returns the Temporal-managed key values for visibility.
-func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
-	return []chasm.SearchAttributeKeyValue{
+func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
+	if s.Sentinel {
+		return []chasm.SearchAttributeKeyValue{
+			executionStatusSearchAttribute.Value(s.executionStatus()),
+		}
+	}
+	out := []chasm.SearchAttributeKeyValue{
+		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
+	if !s.Closed {
+		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
+			out = append(out, scheduleNextActionTimeSearchAttribute.Value(gen.FutureActionTimes[0].AsTime()))
+		}
+	}
+	return out
 }
 
 // Memo returns the scheduler's info block for visibility.
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) proto.Message {
+	if s.Sentinel {
+		return nil
+	}
 	return s.ListInfo(ctx)
 }
 
@@ -712,6 +942,7 @@ func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
+	executionInfo := ctx.ExecutionInfo()
 
 	// Clear fields that are too large/not useful for the list view.
 	spec.TimezoneData = nil
@@ -722,14 +953,16 @@ func (s *Scheduler) ListInfo(
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
 	generator := s.Generator.Get(ctx)
+	invoker := s.Invoker.Get(ctx)
 
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
+		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
+		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
 	}
 }
 
@@ -738,15 +971,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}

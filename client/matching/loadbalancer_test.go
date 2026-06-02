@@ -98,7 +98,7 @@ func TestLoadBalancerConcurrent(t *testing.T) {
 
 	concurrentCount := 10 * partitionCount
 	wg.Add(concurrentCount)
-	for i := 0; i < concurrentCount; i++ {
+	for range concurrentCount {
 		go func() {
 			defer wg.Done()
 			tqlb.pickReadPartition(partitionCount)

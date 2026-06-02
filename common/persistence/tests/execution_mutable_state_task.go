@@ -44,6 +44,7 @@ type (
 		Cancel context.CancelFunc
 	}
 
+	// testSerializer wraps a serializer to add support for fake tasks used in tests
 	testSerializer struct {
 		serialization.Serializer
 	}
@@ -52,15 +53,6 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
-
-	taskCategories = []tasks.Category{
-		tasks.CategoryTransfer,
-		tasks.CategoryTimer,
-		tasks.CategoryReplication,
-		tasks.CategoryVisibility,
-		fakeImmediateTaskCategory,
-		fakeScheduledTaskCategory,
-	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -70,16 +62,16 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	serializer = newTestSerializer(serializer)
+	testSer := &testSerializer{Serializer: serializer}
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serializer,
+			testSer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serializer,
+			testSer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
@@ -662,14 +654,6 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	s.Empty(historyTasks)
 }
 
-func newTestSerializer(
-	serializer serialization.Serializer,
-) serialization.Serializer {
-	return &testSerializer{
-		Serializer: serializer,
-	}
-}
-
 func (s *testSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
@@ -691,7 +675,6 @@ func (s *testSerializer) SerializeTask(
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
 	}
-
 	return s.Serializer.SerializeTask(task)
 }
 

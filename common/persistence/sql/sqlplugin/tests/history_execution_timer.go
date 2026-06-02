@@ -125,7 +125,7 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 	runID := primitives.NewUUID()
 
 	var timers []sqlplugin.TimerInfoMapsRow
-	for i := 0; i < numTimers; i++ {
+	for range numTimers {
 		timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionTimerID))
 		timers = append(timers, timer)
 	}
@@ -292,7 +292,7 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 
 	var timers []sqlplugin.TimerInfoMapsRow
 	var timerIDs []string
-	for i := 0; i < numTimers; i++ {
+	for range numTimers {
 		timerID := shuffle.String(testHistoryExecutionTimerID)
 		timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
 		timerIDs = append(timerIDs, timerID)
@@ -337,7 +337,7 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
 	runID := primitives.NewUUID()
 
 	var timers []sqlplugin.TimerInfoMapsRow
-	for i := 0; i < numTimers; i++ {
+	for range numTimers {
 		timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionTimerID))
 		timers = append(timers, timer)
 	}

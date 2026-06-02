@@ -156,6 +156,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					burstRatioFn,
 				),
 			)
+			serializer := serialization.NewSerializer()
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{
@@ -164,7 +165,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				systemRequestRateLimiter,
 				namespaceRequestRateLimiter,
 				shardRequestRateLimiter,
-				serialization.NewSerializer(),
+				serializer,
 				nil,
 				"",
 				metrics.NoopMetricsHandler,

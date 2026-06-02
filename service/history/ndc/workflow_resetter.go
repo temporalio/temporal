@@ -59,7 +59,6 @@ type (
 			baseRebuildLastEventVersion int64,
 			baseNextEventID int64,
 			resetRunID string,
-			resetRequestID string,
 			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
@@ -115,7 +114,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	baseNextEventID int64,
 	resetRunID string,
-	resetRequestID string,
 	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
@@ -133,7 +131,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	// update base workflow to point to new runID after the reset.
 	baseWorkflow.GetMutableState().UpdateResetRunID(resetRunID)
 
-	resetWorkflowVersion := namespaceEntry.FailoverVersion()
+	resetWorkflowVersion := namespaceEntry.FailoverVersion(workflowID)
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
@@ -203,6 +201,14 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 	}
 
+	// Use the original start request ID from the base run so callbacks on the
+	// reset workflow are associated with the original start request.
+	// The run ID provides uniqueness per execution, so the start request ID can
+	// be used consistently across resets.
+	//
+	// Read from the base run's RequestIds map; fall back to CreateRequestId otherwise.
+	startRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState())
+
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,
 		namespaceID,
@@ -212,7 +218,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
-		resetRequestID,
+		startRequestID,
 		resetWorkflowVersion,
 		resetReason,
 		allowResetWithPendingChildren,
@@ -263,7 +269,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
-	resetRequestID string,
+	requestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
 	allowResetWithPendingChildren bool,
@@ -278,7 +284,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
-		resetRequestID,
+		requestID,
 	)
 	if err != nil {
 		return nil, err
@@ -462,7 +468,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetMetricsHandler(),
 	)
 
-	resetMutableState, resetHistorySize, err := r.stateRebuilder.Rebuild(
+	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(
 		ctx,
 		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
@@ -490,7 +496,9 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 	)
-	resetMutableState.AddHistorySize(resetHistorySize)
+	resetMutableState.AddHistorySize(resetStats.HistorySize)
+	resetMutableState.AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.AddExternalPayloadCount(resetStats.ExternalPayloadCount)
 	return NewWorkflow(
 		r.clusterMetadata,
 		resetContext,
@@ -532,6 +540,8 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			nil,
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
+			nil,
+			-1, // sentinel: synthetic event, no routing info
 		)
 		if err != nil {
 			return err
@@ -863,6 +873,7 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetRequestId(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
@@ -960,6 +971,8 @@ func reapplyEvents(
 				event.Links,
 				attr.GetIdentity(),
 				attr.GetPriority(),
+				attr.GetTimeSkippingConfig(),
+				attr.GetWorkflowUpdateOptions(),
 			); err != nil {
 				return reappliedEvents, err
 			}

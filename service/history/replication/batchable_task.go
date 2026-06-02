@@ -45,7 +45,7 @@ const (
 
 var _ TrackableExecutableTask = (*batchedTask)(nil)
 
-func (w *batchedTask) QueueID() interface{} {
+func (w *batchedTask) QueueID() any {
 	return w.batchedTask.QueueID()
 }
 

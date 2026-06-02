@@ -14,7 +14,7 @@ var (
 type (
 	simple struct {
 		sync.RWMutex
-		accessMap   map[interface{}]*list.Element
+		accessMap   map[any]*list.Element
 		iterateList *list.List
 		rmFunc      RemovedFunc
 	}
@@ -25,8 +25,8 @@ type (
 	}
 
 	simpleEntry struct {
-		key   interface{}
-		value interface{}
+		key   any
+		value any
 	}
 )
 
@@ -57,11 +57,11 @@ func (it *simpleItr) Next() Entry {
 	return entry
 }
 
-func (e *simpleEntry) Key() interface{} {
+func (e *simpleEntry) Key() any {
 	return e.key
 }
 
-func (e *simpleEntry) Value() interface{} {
+func (e *simpleEntry) Value() any {
 	return e.value
 }
 
@@ -81,13 +81,13 @@ func NewSimple(opts *SimpleOptions) Cache {
 	}
 	return &simple{
 		iterateList: list.New(),
-		accessMap:   make(map[interface{}]*list.Element),
+		accessMap:   make(map[any]*list.Element),
 		rmFunc:      opts.RemovedFunc,
 	}
 }
 
 // Get retrieves the value stored under the given key
-func (c *simple) Get(key interface{}) interface{} {
+func (c *simple) Get(key any) any {
 	c.RLock()
 	defer c.RUnlock()
 
@@ -99,7 +99,7 @@ func (c *simple) Get(key interface{}) interface{} {
 }
 
 // Put puts a new value associated with a given key, returning the existing value (if present).
-func (c *simple) Put(key interface{}, value interface{}) interface{} {
+func (c *simple) Put(key any, value any) any {
 	c.Lock()
 	defer c.Unlock()
 	existing := c.putInternal(key, value, true)
@@ -107,7 +107,7 @@ func (c *simple) Put(key interface{}, value interface{}) interface{} {
 }
 
 // PutIfNotExist puts a value associated with a given key if it does not exist
-func (c *simple) PutIfNotExist(key interface{}, value interface{}) (interface{}, error) {
+func (c *simple) PutIfNotExist(key any, value any) (any, error) {
 	c.Lock()
 	defer c.Unlock()
 	existing := c.putInternal(key, value, false)
@@ -119,7 +119,7 @@ func (c *simple) PutIfNotExist(key interface{}, value interface{}) (interface{},
 }
 
 // Delete deletes a key, value pair associated with a key
-func (c *simple) Delete(key interface{}) {
+func (c *simple) Delete(key any) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -136,7 +136,7 @@ func (c *simple) Delete(key interface{}) {
 }
 
 // Release does nothing for simple cache
-func (c *simple) Release(_ interface{}) {}
+func (c *simple) Release(_ any) {}
 
 // Size returns the number of entries currently in the cache
 func (c *simple) Size() int {
@@ -155,7 +155,7 @@ func (c *simple) Iterator() Iterator {
 	return iterator
 }
 
-func (c *simple) putInternal(key interface{}, value interface{}, allowUpdate bool) interface{} {
+func (c *simple) putInternal(key any, value any, allowUpdate bool) any {
 	elt := c.accessMap[key]
 	if elt != nil {
 		// nolint:revive

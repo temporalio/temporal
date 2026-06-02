@@ -91,9 +91,9 @@ func (mdb *db) RangeSelectFromHistoryNode(
 		query = getHistoryNodesQuery
 	}
 
-	var args []interface{}
+	var args []any
 	if filter.ReverseOrder {
-		args = []interface{}{
+		args = []any{
 			filter.ShardID,
 			filter.TreeID,
 			filter.BranchID,
@@ -104,7 +104,7 @@ func (mdb *db) RangeSelectFromHistoryNode(
 			filter.PageSize,
 		}
 	} else {
-		args = []interface{}{
+		args = []any{
 			filter.ShardID,
 			filter.TreeID,
 			filter.BranchID,

@@ -103,10 +103,10 @@ Matching->>History: RecordWorkflowTaskStarted
 History->>Persistence: UpdateWorkflowExecution
 note over Persistence: append History Event: WorkflowTaskStarted<br>update Mutable State & add Timer Task (workflow task timeout)
 Persistence->>History: Update Succeed
+History->>Persistence: GetHistoryEvents
+Persistence->>History: History Events
 History->>Matching: Record Succeed
 Matching->>Frontend: WorkflowTask
-Frontend->>Persistence: GetHistoryEvents
-Persistence->>Frontend: History Events
 Frontend->>Worker: WorkflowTask
 Worker->>Worker: Advance workflow
 ```
@@ -355,7 +355,7 @@ flowchart LR
       subgraph ms[Mutable State]
          direction TB
 
-         ms1["Workflow Task: Empty"]
+         ms1["Workflow Task: Scheduled"]
       end
 
       subgraph transferQ[Transfer Queue]

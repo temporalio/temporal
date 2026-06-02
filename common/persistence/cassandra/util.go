@@ -1092,11 +1092,11 @@ func updateBufferedEvents(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	} else if newBufferedEvents != nil {
-		values := make(map[string]interface{})
+		values := make(map[string]any)
 		values["encoding_type"] = newBufferedEvents.EncodingType.String()
 		values["version"] = int64(0)
 		values["data"] = newBufferedEvents.Data
-		newEventValues := []map[string]interface{}{values}
+		newEventValues := []map[string]any{values}
 		batch.Query(templateAppendBufferedEventsQuery,
 			newEventValues,
 			shardID,
@@ -1124,7 +1124,7 @@ func convertBlobMapToByteMap[T comparable](
 }
 
 func createHistoryEventBatchBlob(
-	result map[string]interface{},
+	result map[string]any,
 ) *commonpb.DataBlob {
 	eventBatch := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}
 	for k, v := range result {

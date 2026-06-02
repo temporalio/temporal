@@ -63,6 +63,26 @@ func (mr *MockHistoryServiceClientMockRecorder) AddTasks(ctx, in any, opts ...an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).AddTasks), varargs...)
 }
 
+// CancelNexusOperation mocks base method.
+func (m *MockHistoryServiceClient) CancelNexusOperation(ctx context.Context, in *historyservice.CancelNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.CancelNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CancelNexusOperation", varargs...)
+	ret0, _ := ret[0].(*historyservice.CancelNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelNexusOperation indicates an expected call of CancelNexusOperation.
+func (mr *MockHistoryServiceClientMockRecorder) CancelNexusOperation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).CancelNexusOperation), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceClient) CloseShard(ctx context.Context, in *historyservice.CloseShardRequest, opts ...grpc.CallOption) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -161,6 +181,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteDLQTasks(ctx, in any, opts
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteDLQTasks), varargs...)
+}
+
+// DeleteExecution mocks base method.
+func (m *MockHistoryServiceClient) DeleteExecution(ctx context.Context, in *historyservice.DeleteExecutionRequest, opts ...grpc.CallOption) (*historyservice.DeleteExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExecution indicates an expected call of DeleteExecution.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteExecution), varargs...)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -1263,6 +1303,26 @@ func (mr *MockHistoryServiceClientMockRecorder) SignalWorkflowExecution(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignalWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).SignalWorkflowExecution), varargs...)
 }
 
+// StartNexusOperation mocks base method.
+func (m *MockHistoryServiceClient) StartNexusOperation(ctx context.Context, in *historyservice.StartNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartNexusOperation", varargs...)
+	ret0, _ := ret[0].(*historyservice.StartNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartNexusOperation indicates an expected call of StartNexusOperation.
+func (mr *MockHistoryServiceClientMockRecorder) StartNexusOperation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).StartNexusOperation), varargs...)
+}
+
 // StartWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) StartWorkflowExecution(ctx context.Context, in *historyservice.StartWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1700,6 +1760,21 @@ func (mr *MockHistoryServiceServerMockRecorder) AddTasks(arg0, arg1 any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).AddTasks), arg0, arg1)
 }
 
+// CancelNexusOperation mocks base method.
+func (m *MockHistoryServiceServer) CancelNexusOperation(arg0 context.Context, arg1 *historyservice.CancelNexusOperationRequest) (*historyservice.CancelNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelNexusOperation", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.CancelNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelNexusOperation indicates an expected call of CancelNexusOperation.
+func (mr *MockHistoryServiceServerMockRecorder) CancelNexusOperation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).CancelNexusOperation), arg0, arg1)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *historyservice.CloseShardRequest) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1773,6 +1848,21 @@ func (m *MockHistoryServiceServer) DeleteDLQTasks(arg0 context.Context, arg1 *hi
 func (mr *MockHistoryServiceServerMockRecorder) DeleteDLQTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteDLQTasks), arg0, arg1)
+}
+
+// DeleteExecution mocks base method.
+func (m *MockHistoryServiceServer) DeleteExecution(arg0 context.Context, arg1 *historyservice.DeleteExecutionRequest) (*historyservice.DeleteExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExecution indicates an expected call of DeleteExecution.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteExecution), arg0, arg1)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -2598,6 +2688,21 @@ func (m *MockHistoryServiceServer) SignalWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) SignalWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignalWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).SignalWorkflowExecution), arg0, arg1)
+}
+
+// StartNexusOperation mocks base method.
+func (m *MockHistoryServiceServer) StartNexusOperation(arg0 context.Context, arg1 *historyservice.StartNexusOperationRequest) (*historyservice.StartNexusOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartNexusOperation", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.StartNexusOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartNexusOperation indicates an expected call of StartNexusOperation.
+func (mr *MockHistoryServiceServerMockRecorder) StartNexusOperation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).StartNexusOperation), arg0, arg1)
 }
 
 // StartWorkflowExecution mocks base method.

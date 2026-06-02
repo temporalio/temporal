@@ -44,9 +44,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 		ErrorCount:   27,
 	}, nil)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
-		memo, ok := args.Get(0).(map[string]interface{})
+		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
-		s.Equal(map[string]interface{}{
+		s.Equal(map[string]any{
 			"batch_operation_stats": BatchOperationStats{
 				NumSuccess: 42,
 				NumFailure: 27,
@@ -76,9 +76,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 		ErrorCount:   27,
 	}, nil)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
-		memo, ok := args.Get(0).(map[string]interface{})
+		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
-		s.Equal(map[string]interface{}{
+		s.Equal(map[string]any{
 			"batch_operation_stats": BatchOperationStats{
 				NumSuccess: 42,
 				NumFailure: 27,

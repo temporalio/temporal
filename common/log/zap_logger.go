@@ -17,8 +17,15 @@ const (
 	// we put a default message when it is empty so that the log can be searchable/filterable
 	defaultMsgForEmpty = "none"
 	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
-	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
-	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+
+	// Console output (testing.T.Log):
+	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // "console" (default) or "json"
+	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // min level written to console (default: debug)
+
+	// File output (written once per process to a shared file):
+	TestLogFileEnvVar       = "TEMPORAL_TEST_LOG_FILE"        // path to log file; empty disables file logging
+	TestLogFileFormatEnvVar = "TEMPORAL_TEST_LOG_FILE_FORMAT" // "json" (default) or "console"
+	TestLogFileLevelEnvVar  = "TEMPORAL_TEST_LOG_FILE_LEVEL"  // min level written to file (default: debug)
 )
 
 var DefaultZapEncoderConfig = zapcore.EncoderConfig{
@@ -179,8 +186,8 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 // With() handles the provided tags as "upserts", replacing any matching keys with new values.
 // Note that we distinguish between the following two seemingly identical lines:
 //
-//	logger.With(logger, tag.NewStringTag("foo", "bar")).Info("msg")
-//	logger.Info("msg", tag.NewStringTag("foo", "bar")
+//	logger.With(logger, tag.String("foo", "bar")).Info("msg")
+//	logger.Info("msg", tag.String("foo", "bar")
 //
 // by deduping "foo" against any existing "foo" tags *only in the former*
 func (l *zapLogger) With(tags ...tag.Tag) Logger {

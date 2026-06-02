@@ -58,8 +58,8 @@ global:
     port: 7936
   metrics:
     prometheus:
-#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-#      framework: "opentelemetry"
+      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+      # framework: "opentelemetry"
       framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"

@@ -2,6 +2,7 @@ package queues
 
 import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 )
 
@@ -11,24 +12,39 @@ type (
 		Assign(Executable) tasks.Priority
 	}
 
-	priorityAssignerImpl struct{}
+	priorityAssignerImpl struct {
+		currentClusterName string
+		nsRegistry         namespace.Registry
+	}
 
 	staticPriorityAssigner struct {
 		priority tasks.Priority
 	}
 )
 
-func NewPriorityAssigner() PriorityAssigner {
-	return &priorityAssignerImpl{}
+func NewPriorityAssigner(nsRegistry namespace.Registry, currentClusterName string) PriorityAssigner {
+	return &priorityAssignerImpl{
+		nsRegistry:         nsRegistry,
+		currentClusterName: currentClusterName,
+	}
 }
 
 func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
+	ns, err := a.nsRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
+	if ns != nil && err == nil {
+		// Use lowest priority level for standby task processing
+		if !ns.ActiveInCluster(a.currentClusterName) {
+			return tasks.PriorityPreemptable
+		}
+	}
+
 	taskType := executable.GetType()
 	switch taskType {
 	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 		enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT:
+		enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+		enumsspb.TASK_TYPE_WORKER_COMMANDS:
 		return tasks.PriorityLow
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,

@@ -3,6 +3,8 @@ package history
 import (
 	"fmt"
 
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -10,6 +12,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
@@ -30,7 +33,9 @@ type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	ClientBean         client.Bean
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+	MatchingClient     resource.MatchingClient
 }
 
 type groupLimiter struct {
@@ -198,8 +203,24 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	rescheduler := queues.NewRescheduler(
+	scheduler := queues.NewRateLimitedScheduler(
 		f.hostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		currentClusterName,
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
@@ -211,6 +232,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.MatchingClient,
 	)
 
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
@@ -220,6 +242,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.ClientBean,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(
@@ -236,7 +259,7 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	factory := queues.NewExecutableFactory(
 		executor,
-		f.hostScheduler,
+		scheduler,
 		rescheduler,
 		queues.NewNoopPriorityAssigner(),
 		shardContext.GetTimeSource(),
@@ -256,7 +279,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	return queues.NewImmediateQueue(
 		shardContext,
 		tasks.CategoryOutbound,
-		f.hostScheduler,
+		scheduler,
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
@@ -285,6 +308,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		outboundTaskGroupPostProcessor(f.ChasmRegistry),
 	)
 }
 
@@ -336,4 +360,19 @@ func getNamespaceNameOrDefault(
 		return def
 	}
 	return nsName.String()
+}
+
+func outboundTaskGroupPostProcessor(registry *chasm.Registry) func([]tasks.Task) {
+	if registry == nil {
+		return nil
+	}
+	return func(taskSlice []tasks.Task) {
+		for _, t := range taskSlice {
+			if ct, ok := t.(*tasks.ChasmTask); ok {
+				if rt, ok := registry.TaskByID(ct.Info.GetTypeId()); ok {
+					ct.SetOutboundTaskGroup(rt.TaskGroup())
+				}
+			}
+		}
+	}
 }

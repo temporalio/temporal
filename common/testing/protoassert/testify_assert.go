@@ -30,7 +30,7 @@ func formatListDiff(listA, listB any, extraA, extraB any) string {
 	return msg.String()
 }
 
-func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
+func diffLists(listA, listB any) (extraA, extraB []any) {
 	aValue := reflect.ValueOf(listA)
 	bValue := reflect.ValueOf(listB)
 
@@ -39,10 +39,10 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 
 	// Mark indexes in bValue that we already used
 	visited := make([]bool, bLen)
-	for i := 0; i < aLen; i++ {
+	for i := range aLen {
 		element := aValue.Index(i).Interface()
 		found := false
-		for j := 0; j < bLen; j++ {
+		for j := range bLen {
 			if visited[j] {
 				continue
 			}
@@ -57,7 +57,7 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 		}
 	}
 
-	for j := 0; j < bLen; j++ {
+	for j := range bLen {
 		if visited[j] {
 			continue
 		}
@@ -67,7 +67,7 @@ func diffLists(listA, listB interface{}) (extraA, extraB []interface{}) {
 	return
 }
 
-func isEmpty(object interface{}) bool {
+func isEmpty(object any) bool {
 
 	// get nil case out of the way
 	if object == nil {
@@ -96,7 +96,7 @@ func isEmpty(object interface{}) bool {
 }
 
 // isList checks that the provided value is array or slice.
-func isList(t assert.TestingT, list interface{}, msgAndArgs ...interface{}) (ok bool) {
+func isList(t assert.TestingT, list any, msgAndArgs ...any) (ok bool) {
 	kind := reflect.TypeOf(list).Kind()
 	if kind != reflect.Array && kind != reflect.Slice {
 		return assert.Fail(t, fmt.Sprintf("%q has an unsupported type %s, expecting array or slice", list, kind),

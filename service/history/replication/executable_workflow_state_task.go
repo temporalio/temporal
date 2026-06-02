@@ -71,7 +71,7 @@ func NewExecutableWorkflowStateTask(
 	}
 }
 
-func (e *ExecutableWorkflowStateTask) QueueID() interface{} {
+func (e *ExecutableWorkflowStateTask) QueueID() any {
 	return e.WorkflowKey
 }
 
@@ -79,6 +79,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -119,6 +120,12 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil

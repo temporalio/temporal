@@ -22,6 +22,16 @@ type (
 		DropDatabase(name string) error
 		ListTables() ([]string, error)
 	}
+
+	// ConnectParams holds connection parameters for CLI tool invocations in tests.
+	// Empty fields are omitted from the command line, allowing the CLI defaults to apply.
+	ConnectParams struct {
+		Host     string
+		Port     string
+		User     string
+		Password string
+	}
+
 	// DBTestBase is the base for all test suites that test
 	// the functionality of a DB implementation
 	DBTestBase struct {
@@ -32,6 +42,24 @@ type (
 		db     DB
 	}
 )
+
+// CLIFlags returns the CLI flags for the connection parameters.
+func (p ConnectParams) CLIFlags() []string {
+	var flags []string
+	if p.Host != "" {
+		flags = append(flags, "--endpoint", p.Host)
+	}
+	if p.Port != "" {
+		flags = append(flags, "--port", p.Port)
+	}
+	if p.User != "" {
+		flags = append(flags, "--user", p.User)
+	}
+	if p.Password != "" {
+		flags = append(flags, "--password", p.Password)
+	}
+	return flags
+}
 
 // SetupSuiteBase sets up the test suite
 func (tb *DBTestBase) SetupSuiteBase(db DB) {

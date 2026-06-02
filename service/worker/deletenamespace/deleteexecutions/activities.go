@@ -8,7 +8,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -18,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
@@ -25,7 +28,8 @@ type (
 		visibilityManager manager.VisibilityManager
 		historyClient     historyservice.HistoryServiceClient
 
-		deleteActivityRPS dynamicconfig.TypedSubscribable[int]
+		deleteActivityRPS       dynamicconfig.TypedSubscribable[int]
+		useChasmDeleteExecution dynamicconfig.BoolPropertyFn
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -64,15 +68,17 @@ func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	historyClient historyservice.HistoryServiceClient,
 	deleteActivityRPS dynamicconfig.TypedSubscribable[int],
+	useChasmDeleteExecution dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
-		visibilityManager: visibilityManager,
-		historyClient:     historyClient,
-		deleteActivityRPS: deleteActivityRPS,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
+		visibilityManager:       visibilityManager,
+		historyClient:           historyClient,
+		deleteActivityRPS:       deleteActivityRPS,
+		useChasmDeleteExecution: useChasmDeleteExecution,
+		metricsHandler:          metricsHandler,
+		logger:                  logger,
 	}
 }
 
@@ -179,10 +185,36 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			logger.Error("Workflow executions delete rate limiter error.", tag.Error(err))
 			return result, fmt.Errorf("rate limiter error: %w", err)
 		}
-		_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-			NamespaceId:       params.NamespaceID.String(),
-			WorkflowExecution: execution.Execution,
-		})
+
+		archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(execution)
+		if err != nil {
+			logger.Error("Failed to extract archetype ID from execution info.", tag.Error(err))
+			return result, fmt.Errorf("archetypeID extraction error: %w", err)
+		}
+
+		if archetypeID == chasm.WorkflowArchetypeID {
+			// TODO: consider using ForceDeleteWorkflowExecution for workflow as well.
+			_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+				NamespaceId:       params.NamespaceID.String(),
+				WorkflowExecution: execution.Execution,
+			})
+		} else if a.useChasmDeleteExecution() {
+			_, err = a.historyClient.DeleteExecution(ctx, &historyservice.DeleteExecutionRequest{
+				NamespaceId: params.NamespaceID.String(),
+				Execution:   execution.Execution,
+				ArchetypeId: archetypeID,
+				Reason:      "Namespace delete",
+			})
+		} else {
+			_, err = a.historyClient.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
+				NamespaceId: params.NamespaceID.String(),
+				ArchetypeId: uint32(archetypeID),
+				Request: &adminservice.DeleteWorkflowExecutionRequest{
+					Execution: execution.Execution,
+				},
+			})
+		}
+
 		switch err.(type) {
 		case nil:
 			result.SuccessCount++

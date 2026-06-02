@@ -35,7 +35,7 @@ func TestExtract(t *testing.T) {
 
 	testCases := []struct {
 		name       string
-		req        interface{}
+		req        any
 		fullMethod string
 		workflowID string
 		runID      string

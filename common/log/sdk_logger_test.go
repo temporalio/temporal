@@ -36,21 +36,21 @@ func (s *SdkLoggerSuite) TearDownTest() {
 }
 
 func (s *SdkLoggerSuite) TestEvenKeyValPairs() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewAnyTag("key2", "val2"))
+	s.underlyingLogger.EXPECT().Info("msg", tag.Any("key1", "val1"), tag.Any("key2", "val2"))
 	s.sdkLogger.Info("msg", "key1", "val1", "key2", "val2")
 }
 
 func (s *SdkLoggerSuite) TestOddKeyValPairs() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewAnyTag("key2", "no value"))
+	s.underlyingLogger.EXPECT().Info("msg", tag.Any("key1", "val1"), tag.Any("key2", "no value"))
 	s.sdkLogger.Info("msg", "key1", "val1", "key2")
 }
 
 func (s *SdkLoggerSuite) TestKeyValPairsWithTag() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewStringTag("key3", "val3"), tag.NewAnyTag("key2", "val2"))
-	s.sdkLogger.Info("msg", "key1", "val1", tag.NewStringTag("key3", "val3"), "key2", "val2")
+	s.underlyingLogger.EXPECT().Info("msg", tag.Any("key1", "val1"), tag.String("key3", "val3"), tag.Any("key2", "val2"))
+	s.sdkLogger.Info("msg", "key1", "val1", tag.String("key3", "val3"), "key2", "val2")
 
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewInt("key3", 3), tag.NewAnyTag("key2", "val2"))
-	s.sdkLogger.Info("msg", "key1", "val1", tag.NewInt("key3", 3), "key2", "val2")
+	s.underlyingLogger.EXPECT().Info("msg", tag.Any("key1", "val1"), tag.Int("key3", 3), tag.Any("key2", "val2"))
+	s.sdkLogger.Info("msg", "key1", "val1", tag.Int("key3", 3), "key2", "val2")
 
 }
 
@@ -60,6 +60,6 @@ func (s *SdkLoggerSuite) TestEmptyKeyValPairs() {
 }
 
 func (s *SdkLoggerSuite) TestSingleKeyValPairs() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "no value"))
+	s.underlyingLogger.EXPECT().Info("msg", tag.Any("key1", "no value"))
 	s.sdkLogger.Info("msg", "key1")
 }

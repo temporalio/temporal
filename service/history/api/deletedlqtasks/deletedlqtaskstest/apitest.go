@@ -26,7 +26,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			QueueKey: queueKey,
 		})
 		require.NoError(t, err)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			_, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 				QueueType:     queueKey.QueueType,
 				SourceCluster: queueKey.SourceCluster,

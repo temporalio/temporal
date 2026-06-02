@@ -228,7 +228,7 @@ func (b *EventStore) assignTaskIDs(
 	}
 
 	taskIDCount := 0
-	for i := 0; i < len(dbEventsBatches); i++ {
+	for i := range dbEventsBatches {
 		taskIDCount += len(dbEventsBatches[i])
 	}
 	taskIDs, err := b.taskIDGenerator(taskIDCount)
@@ -238,9 +238,9 @@ func (b *EventStore) assignTaskIDs(
 
 	taskIDPointer := 0
 	height := len(dbEventsBatches)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		width := len(dbEventsBatches[i])
-		for j := 0; j < width; j++ {
+		for j := range width {
 			dbEventsBatches[i][j].TaskId = taskIDs[taskIDPointer]
 			taskIDPointer++
 		}
@@ -304,6 +304,10 @@ func (b *EventStore) bufferEvent(
 	case // events generated directly from messages should not be buffered
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+		return false
+
+	case // time skipping related events should not be buffered
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
 		return false
 
 	// A paused workflow event *should be* allowed to be buffered since we want to accept any inflight workflow task completion.
@@ -400,6 +404,12 @@ func (b *EventStore) wireEventIDs(
 			attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 			if attributes.GetAttachedRequestId() != "" {
 				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			attributes := event.GetWorkflowExecutionSignaledEventAttributes()
+			if attributes.GetRequestId() != "" {
+				b.requestIDToEventID[attributes.RequestId] = event.GetEventId()
 			}
 		}
 	}

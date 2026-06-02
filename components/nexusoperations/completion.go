@@ -8,6 +8,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -43,25 +44,40 @@ func handleSuccessfulOperationResult(
 func handleOperationError(
 	node *hsm.Node,
 	operation Operation,
-	opFailedError *nexus.OperationError,
+	opErr *nexus.OperationError,
 ) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return err
 	}
-	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError)
-	if err != nil {
-		return err
+	var originalCause *failurepb.Failure
+	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
+	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
+	// The meaningful information is in the operation error's cause.
+	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
+
+	if unwrapError && opErr.OriginalFailure.Cause != nil {
+		var err error
+		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
+		}
+	} else {
+		// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
+		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
+		}
 	}
 
-	switch opFailedError.State { // nolint:exhaustive
+	switch opErr.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
+					Failure:          createNexusOperationFailure(operation, eventID, originalCause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -70,12 +86,23 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
+		if originalCause.GetCanceledFailureInfo() == nil {
+			// Old SDKs may send an ApplicationFailure for canceled operation causes.
+			originalCause = &failurepb.Failure{
+				Message:    originalCause.GetMessage(),
+				StackTrace: originalCause.GetStackTrace(),
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+				},
+				Cause: originalCause.GetCause(),
+			}
+		}
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
+					Failure:          createNexusOperationFailure(operation, eventID, originalCause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -86,7 +113,7 @@ func handleOperationError(
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
 		// transition error.
-		return fmt.Errorf("unexpected operation state: %v", opFailedError.State)
+		return fmt.Errorf("unexpected operation state: %v", opErr.State)
 	}
 }
 

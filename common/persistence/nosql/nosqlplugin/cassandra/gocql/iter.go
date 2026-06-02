@@ -16,11 +16,11 @@ func newIter(session *session, gocqlIter *gocql.Iter) *iter {
 	}
 }
 
-func (it *iter) Scan(dest ...interface{}) bool {
+func (it *iter) Scan(dest ...any) bool {
 	return it.gocqlIter.Scan(dest...)
 }
 
-func (it *iter) MapScan(m map[string]interface{}) bool {
+func (it *iter) MapScan(m map[string]any) bool {
 	return it.gocqlIter.MapScan(m)
 }
 

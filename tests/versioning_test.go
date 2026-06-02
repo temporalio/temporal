@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -31,7 +33,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -63,7 +65,6 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit.Key():                  3,
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():  true,
 
@@ -99,11 +100,6 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
-
-		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
-		// but for now we pick a subset of tests. Versioning tests exercise the most features of
-		// matching so they're a good condidate.
-		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -222,7 +218,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	// success
 	cT = s.deleteAssignmentRule(ctx, tq, 0, cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Len(res.GetAssignmentRules(), 1)
 
 	// failure due to requirement that once a fully-ramped rule exists, at least one must always exist
 	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
@@ -233,7 +229,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 
 	// delete again, success
 	s.deleteAssignmentRule(ctx, tq, 0, cT, true)
-	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Len(res.GetAssignmentRules(), 1)
 
 }
 
@@ -250,7 +246,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
-	s.Equal(rulesMap["1"], "0")
+	s.Equal("0", rulesMap["1"])
 
 	// failure due to cycle
 	s.insertRedirectRule(ctx, tq, "0", "1", cT, false)
@@ -274,7 +270,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
-	s.Equal(rulesMap["1"], "2")
+	s.Equal("2", rulesMap["1"])
 
 	// failure due to source not found
 	s.replaceRedirectRule(ctx, tq, "10", "3", cT, false)
@@ -297,7 +293,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	// success
 	cT = s.deleteRedirectRule(ctx, tq, "1", cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetCompatibleRedirectRules(), 1)
 
 	// failure due to source not found
 	s.deleteRedirectRule(ctx, tq, "1", cT, false)
@@ -321,8 +317,8 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	// no recent poller + force --> success
 	cT = s.commitBuildId(ctx, tq, "1", true, cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
-	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetAssignmentRules(), 1)
+	s.Empty(res.GetCompatibleRedirectRules())
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
@@ -338,8 +334,8 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
-	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetAssignmentRules(), 1)
+	s.Empty(res.GetCompatibleRedirectRules())
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
@@ -373,7 +369,7 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := testcore.NewContext()
 	tq := "functional-versioning-series"
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s.addNewDefaultBuildId(ctx, tq, s.prefixed(fmt.Sprintf("foo-%d", i)))
 	}
 	s.addCompatibleBuildId(ctx, tq, s.prefixed("foo-2.1"), s.prefixed("foo-2"), false)
@@ -472,42 +468,6 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
 }
 
-// func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
-//	for _, forceForward := range []bool{false, true} {
-//		for _, forceAsync := range []bool{false, true} {
-//			name := "NoForward"
-//			if forceForward {
-//				// force two levels of forwarding
-//				name = "ForceForward"
-//			}
-//			if forceAsync {
-//				name += "ForceAsync"
-//			} else {
-//				name += "AllowSync"
-//			}
-//
-//			s.Run(name, func() {
-//				if forceForward {
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
-//				} else {
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-//				}
-//				if forceAsync {
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
-//				} else {
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
-//				}
-//
-//				subtest()
-//			})
-//		}
-//	}
-// }
-
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowOld() {
 	s.RunTestWithMatchingBehavior(func() { s.dispatchNewWorkflow(false) })
 }
@@ -596,7 +556,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer w2.Stop()
 
 	counter := make(map[string]int)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
@@ -605,8 +565,8 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	}
 
 	// both builds should've got executions
-	s.Greater(counter["done v1!"], 0)
-	s.Greater(counter["done v2!"], 0)
+	s.Positive(counter["done v1!"])
+	s.Positive(counter["done v2!"])
 	s.Equal(50, counter["done v1!"]+counter["done v2!"])
 }
 
@@ -681,7 +641,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
+	s.Len(dw.GetPendingActivities(), 1)
 	s.NotNil(dw.GetPendingActivities()[0].GetUseWorkflowBuildId())
 
 	close(rulesUpdated)
@@ -763,7 +723,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
+	s.Len(dw.GetPendingActivities(), 1)
 	s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
 	close(rulesUpdated)
 
@@ -775,6 +735,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_Spooled() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSpooled)
 }
 
@@ -887,6 +848,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_SyncMatch() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSyncMatch)
 }
 
@@ -1068,7 +1030,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1104,7 +1066,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -1143,7 +1105,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v3 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -1275,7 +1237,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1316,7 +1278,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -1396,7 +1358,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf1 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1443,7 +1405,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf11 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1481,7 +1443,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf12 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1885,7 +1847,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	if newVersioning {
@@ -1975,7 +1937,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	startedWf := make(chan struct{}, 1)
@@ -2073,34 +2035,34 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.WaitForChannel(ctx, startedWf)
 	rule2 := s.addRedirectRule(ctx, tq, v1, v11)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, started11)
 	// wf assigned build ID should be updated by activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
 	// let activity finish
-	proceed11 <- struct{}{}
+	s.SendToChannel(ctx, proceed11)
 
 	// wf replays on 1.1 so need to unblock it an extra time
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, startedWf)
 	rule2 = s.addRedirectRule(ctx, tq, v11, v12)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, started12)
 	// wf assigned build ID should not be updated by independent activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
 	// let activity finish
-	proceed12 <- struct{}{}
+	s.SendToChannel(ctx, proceed12)
 
 	// wf replays on 1.2 so need to unblock it two extra times
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -2227,7 +2189,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 				s.NoError(err)
 				res = append(res, activityVersion)
 				// The output of a newer build ID should never be sent to a wf worker of an older build ID
-				s.Assert().GreaterOrEqual(wfVersion, activityVersion)
+				s.GreaterOrEqual(wfVersion, activityVersion)
 				// TODO: uncomment this check once workflow.GetInfo(wfCtx).GetCurrentBuildID() returns correct value
 				// based on last started task build ID, not last completed task build ID.
 				// s.Assert().GreaterOrEqual(workflow.GetInfo(wfCtx).GetCurrentBuildID(), activityVersion)
@@ -2283,7 +2245,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	var maxStartedTimestamp time.Time
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		var taskStartedStamp *commonpb.WorkerVersionStamp
 		var taskRedirectCounter int64
 		var buildId string
@@ -2423,7 +2385,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	defer cancel()
 
 	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	pollResponse, err := s.SdkClient().WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -2433,7 +2395,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 			BuildId: v1,
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	startToCloseTimeout := time.Minute
 
 	completionResponse, err := s.SdkClient().WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -2480,9 +2442,9 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 			},
 		},
 	})
-	s.Require().NoError(err)
-	s.Require().Equal(1, len(completionResponse.ActivityTasks))
-	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
+	s.NoError(err)
+	s.Len(completionResponse.ActivityTasks, 1)
+	s.Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
@@ -3993,14 +3955,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.WaitForChannel(ctx, started)
 
 	// 2. Wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
-		return resp.GetCount() > 0
+		require.NoError(t, err)
+		require.Positive(t, resp.GetCount())
 	}, 5*time.Second, 50*time.Millisecond)
 
 	// 3. Commit a different build id --> A should now only be reachable via visibility query
@@ -4061,14 +4023,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.WaitForChannel(ctx, started)
 
 	// wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
-		return resp.GetCount() > 0
+		require.NoError(t, err)
+		require.Positive(t, resp.GetCount())
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
@@ -4085,11 +4047,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
-	s.Eventually(func() bool {
-		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 			"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
-		})
+		}))
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
@@ -4101,7 +4063,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 
 	workerN := 3
 	workerMap := make(map[string]worker.Worker)
-	for i := 0; i < workerN; i++ {
+	for range workerN {
 		wId := testcore.RandomizeStr("id")
 		w := worker.New(s.SdkClient(), tq, worker.Options{
 			UseBuildIDForVersioning: false,
@@ -4113,7 +4075,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		workerMap[wId] = w
 	}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:              s.Namespace().String(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4124,11 +4086,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 			ReportTaskReachability: true,
 			ReportStats:            false,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
@@ -4136,7 +4098,8 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		foundN := 0
 		for wId := range workerMap {
 			for _, pi := range pollersInfo {
-				s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+				//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
+				require.False(t, pi.GetWorkerVersionCapabilities().GetUseVersioning())
 				if pi.GetIdentity() == wId {
 					foundN++
 					break
@@ -4144,7 +4107,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 			}
 		}
 
-		return foundN == workerN
+		require.Equal(t, workerN, foundN)
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
@@ -4164,7 +4127,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	defer w.Stop()
 
 	// wait for pollers to show up, verify both ReportPollers and ReportTaskReachability
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:              s.Namespace().String(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4174,23 +4137,25 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 			ReportPollers:          true,
 			ReportTaskReachability: true,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
 		}
+		foundPoller := false
 		for _, pi := range pollersInfo {
-			s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+			//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
+			require.False(t, pi.GetWorkerVersionCapabilities().GetUseVersioning())
 			if pi.GetIdentity() == wId {
-				return true
+				foundPoller = true
+				break
 			}
 		}
-
-		return false
+		require.True(t, foundPoller)
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// ask for reachability only
@@ -4204,11 +4169,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 	versionInfo := resp.GetVersionsInfo()[""]
-	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
-		s.Zero(len(t.GetPollers()), "poller info should not be reported")
+		s.Empty(t.GetPollers(), "poller info should not be reported")
 	}
 
 	// ask for pollers only
@@ -4222,11 +4187,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 	versionInfo = resp.GetVersionsInfo()[""]
-	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
+	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
-		s.Equal(1, len(t.GetPollers()), "only one poller info should be reported")
+		s.Len(t.GetPollers(), 1, "only one poller info should be reported")
 	}
 }
 
@@ -4309,13 +4274,13 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		havePoller := func(v string) bool {
 			for _, p := range resp.Pollers {
 				if p.WorkerVersionCapabilities.UseVersioning && v == p.WorkerVersionCapabilities.BuildId {
@@ -4325,7 +4290,9 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 			return false
 		}
 		// v1 polls get rejected because v11 is newer
-		return !havePoller(v1) && havePoller(v11) && havePoller(v2)
+		require.False(t, havePoller(v1))
+		require.True(t, havePoller(v11))
+		require.True(t, havePoller(v2))
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
@@ -4368,10 +4335,11 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.WaitForChannel(ctx, started1)
 
 	// describe and check build ID
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
-		s.NoError(err)
-		return v1 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+		require.NoError(t, err)
+		//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
+		require.Equal(t, v1, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// now register v11 as newer compatible with v1
@@ -4396,10 +4364,11 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.WaitForChannel(ctx, started11)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
-		s.NoError(err)
-		return v11 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+		require.NoError(t, err)
+		//nolint:staticcheck // SA1019: this test covers legacy build-ID versioning.
+		require.Equal(t, v11, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unblock. it should complete
@@ -4447,7 +4416,7 @@ func (s *VersioningIntegSuite) insertAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
-		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
+		s.Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4477,7 +4446,7 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
-		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
+		s.Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4523,7 +4492,7 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 				break
 			}
 		}
-		s.Assert().False(found)
+		s.False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4560,7 +4529,7 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 				break
 			}
 		}
-		s.Assert().True(found)
+		s.True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4597,7 +4566,7 @@ func (s *VersioningIntegSuite) replaceRedirectRule(
 				break
 			}
 		}
-		s.Assert().True(found)
+		s.True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4631,7 +4600,7 @@ func (s *VersioningIntegSuite) deleteRedirectRule(
 				break
 			}
 		}
-		s.Assert().False(found)
+		s.False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4662,7 +4631,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 		// 1. Adds a fully-ramped assignment rule for the target Build ID at the end of the list.
 		endIdx := len(res.GetAssignmentRules()) - 1
 		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
-		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
+		s.Equal(targetBuildId, addedRule.GetTargetBuildId())
 		s.Assert().Equal(float32(100), addedRule.GetPercentageRamp().GetRampPercentage())
 
 		foundOtherAssignmentRuleForTarget := false
@@ -4676,9 +4645,9 @@ func (s *VersioningIntegSuite) commitBuildId(
 			}
 		}
 		// 2. Removes all previously added assignment rules to the given target Build ID (if any).
-		s.Assert().False(foundOtherAssignmentRuleForTarget)
+		s.False(foundOtherAssignmentRuleForTarget)
 		// 3. Removes any fully-ramped assignment rule for other Build IDs.
-		s.Assert().False(foundFullyRampedAssignmentRuleForOtherTarget)
+		s.False(foundFullyRampedAssignmentRuleForOtherTarget)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4723,8 +4692,8 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	s.NotNil(resp)
 	for buildId, vi := range resp.GetVersionsInfo() {
 		expected, ok := expectedReachability[buildId]
-		s.Assert().True(ok, "build id %s was not expected", buildId)
-		s.Assert().Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
+		s.True(ok, "build id %s was not expected", buildId)
+		s.Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
 	}
 }
 
@@ -4941,10 +4910,10 @@ func (s *VersioningIntegSuite) waitForPropagation(
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_ACTIVITY}] = struct{}{}
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_WORKFLOW}] = struct{}{}
 	}
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		for pt := range remaining {
 			f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), taskQueue)
-			s.NoError(err)
+			require.NoError(t, err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -4955,12 +4924,12 @@ func (s *VersioningIntegSuite) waitForPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			require.NoError(t, err)
 			if condition(res.GetUserData().GetData().GetVersioningData()) {
 				delete(remaining, pt)
 			}
 		}
-		return len(remaining) == 0
+		require.Empty(t, remaining)
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -4972,7 +4941,7 @@ func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
 func (s *VersioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
@@ -5026,7 +4995,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
-	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	searchAttrAny, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	var searchAttr []string
 	if searchAttrAny != nil {
 		searchAttr = searchAttrAny.([]string)
@@ -5036,12 +5005,12 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 		if expectedStampBuildId != "" {
 			s.NotNil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
-			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Len(searchAttr, 2+len(extraSearchAttrBuildIds))
 			s.Equal(worker_versioning.UnversionedSearchAttribute, searchAttr[0])
 			s.True(strings.HasPrefix(searchAttr[1], worker_versioning.UnversionedSearchAttribute))
 		} else {
 			s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
-			s.Equal(0, len(searchAttr))
+			s.Empty(searchAttr)
 		}
 	} else {
 		if expectedStampBuildId != "" {
@@ -5052,16 +5021,16 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 		}
 		if newVersioning {
 			s.Equal(expectedBuildId, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Len(searchAttr, 2+len(extraSearchAttrBuildIds))
 			s.Equal(worker_versioning.AssignedBuildIdSearchAttribute(expectedBuildId), searchAttr[0])
 			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 		} else {
-			s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 			if expectedStampBuildId != "" {
-				s.Equal(1+len(extraSearchAttrBuildIds), len(searchAttr))
+				s.Len(searchAttr, 1+len(extraSearchAttrBuildIds))
 				s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 			} else {
-				s.Equal(0, len(searchAttr))
+				s.Empty(searchAttr)
 			}
 		}
 	}
@@ -5086,7 +5055,7 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 	checkedInheritedBuildId := false
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		if !checkedInheritedBuildId {
 			// first event
 			checkedInheritedBuildId = true

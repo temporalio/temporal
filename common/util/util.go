@@ -19,12 +19,15 @@ func MinTime(a, b time.Time) time.Time {
 	return b
 }
 
-// MaxTime returns the later of two given time.Time
-func MaxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
+// MaxTime returns the latest of the given time.Time values.
+func MaxTime(first time.Time, rest ...time.Time) time.Time {
+	latest := first
+	for _, t := range rest {
+		if t.After(latest) {
+			latest = t
+		}
 	}
-	return b
+	return latest
 }
 
 // NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple
@@ -76,6 +79,39 @@ func InverseMap[M ~map[K]V, K, V comparable](m M) map[V]K {
 		invm[v] = k
 	}
 	return invm
+}
+
+// GetOrSetNew looks up k in m and returns the result. If it's not present, it uses `new` to
+// allocate an new value type and sets that in the map, then returns it.
+func GetOrSetNew[M ~map[K]*V, K comparable, V any](m M, k K) *V {
+	if v, ok := m[k]; ok {
+		return v
+	}
+	v := new(V)
+	m[k] = v
+	return v
+}
+
+// GetOrSetMap looks up k in m, a two-level map, and returns the result. If it's not present,
+// it uses `make` to allocate new second-level map and sets that in the first map, then returns it.
+func GetOrSetMap[M ~map[K]M2, M2 ~map[K2]V, K, K2 comparable, V any](m M, k K) M2 {
+	if m2, ok := m[k]; ok {
+		return m2
+	}
+	m2 := make(M2)
+	m[k] = m2
+	return m2
+}
+
+// DeleteFromMap deletes k2 from the nested map m[k]. If the inner map becomes empty
+// after deletion, k is also removed from m to prevent memory leaks.
+func DeleteFromMap[M ~map[K]M2, M2 ~map[K2]V, K, K2 comparable, V any](m M, k K, k2 K2) {
+	if m2, ok := m[k]; ok {
+		delete(m2, k2)
+		if len(m2) == 0 {
+			delete(m, k)
+		}
+	}
 }
 
 // MapConcurrent concurrently maps a function over input and fails fast on error.
@@ -139,7 +175,7 @@ func RepeatSlice[T any](xs []T, n int) []T {
 		return nil
 	}
 	ys := make([]T, n*len(xs))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		copy(ys[i*len(xs):], xs)
 	}
 	return ys

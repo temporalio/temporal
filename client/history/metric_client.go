@@ -50,6 +50,34 @@ func (c *metricClient) StreamWorkflowReplicationMessages(
 	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
 
+func (c *metricClient) StartNexusOperation(
+	ctx context.Context,
+	request *historyservice.StartNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.StartNexusOperationResponse, retError error) {
+	op := "HistoryClientStartNexusOperation_" + request.GetRequest().GetService() + "_" + request.GetRequest().GetOperation()
+	metricsHandler, startTime := c.startMetricsRecording(ctx, op)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StartNexusOperation(ctx, request, opts...)
+}
+
+func (c *metricClient) CancelNexusOperation(
+	ctx context.Context,
+	request *historyservice.CancelNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.CancelNexusOperationResponse, retError error) {
+	op := "HistoryClientCancelNexusOperation_" + request.GetRequest().GetService() + "_" + request.GetRequest().GetOperation()
+	metricsHandler, startTime := c.startMetricsRecording(ctx, op)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelNexusOperation(ctx, request, opts...)
+}
+
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
 	operation string,
@@ -73,7 +101,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.WorkflowNotReady,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.ResourceExhausted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ServiceErrorType(err))

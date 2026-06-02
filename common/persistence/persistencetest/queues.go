@@ -43,8 +43,8 @@ func GetQueueKey(t *testing.T, opts ...func(p *getQueueKeyParams)) persistence.Q
 	return persistence.QueueKey{
 		QueueType:     params.QueueType,
 		Category:      params.Category,
-		SourceCluster: "test-source-cluster-" + t.Name(),
-		TargetCluster: "test-target-cluster-" + t.Name(),
+		SourceCluster: "src-" + t.Name(),
+		TargetCluster: "tgt-" + t.Name(),
 	}
 }
 
@@ -78,7 +78,7 @@ func EnqueueMessage(
 }
 
 func EnqueueMessagesForDelete(t *testing.T, q persistence.QueueV2, queueName string, queueType persistence.QueueV2Type) {
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		// We have to actually enqueue 2 messages. Otherwise, there won't be anything to actually delete,
 		// since we never delete the last message.
 		_, err := EnqueueMessage(context.Background(), q, queueType, queueName)

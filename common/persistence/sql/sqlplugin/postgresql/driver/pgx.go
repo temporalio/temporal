@@ -1,15 +1,42 @@
 package driver
 
 import (
+	"database/sql"
+	sqldriver "database/sql/driver"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib" // register pgx driver for sqlx
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 type PGXDriver struct{}
 
+const pgxDriverName = "pgx"
+
 func (p *PGXDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
-	return sqlx.Connect("pgx", dsn)
+	return sqlx.Connect(pgxDriverName, dsn)
+}
+
+func (p *PGXDriver) CreateRefreshableConnection(buildDSN func() (string, error)) (*sqlx.DB, error) {
+	c := sqlplugin.NewRefreshingConnector(
+		buildDSN,
+		func(dsn string) (sqldriver.Connector, error) {
+			cfg, err := pgx.ParseConfig(dsn)
+			if err != nil {
+				return nil, err
+			}
+			return stdlib.GetConnector(*cfg), nil
+		},
+		stdlib.GetDefaultDriver(),
+	)
+	db := sqlx.NewDb(sql.OpenDB(c), pgxDriverName)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func (p *PGXDriver) IsDupEntryError(err error) bool {

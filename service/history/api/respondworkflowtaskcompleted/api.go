@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -61,7 +62,9 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		chasmWorkflowRegistry          *chasmworkflow.Registry
 		matchingClient                 matchingservice.MatchingServiceClient
+		versionCache                   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -70,10 +73,12 @@ func NewWorkflowTaskCompletedHandler(
 	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -95,7 +100,9 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		chasmWorkflowRegistry:          chasmWorkflowRegistry,
 		matchingClient:                 matchingClient,
+		versionCache:                   versionCache,
 	}
 }
 
@@ -147,6 +154,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	weContext := workflowLease.GetContext()
 	ms := workflowLease.GetMutableState()
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+
+	if len(request.Commands) == 0 {
+		// Context metadata is automatically set during mutable state transaction close. For RespondWorkflowTaskCompleted
+		// with no commands (e.g., workflow task heartbeat or only readonly messages like `update.Rejection`), the transaction
+		// is never closed. We explicitly call SetContextMetadata here to ensure workflow metadata is populated in the context.
+		ms.SetContextMetadata(ctx)
+	}
+
 	defer func() {
 		var errForRelease error
 		if releaseLeaseWithError {
@@ -378,6 +393,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		workflowTaskHandler := newWorkflowTaskCompletedHandler(
 			request.GetIdentity(),
+			request.GetWorkerControlTaskQueue(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
 			updateRegistry,
@@ -392,7 +408,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.chasmWorkflowRegistry,
 			handler.matchingClient,
+			handler.versionCache,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -498,7 +516,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() {
+	// Do not schedule a new workflow task if the workflow is paused. Accepting the in-flight
+	// WT completion is intentional (see HistoryBuilder buffering of WORKFLOW_EXECUTION_PAUSED),
+	// but scheduling a follow-up WT would call ApplyWorkflowTaskScheduledEvent, which resets
+	// Status to RUNNING while leaving executionInfo.PauseInfo set — desyncing pause state.
+	// Mirrors the gate in closeTransactionHandleWorkflowTaskScheduling.
+	if ms.IsWorkflowExecutionRunning() && !ms.IsWorkflowExecutionStatusPaused() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
@@ -584,6 +607,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				nil,
+				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
 			if err != nil {
 				return nil, err
@@ -708,6 +733,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			nil,
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
+			nil,
+			-1, // sentinel: inline path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			return nil, err
@@ -772,7 +799,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	ctx context.Context,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory,
 	branchToken []byte,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
@@ -845,12 +872,11 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 
 		if len(persistenceToken) != 0 {
 			continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:          firstEventID,
-				NextEventId:           nextEventID,
-				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
-				BranchToken:           branchToken,
+				RunId:            matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:     firstEventID,
+				NextEventId:      nextEventID,
+				PersistenceToken: persistenceToken,
+				BranchToken:      branchToken,
 			})
 			if err != nil {
 				return nil, err
@@ -954,7 +980,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 			runID,
 			scope,
 			handler.throttledLogger,
-			tag.BlobSizeViolationOperation("ConsistentQuery"),
+			"ConsistentQuery",
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
 				tag.WorkflowNamespace(namespaceName.String()),

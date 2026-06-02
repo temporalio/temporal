@@ -15,16 +15,16 @@ type (
 	Type   int
 	Number struct {
 		numberType Type
-		value      interface{}
+		value      any
 	}
 )
 
 func NewNumber(
-	value interface{},
+	value any,
 ) Number {
 
 	var numberType Type
-	var number interface{}
+	var number any
 	switch n := value.(type) {
 	case int8:
 		numberType = TypeInt

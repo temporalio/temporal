@@ -237,6 +237,8 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		nil,
 		nil,
 		false,
+		nil,
+		0,
 	)
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 

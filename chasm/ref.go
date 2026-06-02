@@ -13,8 +13,6 @@ var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed compon
 // ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
 var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
-var defaultShardingFn = func(key ExecutionKey) string { return key.NamespaceID + "_" + key.BusinessID }
-
 // ExecutionKey uniquely identifies a CHASM execution in the system.
 type ExecutionKey struct {
 	NamespaceID string
@@ -53,7 +51,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(NodeBackend, Context, Component) error
+	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
@@ -66,6 +64,19 @@ func NewComponentRef[C Component](
 	return ComponentRef{
 		ExecutionKey:    executionKey,
 		executionGoType: reflect.TypeFor[C](),
+	}
+}
+
+// NewComponentRefByArchetypeID creates a new ComponentRef with a known archetype ID.
+// This should only be used by CHASM framework internals.
+// CHASM library developers should use [NewComponentRef] instead.
+func NewComponentRefByArchetypeID(
+	executionKey ExecutionKey,
+	archetypeID ArchetypeID,
+) ComponentRef {
+	return ComponentRef{
+		ExecutionKey: executionKey,
+		archetypeID:  archetypeID,
 	}
 }
 
@@ -83,26 +94,6 @@ func (r *ComponentRef) ArchetypeID(
 	r.archetypeID = rc.componentID
 
 	return r.archetypeID, nil
-}
-
-// ShardingKey returns the sharding key used for determining the shardID of the run
-// that contains the referenced component.
-// TODO: remove this method and ShardingKey concept, we don't need this functionality.
-func (r *ComponentRef) ShardingKey(
-	registry *Registry,
-) (string, error) {
-
-	archetypeID, err := r.ArchetypeID(registry)
-	if err != nil {
-		return "", err
-	}
-
-	rc, ok := registry.ComponentByID(archetypeID)
-	if !ok {
-		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
-	}
-
-	return rc.shardingFn(r.ExecutionKey), nil
 }
 
 func (r *ComponentRef) Serialize(

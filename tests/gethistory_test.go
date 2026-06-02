@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -77,6 +78,7 @@ func TestGetHistoryFunctionalSuite(t *testing.T) {
 func (s *GetHistoryFunctionalSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableTransitionHistory.Key(): s.EnableTransitionHistory,
+		dynamicconfig.ExternalPayloadsEnabled.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -125,7 +127,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -298,7 +300,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -398,7 +400,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 
 		// since we are only interested in close event
 		if token == nil {
-			s.Equal(1, len(events))
+			s.Len(events, 1)
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[0].EventType)
 		} else {
 			s.Empty(events)
@@ -413,7 +415,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 			break
 		}
 	}
-	s.Equal(1, len(events))
+	s.Len(events, 1)
 	s.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
@@ -442,7 +444,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Nil(err0)
+	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -455,7 +457,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -513,7 +515,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			WaitNewEvent:    isLongPoll,
 			NextPageToken:   token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
@@ -526,16 +528,15 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			MaximumPageSize: int32(100),
 			NextPageToken:   token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
-	serializer := serialization.NewSerializer()
 	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
-			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
-			blobEvents, err := serializer.DeserializeEvents(&commonpb.DataBlob{
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
+			blobEvents, err := serialization.DefaultDecoder.DeserializeEvents(&commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			})
@@ -654,8 +655,8 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -669,27 +670,27 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
 
 	wfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.Nil(err)
+	s.NoError(err)
 
 	eventDefaultOrder := s.GetHistory(s.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution)
 	eventDefaultOrder = reverseSlice(eventDefaultOrder)
 
 	events := s.getHistoryReverse(s.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution, 100)
-	s.Equal(len(eventDefaultOrder), len(events))
+	s.Len(events, len(eventDefaultOrder))
 	s.Equal(eventDefaultOrder, events)
 
 	events = s.getHistoryReverse(s.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution, 3)
-	s.Equal(len(eventDefaultOrder), len(events))
+	s.Len(events, len(eventDefaultOrder))
 	s.Equal(eventDefaultOrder, events)
 
 	events = s.getHistoryReverse(s.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution, 1)
-	s.Equal(len(eventDefaultOrder), len(events))
+	s.Len(events, len(eventDefaultOrder))
 	s.Equal(eventDefaultOrder, events)
 }
 
@@ -729,8 +730,8 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-wf-gethistory-reverse-multiple-branches"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -744,7 +745,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	// we want to reset workflow in the middle of execution
 	time.Sleep(time.Second) //nolint:forbidigo
@@ -773,15 +774,15 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	eventsDefaultOrder = reverseSlice(eventsDefaultOrder)
 
 	events := s.getHistoryReverse(s.Namespace().String(), resetWfeResponse.WorkflowExecutionInfo.Execution, 100)
-	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Len(events, len(eventsDefaultOrder))
 	s.Equal(eventsDefaultOrder, events)
 
 	events = s.getHistoryReverse(s.Namespace().String(), resetWfeResponse.WorkflowExecutionInfo.Execution, 3)
-	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Len(events, len(eventsDefaultOrder))
 	s.Equal(eventsDefaultOrder, events)
 
 	events = s.getHistoryReverse(s.Namespace().String(), resetWfeResponse.WorkflowExecutionInfo.Execution, 1)
-	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Len(events, len(eventsDefaultOrder))
 	s.Equal(eventsDefaultOrder, events)
 }
 
@@ -814,4 +815,73 @@ func (s *RawHistoryClientSuite) getHistoryReverse(namespace string, execution *c
 	}
 
 	return events
+}
+
+func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats() {
+	tv := testvars.New(s.T())
+
+	workflowExternalPayloadSize := int64(1024)
+	workflowInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: workflowExternalPayloadSize},
+			},
+		}},
+	}
+
+	activityExternalPayloadSize := int64(2048)
+	activityInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: activityExternalPayloadSize},
+			},
+		}},
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               workflowInputPayload,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	// Process first workflow task (schedules activity)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             "activity1",
+							ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
+							TaskQueue:              tv.TaskQueue(),
+							Input:                  activityInputPayload,
+							ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+							ScheduleToStartTimeout: durationpb.New(100 * time.Second),
+							StartToCloseTimeout:    durationpb.New(50 * time.Second),
+							HeartbeatTimeout:       durationpb.New(5 * time.Second),
+						},
+					},
+				}},
+			}, nil
+		})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	s.Equal(int64(2), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }

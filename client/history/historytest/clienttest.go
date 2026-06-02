@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace/embedded"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -116,7 +117,7 @@ func readTasks(
 
 	// We want to run a test where the client makes multiple requests to the server because the client is stateful. In
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
@@ -135,11 +136,15 @@ func readTasks(
 
 func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
-	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
+	historyHandler, err := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
 		TaskQueueManager:     historyTaskQueueManager,
 		TracerProvider:       fakeTracerProvider{},
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		ChasmRegistry:        chasm.NewRegistry(log.NewNoopLogger()),
 	})
+	if err != nil {
+		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
+	}
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)
 	return grpcServer
@@ -176,7 +181,7 @@ func enqueueTasks(
 	task := &tasks.WorkflowTask{
 		TaskID: 42,
 	}
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		_, err := historyTaskQueueManager.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			SourceCluster: sourceCluster,

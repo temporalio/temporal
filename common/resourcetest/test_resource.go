@@ -115,7 +115,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
-	executionMgr.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
+	executionMgr.EXPECT().GetHistoryBranchUtil().Return(persistence.NewHistoryBranchUtil(serialization.NewSerializer())).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	nexusEndpointMgr := persistence.NewMockNexusEndpointManager(controller)
 

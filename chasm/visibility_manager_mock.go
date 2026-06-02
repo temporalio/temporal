@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	common "go.temporal.io/api/common/v1"
+	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,10 +42,10 @@ func (m *MockVisibilityManager) EXPECT() *MockVisibilityManagerMockRecorder {
 }
 
 // CountExecutions mocks base method.
-func (m *MockVisibilityManager) CountExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *CountExecutionsRequest) (*CountExecutionsResponse, error) {
+func (m *MockVisibilityManager) CountExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *CountExecutionsRequest) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountExecutions", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*CountExecutionsResponse)
+	ret0, _ := ret[0].(*visibilityservice.CountChasmExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -57,10 +57,10 @@ func (mr *MockVisibilityManagerMockRecorder) CountExecutions(arg0, arg1, arg2 an
 }
 
 // ListExecutions mocks base method.
-func (m *MockVisibilityManager) ListExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *ListExecutionsRequest) (*ListExecutionsResponse[*common.Payload], error) {
+func (m *MockVisibilityManager) ListExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *ListExecutionsRequest) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListExecutions", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*ListExecutionsResponse[*common.Payload])
+	ret0, _ := ret[0].(*visibilityservice.ListChasmExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

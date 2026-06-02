@@ -135,7 +135,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			} {
 				if len(msg) > 0 {
 					logger.EXPECT().Error(msg, gomock.Any()).Do(func(msg string, tags ...tag.Tag) {
-						var namespaceID, workflowID, runID interface{}
+						var namespaceID, workflowID, runID any
 						for _, t := range tags {
 							if t.Key() == "wf-namespace-id" {
 								namespaceID = t.Value()

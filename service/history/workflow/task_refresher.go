@@ -55,11 +55,9 @@ type (
 func NewTaskRefresher(
 	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
-
 	return &TaskRefresherImpl{
-		shard: shard,
-
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:                 shard,
+		taskGeneratorProvider: GetTaskGeneratorProvider(),
 	}
 }
 
@@ -68,16 +66,30 @@ func (r *TaskRefresherImpl) Refresh(
 	mutableState historyi.MutableState,
 	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
-	if r.shard.GetConfig().EnableNexus() {
-		// Invalidate all tasks generated for this mutable state before the refresh.
-		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
-	}
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
 	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
 		return err
 	}
 
-	return mutableState.ChasmTree().RefreshTasks()
+	if err := mutableState.ChasmTree().RefreshTasks(); err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflow() && mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
+		if err != nil {
+			return err
+		}
+		taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
+			r.shard,
+			mutableState,
+		)
+		return taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+	}
+
+	return nil
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
@@ -427,6 +439,8 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
+	// if mutableState.ExecutionInfo.TimeSkippingInfo changed,
+	// we need to
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 

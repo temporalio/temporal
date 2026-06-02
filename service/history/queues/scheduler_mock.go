@@ -15,6 +15,44 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+// MockBusyWorkflowHandler is a mock of BusyWorkflowHandler interface.
+type MockBusyWorkflowHandler struct {
+	ctrl     *gomock.Controller
+	recorder *MockBusyWorkflowHandlerMockRecorder
+	isgomock struct{}
+}
+
+// MockBusyWorkflowHandlerMockRecorder is the mock recorder for MockBusyWorkflowHandler.
+type MockBusyWorkflowHandlerMockRecorder struct {
+	mock *MockBusyWorkflowHandler
+}
+
+// NewMockBusyWorkflowHandler creates a new mock instance.
+func NewMockBusyWorkflowHandler(ctrl *gomock.Controller) *MockBusyWorkflowHandler {
+	mock := &MockBusyWorkflowHandler{ctrl: ctrl}
+	mock.recorder = &MockBusyWorkflowHandlerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBusyWorkflowHandler) EXPECT() *MockBusyWorkflowHandlerMockRecorder {
+	return m.recorder
+}
+
+// HandleBusyWorkflow mocks base method.
+func (m *MockBusyWorkflowHandler) HandleBusyWorkflow(arg0 Executable) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleBusyWorkflow", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HandleBusyWorkflow indicates an expected call of HandleBusyWorkflow.
+func (mr *MockBusyWorkflowHandlerMockRecorder) HandleBusyWorkflow(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBusyWorkflow", reflect.TypeOf((*MockBusyWorkflowHandler)(nil).HandleBusyWorkflow), arg0)
+}
+
 // MockScheduler is a mock of Scheduler interface.
 type MockScheduler struct {
 	ctrl     *gomock.Controller
