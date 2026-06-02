@@ -3,7 +3,7 @@ package dynamicconfig
 import (
 	"regexp"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"go.temporal.io/server/common/util"
 )
 

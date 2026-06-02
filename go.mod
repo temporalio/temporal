@@ -24,6 +24,7 @@ require (
 	github.com/go-faker/faker/v4 v4.7.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
@@ -36,7 +37,6 @@ require (
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.12.3
 	github.com/maruel/panicparse/v2 v2.5.0
-	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0
 	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
