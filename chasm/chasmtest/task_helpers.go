@@ -10,6 +10,8 @@ import (
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
+// After a successful execution, Validate must return (false, nil), otherwise
+// the helper returns an error because the task would remain runnable.
 //
 // The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
 // obtain a ref is needed. Pass the component pointer directly.
@@ -48,7 +50,18 @@ func ExecutePureTask[C chasm.Component, T any](
 				taskDropped = true
 				return nil
 			}
-			return handler.Execute(mutableCtx, typedC, attrs, task)
+			if err = handler.Execute(mutableCtx, typedC, attrs, task); err != nil {
+				return err
+			}
+
+			valid, err = handler.Validate(mutableCtx, typedC, attrs, task)
+			if err != nil {
+				return err
+			}
+			if valid {
+				return chasm.NewTaskNotInvalidatedError("pure", fmt.Sprintf("task_type=%T", task))
+			}
+			return nil
 		},
 	)
 	return taskDropped, err

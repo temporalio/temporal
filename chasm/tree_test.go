@@ -3252,11 +3252,12 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		},
 	)
 
-	// One valid task, one invalid task
+	// One valid task, one invalid task.
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, _ TaskAttributes, task *TestPureTask) (bool, error) {
+			return string(task.Payload.Data) != "root-task-payload", nil
+		}).Times(2)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
@@ -3466,7 +3467,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 		},
 	}
 
-	taskAttributes := TaskAttributes{}
+	taskAttributes := TaskAttributes{ScheduledTime: s.timeSource.Now()}
 	pureTask := &TestPureTask{
 		Data: []byte("some-random-data"),
 	}
@@ -3492,11 +3493,31 @@ func (s *nodeSuite) TestExecutePureTask() {
 			Return(retValue, errValue).
 			Times(1)
 	}
+	type validateResult struct {
+		valid bool
+		err   error
+	}
+	expectValidateSequence := func(results ...validateResult) {
+		calls := make([]*gomock.Call, 0, len(results))
+		for _, result := range results {
+			calls = append(calls, s.testLibrary.mockPureTaskHandler.EXPECT().
+				Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+				Return(result.valid, result.err).Times(1))
+		}
+		orderedCalls := make([]any, 0, len(calls))
+		for _, call := range calls {
+			orderedCalls = append(orderedCalls, call)
+		}
+		gomock.InOrder(orderedCalls...)
+	}
 
-	// Succeed task execution and validation (happy case).
+	// Succeed task execution and post-execution validation reports the task is invalid.
 	root.setValueState(valueStateSynced)
 	expectExecute(nil)
-	expectValidate(true, nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false},
+	)
 	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
@@ -3508,6 +3529,31 @@ func (s *nodeSuite) TestExecutePureTask() {
 	root.setValueState(valueStateSynced)
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
+
+	// Succeed execution, but post-execution validation still returns valid.
+	root.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: true},
+	)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
+	var taskNotInvalidatedErr *TaskNotInvalidatedError
+	s.ErrorAs(err, &taskNotInvalidatedErr)
+	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
+
+	// Succeed execution, but post-execution validation errors.
+	root.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false, err: expectedErr},
+	)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
