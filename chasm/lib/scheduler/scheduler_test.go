@@ -412,6 +412,51 @@ func TestSearchAttributes_NextActionTime(t *testing.T) {
 	})
 }
 
+func TestSearchAttributes_IdleCloseTime(t *testing.T) {
+
+	t.Run("idle schedule emits IdleCloseTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		closeTime := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+		sched.IdleCloseTime = timestamppb.New(closeTime)
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleIdleCloseTimeName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleIdleCloseTimeName)
+		require.True(t, closeTime.Equal(val.(time.Time)), "want %v, got %v", closeTime, val)
+	})
+
+	t.Run("schedule with no idle deadline does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.IdleCloseTime = nil
+
+		sas := sched.SearchAttributes(ctx)
+		_, has := findSearchAttribute(t, sas, scheduler.ScheduleIdleCloseTimeName)
+		require.False(t, has, "expected %s to be absent when not idle", scheduler.ScheduleIdleCloseTimeName)
+	})
+
+	t.Run("closed does not emit IdleCloseTime", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		// A deadline left over from before close must not leak through.
+		sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
+
+		sas := sched.SearchAttributes(ctx)
+		_, has := findSearchAttribute(t, sas, scheduler.ScheduleIdleCloseTimeName)
+		require.False(t, has, "expected %s to be absent once closed", scheduler.ScheduleIdleCloseTimeName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, has := findSearchAttribute(t, sas, scheduler.ScheduleIdleCloseTimeName)
+		require.False(t, has)
+	})
+}
+
 func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
 	t.Helper()
 	for _, sa := range sas {
@@ -435,8 +480,9 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 	nextAction := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	generator := sched.Generator.Get(ctx)
 	generator.FutureActionTimes = []*timestamppb.Timestamp{timestamppb.New(nextAction)}
+	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err := node.CloseTransaction()
-	require.NoError(t, err, "CloseTransaction should accept TemporalScheduleNextActionTime")
+	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
 }

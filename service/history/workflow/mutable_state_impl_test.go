@@ -6596,6 +6596,88 @@ func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
 		s.Equal("has pending activity", reason)
 	})
 
+	s.Run("FalseWhenPendingActivityInRetryBackoff", func() {
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.False(hasPendingWork)
+		s.Empty(reason)
+	})
+
+	s.Run("TrueWhenActivityStarted", func() {
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+			StartedEventId:   10,
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	// A running activity that cannot be retried (no retry policy) must still block:
+	// the STARTED state short-circuits before the retry-policy check.
+	s.Run("TrueWhenActivityStartedNotRetryable", func() {
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   false,
+			Attempt:          1,
+			StartedEventId:   10,
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	// A first-attempt scheduled activity that has not failed yet (attempt 1) is not
+	// in backoff and must block even if it has a retry policy.
+	s.Run("TrueWhenActivityFirstAttemptScheduled", func() {
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          1,
+			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	s.Run("TrueWhenActivityPausedInBackoff", func() {
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+			Paused:           true,
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	s.Run("TrueWhenActivityScheduledNow", func() {
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			ScheduledTime:    timestamppb.New(now.Add(-time.Hour)),
+		}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
 	s.Run("TrueWhenPendingChildExecution", func() {
 		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
 		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
@@ -6756,6 +6838,20 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("TrueWhenOnlyActivityInRetryBackoff", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		now := s.mutableState.Now()
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+		}
+		s.True(s.mutableState.shouldExecuteTimeSkipping())
 	})
 }
 
@@ -8385,6 +8481,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		ts := clock.NewEventTimeSource().Update(baseTime)
 		s.mutableState.timeSource = ts
 		s.mutableState.pendingTimerInfoIDs = make(map[string]*persistencespb.TimerInfo)
+		s.mutableState.pendingActivityInfoIDs = make(map[int64]*persistencespb.ActivityInfo)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
@@ -8543,6 +8640,55 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		s.Require().NoError(err)
 		s.False(tr.isValid(),
 			"backoff in the virtual past must not produce a transition candidate")
+	})
+
+	s.Run("ActivityInRetryBackoff_IsCandidate", func() {
+		resetMS()
+		schedTime := baseTime.Add(30 * time.Minute)
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			ScheduledTime:    timestamppb.New(schedTime),
+		}
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(schedTime, tr.targetTime)
+		s.False(tr.disabledAfterBound)
+	})
+
+	s.Run("TwoActivitiesInBackoff_TargetIsEarliest", func() {
+		resetMS()
+		early := baseTime.Add(30 * time.Minute)
+		late := baseTime.Add(2 * time.Hour)
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1, HasRetryPolicy: true, Attempt: 2,
+			ScheduledTime: timestamppb.New(late),
+		}
+		s.mutableState.pendingActivityInfoIDs[2] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 2, HasRetryPolicy: true, Attempt: 2,
+			ScheduledTime: timestamppb.New(early),
+		}
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(early, tr.targetTime)
+	})
+
+	s.Run("ActivityBackoff_PlusEarlierTimer_TargetIsTimer", func() {
+		resetMS()
+		schedTime := baseTime.Add(2 * time.Hour)
+		timerTime := baseTime.Add(time.Hour)
+		addTimer("t1", timerTime)
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+			ScheduledEventId: 1, HasRetryPolicy: true, Attempt: 2,
+			ScheduledTime: timestamppb.New(schedTime),
+		}
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(timerTime, tr.targetTime)
 	})
 }
 

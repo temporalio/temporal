@@ -62,6 +62,7 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			chasm.WithSearchAttributes(
 				executionStatusSearchAttribute,
 				scheduleNextActionTimeSearchAttribute,
+				scheduleIdleCloseTimeSearchAttribute,
 			),
 		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
