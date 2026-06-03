@@ -1512,6 +1512,8 @@ func (s *scheduler) startWorkflow(
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
 			desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
+			// Record total delay from original schedule time, including any overlap policy wait.
+			s.metrics.Timer(metrics.ScheduleActionStartToCloseDelay.Name()).Record(res.RealStartTime.AsTime().Sub(start.ActualTime.AsTime()))
 		}
 
 		actionResult := &schedulepb.ScheduleActionResult{

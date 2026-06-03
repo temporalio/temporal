@@ -562,7 +562,7 @@ func (s *Scheduler) HandleNexusCompletion(
 		return nil
 	}
 
-	// Record how long it took for the callback to arrive after the workflow closed.
+	// Record how long it took for the callback to arrive after the action completed.
 	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
 		newTaggedMetricsHandler(ctx.MetricsHandler(), s).
 			Timer(metrics.ScheduleCallbackLatency.Name()).

@@ -416,7 +416,7 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	if result.missedCatchupWindow > 0 {
 		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
 			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
-			metrics.StringTag(metrics.ScheduleWorkflowRunningTag, strconv.FormatBool(result.hadRunningWorkflow)),
+			metrics.StringTag(metrics.ScheduleActionRunningTag, strconv.FormatBool(result.hadRunningWorkflow)),
 		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(result.missedCatchupWindow)
 	}
 
@@ -624,6 +624,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(desiredTime.AsTime()))
+		// Record total delay from original schedule time, including any overlap policy wait.
+		metricsHandler.
+			Timer(metrics.ScheduleActionStartToCloseDelay.Name()).
+			Record(actualStartTime.Sub(start.ActualTime.AsTime()))
 	}
 
 	return &schedulepb.ScheduleActionResult{
