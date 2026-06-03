@@ -99,7 +99,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
 		Namespace:          env.Namespace().String(),
-		WorkflowId:         tv.WorkflowID(),
+		WorkflowId:         "workflow",
 		WorkflowType:       tv.WorkflowType(),
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
@@ -115,7 +115,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 	return env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: "workflow",
 		},
 		Reason: "terminate reason",
 	})
@@ -132,7 +132,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			// Filter by WorkflowId to isolate this test's workflow from other tests
 			resp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowId = '%s'", env.Tv().WorkflowID()),
+				Query:     "WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -140,7 +140,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, env.Tv().WorkflowID()),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -148,7 +148,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", env.Tv().WorkflowID()),
+				Query:     "WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -187,7 +187,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			// Filter by WorkflowId to isolate this test's workflow from other tests
 			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, env.Tv().WorkflowID()),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
@@ -195,7 +195,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", env.Tv().WorkflowID()),
+				Query:     "WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
