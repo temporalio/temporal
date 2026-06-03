@@ -71,8 +71,6 @@ var (
 const ScheduleNextActionTimeName = "ScheduleNextActionTime"
 const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
 
-const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
-
 var (
 	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
 	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
