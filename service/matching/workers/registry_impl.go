@@ -302,6 +302,9 @@ func (m *registryImpl) recordEvictionMetric() {
 	}
 }
 
+// recordWorkerCountMetric emits a gauge per namespace. When a namespace moves to a different
+// matching node, the old node's gauge goes stale until its entries are evicted (up to TTL).
+// Use max by (namespace) when querying to get the correct value.
 func (m *registryImpl) recordWorkerCountMetric() {
 	for _, b := range m.buckets {
 		b.mu.Lock()
