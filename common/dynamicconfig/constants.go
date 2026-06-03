@@ -2994,6 +2994,15 @@ the CHASM implementation. When disabled, new update callbacks will not be regist
 but existing callbacks will still be processed and fired.`,
 	)
 
+	EnableCHASMVisibilityRatio = NewNamespaceFloatSetting(
+		"history.enableCHASMVisibilityRatio",
+		0.0,
+		`Controls whether workflows uses CHASM Visibility component to manage custom
+		search attributes and memo. Set ratio=0 to disable, set ratio=1 to enable,
+		set 0 < ratio < 1 to enable double write for a ratio of the workflows.
+		Note: system.visibilityAllowList must be false to enable CHASM Visibility.`,
+	)
+
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,

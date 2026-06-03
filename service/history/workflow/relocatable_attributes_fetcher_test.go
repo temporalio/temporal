@@ -41,12 +41,16 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 
 	require.NotEqual(t, mutableStateAttributes.Memo, persistenceAttributes.Memo)
 	require.NotEqual(t, mutableStateAttributes.SearchAttributes, persistenceAttributes.SearchAttributes)
-	testErr := errors.New("test error")
+	getWorkflowExecutionErr := errors.New("test get workflow execution error")
+	getSearchAttributesErr := errors.New("test get search attributes error")
+	getMemoErr := errors.New("test get memo error")
 	for _, c := range []*struct {
 		Name                         string
 		RelocatableAttributesRemoved bool
 		DisableFetchFromVisibility   bool
 		GetWorkflowExecutionErr      error
+		GetSearchAttributesErr       error
+		GetMemoErr                   error
 
 		ExpectedInfo *RelocatableAttributes
 		ExpectedErr  error
@@ -73,12 +77,25 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 		{
 			Name:                         "GetWorkflowExecutionErr",
 			RelocatableAttributesRemoved: true,
-			GetWorkflowExecutionErr:      testErr,
+			GetWorkflowExecutionErr:      getWorkflowExecutionErr,
 
-			ExpectedErr: testErr,
+			ExpectedErr: getWorkflowExecutionErr,
+		},
+		{
+			Name:                         "GetSearchAttributesErr",
+			RelocatableAttributesRemoved: false,
+			GetSearchAttributesErr:       getSearchAttributesErr,
+
+			ExpectedErr: getSearchAttributesErr,
+		},
+		{
+			Name:                         "GetMemoErr",
+			RelocatableAttributesRemoved: false,
+			GetMemoErr:                   getMemoErr,
+
+			ExpectedErr: getMemoErr,
 		},
 	} {
-		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			closeTime := time.Unix(100, 0).UTC()
@@ -99,7 +116,14 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
-			if c.RelocatableAttributesRemoved && !c.DisableFetchFromVisibility {
+			if !c.RelocatableAttributesRemoved {
+				mutableState.EXPECT().GetSearchAttributes(gomock.Any()).
+					Return(mutableStateAttributes.SearchAttributes.GetIndexedFields(), c.GetSearchAttributesErr)
+				if c.GetSearchAttributesErr == nil {
+					mutableState.EXPECT().GetMemo(gomock.Any()).
+						Return(mutableStateAttributes.Memo.GetFields(), c.GetMemoErr)
+				}
+			} else if !c.DisableFetchFromVisibility {
 				visibilityManager.EXPECT().GetWorkflowExecution(gomock.Any(), &manager.GetWorkflowExecutionRequest{
 					NamespaceID: namespaceEntry.ID(),
 					Namespace:   namespaceEntry.Name(),

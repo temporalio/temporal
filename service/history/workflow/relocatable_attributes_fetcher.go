@@ -64,9 +64,17 @@ func (f *relocatableAttributesFetcher) Fetch(
 	// If the relocatable attributes were not removed from mutable state, then we can fetch the memo
 	// and search attributes from the mutable state.
 	if !executionInfo.GetRelocatableAttributesRemoved() {
+		searchAttributes, err := mutableState.GetSearchAttributes(ctx)
+		if err != nil {
+			return nil, err
+		}
+		memo, err := mutableState.GetMemo(ctx)
+		if err != nil {
+			return nil, err
+		}
 		return &RelocatableAttributes{
-			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			Memo:             &commonpb.Memo{Fields: memo},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: searchAttributes},
 		}, nil
 	}
 

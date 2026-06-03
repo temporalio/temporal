@@ -55,3 +55,7 @@ history.enableChasm:
   - value: true
 activity.enableStandalone:
   - value: true
+history.enableCHASMVisibilityRatio:
+  - value: 0.999
+system.visibilityAllowList:
+  - value: false
