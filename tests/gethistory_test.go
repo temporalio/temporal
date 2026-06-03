@@ -797,8 +797,6 @@ func (s *RawHistorySuite) getHistoryReverse(env *testcore.TestEnv, execution *co
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
-	tv := env.Tv()
-
 	workflowExternalPayloadSize := int64(1024)
 	workflowInputPayload := &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{{
@@ -820,18 +818,18 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(e
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
-		WorkflowId:          tv.WorkflowID(),
-		WorkflowType:        tv.WorkflowType(),
-		TaskQueue:           tv.TaskQueue(),
+		WorkflowId:          env.Tv().WorkflowID(),
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           env.Tv().TaskQueue(),
 		Input:               workflowInputPayload,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            tv.WorkerIdentity(),
+		Identity:            env.Tv().WorkerIdentity(),
 	})
 	s.NoError(err)
 
 	// Process first workflow task (schedules activity)
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{{
@@ -840,7 +838,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(e
 						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 							ActivityId:             "activity1",
 							ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
-							TaskQueue:              tv.TaskQueue(),
+							TaskQueue:              env.Tv().TaskQueue(),
 							Input:                  activityInputPayload,
 							ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 							ScheduleToStartTimeout: durationpb.New(100 * time.Second),
@@ -856,7 +854,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(e
 	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(),
+			WorkflowId: env.Tv().WorkflowID(),
 			RunId:      we.GetRunId(),
 		},
 	})
