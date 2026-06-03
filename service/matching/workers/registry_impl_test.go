@@ -539,6 +539,45 @@ func TestMultipleNamespaces(t *testing.T) {
 	assert.Equal(t, int64(5), totalNew, "should record 5 total new workers across namespaces")
 }
 
+func TestRecordWorkerCountMetric(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(100),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   captureHandler,
+		MetricsConfig:    WorkerMetricsConfig{},
+	})
+
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "w1"},
+		{WorkerInstanceKey: "w2"},
+		{WorkerInstanceKey: "w3"},
+	})
+	m.upsertHeartbeats("ns2", "ns2_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "w4"},
+	})
+
+	m.recordWorkerCountMetric()
+
+	snapshot := capture.Snapshot()
+	workerCounts := snapshot["worker_registry_worker_count"]
+	require.Len(t, workerCounts, 2, "should have one metric per namespace")
+
+	countByNs := make(map[string]float64)
+	for _, mc := range workerCounts {
+		countByNs[mc.Tags["namespace"]] = mc.Value.(float64)
+	}
+	// Verify metric uses namespace name, not ID
+	require.Equal(t, float64(3), countByNs["ns1_name"])
+	require.Equal(t, float64(1), countByNs["ns2_name"])
+}
+
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 	// Using synctest as it provides virtual time control.
 	synctest.Test(t, func(t *testing.T) {
