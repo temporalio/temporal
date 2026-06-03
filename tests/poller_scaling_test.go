@@ -238,9 +238,6 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
-	feClient := env.FrontendClient()
-	deploymentName := env.Tv().DeploymentSeries()
-	buildID := env.Tv().BuildID()
 
 	// Queueing up unversioned workflows
 	for range 5 {
@@ -257,12 +254,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	pollResultCh := make(chan pollResult, 1)
 
 	go func() {
-		pollResp, err := feClient.PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-				DeploymentName:       deploymentName,
-				BuildId:              buildID,
+				DeploymentName:       env.Tv().DeploymentSeries(),
+				BuildId:              env.Tv().BuildID(),
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
@@ -272,12 +269,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	// Also start a versioned activity poller so that the activity task queue is registered in the version
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	go func() {
-		_, _ = feClient.PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-				DeploymentName:       deploymentName,
-				BuildId:              buildID,
+				DeploymentName:       env.Tv().DeploymentSeries(),
+				BuildId:              env.Tv().BuildID(),
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
@@ -288,11 +285,11 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a := require.New(t)
 
 		// Verify the version status is Inactive and has been registered due to a poller.
-		descResp, err := feClient.DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
+				DeploymentName: env.Tv().DeploymentSeries(),
+				BuildId:        env.Tv().BuildID(),
 			},
 		})
 		a.NoError(err)
@@ -305,11 +302,11 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.NoError(err)
 
 		// Verify the version status is the expected status.
-		descResp, err = feClient.DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err = env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
+				DeploymentName: env.Tv().DeploymentSeries(),
+				BuildId:        env.Tv().BuildID(),
 			},
 		})
 		a.NoError(err)
@@ -341,7 +338,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		})
 	}
 
-	_, err := feClient.RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands:  commands,
@@ -351,8 +348,8 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		// complete the transition task.
 		VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-			DeploymentName:       deploymentName,
-			BuildId:              buildID,
+			DeploymentName:       env.Tv().DeploymentSeries(),
+			BuildId:              env.Tv().BuildID(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
@@ -362,7 +359,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		res, err := feClient.DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+		res, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq},
 			TaskQueueType: tqtyp,
@@ -373,11 +370,11 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.GreaterOrEqual(stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
 
 		// Describe the deployment version to see the activity stats attributed to it.
-		versionDescResp, err := feClient.DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		versionDescResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
+				DeploymentName: env.Tv().DeploymentSeries(),
+				BuildId:        env.Tv().BuildID(),
 			},
 			ReportTaskQueueStats: true,
 		})
@@ -396,12 +393,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Start an activity poller that's in the deployment version. This should see a scale up decision since the backlog
 	// is absorbed by the deployment version.
-	actResp, err := feClient.PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+	actResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-			DeploymentName:       deploymentName,
-			BuildId:              buildID,
+			DeploymentName:       env.Tv().DeploymentSeries(),
+			BuildId:              env.Tv().BuildID(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
