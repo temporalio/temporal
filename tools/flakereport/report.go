@@ -120,7 +120,7 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 		if pct > boldFlakeRateThreshold {
 			rate = "**" + rate + "**"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s | %s |\n",
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | `%s` | %s |\n",
 			report.TestName, rate, lastFailure, formatSparkline(report.TrendPoints), links))
 	}
 

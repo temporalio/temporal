@@ -28,7 +28,7 @@ func TestGenerateTestReportTable(t *testing.T) {
 
 	require.Equal(t, "| Test | Flake Rate | Last Failure | Trend | Links |\n"+
 		"|------|------------|-------------|-------|-------|\n"+
-		"| `TestFlake` | **30.0% (3/10)** | 2h ago | ▁▅█▁ | [1](https://github.com/temporalio/temporal/actions/runs/1) |\n", table)
+		"| `TestFlake` | **30.0% (3/10)** | 2h ago | `▁▅█▁` | [1](https://github.com/temporalio/temporal/actions/runs/1) |\n", table)
 }
 
 func TestGenerateSuiteBreakdownTable(t *testing.T) {
