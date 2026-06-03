@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -49,6 +50,9 @@ func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerSta
 // immediately kicking off a processing task.
 func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
+	if len(starts) > 0 {
+		i.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("enqueued %d buffered start(s)", len(starts)))
+	}
 	i.addTasks(ctx)
 }
 
