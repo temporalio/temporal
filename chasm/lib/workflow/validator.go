@@ -154,6 +154,16 @@ func (v *RequestValidator) ValidateLinks(
 			if t.BatchJob.GetJobId() == "" {
 				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
 			}
+		case *commonpb.Link_NexusOperation_:
+			if t.NexusOperation.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty namespace field")
+			}
+			if t.NexusOperation.GetOperationId() == "" {
+				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty operation ID field")
+			}
+			if t.NexusOperation.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty run ID field")
+			}
 		default:
 			return serviceerror.NewInvalidArgument("unsupported link variant")
 		}

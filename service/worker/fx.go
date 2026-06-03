@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -91,6 +92,7 @@ var Module = fx.Options(
 		dataMerger nsreplication.NamespaceDataMerger,
 		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		testHooks testhooks.TestHooks,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
@@ -98,6 +100,7 @@ var Module = fx.Options(
 			dataMerger,
 			admitter,
 			logger,
+			testHooks,
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),

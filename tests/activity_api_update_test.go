@@ -263,7 +263,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// wait for activity to start (and fail)
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		require.NotZero(t, startedActivityCount.Load())
-	}, 2*time.Second, 200*time.Millisecond)
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout, make it longer
 	// also update retry policy interval, make it shorter

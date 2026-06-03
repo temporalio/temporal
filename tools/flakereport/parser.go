@@ -192,9 +192,49 @@ func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash m
 	return flaky, timeout, crash
 }
 
+func utcDay(t time.Time) time.Time {
+	y, m, d := t.UTC().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+type reportWindow struct {
+	days []time.Time
+}
+
+func newReportWindow(since, until time.Time) reportWindow {
+	if since.IsZero() || until.IsZero() || until.Before(since) {
+		return reportWindow{}
+	}
+
+	start := utcDay(since)
+	end := utcDay(until)
+	days := make([]time.Time, 0, int(end.Sub(start).Hours()/24)+1)
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		days = append(days, day)
+	}
+	return reportWindow{days: days}
+}
+
+func (w reportWindow) dailyFailureCounts(failures []TestFailure) []int {
+	if len(w.days) == 0 {
+		return nil
+	}
+
+	counts := make([]int, len(w.days))
+	firstDay := w.days[0]
+	for _, failure := range failures {
+		day := utcDay(failure.Timestamp)
+		if day.Before(firstDay) || day.After(w.days[len(w.days)-1]) {
+			continue
+		}
+		counts[int(day.Sub(firstDay).Hours()/24)]++
+	}
+	return counts
+}
+
 // buildReports builds TestReport slice from grouped failures, sorts by FailureCount/TotalRuns descending.
 // numerator and denominator return the rate components for each test.
-func buildReports(grouped map[string][]TestFailure, numerator func(string, []TestFailure) int, denominator func(string, []TestFailure) int, repo string, maxLinks int) []TestReport {
+func buildReports(grouped map[string][]TestFailure, numerator func(string, []TestFailure) int, denominator func(string, []TestFailure) int, repo string, maxLinks int, window reportWindow) []TestReport {
 	var reports []TestReport
 
 	for testName, failures := range grouped {
@@ -211,6 +251,7 @@ func buildReports(grouped map[string][]TestFailure, numerator func(string, []Tes
 			FailureCount: numerator(testName, failures),
 			TotalRuns:    denominator(testName, failures),
 			LastFailure:  lastFailure,
+			TrendPoints:  window.dailyFailureCounts(failures),
 			GitHubURLs:   make([]string, 0, maxLinks),
 		}
 
@@ -240,7 +281,7 @@ func buildReports(grouped map[string][]TestFailure, numerator func(string, []Tes
 
 // convertToReports converts grouped failures to TestReport slice
 // testRunCounts maps test name to total number of runs (including successes)
-func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int) []TestReport {
+func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
 		func(_ string, failures []TestFailure) int { return len(failures) },
 		func(name string, failures []TestFailure) int {
@@ -249,7 +290,7 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 			}
 			return len(failures) // Fallback if we don't have run counts
 		},
-		repo, maxLinks)
+		repo, maxLinks, window)
 }
 
 // filterParentTests removes top-level test names from grouped when subtests of
@@ -302,7 +343,7 @@ func analyzeArtifactForCIBreakers(artifactID string, artifactFailures []TestFail
 // Crashes are job-level events. The rate is unique-jobs-with-crash / total jobs of that type.
 // The crash name (e.g. "functional-test") matches the artifact name suffix, so we count
 // artifacts ending with "--<crash-name>" as the denominator.
-func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJob, repo string, maxLinks int) []TestReport {
+func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJob, repo string, maxLinks int, window reportWindow) []TestReport {
 	// Count artifacts per type suffix (e.g. "functional-test", "unit-test")
 	artifactsByType := make(map[string]int)
 	for _, job := range jobs {
@@ -326,16 +367,16 @@ func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJo
 			}
 			return 1 // Fallback to avoid division by zero
 		},
-		repo, maxLinks)
+		repo, maxLinks, window)
 }
 
 // convertCIBreakersToReports converts CI breaker failures to TestReport slice.
 // totalWorkflowRuns is the total number of CI runs analyzed (denominator for break rate).
-func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, totalWorkflowRuns int, repo string, maxLinks int) []TestReport {
+func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, totalWorkflowRuns int, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
 		func(name string, _ []TestFailure) int { return ciBreakCounts[name] },
 		func(_ string, _ []TestFailure) int { return totalWorkflowRuns },
-		repo, maxLinks)
+		repo, maxLinks, window)
 }
 
 // identifyCIBreakers finds tests that failed their final retry in a CI job.
@@ -413,7 +454,8 @@ func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []Su
 		if suiteFailedRuns[failure.SuiteName] == nil {
 			suiteFailedRuns[failure.SuiteName] = make(map[string]bool)
 		}
-		suiteFailedRuns[failure.SuiteName][suiteRunKey(failure.RunID, failure.MatrixName)] = true
+		runKey := suiteRunKey(failure.RunID, failure.MatrixName)
+		suiteFailedRuns[failure.SuiteName][runKey] = true
 		if failure.Timestamp.After(suiteLastFailure[failure.SuiteName]) {
 			suiteLastFailure[failure.SuiteName] = failure.Timestamp
 		}

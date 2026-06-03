@@ -32,6 +32,7 @@ type TestReport struct {
 	TotalRuns    int       // Total number of times this test ran (including successes)
 	GitHubURLs   []string  // Up to max_links failure URLs
 	LastFailure  time.Time // Timestamp of the most recent failure
+	TrendPoints  []int     // Per-day points across the report window
 }
 
 // SuiteReport represents aggregated flake data for a test suite
