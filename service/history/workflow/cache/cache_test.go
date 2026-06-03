@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -343,6 +344,42 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	// all we need is a fake MutableState
 	s.Nil(ctx.(*workflow.ContextImpl).MutableState)
 	release(nil)
+}
+
+func (s *workflowCacheSuite) TestHistoryCacheLockTimeoutIncludesWorkflowID() {
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "busy-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	_, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	defer release(nil)
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
+		cancelledCtx,
+		s.mockShard,
+		namespaceID,
+		&execution,
+		locks.PriorityHigh,
+	)
+	s.Nil(ctx)
+	s.Nil(release2)
+	s.ErrorIs(err, consts.ErrResourceExhaustedBusyWorkflow)
+	s.Equal("Workflow is busy. WorkflowId: busy-workflow-id.", err.Error())
+	s.Equal("Workflow is busy. WorkflowId: busy-workflow-id.", serviceerror.ToStatus(err).Message())
 }
 
 /*
