@@ -1273,6 +1273,14 @@ var (
 		"worker_registry_activity_slots_used",
 		WithDescription("Number of activity slots in use per worker."),
 	)
+	WorkerRegistryWorkerCount = NewGaugeDef(
+		"worker_registry_worker_count",
+		WithDescription("Number of workers per namespace."),
+	)
+	WorkerRegistryWorkersPerProcess = NewDimensionlessHistogramDef(
+		"worker_registry_workers_per_process",
+		WithDescription("Number of workers per SDK process."),
+	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.
 	WorkerPluginNameMetric = NewGaugeDef(

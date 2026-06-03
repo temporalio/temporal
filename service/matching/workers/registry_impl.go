@@ -302,6 +302,20 @@ func (m *registryImpl) recordEvictionMetric() {
 	}
 }
 
+func (m *registryImpl) recordWorkerCountMetric() {
+	for _, b := range m.buckets {
+		b.mu.Lock()
+		for _, ns := range b.namespaces {
+			if len(ns.workers) == 0 {
+				continue
+			}
+			metrics.WorkerRegistryWorkerCount.With(m.metricsHandler).
+				Record(float64(len(ns.workers)), metrics.NamespaceTag(string(ns.name)))
+		}
+		b.mu.Unlock()
+	}
+}
+
 // filterWorkers returns all WorkerHeartbeats in a namespace
 // for which predicate(hb) returns true. System workers are excluded
 // unless includeSystemWorkers is true.
@@ -326,6 +340,7 @@ func (m *registryImpl) evictLoop() {
 			m.evictByTTL()
 			m.evictByCapacity()
 			m.recordUtilizationMetric()
+			m.recordWorkerCountMetric()
 		case <-m.quit:
 			return
 		}
