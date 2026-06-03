@@ -425,20 +425,6 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-// IndexedFields re-encodes the (already-aliased) search attribute values into a map of
-// payloads keyed by alias, suitable for inclusion in a commonpb.SearchAttributes. Returns
-// nil if the map is empty.
-func (m SearchAttributesMap) IndexedFields() map[string]*commonpb.Payload {
-	if len(m.values) == 0 {
-		return nil
-	}
-	fields := make(map[string]*commonpb.Payload, len(m.values))
-	for name, value := range m.values {
-		fields[name] = value.MustEncode()
-	}
-	return fields
-}
-
 // newSearchAttributesMapFromProto creates a new SearchAttributesMap from commonpb.SearchAttributes.
 func newSearchAttributesMapFromProto(
 	searchAttributes *commonpb.SearchAttributes,
