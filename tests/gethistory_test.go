@@ -229,7 +229,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
  11 WorkflowExecutionCompleted`, allEvents)
 }
 
-// Note: not *RawHistorySuite. WHY???
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
