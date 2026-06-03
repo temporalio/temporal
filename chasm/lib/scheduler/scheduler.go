@@ -563,10 +563,13 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 
 	// Record how long it took for the callback to arrive after the action completed.
+	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
+	// and clamp to zero in case of clock skew.
 	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
+		latency := max(0, ctx.Now(s).Sub(closeTime))
 		newTaggedMetricsHandler(ctx.MetricsHandler(), s).
 			Timer(metrics.ScheduleCallbackLatency.Name()).
-			Record(time.Since(closeTime))
+			Record(latency)
 	}
 
 	// Handle last completed/failed status and payloads.

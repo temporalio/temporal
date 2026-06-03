@@ -617,7 +617,7 @@ const (
 	ScheduleBackendChasm                 = "chasm"
 	ScheduleBackendLegacy                = "legacy"
 	ScheduleBackendWorkflow              = "workflow"
-	ScheduleOverlapPolicyTag              = "schedule_overlap_policy"
+	ScheduleOverlapPolicyTag             = "schedule_overlap_policy"
 	ScheduleMissedReasonTag              = "reason"
 	ScheduleMissedReasonNotBuffered      = "not_buffered"
 	ScheduleMissedReasonBufferExpired    = "buffer_expired"
@@ -1439,9 +1439,9 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
-	ScheduleActionStartToCloseDelay = NewTimerDef(
-		"schedule_action_start_to_close_delay",
-		WithDescription("Delay between the action's original schedule time and when it was actually started, including overlap policy wait"),
+	ScheduleActionE2EDelay = NewTimerDef(
+		"schedule_action_e2e_delay",
+		WithDescription("End-to-end delay between the action's original schedule time and when it was actually started, including overlap policy wait"),
 	)
 	ScheduleGenerateLatency = NewTimerDef(
 		"schedule_generate_latency",
@@ -1467,7 +1467,7 @@ var (
 		"schedule_overlap_skipped",
 		WithDescription("The number of schedule actions skipped due to overlap policy"),
 	)
-ScheduleCallbackLatency = NewTimerDef(
+	ScheduleCallbackLatency = NewTimerDef(
 		"schedule_callback_latency",
 		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
 	)

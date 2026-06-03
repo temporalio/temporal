@@ -64,10 +64,9 @@ type processBufferResult struct {
 	overlapSkipped         int64
 	overlapSkippedByPolicy map[enumspb.ScheduleOverlapPolicy]int64
 
-	// Number of buffered starts dropped from missing the catchup window.
-	missedCatchupWindow int64
-	// Whether an action was running when the buffer was processed.
-	actionRunning bool
+	// Number of buffered starts dropped from missing the catchup window,
+	// bucketed by whether a running action contributed to the miss.
+	missedCatchupByActionRunning map[bool]int64
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
@@ -228,6 +227,30 @@ func (i *Invoker) recordCompletedAction(
 		}
 	}
 
+	// Update DesiredTime on the first deferred start (Attempt == -1) before
+	// re-enabling it. DesiredTime is used to drive action latency between
+	// buffered starts (the time between completing one start and kicking off
+	// the next). Setting it on the deferred start specifically -- rather than
+	// whichever Attempt == 0 start happens to come first -- ensures the metric
+	// reflects the actual wait caused by the previous action. It also serves as
+	// evidence in processBuffer that this start was blocked behind a running
+	// action: if DesiredTime (the previous action's CloseTime) is past the
+	// start's catchup deadline, the previous action's duration caused the miss.
+	deferredIdx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+		return start.Attempt == -1
+	})
+	if deferredIdx >= 0 {
+		i.BufferedStarts[deferredIdx].DesiredTime = timestamppb.New(completed.GetCloseTime().AsTime())
+	} else {
+		// No deferred starts; update the first pending start for metrics.
+		pendingIdx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+			return start.Attempt == 0
+		})
+		if pendingIdx >= 0 {
+			i.BufferedStarts[pendingIdx].DesiredTime = timestamppb.New(completed.GetCloseTime().AsTime())
+		}
+	}
+
 	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
 	// ProcessBuffer now that a workflow has completed. This allows the overlap
 	// policy to be re-evaluated.
@@ -235,17 +258,6 @@ func (i *Invoker) recordCompletedAction(
 		if start.Attempt == -1 {
 			start.Attempt = 0
 		}
-	}
-
-	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
-	// to drive action latency between buffered starts (the time it takes between
-	// completing one start and kicking off the next). We set that on the first start
-	// pending execution.
-	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
-	})
-	if idx >= 0 {
-		i.BufferedStarts[idx].DesiredTime = timestamppb.New(completed.GetCloseTime().AsTime())
 	}
 
 	// Apply retention to keep only the last N completed actions.
