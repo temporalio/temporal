@@ -595,9 +595,11 @@ CheckHistoryLoopForSignalSent:
  12 WorkflowTaskScheduled`, we2.RunId, id), historyEvents)
 
 	// Process signal in workflow for external workflow
-	_, err = externalPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
+	s.Await(func(s *SignalWorkflowTestSuite) {
+		_, err = externalPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		s.NoError(err)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	s.False(workflowComplete)
 	s.NotNil(signalEvent)

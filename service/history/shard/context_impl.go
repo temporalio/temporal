@@ -994,7 +994,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
 						namespace.ID(key.NamespaceID),
 					); err == nil &&
-						nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+						nsEntry.ActiveClusterName(namespace.RoutingKey{ID: key.WorkflowID}) == s.GetClusterMetadata().GetCurrentClusterName() &&
 						nsEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 						newTasks[tasks.CategoryReplication] = []tasks.Task{
 							&tasks.DeleteExecutionReplicationTask{

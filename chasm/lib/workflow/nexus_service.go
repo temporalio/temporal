@@ -43,29 +43,26 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	link := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-		Namespace:  req.GetNamespace(),
-		WorkflowId: req.GetWorkflowId(),
-		RunId:      res.GetRunId(),
-		Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: req.GetRequestId(),
-			},
-		},
-	})
+
+	// Persist the link from the signaling workflow to its target workflow.
+	// The backlink is already taken care of within the historyHandler.
+	signalLink := res.GetSignalLink()
+	link := commonnexus.ConvertLinkWorkflowEventToNexusLink(signalLink.GetWorkflowEvent())
 	nexus.AddHandlerLinks(ctx, link)
+
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   res.GetRunId(),
-		Started: res.GetStarted(),
+		RunId:      res.GetRunId(),
+		Started:    res.GetStarted(),
+		SignalLink: signalLink,
 	}, nil
 }
 
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
-	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
+	svc := nexus.NewService(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
 	svc.MustRegister(nexus.NewSyncOperation(
-		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		handler.signalWithStartWorkflowExecution,
 	))
 	return svc
@@ -130,10 +127,10 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
-	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
+	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
 	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
 	sp.MustRegisterOperation(
-		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(op),
 	)
 	return sp
