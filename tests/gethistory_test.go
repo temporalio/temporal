@@ -47,11 +47,11 @@ func TestRawHistoryClientSuite(t *testing.T) {
 	parallelsuite.Run(t, &RawHistoryClientSuite{})
 }
 
-func TestGetHistoryFunctionalSuiteDisableTransitionHistory(t *testing.T) {
+func TestGetHistoryFunctionalSuite_DisableTransitionHistory(t *testing.T) {
 	parallelsuite.Run(t, &GetHistoryFunctionalSuite{}, false)
 }
 
-func TestGetHistoryFunctionalSuiteEnableTransitionHistory(t *testing.T) {
+func TestGetHistoryFunctionalSuite_EnableTransitionHistory(t *testing.T) {
 	parallelsuite.Run(t, &GetHistoryFunctionalSuite{}, true)
 }
 
