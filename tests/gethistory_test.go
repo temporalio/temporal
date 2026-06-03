@@ -35,16 +35,16 @@ type RawHistoryClientSuite struct {
 	parallelsuite.Suite[*RawHistoryClientSuite]
 }
 
-type GetHistoryFunctionalSuite struct {
-	parallelsuite.Suite[*GetHistoryFunctionalSuite]
-}
-
 func TestRawHistorySuite(t *testing.T) {
 	parallelsuite.Run(t, &RawHistorySuite{})
 }
 
 func TestRawHistoryClientSuite(t *testing.T) {
 	parallelsuite.Run(t, &RawHistoryClientSuite{})
+}
+
+type GetHistoryFunctionalSuite struct {
+	parallelsuite.Suite[*GetHistoryFunctionalSuite]
 }
 
 func TestGetHistoryFunctionalSuite_DisableTransitionHistory(t *testing.T) {
