@@ -66,8 +66,8 @@ type processBufferResult struct {
 
 	// Number of buffered starts dropped from missing the catchup window.
 	missedCatchupWindow int64
-	// Whether a workflow was running when buffered starts expired.
-	hadRunningWorkflow bool
+	// Whether an action was running when the buffer was processed.
+	actionRunning bool
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the

@@ -416,7 +416,7 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	if result.missedCatchupWindow > 0 {
 		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
 			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
-			metrics.StringTag(metrics.ScheduleActionRunningTag, strconv.FormatBool(result.hadRunningWorkflow)),
+			metrics.StringTag(metrics.ScheduleActionRunningTag, strconv.FormatBool(result.actionRunning)),
 		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(result.missedCatchupWindow)
 	}
 
@@ -436,6 +436,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
 	isRunning := len(runningWorkflows) > 0
+	result.actionRunning = isRunning
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
@@ -475,7 +476,6 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 			// Action was buffered in time but expired before execution
 			// (e.g., due to overlap deferral, retries, or system delay).
 			result.missedCatchupWindow++
-			result.hadRunningWorkflow = result.hadRunningWorkflow || isRunning
 			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}

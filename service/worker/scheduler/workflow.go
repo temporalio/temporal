@@ -678,7 +678,7 @@ func (s *scheduler) processTimeRange(
 	}
 
 	lastAction := start
-	generatedCount := 0
+	recordedGenerateLatency := false
 	var next GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
@@ -690,16 +690,16 @@ func (s *scheduler) processTimeRange(
 			// hasMinVersion because this condition couldn't happen in previous versions.
 			continue
 		}
-		if !manual && generatedCount == 0 {
+		if !manual && !recordedGenerateLatency {
 			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
+			recordedGenerateLatency = true
 		}
-		generatedCount++
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
 			// Action's nominal time was already past the catchup window when
 			// the scheduler woke up. It was never buffered for execution.
-			// Note: workflow_running is not included here because
-			// RunningWorkflows has not been refreshed yet at this point
+			// Note: action_running is not included here because
+			// running action state has not been refreshed yet at this point
 			// (refresh happens later in processBuffer).
 			s.metrics.WithTags(map[string]string{
 				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,

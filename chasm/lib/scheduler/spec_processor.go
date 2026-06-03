@@ -123,7 +123,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
 	var droppedCount int64
-	generatedCount := 0
+	recordedGenerateLatency := false
 	limitReached := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
@@ -141,11 +141,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 		// Record generate latency only for the first action in the batch to
 		// avoid inflating the metric when catching up over a large time range.
-		if !manual && generatedCount == 0 {
+		if !manual && !recordedGenerateLatency {
 			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
 				Record(end.Sub(next.Next))
+			recordedGenerateLatency = true
 		}
-		generatedCount++
 
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Info("Schedule missed catchup window",
