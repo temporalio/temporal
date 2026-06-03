@@ -853,7 +853,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	// Queue up new workflow.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    env.Namespace().String(),
-		WorkflowId:   env.Tv().WorkflowID(),
+		WorkflowId:   "workflow",
 		WorkflowType: env.Tv().WorkflowType(),
 		TaskQueue:    env.Tv().TaskQueue(),
 		Priority:     originalPriority,
@@ -876,7 +876,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: "workflow",
 			RunId:      startResp.GetRunId(),
 		},
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
@@ -892,7 +892,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: "workflow",
 			RunId:      startResp.GetRunId(),
 		},
 	})
@@ -968,7 +968,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	_, err = env.FrontendClient().UpdateActivityOptions(s.Context(), &workflowservice.UpdateActivityOptionsRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: "workflow",
 			RunId:      startResp.GetRunId(),
 		},
 		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: env.Tv().ActivityID()},
@@ -983,7 +983,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	descResp, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: "workflow",
 			RunId:      startResp.GetRunId(),
 		},
 	})
