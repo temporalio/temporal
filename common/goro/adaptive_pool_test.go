@@ -133,10 +133,10 @@ func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	ts := clock.NewEventTimeSource()
 
 	const (
-		minWorkers            = 1
-		maxWorkers            = 5
-		workersAfterGrowth    = 3
-		blockedWorkersAfterOp = 2
+		minWorkers         = 1
+		maxWorkers         = 5
+		workersAfterGrowth = 3
+		workersAfterShrink = 2
 	)
 
 	p := goro.NewAdaptivePool(ts, minWorkers, maxWorkers, 10*time.Millisecond, 1)
@@ -167,12 +167,12 @@ func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	// after no more than 10ms, the free worker should exit
 	// advance the next timer once the worker has registered it
 	s.Await(func(s *AdaptivePoolSuite) {
-		if p.NumWorkers() == blockedWorkersAfterOp {
+		if p.NumWorkers() == workersAfterShrink {
 			return
 		}
 		if ts.NumTimers() > 0 {
 			ts.AdvanceNext() // let timer fire
 		}
-		s.Equal(blockedWorkersAfterOp, p.NumWorkers())
+		s.Equal(workersAfterShrink, p.NumWorkers())
 	}, time.Second, time.Millisecond)
 }
