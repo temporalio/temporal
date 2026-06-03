@@ -85,11 +85,12 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 		// task forwarding between task queue partitions is rate-limited by default to 10 rps.
 		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0),
+		// Terminating workflows mid-backlog intentionally trips soft asserts in the
+		// matching task queue; disable fail-on-error so those logs don't poison the
+		// suite's shared cluster.
+		testcore.WithDisableTestloggerFailure(),
 	)
 
-	// Terminating workflows mid-backlog intentionally trips soft asserts in the
-	// matching task queue; disable fail-on-error so those logs don't poison the
-	// suite's shared cluster.
 	tl := env.Logger.(*testlogger.TestLogger)
 	prev := tl.FailOnError(false)
 	s.T().Cleanup(func() { tl.FailOnError(prev) })
