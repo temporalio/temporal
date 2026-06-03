@@ -352,9 +352,13 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 			config: nil,
 		},
 		{
-			name:        "disabled short-circuits even when bound would be violated",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxSkippedTen},
-			accumulated: twentyMin,
+			name:    "disabled with bound is rejected",
+			config:  &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxSkippedTen},
+			wantErr: true,
+		},
+		{
+			name:   "disabled with no bound",
+			config: &workflowpb.TimeSkippingConfig{Enabled: false},
 		},
 		{
 			name:   "enabled, no bound",
@@ -424,7 +428,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
-			name: "update max_skipped_duration preserves enabled",
+			name: "update max_skipped_duration while enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
@@ -433,6 +437,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
 				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Enabled: true,
 					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 						MaxSkippedDuration: twoHours,
 					},
@@ -447,7 +452,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "change bound type to max_elapsed_duration preserves enabled",
+			name: "change bound type to max_elapsed_duration while enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
@@ -456,6 +461,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
 				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Enabled: true,
 					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
 						MaxElapsedDuration: thirtyMin,
 					},
