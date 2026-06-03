@@ -2700,6 +2700,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 			}
 		}
 	}
+	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
 	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
 
@@ -2757,7 +2758,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedBuildId:             inheritedBuildId,
 		InheritedPinnedVersion:       inheritedPinnedVersion,
 		VersioningOverride:           pinnedOverride,
-		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
+		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		InitialSkippedDuration:       newRunInitialSkipped,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -2813,11 +2814,17 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 // computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
-// pass to the next run at continue-as-new time:
+// pass to the next run when it inherits PINNED behavior:
 //   - If the current run was signaled about a target change (last_notified is set),
 //     that becomes the declined value (the SDK saw it and chose not to upgrade).
 //   - Otherwise, preserve the existing declined value from a prior CaN chain.
-func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+func computeDeclinedTargetVersionUpgrade(
+	info *persistencespb.WorkflowExecutionInfo,
+	inheritPinnedVersion bool,
+) *historypb.DeclinedTargetVersionUpgrade {
+	if !inheritPinnedVersion {
+		return nil
+	}
 	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
 		return &historypb.DeclinedTargetVersionUpgrade{
 			DeploymentVersion: lastNotified.GetDeploymentVersion(),
@@ -3501,11 +3508,10 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
-	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter,
-		suggestContinueAsNewReasons, targetWorkerDeploymentVersionChanged)
+		suggestContinueAsNewReasons)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -9423,12 +9429,11 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
-			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
-			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
-			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                              incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,
+			SuggestContinueAsNew:        incoming.WorkflowTaskSuggestContinueAsNew,
+			SuggestContinueAsNewReasons: incoming.WorkflowTaskSuggestContinueAsNewReasons,
+			HistorySizeBytes:            incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                     incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter:      incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
 		workflowTaskVersionUpdated = true
 	}
