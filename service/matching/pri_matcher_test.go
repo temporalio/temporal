@@ -65,7 +65,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		return true // task is valid
 	})
 
-	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW, metrics.NoopMetricsHandler)
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	tm := newPriTaskMatcher(
 		ctx,
@@ -158,7 +158,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		)
 		require.NoError(t, err)
 
-		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW, metrics.NoopMetricsHandler)
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 		tm := newPriTaskMatcher(
 			ctx,

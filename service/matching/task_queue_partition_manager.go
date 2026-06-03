@@ -133,8 +133,7 @@ func newTaskQueuePartitionManager(
 	rateLimitManager := newRateLimitManager(
 		userDataManager,
 		tqConfig,
-		partition.TaskQueue().TaskType(),
-		metricsHandler)
+		partition.TaskQueue().TaskType())
 
 	var taskHooks []hooks.TaskHook
 	for _, hookFactory := range e.taskHookFactories {

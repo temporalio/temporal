@@ -8,7 +8,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -21,7 +20,6 @@ type (
 		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType // Task queue type
 		timeSource      clock.TimeSource
-		metricsHandler  metrics.Handler // Partition-scoped handler; nil-safe for tests that don't care.
 
 		// Sources of the effective RPS.
 		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
@@ -35,13 +33,6 @@ type (
 		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the per-partition wise task queue RPS.
 		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
-
-		// Throttle state for TaskQueueEffectiveRateLimitGauge. The gauge is throttled to one emission
-		// per EffectiveRateLimitMetricsEmitInterval per instance (per (namespace, taskqueue, task_type,
-		// partition) tag group, since each manager is owned by one partition). A source change
-		// always emits regardless of the throttle so transitions like SYSTEM->API are not missed.
-		lastMetricEmittedAt     time.Time
-		lastMetricEmittedSource enumspb.RateLimitSource
 		// Derived from the `defaultTaskDispatchRPS`.
 		// dynamicRateBurst is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
@@ -75,7 +66,6 @@ const (
 func newRateLimitManager(userDataManager userDataManager,
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
-	metricsHandler metrics.Handler,
 ) *rateLimitManager {
 	r := &rateLimitManager{
 		userDataManager: userDataManager,
@@ -83,7 +73,6 @@ func newRateLimitManager(userDataManager userDataManager,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
-		metricsHandler:  metricsHandler,
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -106,30 +95,8 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSourceLocked()
-	r.emitEffectiveRateLimitLocked()
 
 	return r
-}
-
-// emitEffectiveRateLimitLocked publishes the current per-partition effective RPS and its source.
-// Throttled to one emission per EffectiveRateLimitMetricsEmitInterval, except a source change always
-// emits immediately so transitions like SYSTEM->API are not hidden behind the throttle window.
-// Must be called with r.mu held. Safe to call when metricsHandler is nil (used by some tests).
-func (r *rateLimitManager) emitEffectiveRateLimitLocked() {
-	if r.metricsHandler == nil {
-		return
-	}
-	now := r.timeSource.Now()
-	sourceChanged := r.lastMetricEmittedSource != r.rateLimitSource
-	if !sourceChanged && now.Sub(r.lastMetricEmittedAt) < r.config.EffectiveRateLimitMetricsEmitInterval() {
-		return
-	}
-	metrics.TaskQueueEffectiveRateLimitGauge.With(r.metricsHandler).Record(
-		r.effectiveRPS,
-		metrics.RateLimitSourceTag(r.rateLimitSource),
-	)
-	r.lastMetricEmittedAt = now
-	r.lastMetricEmittedSource = r.rateLimitSource
 }
 
 func (r *rateLimitManager) setAdminNsRate(rps float64) {
@@ -205,9 +172,6 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	}
 	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
 	r.updatePerKeySimpleRateLimitWithBurstLocked(defaultBurstDuration)
-	// Always emit: the source may have changed even when the numeric RPS didn't (e.g., user
-	// removes their API override and we fall back to worker RPS at the same value).
-	r.emitEffectiveRateLimitLocked()
 }
 
 // Lazy injection of poll metadata.

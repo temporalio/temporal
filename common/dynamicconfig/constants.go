@@ -1366,11 +1366,6 @@ Set to zero to disable ephemeral data updates.`,
 		time.Minute,
 		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
 	)
-	MatchingEffectiveRateLimitMetricsEmitInterval = NewTaskQueueDurationSetting(
-		"matching.effectiveRateLimitMetricsEmitInterval",
-		time.Minute,
-		`Minimum interval between emissions of the task_queue_effective_rate_limit_rps gauge for the same task queue. Bounded throttle that protects the metrics pipeline from per-poll thrashing via InjectWorkerRPS. A rate-limit-source change (e.g. SYSTEM->API) is always emitted immediately regardless of this interval.`,
-	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
 		true,

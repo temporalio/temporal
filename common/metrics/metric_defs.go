@@ -1248,10 +1248,6 @@ var (
 		"tasks_dropped",
 		WithDescription("Tasks dropped by matching after a Record(Workflow|Activity)TaskStarted call to history failed. Per-task-queue, tagged with `reason` identifying the failure mode."),
 	)
-	TaskQueueEffectiveRateLimitGauge = NewGaugeDef(
-		"task_queue_effective_rate_limit_rps",
-		WithDescription("Per-partition effective dispatch rate limit (RPS) currently applied by matching. Tagged with `rate_limit_source` (API/WORKER/SYSTEM) identifying which configuration source set the limit."),
-	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
 		WithDescription("Count of tasks that were completed after being dropped from the matcher"),

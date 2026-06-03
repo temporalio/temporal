@@ -47,7 +47,6 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	taskExpireStage                                = "task_expire_stage"
-	rateLimitSourceTag                             = "rate_limit_source"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -583,11 +582,6 @@ var (
 	DroppedTaskReasonDataLossTag                      = Tag{Key: reason, Value: "data_loss"}
 	DroppedTaskReasonOtherTag                         = Tag{Key: reason, Value: "other"}
 )
-
-// RateLimitSourceTag tags a rate-limit-related metric with the source that set the effective limit.
-func RateLimitSourceTag(src enumspb.RateLimitSource) Tag {
-	return Tag{Key: rateLimitSourceTag, Value: src.String()}
-}
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {

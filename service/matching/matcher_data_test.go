@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -49,7 +48,7 @@ func (s *MatcherDataSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
-	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY, metrics.NoopMetricsHandler)
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
 }
 
@@ -1013,7 +1012,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
-		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY, metrics.NoopMetricsHandler)
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
 
 		next := func() int {
