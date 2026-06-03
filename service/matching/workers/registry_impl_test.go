@@ -574,8 +574,8 @@ func TestRecordWorkerCountMetric(t *testing.T) {
 		countByNs[mc.Tags["namespace"]] = mc.Value.(float64)
 	}
 	// Verify metric uses namespace name, not ID
-	require.Equal(t, float64(3), countByNs["ns1_name"])
-	require.Equal(t, float64(1), countByNs["ns2_name"])
+	require.InDelta(t, 3, countByNs["ns1_name"], 0)
+	require.InDelta(t, 1, countByNs["ns2_name"], 0)
 }
 
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
