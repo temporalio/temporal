@@ -506,7 +506,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                  "workflow",
+		ID:                  env.Tv().WorkflowID(),
 		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
