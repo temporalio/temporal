@@ -69,6 +69,7 @@ var (
 )
 
 const ScheduleNextActionTimeName = "ScheduleNextActionTime"
+const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
 
 const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
 

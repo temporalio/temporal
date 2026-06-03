@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -384,7 +383,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.ForwardedTag(forwarded),
 		metrics.StringTag(metrics.TaskPriorityTagName, ""),
 	)
 }
@@ -422,10 +421,19 @@ func (tm *TaskMatcher) poll(
 	defer func() {
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
+			var pollResult string
+			if err == nil {
+				pollResult = "success"
+			} else if errors.Is(err, errNoTasks) {
+				pollResult = "timeout"
+			} else {
+				pollResult = "failed"
+			}
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
-				metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)),
+				metrics.ForwardedTag(forwardedPoll),
 				metrics.StringTag(metrics.TaskPriorityTagName, ""),
+				metrics.PollResultTag(pollResult),
 			)
 		}
 

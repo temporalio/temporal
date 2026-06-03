@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +48,14 @@ type Context interface {
 	// callbacks invoked by the chasm engine. In other contexts, such as pure tasks executed at the end of a transaction
 	// or background task handlers, the underlying ctx has no gRPC metadata and this method always returns "".
 	RequestHeader(key string) string
+	// Links returns the union of links attached to the given component across all requests.
+	// Returns nil for components that are not (yet) registered as tree nodes.
+	Links(Component) []*commonpb.Link
+	// RequestLinks returns the links attached to the given component for the specific requestID.
+	// Returns nil if no entry exists for that requestID. Empty requestID is rejected.
+	RequestLinks(Component, string) ([]*commonpb.Link, error)
+	// UserMetadata returns the user metadata attached to the given component, or nil if none.
+	UserMetadata(Component) *sdkpb.UserMetadata
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -80,6 +90,12 @@ type MutableContext interface {
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
+	// SetRequestLinks records the links contributed by the given request on the
+	// component, replacing any prior entry for the same request ID. Passing
+	// nil/empty links removes the entry.
+	SetRequestLinks(Component, string, []*commonpb.Link) error
+	// SetUserMetadata replaces the user metadata attached to the given component.
+	SetUserMetadata(Component, *sdkpb.UserMetadata) error
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -138,6 +154,18 @@ func newContext(
 
 func (c *immutableCtx) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
+}
+
+func (c *immutableCtx) Links(component Component) []*commonpb.Link {
+	return c.root.componentLinks(component)
+}
+
+func (c *immutableCtx) RequestLinks(component Component, requestID string) ([]*commonpb.Link, error) {
+	return c.root.componentRequestLinks(component, requestID)
+}
+
+func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
+	return c.root.componentUserMetadata(component)
 }
 
 func (c *immutableCtx) Now(component Component) time.Time {
@@ -234,6 +262,14 @@ func (c *mutableCtx) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *mutableCtx) SetRequestLinks(component Component, requestID string, links []*commonpb.Link) error {
+	return c.root.setComponentRequestLinks(component, requestID, links)
+}
+
+func (c *mutableCtx) SetUserMetadata(component Component, md *sdkpb.UserMetadata) error {
+	return c.root.setComponentUserMetadata(component, md)
 }
 
 func (c *mutableCtx) withValue(key any, value any) Context {
