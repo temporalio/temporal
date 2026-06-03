@@ -198,16 +198,13 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 // The following tests verify poller scaling decisions work with worker-versioning based concepts.
 func (s *PollerScalingIntegSuite) TestPollerScalingOnCurrentVersionConsidersUnversionedQueueBacklog() {
-	env := s.setupEnv()
 	buildID := testcore.RandomizeStr("test-build-id")
-	ns := env.Namespace().String()
 	s.testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
-		env,
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 		buildID,
-		func(ctx context.Context, feClient workflowservice.WorkflowServiceClient, deploymentName, buildID string) error {
-			_, err := feClient.SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-				Namespace:      ns,
+		func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error {
+			_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+				Namespace:      env.Namespace().String(),
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			})
@@ -217,19 +214,15 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnCurrentVersionConsidersUnve
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingOnRampingVersionConsidersUnversionedQueueBacklog() {
-	env := s.setupEnv()
 	// Use 100% ramp so the ramping version absorbs the entire unversioned backlog.
-	ns := env.Namespace().String()
-
 	const rampPercentage = float32(100)
 	rampingBuildID := testcore.RandomizeStr("test-ramping-build-id")
 	s.testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
-		env,
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 		rampingBuildID,
-		func(ctx context.Context, feClient workflowservice.WorkflowServiceClient, deploymentName, buildID string) error {
-			_, err := feClient.SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
-				Namespace:      ns,
+		func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error {
+			_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+				Namespace:      env.Namespace().String(),
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 				Percentage:     rampPercentage,
@@ -240,15 +233,15 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnRampingVersionConsidersUnve
 }
 
 func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
-	env *testcore.TestEnv,
 	expectedStatus enumspb.WorkerDeploymentVersionStatus,
 	testBuildID string,
-	promoteDeploymentVersion func(ctx context.Context, feClient workflowservice.WorkflowServiceClient, deploymentName, buildID string) error,
+	promoteDeploymentVersion func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error,
 ) {
 	// 1. Create a backlog of unversioned workflows.
 	// 2. Set the current/ramping version for a worker-deployment (depending on the test case)
 	// 3. Verify that the poller scaling decision reports a 1 since the deployment version (current/ramping) absorbs the unversioned backlog.
 
+	env := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
 	feClient := env.FrontendClient()
 
@@ -316,7 +309,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.Len(descResp.GetVersionTaskQueues(), 2) // one for workflow TQ, one for activity TQ
 
 		// Promote the deployment version to either current or ramping.
-		err = promoteDeploymentVersion(s.Context(), feClient, deploymentName, testBuildID)
+		err = promoteDeploymentVersion(s.Context(), env, deploymentName, testBuildID)
 		a.NoError(err)
 
 		// Verify the version status is the expected status.
