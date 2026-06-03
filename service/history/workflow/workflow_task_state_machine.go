@@ -860,7 +860,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) targetWorkerDeploymentVersionChangedForStartedEvent() bool {
-	return m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+	return m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
+		m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		m.ms.executionInfo.GetLastNotifiedTargetVersion() != nil
 }
 
