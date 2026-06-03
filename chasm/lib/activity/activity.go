@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -396,23 +395,10 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if len(priorForRequest) > 0 {
 		return nil
 	}
-	toAdd := make([]*commonpb.Link, 0, len(links))
-	for _, link := range links {
-		isDup := false
-		for _, t := range toAdd {
-			if proto.Equal(link, t) {
-				isDup = true
-				break
-			}
-		}
-		if !isDup {
-			toAdd = append(toAdd, link)
-		}
-	}
-	if err := validator.ValidateExecutionTotal(namespaceName, len(ctx.Links(a)), len(toAdd)); err != nil {
+	if err := validator.ValidateExecutionTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
 		return err
 	}
-	return ctx.SetRequestLinks(a, requestID, toAdd)
+	return ctx.SetRequestLinks(a, requestID, links)
 }
 
 // GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.

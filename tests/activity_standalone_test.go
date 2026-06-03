@@ -886,7 +886,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
 	})
 
-	t.Run("AttachLinksOnConflictDeduplicates", func(t *testing.T) {
+	t.Run("AttachLinksOnConflictStoresRawInput", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -895,8 +895,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 				Variant: &commonpb.Link_WorkflowEvent_{
 					WorkflowEvent: &commonpb.Link_WorkflowEvent{
 						Namespace:  env.Namespace().String(),
-						WorkflowId: "dedup-wf",
-						RunId:      "dedup-run",
+						WorkflowId: "raw-wf",
+						RunId:      "raw-run",
 						Reference: &commonpb.Link_WorkflowEvent_EventRef{
 							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 								EventId:   1,
@@ -926,6 +926,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.True(t, firstResp.Started)
 
 		// Second start re-sends the same link plus an extra duplicate within the same batch.
+		// Activity start does not dedup intra-batch (matching the workflow start path), so the
+		// duplicate is preserved on the activity.
 		_, err = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
@@ -951,11 +953,115 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
-		// Intra-batch dedup collapses the second call's [link, link] to [link]; the
-		// activity now holds the link once per requestID.
+		// Activity holds the first call's [link] under reqID-1 and the second call's
+		// raw [link, link] under reqID-2 — no intra-batch dedup is applied.
 		expected := append([]*commonpb.Link{}, startLinks...)
 		expected = append(expected, startLinks...)
+		expected = append(expected, startLinks...)
 		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+	})
+
+	t.Run("PerExecutionCapEnforcedOnCreate", func(t *testing.T) {
+		const maxLinks = 2
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerExecution, maxLinks)
+		defer cleanup()
+
+		links := make([]*commonpb.Link, maxLinks+1)
+		for i := range links {
+			links[i] = &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: fmt.Sprintf("cap-wf-%d", i),
+						RunId:      "cap-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			Links:               links,
+		})
+		require.Error(t, err)
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+	})
+
+	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {
+		// Reproduces the SAA Nexus-handler scenario: a benign retry of
+		// StartActivityExecution against an already-running activity, without
+		// OnConflictOptions.attach_links, must not reject the request just because
+		// the Links field would push the activity over the per-execution cap — the
+		// links would be dropped anyway.
+		const maxLinks = 1
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerExecution, maxLinks)
+		defer cleanup()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+		})
+		require.NoError(t, err)
+		require.True(t, firstResp.Started)
+
+		overCap := make([]*commonpb.Link, maxLinks+5)
+		for i := range overCap {
+			overCap[i] = &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: fmt.Sprintf("drop-wf-%d", i),
+						RunId:      "drop-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               overCap,
+			// attach_links intentionally omitted — the Links field should be silently dropped.
+		})
+		require.NoError(t, err, "over-cap Links must be ignored when attach_links is unset")
+		require.False(t, secondResp.Started)
+		require.Equal(t, firstResp.RunId, secondResp.RunId)
 	})
 }
 

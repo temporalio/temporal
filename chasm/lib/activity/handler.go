@@ -72,10 +72,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 
-	if err := h.linkValidator.ValidateExecutionTotal(frontendReq.GetNamespace(), 0, len(frontendReq.GetLinks())); err != nil {
-		return nil, err
-	}
-
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
@@ -83,6 +79,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
+			// Only enforce the per-execution cap when we'll actually persist the links —
+			// i.e., when creating a new activity. On returning an existing activity
+			// without attach_links the request.Links field is dropped, so the cap check
+			// is skipped to avoid false rejects. Per-request shape/size/count is already
+			// validated by the frontend (the only caller of this handler).
+			if err := h.linkValidator.ValidateExecutionTotal(request.GetNamespace(), 0, len(request.GetLinks())); err != nil {
+				return nil, err
+			}
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, err

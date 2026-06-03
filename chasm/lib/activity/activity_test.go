@@ -376,8 +376,8 @@ func TestEffectiveUserMetadata_PrefersFrameworkLocation(t *testing.T) {
 }
 
 // TestAttachLinks_SameRequestIDIsNoOp verifies that calling attachLinks with a
-// requestID that already has links recorded is a no-op (idempotent retry),
-// while intra-batch duplicates within a single call are still collapsed.
+// requestID that already has links recorded is a no-op — the request is
+// treated as an idempotent retry regardless of payload.
 func TestAttachLinks_SameRequestIDIsNoOp(t *testing.T) {
 	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
 		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
@@ -410,14 +410,15 @@ func TestAttachLinks_SameRequestIDIsNoOp(t *testing.T) {
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
 
-	// Intra-batch dedup: linkA sent twice in the same call lands once.
+	// First call records the request's links verbatim (no intra-batch dedup, matching
+	// the workflow start path).
 	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{linkA, linkA}, "req-1", validator, "ns"))
 	stored["req-1"] = ctx.LinksByRequest[activity]["req-1"]
-	require.Equal(t, []*commonpb.Link{linkA}, stored["req-1"])
+	require.Equal(t, []*commonpb.Link{linkA, linkA}, stored["req-1"])
 
 	// Retry with the same requestID (even with different links) is a no-op.
 	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{linkB}, "req-1", validator, "ns"))
-	require.Equal(t, []*commonpb.Link{linkA}, ctx.LinksByRequest[activity]["req-1"])
+	require.Equal(t, []*commonpb.Link{linkA, linkA}, ctx.LinksByRequest[activity]["req-1"])
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted
