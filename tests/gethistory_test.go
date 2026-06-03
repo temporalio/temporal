@@ -31,31 +31,23 @@ type RawHistorySuite struct {
 	parallelsuite.Suite[*RawHistorySuite]
 }
 
-type RawHistoryClientSuite struct {
-	parallelsuite.Suite[*RawHistoryClientSuite]
-}
-
 func TestRawHistorySuite(t *testing.T) {
 	parallelsuite.Run(t, &RawHistorySuite{})
 }
 
-func TestRawHistoryClientSuite(t *testing.T) {
-	parallelsuite.Run(t, &RawHistoryClientSuite{})
+type GetHistorySuite struct {
+	parallelsuite.Suite[*GetHistorySuite]
 }
 
-type GetHistoryFunctionalSuite struct {
-	parallelsuite.Suite[*GetHistoryFunctionalSuite]
+func TestGetHistorySuite_DisableTransitionHistory(t *testing.T) {
+	parallelsuite.Run(t, &GetHistorySuite{}, false)
 }
 
-func TestGetHistoryFunctionalSuite_DisableTransitionHistory(t *testing.T) {
-	parallelsuite.Run(t, &GetHistoryFunctionalSuite{}, false)
+func TestGetHistorySuite_EnableTransitionHistory(t *testing.T) {
+	parallelsuite.Run(t, &GetHistorySuite{}, true)
 }
 
-func TestGetHistoryFunctionalSuite_EnableTransitionHistory(t *testing.T) {
-	parallelsuite.Run(t, &GetHistoryFunctionalSuite{}, true)
-}
-
-func (s *GetHistoryFunctionalSuite) newTestEnv(enableTransitionHistory bool, opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *GetHistorySuite) newTestEnv(enableTransitionHistory bool, opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableTransitionHistory, enableTransitionHistory),
 		testcore.WithDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true),
@@ -63,14 +55,7 @@ func (s *GetHistoryFunctionalSuite) newTestEnv(enableTransitionHistory bool, opt
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
-func (s *RawHistorySuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.SendRawWorkflowHistory, true),
-	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
-}
-
-func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All(enableTransitionHistory bool) {
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
 	workflowID := "functional-get-workflow-history-events-long-poll-test-all"
@@ -245,7 +230,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All(enableTr
 }
 
 // Note: not *RawHistorySuite. WHY???
-func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close(enableTransitionHistory bool) {
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
 	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
@@ -614,7 +599,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
  11 WorkflowExecutionCompleted`, allEvents)
 }
 
-func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
+func (s *RawHistorySuite) TestGetHistoryReverse() {
 	env := testcore.NewEnv(s.T())
 
 	activityFn := func(ctx context.Context) error {
@@ -680,7 +665,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	s.Equal(eventDefaultOrder, events)
 }
 
-func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
+func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 	env := testcore.NewEnv(s.T())
 
 	activityFn := func(ctx context.Context) error {
@@ -779,7 +764,14 @@ func reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	return events
 }
 
-func (s *RawHistoryClientSuite) getHistoryReverse(env *testcore.TestEnv, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
+func (s *RawHistorySuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	baseOpts := []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.SendRawWorkflowHistory, true),
+	}
+	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+}
+
+func (s *RawHistorySuite) getHistoryReverse(env *testcore.TestEnv, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
 	historyResponse, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(s.Context(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       env.Namespace().String(),
 		Execution:       execution,
@@ -803,7 +795,7 @@ func (s *RawHistoryClientSuite) getHistoryReverse(env *testcore.TestEnv, executi
 	return events
 }
 
-func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(enableTransitionHistory bool) {
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
 	tv := env.Tv()
