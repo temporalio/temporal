@@ -76,12 +76,12 @@ func (s *AdaptivePoolSuite) TestGrows() {
 	default:
 	}
 
-	s.Equal(workersBeforeDelay, p.NumWorkers()) // Still 5 here.
+	s.Equal(workersBeforeDelay, p.NumWorkers()) // still 5 here
 
 	ts.Advance(15 * time.Millisecond)
 	<-doneCh
 
-	s.Equal(workersAfterGrowth, p.NumWorkers()) // Now 6 here.
+	s.Equal(workersAfterGrowth, p.NumWorkers()) // now 6 here
 }
 
 func (s *AdaptivePoolSuite) TestDoesntGrowPastMax() {
@@ -126,7 +126,7 @@ func (s *AdaptivePoolSuite) TestDoesntGrowPastMax() {
 	// Wait for the sixth call.
 	<-doneCh
 
-	s.Equal(maxWorkers, p.NumWorkers()) // Still 5.
+	s.Equal(maxWorkers, p.NumWorkers()) // still 5
 }
 
 func (s *AdaptivePoolSuite) TestShrinksAgain() {
@@ -149,13 +149,13 @@ func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	go p.Do(func() { syncCh <- struct{}{}; block() })
 	// Wait for the goroutine to block in Do.
 	s.AwaitTrue(func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
-	ts.Advance(10 * time.Millisecond) // Allow it to start another.
-	<-syncCh                          // Wait for it to call the function.
+	ts.Advance(10 * time.Millisecond) // allow it to start another
+	<-syncCh                          // wait for it to call the function
 
 	go p.Do(func() { syncCh <- struct{}{} })
 	s.AwaitTrue(func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
-	ts.Advance(10 * time.Millisecond) // Allow it to start another.
-	<-syncCh                          // Wait for it to call the function.
+	ts.Advance(10 * time.Millisecond) // allow it to start another
+	<-syncCh                          // wait for it to call the function
 
 	s.Equal(workersAfterGrowth, p.NumWorkers())
 
@@ -168,7 +168,7 @@ func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	// Advance the next timer once the worker has registered it.
 	s.Await(func(s *AdaptivePoolSuite) {
 		if ts.NumTimers() > 0 {
-			ts.AdvanceNext() // Let the timer fire.
+			ts.AdvanceNext() // let timer fire
 		}
 		s.Equal(workersAfterShrink, p.NumWorkers())
 	}, time.Second, time.Millisecond)
