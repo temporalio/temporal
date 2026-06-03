@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -335,16 +336,14 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 
 func TestValidateTimeSkippingConfig(t *testing.T) {
 	tenMin := durationpb.New(10 * time.Minute)
-	twentyMin := durationpb.New(20 * time.Minute)
-	maxSkippedTen := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: tenMin}
-	maxSkippedTwenty := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: twentyMin}
+	negativeElapsed := durationpb.New(-1 * time.Minute)
 	maxElapsedTen := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: tenMin}
+	maxElapsedNegative := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: negativeElapsed}
 
 	tcs := []struct {
-		name        string
-		config      *workflowpb.TimeSkippingConfig
-		accumulated *durationpb.Duration
-		wantErr     bool
+		name    string
+		config  *workflowpb.TimeSkippingConfig
+		wantErr bool
 	}{
 		{
 			name:   "nil config",
@@ -352,7 +351,7 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 		},
 		{
 			name:    "disabled with bound is rejected",
-			config:  &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxSkippedTen},
+			config:  &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxElapsedTen},
 			wantErr: true,
 		},
 		{
@@ -362,22 +361,21 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 		{
 			name:   "enabled, no bound",
 			config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		}
+		},
+		{
+			name:   "enabled, positive max_elapsed_duration",
+			config: &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedTen},
+		},
+		{
+			name:    "enabled, negative max_elapsed_duration",
+			config:  &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedNegative},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			ms := historyi.NewMockMutableState(ctrl)
-			info := &persistencespb.WorkflowExecutionInfo{}
-			if tc.accumulated != nil {
-				info.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-					AccumulatedSkippedDuration: tc.accumulated,
-				}
-			}
-			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
-
-			err := validateTimeSkippingConfig(tc.config, ms)
+			err := validateTimeSkippingConfig(tc.config)
 			if tc.wantErr {
 				var invalidArg *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArg)
@@ -401,7 +399,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
-			name: "update max_skipped_duration while enabled",
+			name: "update max_elapsed_duration while enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
@@ -411,8 +409,8 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
 				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
 					Enabled: true,
-					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-						MaxSkippedDuration: twoHours,
+					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+						MaxElapsedDuration: twoHours,
 					},
 				},
 			},
