@@ -2476,7 +2476,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2525,7 +2525,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return enabled })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return enabled }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2564,7 +2564,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{

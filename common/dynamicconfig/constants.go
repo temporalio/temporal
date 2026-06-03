@@ -2976,6 +2976,14 @@ EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
 scheduler workflow starts or continues-as-new.`,
 	)
 
+	EnableCHASMSchedulerMigrationWithRunningWorkflows = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerMigrationWithRunningWorkflows",
+		false,
+		`EnableCHASMSchedulerMigrationWithRunningWorkflows, when set to false, prevents schedules with
+running workflows from being migrated. This works around a known bug in 3P SDKs involving updating
+existing workflows to attach callbacks.`,
+	)
+
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerSentinels",
 		true,

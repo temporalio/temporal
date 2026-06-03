@@ -1322,6 +1322,151 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestScheduleMigrationDeferredWithRunningWorkflow verifies that
+// EnableCHASMSchedulerMigrationWithRunningWorkflows gates migration of a V1
+// schedule that has a running workflow. When the gate is off (default),
+// migration is deferred while a workflow is running (the V1 scheduler keeps
+// running rather than migrating and completing); when the gate is turned on,
+// migration proceeds even with a running workflow.
+func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
+	// Create the env without EnableChasm so that CreateSchedule produces a V1
+	// (workflow-backed) schedule rather than a CHASM sentinel.
+	env := testcore.NewEnv(
+		t,
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithSdkWorker(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-defer-running")
+	wid := testcore.RandomizeStr("sched-migrate-defer-running-wf")
+	wt := testcore.RandomizeStr("sched-migrate-defer-running-wt")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	// A workflow that blocks until signaled, so it stays running during migration.
+	resumeSignal := "resume"
+	workflowFn := func(ctx workflow.Context) error {
+		ch := workflow.GetSignalChannel(ctx, resumeSignal)
+		ch.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+
+	// Create a V1 schedule with an immediate trigger so it starts a workflow.
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Wait for the V1 scheduler to start the workflow and record it as running.
+	var runningWfID string
+	require.Eventually(t, func() bool {
+		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		if err != nil || len(descResp.GetInfo().GetRecentActions()) == 0 {
+			return false
+		}
+		a := descResp.Info.RecentActions[0]
+		if a.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return false
+		}
+		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
+		return true
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// Enable CHASM so the migration activity is able to create the V2 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+
+	// A successful migration completes the V1 scheduler workflow; while migration
+	// is deferred it stays running.
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	v1Migrated := func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}
+
+	// Request migration while the action workflow is still running. With the gate
+	// off, the V1 scheduler must defer: it does not migrate (stays running).
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.Never(t, v1Migrated, 5*time.Second, 500*time.Millisecond,
+		"migration must be deferred while the schedule has a running workflow and the gate is off")
+
+	// Turn the gate on; migration now proceeds even with the workflow running.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.Eventually(t, v1Migrated, 15*time.Second, 500*time.Millisecond,
+		"migration should proceed once the gate allows running workflows")
+
+	// The V2 schedule should now exist.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+
+	// Clean up: signal the running workflow to complete.
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
+		SignalName:        resumeSignal,
+	})
+	require.NoError(t, err)
+}
+
 // TestDeleteScheduleContextMetadata verifies that DeleteSchedule propagates the
 // correct context metadata (workflow-type, workflow-task-queue) for every
 // combination of CHASM and V1 state. This metadata is read by saas-temporal's
