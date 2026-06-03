@@ -311,11 +311,13 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		resetRunID := uuid.NewString()
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
 
-		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-		//  since cannot reapply event to a finished workflow which had no workflow tasks started.
-		// Best-effort: a closed workflow with no completed workflow task has no event to rebuild
-		// from, so reset is not supported. Drop the reapply instead of failing the replication
-		// task, which would otherwise retry and eventually land in the DLQ.
+		// Best-effort: a closed workflow that never completed a workflow task has no event to
+		// rebuild from (reset anchors on LastCompletedWorkflowTaskStartedEventId, which is
+		// EmptyEventID here), so reset is not supported. Drop the reapply instead of failing the
+		// replication task, which would otherwise retry and eventually land in the DLQ.
+		//
+		// TODO: Remove this guard once reapply/reset supports resetting a workflow with no completed
+		//  workflow task.
 		if baseRebuildLastEventID == common.EmptyEventID {
 			r.logger.Warn("cannot reapply event to a finished workflow with no workflow task",
 				tag.WorkflowNamespaceID(namespaceID.String()),
