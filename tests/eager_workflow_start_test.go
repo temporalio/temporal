@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -248,19 +246,15 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 	task = s.pollWorkflowTaskQueue(env)
 	s.failWorkflow(env, task, "failure 2")
 
-	s.EventuallyWithT( //nolint:forbidigo // await conversion is out of scope for the parallelsuite migration
-		func(c *assert.CollectT) {
-			resp, err := env.FrontendClient().CountWorkflowExecutions(
-				s.Context(),
-				&workflowservice.CountWorkflowExecutionsRequest{
-					Namespace: env.Namespace().String(),
-					Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
-				},
-			)
-			require.NoError(c, err)
-			require.Equal(c, int64(2), resp.Count)
-		},
-		testcore.WaitForESToSettle,
-		200*time.Millisecond,
-	)
+	s.Await(func(s *EagerWorkflowTestSuite) {
+		resp, err := env.FrontendClient().CountWorkflowExecutions(
+			s.Context(),
+			&workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
+			},
+		)
+		s.NoError(err)
+		s.Equal(int64(2), resp.Count)
+	}, testcore.WaitForESToSettle, 200*time.Millisecond)
 }
