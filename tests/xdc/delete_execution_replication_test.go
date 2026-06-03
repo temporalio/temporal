@@ -21,9 +21,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -65,13 +63,7 @@ func (s *deleteExecutionReplicationTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.AllServices,
-			fx.Decorate(
-				func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-					return config.DCRedirectionPolicy{Policy: "noop"}
-				},
-			),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
 	)
 }
 

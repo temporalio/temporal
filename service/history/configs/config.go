@@ -19,9 +19,6 @@ type Config struct {
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableNamespaceFairness                     dynamicconfig.BoolPropertyFn
-	NamespaceFairShareMultiplier                dynamicconfig.FloatPropertyFn
-	FrontendGlobalNamespaceRPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -450,9 +447,6 @@ func NewConfig(
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
-		EnableNamespaceFairness:              dynamicconfig.EnableHistoryNamespaceFairness.Get(dc),
-		NamespaceFairShareMultiplier:         dynamicconfig.HistoryNamespaceFairShareMultiplier.Get(dc),
-		FrontendGlobalNamespaceRPS:           dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),

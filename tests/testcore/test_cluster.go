@@ -42,9 +42,11 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
@@ -93,7 +95,9 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions map[primitives.ServiceName][]fx.Option
+		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
+		TokenProvider     auth.TokenProvider
+		TLSConfigProvider *encryption.FixedTLSConfigProvider
 	}
 
 	TestClusterFactory interface {
@@ -313,7 +317,9 @@ func newClusterWithPersistenceTestBaseFactory(
 	}
 
 	var tlsConfigProvider *encryption.FixedTLSConfigProvider
-	if clusterConfig.EnableMTLS {
+	if clusterConfig.TLSConfigProvider != nil {
+		tlsConfigProvider = clusterConfig.TLSConfigProvider
+	} else if clusterConfig.EnableMTLS {
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}
@@ -340,7 +346,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		MatchingConfig:                   clusterConfig.MatchingConfig,
 		WorkerConfig:                     clusterConfig.WorkerConfig,
 		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
 		DCRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
@@ -348,6 +354,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
+		TokenProvider:                    clusterConfig.TokenProvider,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -600,6 +607,10 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 // TODO (alex): expose only needed objects from TemporalImpl.
 func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
+}
+
+func (tc *TestCluster) InjectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
+	return tc.host.injectHook(t, hook, scope)
 }
 
 func (tc *TestCluster) WorkerGRPCAddress() string {

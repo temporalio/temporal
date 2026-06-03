@@ -62,7 +62,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// Check capacity utilization metric
 	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
-	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
+	assert.Equal(t, 1, len(utilizationMetrics), "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
 
@@ -704,7 +704,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		for i := range totalHeartbeats {
 			key := fmt.Sprintf("%s-worker%d", ns, i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
-			m.upsertHeartbeats(ns, namespace.Name(ns + "_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
+			m.upsertHeartbeats(ns, namespace.Name(ns+"_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 			pairs = append(pairs, pair{ns: ns, hb: hb})
 		}
 	}
@@ -713,7 +713,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := pairs[r.Intn(len(pairs))]
-		m.upsertHeartbeats(p.ns, namespace.Name(p.ns + "_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{p.hb})
+		m.upsertHeartbeats(p.ns, namespace.Name(p.ns+"_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{p.hb})
 	}
 }
 

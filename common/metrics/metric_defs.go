@@ -632,11 +632,7 @@ var (
 		"service_errors",
 		WithDescription("The number of unexpected service request errors."),
 	)
-	ServicePanic                            = NewCounterDef("service_panics")
-	ServiceRequestsNamespaceFairnessDemoted = NewCounterDef(
-		"service_requests_namespace_fairness_demoted",
-		WithDescription("The number of requests demoted by the history namespace fairness mechanism (over-share). Tagged with namespace and original caller type."),
-	)
+	ServicePanic         = NewCounterDef("service_panics")
 	ServiceErrorWithType = NewCounterDef(
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
@@ -1214,6 +1210,7 @@ var (
 	ForceLoadedTaskQueuePartitions                    = NewCounterDef("force_loaded_task_queue_partitions_count")
 	ForceLoadedTaskQueuePartitionUnnecessarilyCounter = NewCounterDef("force_loaded_task_queue_partition_unnecessarily_count")
 	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
+	PendingPolls                                      = NewGaugeDef("pending_polls")
 	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TasksAddedCounter                                 = NewCounterDef(
@@ -1409,7 +1406,11 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef(
+	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+		"signal_external_workflow_execution_failures",
+		WithDescription("The number of signal external workflow execution failures by cause."),
+	)
+	ScheduleMissedCatchupWindow = NewCounterDef(
 		"schedule_missed_catchup_window",
 		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
 	)

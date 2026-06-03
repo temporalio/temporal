@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -124,6 +125,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		tokenProvider             auth.TokenProvider
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -181,6 +183,7 @@ type (
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider            auth.TokenProvider
 	}
 
 	listenHostPort string
@@ -224,6 +227,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		tokenProvider:                    params.TokenProvider,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -807,7 +811,7 @@ func (c *TemporalImpl) newRPCFactory(
 			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
 		)
 	}
-	// Add replication stream recorder interceptor
+	// Add replication stream recorder injector
 	if c.replicationStreamRecorder != nil {
 		options = append(options,
 			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
@@ -835,6 +839,7 @@ func (c *TemporalImpl) newRPCFactory(
 		options,
 		resource.PerServiceDialOptionsProvider(logger),
 		monitor,
+		c.tokenProvider,
 	), nil
 }
 
@@ -950,6 +955,20 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 	} else if err = json.Unmarshal(b, &newCfg); err != nil {
 		panic("copy persistence config: " + err.Error())
 	}
+
+	// Preserve fault injection injectors after the JSON copy.
+	for name, dataStore := range cfg.DataStores {
+		if dataStore.FaultInjection == nil {
+			continue
+		}
+		newDataStore := newCfg.DataStores[name]
+		if newDataStore.FaultInjection == nil {
+			newDataStore.FaultInjection = &config.FaultInjection{}
+		}
+		newDataStore.FaultInjection.Injector = dataStore.FaultInjection.Injector
+		newCfg.DataStores[name] = newDataStore
+	}
+
 	return newCfg
 }
 

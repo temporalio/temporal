@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -495,8 +496,12 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
-	return interceptor.NewContextMetadataInterceptor(false, logger)
+func ContextMetadataInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.ContextMetadataInterceptor {
+	setTrailer := dynamicconfig.FrontendContextMetadataSetTrailer.Get(dc)()
+	return interceptor.NewContextMetadataInterceptor(setTrailer, logger)
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
@@ -796,6 +801,7 @@ func NamespaceDLQHandlerProvider(
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -803,6 +809,7 @@ func NamespaceDLQHandlerProvider(
 		namespaceDataMerger,
 		namespaceAdmitter,
 		logger,
+		testHooks,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,
