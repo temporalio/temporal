@@ -24,6 +24,9 @@ type workerMetricsEmitter struct {
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
+	// The SDK aggregates all workers on the same Client into one heartbeat RPC, so
+	// len(heartbeats) approximates workers-per-process. It's per-Client-per-Namespace,
+	// not strictly per-process, but multiple Clients per process is uncommon in practice.
 	metrics.WorkerRegistryWorkersPerProcess.With(e.handler).Record(int64(len(heartbeats)))
 
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
