@@ -198,15 +198,13 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 // The following tests verify poller scaling decisions work with worker-versioning based concepts.
 func (s *PollerScalingIntegSuite) TestPollerScalingOnCurrentVersionConsidersUnversionedQueueBacklog() {
-	buildID := testcore.RandomizeStr("test-build-id")
 	s.testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		buildID,
-		func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error {
-			_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		func(env *testcore.TestEnv) error {
+			_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(s.Context(), &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 				Namespace:      env.Namespace().String(),
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
+				DeploymentName: env.Tv().DeploymentSeries(),
+				BuildId:        env.Tv().BuildID(),
 			})
 			return err
 		},
@@ -216,15 +214,13 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnCurrentVersionConsidersUnve
 func (s *PollerScalingIntegSuite) TestPollerScalingOnRampingVersionConsidersUnversionedQueueBacklog() {
 	// Use 100% ramp so the ramping version absorbs the entire unversioned backlog.
 	const rampPercentage = float32(100)
-	rampingBuildID := testcore.RandomizeStr("test-ramping-build-id")
 	s.testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
-		rampingBuildID,
-		func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error {
-			_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		func(env *testcore.TestEnv) error {
+			_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(s.Context(), &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 				Namespace:      env.Namespace().String(),
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
+				DeploymentName: env.Tv().DeploymentSeries(),
+				BuildId:        env.Tv().BuildID(),
 				Percentage:     rampPercentage,
 			})
 			return err
@@ -234,8 +230,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnRampingVersionConsidersUnve
 
 func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnversionedQueueBacklog(
 	expectedStatus enumspb.WorkerDeploymentVersionStatus,
-	testBuildID string,
-	promoteDeploymentVersion func(ctx context.Context, env *testcore.TestEnv, deploymentName, buildID string) error,
+	promoteDeploymentVersion func(env *testcore.TestEnv) error,
 ) {
 	// 1. Create a backlog of unversioned workflows.
 	// 2. Set the current/ramping version for a worker-deployment (depending on the test case)
@@ -244,11 +239,8 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
 	feClient := env.FrontendClient()
-
-	const (
-		deploymentNamePrefix = "test-deployment"
-	)
-	deploymentName := testcore.RandomizeStr(deploymentNamePrefix)
+	deploymentName := env.Tv().DeploymentSeries()
+	buildID := env.Tv().BuildID()
 
 	// Queueing up unversioned workflows
 	for range 5 {
@@ -270,7 +262,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 				DeploymentName:       deploymentName,
-				BuildId:              testBuildID,
+				BuildId:              buildID,
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
@@ -285,7 +277,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 				DeploymentName:       deploymentName,
-				BuildId:              testBuildID,
+				BuildId:              buildID,
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
@@ -300,7 +292,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: deploymentName,
-				BuildId:        testBuildID,
+				BuildId:        buildID,
 			},
 		})
 		a.NoError(err)
@@ -309,7 +301,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.Len(descResp.GetVersionTaskQueues(), 2) // one for workflow TQ, one for activity TQ
 
 		// Promote the deployment version to either current or ramping.
-		err = promoteDeploymentVersion(s.Context(), env, deploymentName, testBuildID)
+		err = promoteDeploymentVersion(env)
 		a.NoError(err)
 
 		// Verify the version status is the expected status.
@@ -317,7 +309,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: deploymentName,
-				BuildId:        testBuildID,
+				BuildId:        buildID,
 			},
 		})
 		a.NoError(err)
@@ -360,7 +352,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 			DeploymentName:       deploymentName,
-			BuildId:              testBuildID,
+			BuildId:              buildID,
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
@@ -385,7 +377,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: deploymentName,
-				BuildId:        testBuildID,
+				BuildId:        buildID,
 			},
 			ReportTaskQueueStats: true,
 		})
@@ -409,7 +401,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 			DeploymentName:       deploymentName,
-			BuildId:              testBuildID,
+			BuildId:              buildID,
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
