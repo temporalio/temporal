@@ -10,6 +10,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -309,6 +310,25 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.NewString()
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
+
+		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
+		//  since cannot reapply event to a finished workflow which had no workflow tasks started.
+		// Best-effort: a closed workflow with no completed workflow task has no event to rebuild
+		// from, so reset is not supported. Drop the reapply instead of failing the replication
+		// task, which would otherwise retry and eventually land in the DLQ.
+		if baseRebuildLastEventID == common.EmptyEventID {
+			r.logger.Warn("cannot reapply event to a finished workflow with no workflow task",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+			)
+			metrics.EventReapplySkippedCount.With(r.metricsHandler).Record(
+				1,
+				metrics.OperationTag(metrics.HistoryReapplyEventsScope))
+			// the target workflow is not reset so it is still the current workflow. It needs to
+			// persist updated version histories.
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
+		}
+
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
