@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"cmp"
 	"fmt"
 	"testing"
 	"time"
@@ -44,24 +45,12 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(env *testcore.TestEnv, baseO
 	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest) //nolint:revive
 	options.RequestEagerExecution = true
 
-	if options.GetNamespace() == "" {
-		options.Namespace = env.Namespace().String()
-	}
-	if options.Identity == "" {
-		options.Identity = "test"
-	}
-	if options.WorkflowId == "" {
-		options.WorkflowId = s.defaultWorkflowID()
-	}
-	if options.WorkflowType == nil {
-		options.WorkflowType = &commonpb.WorkflowType{Name: "Workflow"}
-	}
-	if options.TaskQueue == nil {
-		options.TaskQueue = s.defaultTaskQueue()
-	}
-	if options.RequestId == "" {
-		options.RequestId = uuid.NewString()
-	}
+	options.Namespace = cmp.Or(options.GetNamespace(), env.Namespace().String())
+	options.Identity = cmp.Or(options.Identity, "test")
+	options.WorkflowId = cmp.Or(options.WorkflowId, s.defaultWorkflowID())
+	options.WorkflowType = cmp.Or(options.WorkflowType, &commonpb.WorkflowType{Name: "Workflow"})
+	options.TaskQueue = cmp.Or(options.TaskQueue, s.defaultTaskQueue())
+	options.RequestId = cmp.Or(options.RequestId, uuid.NewString())
 
 	response, err := env.FrontendClient().StartWorkflowExecution(s.Context(), options)
 	s.NoError(err)
