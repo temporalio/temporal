@@ -1190,6 +1190,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(skippedDuration),
@@ -1283,6 +1285,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 
 			ctrl := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(tc.execInfo).AnyTimes()
 			// HadOrHasWorkflowTask is consulted by the backoff-timer regen path. These edge
 			// cases don't exercise that path, so it can return true to short-circuit.
@@ -1342,6 +1346,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 
 			ctrl := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                     namespaceID,
 				WorkflowId:                      workflowID,
@@ -1497,6 +1503,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 
 			ctrl := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: tc.tsi,
 			}).AnyTimes()
@@ -1618,6 +1626,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 
 			ctrl := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				StartTime:     timestamppb.New(tc.startTime),
 				ExecutionTime: timestamppb.New(tc.executionTime),
@@ -1665,6 +1675,73 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 	}
 }
 
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry covers step (5):
+// activity retry timers are re-stamped only for activities in retry backoff, so their
+// wall-clock firing time tracks the new accumulated skip. Activities that are started
+// (actively in flight) must not be regenerated.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	backoffScheduledTime := now.Add(time.Hour)
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
+		1: { // in retry backoff -> regenerated
+			ScheduledEventId: 1,
+			HasRetryPolicy:   true,
+			Attempt:          3,
+			Stamp:            7,
+			Version:          42,
+			ScheduledTime:    timestamppb.New(backoffScheduledTime),
+		},
+		2: { // started -> not regenerated
+			ScheduledEventId: 2,
+			HasRetryPolicy:   true,
+			Attempt:          2,
+			StartedEventId:   10,
+			ScheduledTime:    timestamppb.New(backoffScheduledTime),
+		},
+	}).AnyTimes()
+
+	var captured []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		captured = append(captured, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+	var retryTasks []*tasks.ActivityRetryTimerTask
+	for _, task := range captured {
+		if rt, ok := task.(*tasks.ActivityRetryTimerTask); ok {
+			retryTasks = append(retryTasks, rt)
+		}
+	}
+
+	require.Len(t, retryTasks, 1, "only the backoff activity should be regenerated")
+	rt := retryTasks[0]
+	require.Equal(t, tests.WorkflowKey, rt.WorkflowKey)
+	require.Equal(t, int64(1), rt.EventID)
+	// VisibilityTimestamp is emitted in the virtual frame; the virtual-to-wallclock
+	// subtraction happens inside MutableState.AddTasks, mocked here.
+	require.Equal(t, backoffScheduledTime, rt.VisibilityTimestamp)
+	require.Equal(t, int32(3), rt.Attempt)
+	require.Equal(t, int32(7), rt.Stamp)
+	require.Equal(t, int64(42), rt.Version)
+	require.Equal(t, int64(0), rt.TaskID, "TaskID must be zero (set by shard)")
+}
+
 // TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_StartVersionError
 // verifies that an error from GetStartVersion in step (4) propagates out of
 // RegenerateTimerTasksForTimeSkipping.
@@ -1674,6 +1751,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_Star
 	now := time.Now().UTC()
 	ctrl := gomock.NewController(t)
 	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().Now().Return(now).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		StartTime:     timestamppb.New(now),
 		ExecutionTime: timestamppb.New(now.Add(time.Hour)),

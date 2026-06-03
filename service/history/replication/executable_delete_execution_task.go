@@ -103,6 +103,26 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		)
 		return nil
 	}
+	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(e.NamespaceID))
+	if err != nil {
+		return err
+	}
+	currentCluster := e.ClusterMetadata.GetCurrentClusterName()
+	if namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: e.BusinessID}) == currentCluster {
+		e.Logger.Warn("Skipping delete execution replication task on active cluster",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.BusinessID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.TaskID()),
+			tag.ClusterName(currentCluster),
+		)
+		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+			1,
+			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
+		return nil
+	}
 
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
