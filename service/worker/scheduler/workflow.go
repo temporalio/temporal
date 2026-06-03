@@ -690,6 +690,8 @@ func (s *scheduler) processTimeRange(
 			// hasMinVersion because this condition couldn't happen in previous versions.
 			continue
 		}
+		// Record generate latency only for the first action in the batch to
+		// avoid inflating the metric when catching up over a large time range.
 		if !manual && !recordedGenerateLatency {
 			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
 			recordedGenerateLatency = true
@@ -926,7 +928,11 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		}
 	}
 
-	// Update desired time of next start if it's buffered. This is used for metrics only.
+	// Update desired time of next start if it's buffered. This is used to
+	// compute ScheduleActionDelay (time between completing one action and
+	// starting the next). The legacy path doesn't use deferred starts
+	// (Attempt == -1) like CHASM, so BufferedStarts[0] is always the next
+	// pending start.
 	if long && len(s.State.BufferedStarts) > 0 {
 		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
 	}
@@ -1358,12 +1364,10 @@ func (s *scheduler) processBuffer() bool {
 
 	s.State.BufferedStarts = action.NewBuffer
 	s.Info.OverlapSkipped += action.OverlapSkipped
-	if action.OverlapSkipped > 0 {
-		for overlapPolicy, count := range action.OverlapSkippedByPolicy {
-			s.metrics.WithTags(map[string]string{
-				metrics.ScheduleOverlapPolicyTag: overlapPolicy.String(),
-			}).Counter(metrics.ScheduleOverlapSkipped.Name()).Inc(count)
-		}
+	for overlapPolicy, count := range action.OverlapSkippedByPolicy {
+		s.metrics.WithTags(map[string]string{
+			metrics.ScheduleOverlapPolicyTag: overlapPolicy.String(),
+		}).Counter(metrics.ScheduleOverlapSkipped.Name()).Inc(count)
 	}
 
 	// Try starting whatever we're supposed to start now
