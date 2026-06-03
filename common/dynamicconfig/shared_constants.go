@@ -118,6 +118,12 @@ var DefaultHistoryCacheBackgroundEvictSettings = CacheBackgroundEvictSettings{
 	MaxEntryPerCall: 1024,
 }
 
+var DefaultEventsCacheBackgroundEvictSettings = CacheBackgroundEvictSettings{
+	Enabled:         false,
+	LoopInterval:    1 * time.Minute,
+	MaxEntryPerCall: 1024,
+}
+
 type PartitionScaleAllowedDrift struct {
 	// Delta and Ratio controls how far off client counts can be before we reject an RPC.
 	// If the client count is within the delta, it's allowed. Also, if the ratio of

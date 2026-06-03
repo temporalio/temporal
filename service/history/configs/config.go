@@ -84,6 +84,7 @@ type Config struct {
 	// Change of these configs require service restart
 	EnableHostLevelEventsCache       dynamicconfig.BoolPropertyFn
 	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheBackgroundEvict       dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
 
 	// ShardController settings
 	RangeSizeBits                uint
@@ -507,6 +508,7 @@ func NewConfig(
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
 		EventsCacheTTL:                    dynamicconfig.EventsCacheTTL.Get(dc),
 		EnableHostLevelEventsCache:        dynamicconfig.EnableHostLevelEventsCache.Get(dc),
+		EventsCacheBackgroundEvict:        dynamicconfig.EventsCacheBackgroundEvict.Get(dc),
 
 		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
 
