@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -59,6 +60,8 @@ func (g *GeneratorTaskHandler) Execute(
 
 	now := ctx.Now(generator)
 
+	generator.EventLog.Get(ctx).LogEvent(ctx, "generatorTask executed")
+
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
 		createdAt := timestamppb.New(now)
@@ -103,6 +106,8 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Emit metrics and update state for any dropped actions.
 	if result.DroppedCount > 0 {
+		generator.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("buffer overrun, dropped %d actions", result.DroppedCount))
 		logger.Warn("Buffer overrun, dropping actions",
 			tag.Int64("dropped-count", result.DroppedCount))
 		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
@@ -134,6 +139,8 @@ func (g *GeneratorTaskHandler) Execute(
 		// customer can describe/modify/restart the schedule.
 		//
 		// Once the idle timer expires, we close the component.
+		generator.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("scheduled idle task for %s", idleExpiration.Format(time.RFC3339)))
 		ctx.AddTask(scheduler, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
 		}, &schedulerpb.SchedulerIdleTask{

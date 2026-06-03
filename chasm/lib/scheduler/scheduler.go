@@ -168,6 +168,7 @@ func NewSentinel(
 			Info:          &schedulepb.ScheduleInfo{},
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
+		EventLog:           chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	now := ctx.Now(s)
 	s.Info.CreateTime = timestamppb.New(now)
@@ -787,6 +788,8 @@ func (s *Scheduler) MigrateToWorkflow(
 	s.Schedule.State.Paused = true
 	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
 
+	s.EventLog.Get(ctx).LogEvent(ctx, "started migration to V1")
+
 	// Schedule a side-effect task to export state and start the V1 workflow.
 	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
 
@@ -843,6 +846,7 @@ func (s *Scheduler) Update(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+	s.EventLog.Get(ctx).LogEvent(ctx, "updated via API")
 
 	// Since the spec may have been updated, kick off the generator.
 	s.Generator.Get(ctx).Generate(ctx)
@@ -869,6 +873,7 @@ func (s *Scheduler) Patch(
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
+		s.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
 		if s.WorkflowMigration != nil {
@@ -876,6 +881,7 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+		s.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
