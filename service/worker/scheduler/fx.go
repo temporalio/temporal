@@ -49,13 +49,14 @@ var VisibilityListQueryChasm = fmt.Sprintf(
 
 type (
 	workerComponent struct {
-		specBuilder              *SpecBuilder // workflow dep
-		activityDeps             activityDeps
-		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		enableCHASMMigration     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
-		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		specBuilder                  *SpecBuilder // workflow dep
+		activityDeps                 activityDeps
+		enabledForNs                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableCHASMMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
+		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -85,13 +86,14 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:              specBuilder,
-			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
-			enableCHASMMigration:     dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
-			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
-			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
+			specBuilder:                  specBuilder,
+			activityDeps:                 params,
+			enabledForNs:                 dynamicconfig.WorkerEnableScheduler.Get(dc),
+			enableCHASMMigration:         dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
+			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
+			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
+			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
+			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
 	}
 }
@@ -103,8 +105,13 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	enableMigration := s.enableCHASMMigration(ns.Name().String())
+	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
+		enableMigration := func() bool {
+			return s.enableCHASMMigration(nsName) &&
+				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+		}
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})

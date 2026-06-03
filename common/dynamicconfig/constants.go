@@ -2938,6 +2938,14 @@ Requires service restart to take effect.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerCreationRolloutPercent",
+		0,
+		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage of new schedules that will be
+created on the CHASM (V2) implementation. This setting is only consulted when EnableCHASMSchedulerCreation is true and
+is re-evaluated on every CreateSchedule RPC.`,
+	)
+
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
 		true,
@@ -2950,6 +2958,15 @@ first (with fallback to V1), excluding CreateSchedule.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	CHASMSchedulerMigrationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerMigrationRolloutPercent",
+		0,
+		`CHASMSchedulerMigrationRolloutPercent is the per-namespace percentage of V1 schedules that will be
+migrated to the CHASM (V2) implementation This setting is only consulted when
+EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
+scheduler workflow starts or continues-as-new.`,
 	)
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(

@@ -1,10 +1,8 @@
 package testcore
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"maps"
 	"os"
@@ -637,26 +635,11 @@ func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.Wo
 	return s.GetHistoryFunc(namespace, execution)()
 }
 
-func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {
-	s.T().Helper()
-	var r string
-	s.NoError(payloads.Decode(ps, &r))
-	return r
-}
-
 func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
 	s.NoError(payloads.Decode(ps, &r))
 	return r
-}
-
-func (s *FunctionalTestBase) DecodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
-	s.T().Helper()
-	var buf []byte
-	s.NoError(payloads.Decode(ps, &buf))
-	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
-	return
 }
 
 func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
