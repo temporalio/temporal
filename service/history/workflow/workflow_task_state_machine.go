@@ -489,7 +489,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 
@@ -540,10 +539,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			}
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
-		targetDeploymentVersionChanged = m.targetWorkerDeploymentVersionChangedForStartedEvent()
 	}
 	// emit metric
-	if targetDeploymentVersionChanged {
+	if m.targetWorkerDeploymentVersionChangedForStartedEvent() {
 		metrics.WorkflowTargetVersionChangedCount.With(m.metricsHandler.WithTags(
 			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
 			metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
@@ -603,7 +601,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			versioningStamp,
 			redirectCounter,
 			suggestContinueAsNewReasons,
-			targetDeploymentVersionChanged,
+			m.targetWorkerDeploymentVersionChangedForStartedEvent(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
