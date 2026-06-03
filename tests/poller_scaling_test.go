@@ -35,15 +35,12 @@ func TestPollerScalingFunctionalSuite(t *testing.T) {
 
 func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment version registration"),
+
 		// Force one partition so we can reliably see the backlog
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp, 50*time.Millisecond),
-
-		// The worker-deployment tests register deployment versions via the per-namespace
-		// worker-deployment manager workflows, which only run when the system worker
-		// service is enabled.
-		testcore.WithWorkerService("worker-deployment version registration"),
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
