@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/tests/testcore"
@@ -90,10 +89,6 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 		// suite's shared cluster.
 		testcore.WithDisableTestloggerFailure(),
 	)
-
-	tl := env.Logger.(*testlogger.TestLogger)
-	prev := tl.FailOnError(false)
-	s.T().Cleanup(func() { tl.FailOnError(prev) })
 
 	const maxBacklog = 30
 	tv := testvars.New(s.T())
