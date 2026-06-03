@@ -167,9 +167,6 @@ func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	// after no more than 10ms, the free worker should exit
 	// advance the next timer once the worker has registered it
 	s.Await(func(s *AdaptivePoolSuite) {
-		if p.NumWorkers() == workersAfterShrink {
-			return
-		}
 		if ts.NumTimers() > 0 {
 			ts.AdvanceNext() // let timer fire
 		}
