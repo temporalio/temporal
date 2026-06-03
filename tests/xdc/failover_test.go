@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -113,6 +115,32 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	we, err := s.clusters[1].FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
+}
+
+// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters guards against
+// State being dropped on the wire for UPDATE replication tasks, which left the
+// non-receiving cluster stuck at UNSPECIFIED after a force-failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters() {
+	namespace := s.createGlobalNamespace()
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		for _, c := range s.clusters {
+			resp, err := c.FrontendClient().DescribeNamespace(t.Context(), &workflowservice.DescribeNamespaceRequest{
+				Namespace: namespace,
+			})
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				enumspb.REPLICATION_STATE_NORMAL,
+				resp.ReplicationConfig.State,
+				"cluster %s left ReplicationConfig.State = %s after failover",
+				c.ClusterName(),
+				resp.ReplicationConfig.State,
+			)
+		}
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {

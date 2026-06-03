@@ -539,6 +539,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		RequestId:               o.RequestId,
 		OperationToken:          o.OperationToken,
 		StateTransitionCount:    ctx.ExecutionInfo().StateTransitionCount,
+		StateSizeBytes:          int64(ctx.ExecutionInfo().ApproximateStateSize),
 		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: o.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 		},

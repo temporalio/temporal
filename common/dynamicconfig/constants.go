@@ -800,6 +800,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
 	)
+	FrontendContextMetadataSetTrailer = NewGlobalBoolSetting(
+		"frontend.contextMetadataSetTrailer",
+		false,
+		`FrontendContextMetadataSetTrailer controls whether frontend gRPC handlers emit context metadata in response trailers. This is read when constructing the frontend ContextMetadataInterceptor.`,
+	)
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
 		0.5,
@@ -1608,21 +1613,8 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 	HistoryNamespaceRPS = NewNamespaceIntSetting(
 		"history.namespaceRPS",
 		0,
-		`HistoryNamespaceRPS is namespace rate limit per second for each history host.
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
 If value less or equal to 0, will fall back to HistoryRPS`,
-	)
-	EnableHistoryNamespaceFairness = NewGlobalBoolSetting(
-		"history.enableNamespaceFairness",
-		false,
-		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
-Requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's frontend cluster-wide
-RPS budget) are routed to a lower-priority bucket`,
-	)
-	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
-		"history.namespaceFairShareMultiplier",
-		1.0,
-		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used by the history host RPS rate limiter.
-share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
@@ -2953,6 +2945,14 @@ Requires service restart to take effect.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerCreationRolloutPercent",
+		0,
+		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage of new schedules that will be
+created on the CHASM (V2) implementation. This setting is only consulted when EnableCHASMSchedulerCreation is true and
+is re-evaluated on every CreateSchedule RPC.`,
+	)
+
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
 		true,
@@ -2965,6 +2965,15 @@ first (with fallback to V1), excluding CreateSchedule.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	CHASMSchedulerMigrationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerMigrationRolloutPercent",
+		0,
+		`CHASMSchedulerMigrationRolloutPercent is the per-namespace percentage of V1 schedules that will be
+migrated to the CHASM (V2) implementation This setting is only consulted when
+EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
+scheduler workflow starts or continues-as-new.`,
 	)
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(

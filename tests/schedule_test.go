@@ -92,6 +92,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
+	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -3380,6 +3381,84 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	require.ErrorAs(t, err, &invalidArgBlob)
 }
 
+// TestScheduleCreationRolloutPercent verifies that
+// CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
+// after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
+// bucket on opposite sides of the rollout land on different stacks.
+func TestScheduleCreationRolloutPercent(t *testing.T) {
+	opts := append(scheduleCommonOpts(t),
+		// V1 worker is needed because at 50% rollout some schedules land on V1.
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerCreationRolloutPercent, 50),
+	)
+	s := testcore.NewEnv(t, opts...)
+	ctx := s.Context()
+	nsName := s.Namespace().String()
+	nsID := s.NamespaceID().String()
+
+	chasmSID, v1SID := testcore.PickRolloutSplit(t, nsName, 50)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: testcore.RandomizeStr("wt")},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	for _, sid := range []string{chasmSID, v1SID} {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Schedule:   mkSchedule(),
+			Identity:   testcore.RandomizeStr("identity"),
+			RequestId:  uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+
+	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
+	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
+	describeOnCHASM := func(sid string) error {
+		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		return err
+	}
+
+	require.Eventually(t, func() bool { return describeOnCHASM(chasmSID) == nil }, 15*time.Second, 250*time.Millisecond,
+		"schedule %q bucketed into CHASM should be describable via the CHASM handler", chasmSID)
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, describeOnCHASM(v1SID), &notFoundErr,
+		"schedule %q bucketed into V1 should not be present on the CHASM handler", v1SID)
+
+	// Both schedules must remain describable through the public frontend
+	// regardless of which stack they live on — the V1 schedule in particular
+	// must round-trip through the frontend's fallback path. The V1 workflow
+	// takes a moment to be queryable after creation, so poll.
+	for _, sid := range []string{chasmSID, v1SID} {
+		require.Eventually(t, func() bool {
+			_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+			})
+			return err == nil
+		}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for %q", sid)
+	}
+}
+
 // testSingleDateScheduleCloses verifies that a CHASM schedule configured with
 // a single calendar date closes after its one workflow completes.
 func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
@@ -3551,4 +3630,88 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		})
 		return err != nil
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
+}
+
+// testScheduleNextActionTimeVisibility asserts that the
+// TemporalScheduleNextActionTime search attribute is published to visibility.
+func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
+	opts := scheduleCommonOpts(t)
+	s := testcore.NewEnv(t, opts...)
+
+	v2Sid := testcore.RandomizeStr("sched-next-action-v2")
+	wid := testcore.RandomizeStr("sched-next-action-wf")
+	wt := testcore.RandomizeStr("sched-next-action-wt")
+
+	// Register a no-op workflow type. We pause both schedules immediately after
+	// creation so spawned actions shouldn't run, but registering avoids worker
+	// noise if a fire slips through before pause lands.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour), Phase: durationpb.New(23 * time.Minute)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	v2Ctx := newContext(s.Context())
+	createTime := time.Now()
+
+	_, err := s.FrontendClient().CreateSchedule(v2Ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: v2Sid,
+		Schedule:   mkSchedule(),
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Pause so FutureActionTimes is stable, and so that any SA the
+	// implementation intends to publish has been committed to visibility by
+	// the time the entry comes back paused.
+	for _, p := range []struct {
+		ctx context.Context
+		sid string
+	}{{v2Ctx, v2Sid}} {
+		_, err := s.FrontendClient().PatchSchedule(p.ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: p.sid,
+			Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	paused := func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetPaused()
+	}
+
+	// V2: TemporalScheduleNextActionTime must be present and decode to a
+	// timestamp at or after the create time.
+	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
+	s.NotNil(v2Entry)
+	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
+
+	var v2Next time.Time
+	s.NoError(payload.Decode(v2Pl, &v2Next))
+	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
+	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
+	s.True(v2Next.After(createTime.Add(-time.Second)),
+		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
 }
