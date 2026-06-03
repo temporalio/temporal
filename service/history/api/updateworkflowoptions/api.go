@@ -133,6 +133,9 @@ func Invoke(
 // retroactively violated. Validated against current MS state, before merge.
 func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.MutableState) error {
 	if !cfg.GetEnabled() {
+		if cfg.GetBound() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		}
 		return nil
 	}
 	bound, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
