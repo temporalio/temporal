@@ -766,7 +766,9 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
 // The pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
-	s.t.addTest(t)
+	if s.t != nil {
+		s.t.addTest(t)
+	}
 
 	t.Cleanup(func() {
 		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
@@ -774,7 +776,7 @@ func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
 			}
 		}
-		wasLast := s.t.removeTest(t)
+		wasLast := s.t != nil && s.t.removeTest(t)
 		if wasLast && s.Poisoned() {
 			if err := s.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down poisoned cluster: %v", err)
