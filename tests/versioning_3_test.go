@@ -6233,8 +6233,9 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 	}, 60*time.Second, 500*time.Millisecond)
 
 	if mode == modeBlockedByCurrentRunOnly {
-		// Nothing was reset: the current run is still running on v2, and the
-		// previous run still shows CONTINUED_AS_NEW.
+		// Nothing was reset: the current run is still RUNNING (a successful
+		// walk-back-and-reset would have terminated it), and no new run was
+		// created — the latest run for the workflow ID is still canRunID.
 		canDesc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -6245,15 +6246,12 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		s.NoError(err)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, canDesc.GetWorkflowExecutionInfo().GetStatus())
 
-		origDesc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		latestDesc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: tv1.WorkflowID(),
-				RunId:      runID,
-			},
+			Execution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
 		})
 		s.NoError(err)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, origDesc.GetWorkflowExecutionInfo().GetStatus())
+		s.Equal(canRunID, latestDesc.GetWorkflowExecutionInfo().GetExecution().GetRunId())
 		return
 	}
 
