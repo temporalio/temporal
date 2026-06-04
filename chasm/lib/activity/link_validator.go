@@ -9,21 +9,21 @@ import (
 
 // linkValidator validates links attached to standalone activity executions.
 // It enforces both per-request limits (count + size + variant shape) and a
-// per-execution cumulative cap across start/attach calls.
+// per-component cumulative cap across start/attach calls.
 type linkValidator struct {
 	maxLinksPerRequest   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	maxLinksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxLinksPerComponent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	linkMaxSize          dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func newLinkValidator(
 	maxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	maxLinksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	maxLinksPerComponent dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	linkMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *linkValidator {
 	return &linkValidator{
 		maxLinksPerRequest:   maxLinksPerRequest,
-		maxLinksPerExecution: maxLinksPerExecution,
+		maxLinksPerComponent: maxLinksPerComponent,
 		linkMaxSize:          linkMaxSize,
 	}
 }
@@ -34,10 +34,10 @@ func (v *linkValidator) ValidateRequest(namespaceName string, links []*commonpb.
 	return commonlinks.Validate(links, v.maxLinksPerRequest(namespaceName), v.linkMaxSize(namespaceName))
 }
 
-// ValidateExecutionTotal checks that adding addingCount links to an execution
-// already holding existingCount links would not exceed the per-execution cap.
-func (v *linkValidator) ValidateExecutionTotal(namespaceName string, existingCount, addingCount int) error {
-	maxLinks := v.maxLinksPerExecution(namespaceName)
+// ValidateComponentTotal checks that adding addingCount links to a component
+// already holding existingCount links would not exceed the per-component cap.
+func (v *linkValidator) ValidateComponentTotal(namespaceName string, existingCount, addingCount int) error {
+	maxLinks := v.maxLinksPerComponent(namespaceName)
 	if existingCount+addingCount > maxLinks {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d links to an activity (%d links already attached)",

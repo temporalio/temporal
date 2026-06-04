@@ -69,7 +69,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
 	return newLinkValidator(
 		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
-		dynamicconfig.MaxLinksPerExecution.Get(dc),
+		dynamicconfig.MaxLinksPerComponent.Get(dc),
 		dynamicconfig.FrontendLinkMaxSize.Get(dc),
 	)
 }

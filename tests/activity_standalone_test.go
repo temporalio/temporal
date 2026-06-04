@@ -963,7 +963,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 	t.Run("PerExecutionCapEnforcedOnCreate", func(t *testing.T) {
 		const maxLinks = 2
-		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerExecution, maxLinks)
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, maxLinks)
 		defer cleanup()
 
 		links := make([]*commonpb.Link, maxLinks+1)
@@ -1007,7 +1007,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		// the Links field would push the activity over the per-execution cap — the
 		// links would be dropped anyway.
 		const maxLinks = 1
-		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerExecution, maxLinks)
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, maxLinks)
 		defer cleanup()
 
 		activityID := testcore.RandomizeStr(t.Name())

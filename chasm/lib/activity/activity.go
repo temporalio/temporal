@@ -375,11 +375,23 @@ func (a *Activity) effectiveUserMetadata(ctx chasm.Context) *sdkpb.UserMetadata 
 
 // attachLinks records the given links on the activity keyed by requestID. Duplicates
 // within the same batch are skipped. If the requestID has already been used to attach
-// links the call is a no-op, making retries idempotent. Returns an error if the activity
-// is closed, if the per-execution cap would be exceeded, or if the request's per-link
-// size, per-request count, or variant shape is invalid.
+// links the call is a no-op, making retries idempotent even after the activity has
+// closed. Returns an error if the activity is closed (and the requestID is new), if
+// the per-component cap would be exceeded, or if the request's per-link size,
+// per-request count, or variant shape is invalid.
 func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link, requestID string, validator *linkValidator, namespaceName string) error {
 	if len(links) == 0 {
+		return nil
+	}
+	// Idempotency check must run before IsClosed: if a prior attach succeeded but
+	// the response was lost and the activity closed before the client retried, we
+	// must still return success rather than FailedPrecondition for work already
+	// persisted.
+	priorForRequest, err := ctx.RequestLinks(a, requestID)
+	if err != nil {
+		return err
+	}
+	if len(priorForRequest) > 0 {
 		return nil
 	}
 	if a.LifecycleState(ctx).IsClosed() {
@@ -388,14 +400,7 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if err := validator.ValidateRequest(namespaceName, links); err != nil {
 		return err
 	}
-	priorForRequest, err := ctx.RequestLinks(a, requestID)
-	if err != nil {
-		return err
-	}
-	if len(priorForRequest) > 0 {
-		return nil
-	}
-	if err := validator.ValidateExecutionTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
+	if err := validator.ValidateComponentTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)
@@ -853,10 +858,6 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
 	executionInfo := ctx.ExecutionInfo()
-
-	links := ctx.Links(a)
-	userMetadata := a.effectiveUserMetadata(ctx)
-
 	var closeTime *timestamppb.Timestamp
 	var executionDuration *durationpb.Duration
 	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
@@ -885,7 +886,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
-		Links:                   links,
+		Links:                   ctx.Links(a),
 		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
@@ -908,7 +909,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		SearchAttributes:        sa,
 		Status:                  status,
 		TaskQueue:               a.GetTaskQueue().GetName(),
-		UserMetadata:            userMetadata,
+		UserMetadata:            a.effectiveUserMetadata(ctx),
 	}
 
 	return info

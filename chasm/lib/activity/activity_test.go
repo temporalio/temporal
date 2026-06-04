@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -419,6 +420,103 @@ func TestAttachLinks_SameRequestIDIsNoOp(t *testing.T) {
 	// Retry with the same requestID (even with different links) is a no-op.
 	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{linkB}, "req-1", validator, "ns"))
 	require.Equal(t, []*commonpb.Link{linkA, linkA}, ctx.LinksByRequest[activity]["req-1"])
+}
+
+// TestAttachLinks_RejectsClosedActivity verifies that attachLinks returns a
+// FailedPrecondition error when the activity is already in a terminal state and
+// the requestID has not been seen before.
+func TestAttachLinks_RejectsClosedActivity(t *testing.T) {
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleRequestLinks: func(chasm.Component, string) ([]*commonpb.Link, error) {
+				return nil, nil
+			},
+		},
+	}
+	validator := newLinkValidator(
+		func(string) int { return 100 },
+		func(string) int { return 100 },
+		func(string) int { return 4000 },
+	)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+	}
+
+	err := activity.attachLinks(ctx, []*commonpb.Link{link}, "req-new", validator, "ns")
+	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+}
+
+// TestAttachLinks_IdempotentAfterClose verifies that a retry with a previously
+// seen requestID is a no-op even after the activity has closed — protecting
+// against the case where the original attach succeeded but the response was
+// lost before the client could observe it.
+func TestAttachLinks_IdempotentAfterClose(t *testing.T) {
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+
+	stored := map[string][]*commonpb.Link{"req-1": {link}}
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleRequestLinks: func(_ chasm.Component, reqID string) ([]*commonpb.Link, error) {
+				return stored[reqID], nil
+			},
+		},
+	}
+	validator := newLinkValidator(
+		func(string) int { return 100 },
+		func(string) int { return 100 },
+		func(string) int { return 4000 },
+	)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+	}
+
+	require.NoError(t, activity.attachLinks(ctx, []*commonpb.Link{link}, "req-1", validator, "ns"))
+}
+
+// TestAttachLinks_RejectsWhenComponentCapExceeded verifies that an attach
+// against a still-running activity is rejected with FailedPrecondition when the
+// combined existing + incoming link count would exceed the per-component cap.
+func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
+	existingLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "existing", RunId: "run"},
+	}}
+	newLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "new", RunId: "run"},
+	}}
+
+	stored := map[string][]*commonpb.Link{"req-existing": {existingLink}}
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleLinks: func(chasm.Component) []*commonpb.Link {
+				var all []*commonpb.Link
+				for _, ls := range stored {
+					all = append(all, ls...)
+				}
+				return all
+			},
+			HandleRequestLinks: func(_ chasm.Component, reqID string) ([]*commonpb.Link, error) {
+				return stored[reqID], nil
+			},
+		},
+	}
+	// per-component cap = 1; activity already has 1 link, so any additional must fail.
+	validator := newLinkValidator(
+		func(string) int { return 100 },
+		func(string) int { return 1 },
+		func(string) int { return 4000 },
+	)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+	}
+
+	err := activity.attachLinks(ctx, []*commonpb.Link{newLink}, "req-new", validator, "ns")
+	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted
