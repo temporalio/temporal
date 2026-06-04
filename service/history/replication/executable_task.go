@@ -56,6 +56,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		SourceClusterName() string
+		SourceShardKey() ClusterShardKey
 		Ack()
 		Nack(err error)
 		Abort()
@@ -162,6 +163,10 @@ func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 
 func (e *ExecutableTaskImpl) SourceClusterName() string {
 	return e.sourceClusterName
+}
+
+func (e *ExecutableTaskImpl) SourceShardKey() ClusterShardKey {
+	return e.sourceShardKey
 }
 
 func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {

@@ -169,10 +169,13 @@ func NewVisibilityWithData(
 			&commonpb.SearchAttributes{IndexedFields: filteredSA},
 		)
 	}
-	if len(customMemo) != 0 {
+
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+	if len(filteredMemo) != 0 {
 		visibility.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 
@@ -307,7 +310,10 @@ func (v *Visibility) ReplaceCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	if len(customMemo) == 0 {
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+
+	if len(filteredMemo) == 0 {
 		_, ok := v.Memo.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
@@ -318,7 +324,7 @@ func (v *Visibility) ReplaceCustomMemo(
 	} else {
 		v.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 

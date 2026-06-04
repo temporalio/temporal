@@ -19,6 +19,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -829,6 +830,149 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
 	}, 5*time.Second, 200*time.Millisecond)
+}
+
+// TestPauseDuringInFlightWorkflowTask reproduces the race described in
+// https://github.com/temporalio/temporal/issues/10239: if
+// PauseWorkflowExecution arrives while a worker has a workflow task in flight,
+// the worker's RespondWorkflowTaskCompleted can still be accepted after the
+// WORKFLOW_EXECUTION_PAUSED event is appended. A follow-up WORKFLOW_TASK_SCHEDULED
+// is then written and the next workflow task completion resets Status to RUNNING
+// without clearing executionInfo.PauseInfo. The workflow ends up stuck:
+// Status=RUNNING with pauseInfo set, and UnpauseWorkflowExecution rejects with
+// FailedPrecondition because it only inspects Status.
+//
+// The bug is timing-sensitive. It often does not reproduce on a single run.
+// Run with -count=N (e.g. -count=50) to reliably observe failures.
+func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	const (
+		tickActivityName = "pause-race-tick-activity"
+		busyWorkflowName = "pause-race-busy-workflow"
+		iterations       = 200
+	)
+
+	// tickActivity completes immediately so the workflow keeps cycling
+	// through workflow tasks with minimal wall time between them.
+	tickActivity := func(ctx context.Context) error {
+		return nil
+	}
+
+	// busyWorkflow runs a long tight loop of short activities so that workflow
+	// tasks are being scheduled/started/completed continuously. This widens
+	// the chance of a Pause RPC arriving while a WT is in flight on the worker.
+	busyWorkflow := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout:    5 * time.Second,
+			ScheduleToCloseTimeout: 30 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		for range iterations {
+			if err := workflow.ExecuteActivity(ctx, tickActivityName).Get(ctx, nil); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	s.SdkWorker().RegisterWorkflowWithOptions(busyWorkflow, workflow.RegisterOptions{Name: busyWorkflowName})
+	s.SdkWorker().RegisterActivityWithOptions(tickActivity, activity.RegisterOptions{Name: tickActivityName})
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-race-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, busyWorkflowName)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	// Wait until the workflow has progressed a few iterations so workflow
+	// tasks are actively flowing through the worker.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		require.GreaterOrEqual(t, info.GetHistoryLength(), int64(15),
+			"workflow has not started cycling through tasks yet")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Issue the Pause while the worker is still busy. Repeat until either we
+	// observe Status=PAUSED or we hit the desync state (Status=RUNNING with
+	// pauseInfo set). The race window is small, so we don't always hit it on
+	// the first pause/unpause cycle.
+	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	// Eventually the workflow should reach a stable PAUSED state. The bug
+	// manifests as Status=RUNNING with pauseInfo still populated; this assertion
+	// is what fails when the race fires.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus(),
+			"workflow ended up desynced: Status=%s, pauseInfo=%v (issue #10239 race)",
+			info.GetStatus(), desc.GetWorkflowExtendedInfo().GetPauseInfo())
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Verify history contains no WORKFLOW_TASK_SCHEDULED event after
+	// WORKFLOW_EXECUTION_PAUSED — that event (eventId #1963 in the issue
+	// reproduction) is the smoking gun for the race.
+	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	inPaused := false
+	for hist.HasNext() {
+		event, herr := hist.Next()
+		s.NoError(herr)
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED:
+			inPaused = true
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED:
+			inPaused = false
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
+			s.False(inPaused,
+				"WORKFLOW_TASK_SCHEDULED at eventId=%d appended after WORKFLOW_EXECUTION_PAUSED (issue #10239 race)",
+				event.EventId)
+		default:
+		}
+	}
+
+	// Unpause should succeed. When the race fires, Status is RUNNING and the
+	// unpause API rejects with FailedPrecondition: "workflow is not paused".
+	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err, "UnpauseWorkflowExecution failed; workflow is stuck with Status=RUNNING and pauseInfo set (issue #10239 race)")
+	s.NotNil(unpauseResp)
+
+	// Cleanup: terminate so the busy loop doesn't run to completion.
+	_, _ = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Reason: "cleanup after pause race test",
+	})
 }
 
 // hasActivityPauseEntries checks if the TemporalPauseInfo search attribute contains any activity pause entries.

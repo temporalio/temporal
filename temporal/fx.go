@@ -21,8 +21,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -47,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -116,6 +115,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
+		TokenProvider              auth.TokenProvider
 		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
@@ -150,12 +150,6 @@ var (
 		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
-	)
-
-	ChasmLibraryOptions = fx.Options(
-		chasm.Module,
-		chasmscheduler.Module,
-		chasmcallback.Module,
 	)
 )
 
@@ -277,6 +271,17 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
+		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
+	}
+	// TokenCredentials require TLS (RFC 9700); without a remote-cluster TLS source the first
+	// cross-cluster dial would fatal-log, with no clear "you forgot TLS" diagnostic.
+	// Coarse check: any remote-cluster TLS entry passes; per-hostname config is still validated
+	// lazily on first dial.
+	if so.tokenProvider != nil && so.tlsConfigProvider == nil && len(so.config.Global.TLS.RemoteClusters) == 0 {
+		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -301,6 +306,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		Authorizer:                 so.authorizer,
 		ClaimMapper:                so.claimMapper,
 		AudienceGetter:             so.audienceGetter,
+		TokenProvider:              so.tokenProvider,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,
@@ -365,6 +371,7 @@ type (
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper
+		TokenProvider                   auth.TokenProvider
 		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory          visibility.VisibilityStoreFactory
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
@@ -430,6 +437,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() authorization.ClaimMapper {
 				return params.ClaimMapper
 			},
+			func() auth.TokenProvider {
+				return params.TokenProvider
+			},
 			func() encryption.TLSConfigProvider {
 				return params.TlsConfigProvider
 			},
@@ -456,7 +466,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
-		ChasmLibraryOptions,
+		chasm.Module,
 	)
 }
 

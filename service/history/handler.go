@@ -48,12 +48,14 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteexecution"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
@@ -2019,6 +2021,21 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	)
 }
 
+func (h *Handler) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+) (*historyservice.DeleteExecutionResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	h.logger.Info("DeleteExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(request.GetExecution().GetRunId()))
+	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
+}
+
 func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
@@ -2491,7 +2508,7 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := payloads.Encode(r.ValueAsAny())
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")

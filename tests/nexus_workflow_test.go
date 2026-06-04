@@ -2208,11 +2208,30 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 				s.NoError(err)
 				requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 				s.NotNil(requestIDInfos)
-				s.Len(requestIDInfos, 1)
+				cntStarted := 0
+				cntSignaled := 0
 				for _, info := range requestIDInfos {
 					s.False(info.Buffered)
 					s.GreaterOrEqual(info.EventId, common.FirstEventID)
-					s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, info.EventType)
+					switch info.EventType {
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+						cntStarted++
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+						// The Signal event's request ID is attached to the requestIDInfos map for backlinking,
+						// so it should be present here.
+						cntSignaled++
+					default:
+						s.Fail("Unexpected event type in request ID info")
+					}
+				}
+				s.Equal(1, cntStarted)
+
+				// DescribeWorkflowExecution only incorporates signal events if CHASM is enabled since these signal requests
+				// are stored under the Workflow's CHASM component.
+				if chasmEnabled {
+					s.Equal(1, cntSignaled)
+				} else {
+					s.Equal(0, cntSignaled)
 				}
 			},
 		},
@@ -2230,6 +2249,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 				s.NotNil(requestIDInfos)
 				cntStarted := 0
 				cntAttached := 0
+				cntSignaled := 0
 				for _, info := range requestIDInfos {
 					s.False(info.Buffered)
 					s.GreaterOrEqual(info.EventId, common.FirstEventID)
@@ -2238,11 +2258,23 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 						cntStarted++
 					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 						cntAttached++
+					case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+						// The Signal event's request ID is attached to the requestIDInfos map for backlinking,
+						// so it should be present here.
+						cntSignaled++
 					default:
 						s.Fail("Unexpected event type in request ID info")
 					}
 				}
 				s.Equal(1, cntStarted)
+
+				// DescribeWorkflowExecution only incorporates signal events if CHASM is enabled since these signal requests
+				// are stored under the Workflow's CHASM component.
+				if chasmEnabled {
+					s.Equal(1, cntSignaled)
+				} else {
+					s.Equal(0, cntSignaled)
+				}
 				s.Equal(numCalls-1, cntAttached)
 			},
 		},

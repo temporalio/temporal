@@ -44,7 +44,7 @@ const (
 	urlPathWorkflowIDKey          = "workflowID"
 	urlPathRunIDKey               = "runID"
 	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
-	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s"
+	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
 
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
@@ -68,18 +68,15 @@ var (
 
 // ConvertLinkNexusOperationToNexusLink converts a Link_NexusOperation type to Nexus Link.
 func ConvertLinkNexusOperationToNexusLink(no *commonpb.Link_NexusOperation) nexus.Link {
-	query := url.Values{}
-	query.Set(urlPathRunIDKey, no.GetRunId())
-
 	u := &url.URL{
 		Scheme: urlSchemeTemporalKey,
-		Path:   fmt.Sprintf(urlPathNexusOperationTemplate, no.GetNamespace(), no.GetOperationId()),
+		Path:   fmt.Sprintf(urlPathNexusOperationTemplate, no.GetNamespace(), no.GetOperationId(), no.GetRunId()),
 		RawPath: fmt.Sprintf(
 			urlPathNexusOperationTemplate,
 			url.PathEscape(no.GetNamespace()),
 			url.PathEscape(no.GetOperationId()),
+			url.PathEscape(no.GetRunId()),
 		),
-		RawQuery: query.Encode(),
 	}
 
 	return nexus.Link{

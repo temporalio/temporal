@@ -1091,7 +1091,13 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	// UpdateComponent is used twice to update the execution in a way which does not satisfy the
 	// predicate, and a final third time in a way that does satisfy the predicate, causing the
 	// long-poll to return.
+	//
+	// All three UpdateComponent calls result in a workflow execution mutation (UpdateWorkflowExecution
+	// is always called). However, only the third call actually mutates CHASM node data, so
+	// NotifyChasmExecution fires exactly once — for that satisfying update — which is sufficient
+	// to wake the poll.
 	const numUpdatesTotal = 3
+	const numChasmNodeUpdates = 1 // only the satisfying update changes CHASM node bytes
 
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -1146,7 +1152,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		func(key chasm.ExecutionKey, ref []byte) {
 			s.engine.notifier.Notify(key)
 		},
-	).Times(numUpdatesTotal)
+	).Times(numChasmNodeUpdates)
 
 	pollErr := make(chan error)
 	pollResult := make(chan []byte)
@@ -1983,7 +1989,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncode(state)
+	blob, err := serialization.Encode(state, serialization.WithDeterministicProto3)
 	s.NoError(err)
 	return blob
 }

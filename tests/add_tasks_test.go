@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,9 +18,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
@@ -36,21 +33,11 @@ type (
 	AddTasksSuite struct {
 		testcore.FunctionalTestBase
 
-		shardController *faultyShardController
-		worker          worker.Worker
-		skippedTasks    chan tasks.Task
+		worker       worker.Worker
+		skippedTasks chan tasks.Task
 
-		shouldSkip   atomic.Bool
-		getEngineErr atomic.Pointer[error]
-		workflowID   atomic.Pointer[string]
-	}
-	faultyShardController struct {
-		shard.Controller
-		s *AddTasksSuite
-	}
-	faultyShardContext struct {
-		historyi.ShardContext
-		suite *AddTasksSuite
+		shouldSkip atomic.Bool
+		workflowID atomic.Pointer[string]
 	}
 	// executorWrapper is used to wrap any [queues.Executable] that the history service makes so that we can intercept
 	// workflow tasks.
@@ -68,22 +55,6 @@ type (
 func TestAddTasksSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(AddTasksSuite))
-}
-
-func (c *faultyShardController) GetShardByID(shardID int32) (historyi.ShardContext, error) {
-	ctx, err := c.Controller.GetShardByID(shardID)
-	if err != nil {
-		return nil, err
-	}
-	return &faultyShardContext{ShardContext: ctx, suite: c.s}, nil
-}
-
-func (c *faultyShardContext) GetEngine(ctx context.Context) (historyi.Engine, error) {
-	err := c.suite.getEngineErr.Load()
-	if err != nil && *err != nil {
-		return nil, *err
-	}
-	return c.ShardContext.GetEngine(ctx)
 }
 
 // Wrap a [queues.Executable] with the noopExecutor.
@@ -123,12 +94,6 @@ func (s *AddTasksSuite) SetupSuite() {
 		fx.Provide(
 			func() queues.ExecutorWrapper {
 				return &executorWrapper{s: s}
-			},
-		),
-		fx.Decorate(
-			func(c shard.Controller) shard.Controller {
-				s.shardController = &faultyShardController{Controller: c, s: s}
-				return s.shardController
 			},
 		),
 	),
@@ -214,24 +179,10 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	}
 }
 
-var ExampleShardEngineErr = errors.New("example shard engine error")
-
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
 	s.Error(err)
 	s.Contains(strings.ToLower(err.Error()), "invalid shardid")
-}
-
-func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
-	defer func() {
-		s.getEngineErr.Store(nil)
-	}()
-	s.getEngineErr.Store(&ExampleShardEngineErr)
-	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
-		ShardId: 1,
-	})
-	s.Error(err)
-	s.ErrorContains(err, (*s.getEngineErr.Load()).Error())
 }

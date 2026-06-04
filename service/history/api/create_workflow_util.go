@@ -81,6 +81,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetRequestId(),
 			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err

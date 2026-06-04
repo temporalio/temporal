@@ -21,13 +21,16 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -87,7 +90,9 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster      bool
+	dedicatedReason       string
 	dynamicConfigSettings []dynamicConfigOverride
+	clusterOptions        []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -106,6 +111,57 @@ func WithDedicatedCluster() TestOption {
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
+	}
+}
+
+// WithFxOptions appends fx options to a specific service's fx graph. This
+// implies a dedicated cluster because custom fx options cannot be shared
+// across tests.
+func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
+		o.dedicatedReason = "custom fx options used"
+	}
+}
+
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
+func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
+		o.dedicatedReason = "fault injection config used"
+	}
+}
+
+// WithLogger sets a custom logger for the test's cluster, letting a test intercept
+// server log output. This implies a dedicated cluster, since a custom logger cannot
+// be shared across tests.
+func WithLogger(logger log.Logger) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
+		o.dedicatedReason = "custom logger used"
+	}
+}
+
+// WithHistoryShardCount sets the number of history shards for the test's cluster.
+// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
+func WithHistoryShardCount(n int32) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
+		o.dedicatedReason = "custom history shard count used"
 	}
 }
 
@@ -136,6 +192,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		opt(&options)
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
+	if options.dedicatedReason != "" {
+		dedicatedGuard.record(options.dedicatedReason)
+	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
@@ -150,7 +209,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.

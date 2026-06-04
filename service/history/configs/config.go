@@ -19,9 +19,6 @@ type Config struct {
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableNamespaceFairness                     dynamicconfig.BoolPropertyFn
-	NamespaceFairShareMultiplier                dynamicconfig.FloatPropertyFn
-	FrontendGlobalNamespaceRPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -70,8 +67,11 @@ type Config struct {
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -447,9 +447,6 @@ func NewConfig(
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
-		EnableNamespaceFairness:              dynamicconfig.EnableHistoryNamespaceFairness.Get(dc),
-		NamespaceFairShareMultiplier:         dynamicconfig.HistoryNamespaceFairShareMultiplier.Get(dc),
-		FrontendGlobalNamespaceRPS:           dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
@@ -494,14 +491,17 @@ func NewConfig(
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
+		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbacks:    dynamicconfig.EnableCHASMCallbacks.Get(dc),
-		ExternalPayloadsEnabled: dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableCHASMCallbacks:          dynamicconfig.EnableCHASMCallbacks.Get(dc),
+		EnableCHASMSignalBacklinks:    dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		ExternalPayloadsEnabled:       dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableWorkflowUpdateCallbacks: dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB

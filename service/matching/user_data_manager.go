@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -58,6 +59,10 @@ type (
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
 		LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64)
+		// SetPartitionScale is called on the root partition to propagate new scale info to child partitions.
+		SetPartitionScale(*taskqueuespb.PartitionScaleInfo)
+		// PartitionScale returns the current partition scale info from ephemeral data.
+		PartitionScale() *taskqueuespb.PartitionScaleInfo
 	}
 
 	UserDataUpdateOptions struct {
@@ -756,6 +761,23 @@ func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[Ph
 	})
 }
 
+// SetPartitionScale can only be called on a root partition.
+func (m *userDataManagerImpl) SetPartitionScale(scaleInfo *taskqueuespb.PartitionScaleInfo) {
+	if !m.partition.IsRoot() {
+		return
+	}
+	m.updateEphemeralData(func(newData *taskqueuespb.EphemeralData) {
+		newData.Scale = scaleInfo
+	})
+}
+
+// PartitionScale gets the current partition scale state.
+func (m *userDataManagerImpl) PartitionScale() *taskqueuespb.PartitionScaleInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	return m.mergedEphemeralData.GetData().GetScale()
+}
+
 func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
 	if m.partition.IsRoot() {
 		// Root activity/nexus partition should not get ephemeral data from its fetch source
@@ -817,6 +839,11 @@ func (m *userDataManagerImpl) mergeEphemeralDataLocked() {
 			Partition: slices.Concat(
 				m.incomingEphemeralData.GetData().GetPartition(),
 				m.myEphemeralData.GetData().GetPartition(),
+			),
+			// scale info always comes from the root, so only one of these should be non-nil
+			Scale: cmp.Or(
+				m.incomingEphemeralData.GetData().GetScale(),
+				m.myEphemeralData.GetData().GetScale(),
 			),
 		},
 		Version: time.Now().UnixNano(),
