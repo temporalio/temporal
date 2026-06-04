@@ -167,16 +167,9 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueUserDataSuite() {
 
 func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption()),
-	}
-	suite.Run(p.T(), s)
-}
-
-// TestPostgreSQLVisibilityPersistenceSuitePGXSP exercises the visibility
-// persistence suite against the pgx plugin in simple-protocol mode
-func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuitePGXSP() {
-	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLPGXSPTestClusterOption()),
+		TestBase: persistencetests.NewTestBaseWithSQL(
+			persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+		),
 	}
 	suite.Run(p.T(), s)
 }
@@ -185,28 +178,36 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuitePGXSP() {
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMetadataPersistenceSuiteV2() {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLClusterMetadataPersistence() {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
 	s := new(persistencetests.QueuePersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
 	s.TestBase.Setup(nil)
 	suite.Run(p.T(), s)
 }

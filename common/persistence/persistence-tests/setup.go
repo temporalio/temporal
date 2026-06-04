@@ -37,10 +37,8 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 		switch driver {
 		case mysql.PluginName:
 			return GetMySQLTestClusterOption()
-		case postgresql.PluginName:
-			return GetPostgreSQLTestClusterOption()
-		case postgresql.PluginNamePGX:
-			return GetPostgreSQLPGXTestClusterOption()
+		case postgresql.PluginName, postgresql.PluginNamePGX:
+			return GetPostgreSQLTestClusterOption(driver, nil)
 		case sqlite.PluginName:
 			return GetSQLiteMemoryTestClusterOption()
 		default:
@@ -79,39 +77,23 @@ func GetMySQLTestClusterOption() *TestBaseOptions {
 }
 
 // GetPostgreSQLTestClusterOption return test options
-func GetPostgreSQLTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginName,
-		DBName:          "test_" + GenerateRandomDBName(3),
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
+func GetPostgreSQLTestClusterOption(
+	pluginName string,
+	connectAttributes map[string]string,
+) *TestBaseOptions {
+	switch pluginName {
+	case postgresql.PluginName, postgresql.PluginNamePGX:
+		// no-op
+	default:
+		panic(fmt.Sprintf(
+			"invalid postgresql plugin name: %s (valid options: %s, %s)",
+			pluginName,
+			postgresql.PluginName,
+			postgresql.PluginNamePGX,
+		))
 	}
-}
-
-// GetPostgreSQLPGXTestClusterOption return test options
-func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNamePGX,
-		DBName:          "test_" + GenerateRandomDBName(3),
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
-
-// GetPostgreSQLPGXSPTestClusterOption return test options for the pgx plugin in
-// simple-protocol mode, the configuration users land on when fronting Postgres
-// with PgBouncer in transaction pooling
-func GetPostgreSQLPGXSPTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName:   postgresql.PluginNamePGX,
+		SQLDBPluginName:   pluginName,
 		DBName:            "test_" + GenerateRandomDBName(3),
 		DBUsername:        testPostgreSQLUser,
 		DBPassword:        testPostgreSQLPassword,
@@ -119,7 +101,7 @@ func GetPostgreSQLPGXSPTestClusterOption() *TestBaseOptions {
 		DBPort:            environment.GetPostgreSQLPort(),
 		SchemaDir:         testPostgreSQLSchemaDir,
 		StoreType:         config.StoreTypeSQL,
-		ConnectAttributes: map[string]string{"default_query_exec_mode": "simple_protocol"},
+		ConnectAttributes: connectAttributes,
 	}
 }
 
