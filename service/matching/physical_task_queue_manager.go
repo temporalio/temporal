@@ -352,10 +352,9 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return err
 }
 
-// LoadedMetadata is called by backlog manager after it's loaded metadata from the
-// default queue. (New matcher only.)
-func (c *physicalTaskQueueManagerImpl) LoadedMetadata(scaleState *persistencespb.PartitionScaleState) {
-	c.partitionMgr.LoadedMetadata(scaleState)
+// StartScaleManager is called by backlog manager after it's loaded metadata from the default queue. (New matcher only.)
+func (c *physicalTaskQueueManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
+	c.partitionMgr.StartScaleManager(scaleState)
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateScaleState(scaleState *persistencespb.PartitionScaleState, syncToDB bool) error {

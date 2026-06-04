@@ -343,10 +343,10 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.goroGroup.Cancel()
 }
 
-func (pm *taskQueuePartitionManagerImpl) LoadedMetadata(scaleState *persistencespb.PartitionScaleState) {
+func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
 	// Note that this must be called before defaultQueue is marked initialized!
 	// Otherwise child partitions will see empty scale info in their first ephemeral data update.
-	pm.scaleManager.LoadedMetadata(scaleState, pm.defaultQueue())
+	pm.scaleManager.Start(scaleState, pm.defaultQueue())
 }
 
 func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite bool) error {
@@ -443,7 +443,7 @@ func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler() {
 	// we assume that tasks are balanced uniformly across partitions, so if the root has
 	// seen 1 task then all have seen ~1 task, so the whole queue has seen 'effective'
 	// tasks in total.
-	// TODO: this will change when we add non-uniform load balancing. we should eventually
+	// TODO(dp): this will change when we add non-uniform load balancing. we should eventually
 	// aggregate real stats instead of assuming
 	pm.scaleManager.AddedTasks(effectiveWrite)
 }
@@ -457,7 +457,7 @@ func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.C
 		Write: scaleInfo.GetWrite(),
 	}.SetTrailer(ctx)
 	if err != nil {
-		// TODO: this is very noisy in unit tests, figure out how to log it only in non-test
+		// TODO(dp): this is very noisy in unit tests, figure out how to log it only in non-test
 		pm.throttledLogger.Debug("error setting partition count trailer", tag.Error(err))
 	}
 }
@@ -994,8 +994,9 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	// query counts as "write" for partition load balancing
+	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
 	defer pm.sendPartitionCountTrailer(ctx)
+	// query counts as "write" for partition load balancing
 	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return nil, err
 	}
@@ -1045,8 +1046,9 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	// nexus counts as "write" for partition load balancing
+	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
 	defer pm.sendPartitionCountTrailer(ctx)
+	// nexus counts as "write" for partition load balancing
 	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return nil, err
 	}
@@ -1841,7 +1843,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 }
 
 // ForceLoadAllChildPartitions force-loads known child (read) partitions in new goroutines.
-// TODO: consider moving this into scaleManager.backgroundWork after auto-scaling is enabled everywhere.
+// TODO(dp): consider moving this into scaleManager.backgroundWork after auto-scaling is enabled everywhere.
 func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 	if !pm.partition.IsRoot() {
 		return

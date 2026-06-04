@@ -91,7 +91,7 @@ func (s *ScaleManagerSuite) startManager(writePartitions int, initial *persisten
 		dynamicconfig.GetIntPropertyFn(writePartitions),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
-	s.sm.LoadedMetadata(initial, s.scaleDB)
+	s.sm.Start(initial, s.scaleDB)
 }
 
 // fireBackgroundTimer waits for the worker to register its periodic timer and
@@ -232,7 +232,7 @@ func (s *ScaleManagerSuite) TestNoChangeDecisionSkipsWrite() {
 
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 3})
 
-	// LoadedMetadata pushes ephemeral data once (Read/Write change 0 → 3).
+	// Start pushes ephemeral data once (Read/Write change 0 → 3).
 	await.RequireTrue(s.T(), func() bool { return scalePushes.Load() >= 1 },
 		time.Second, time.Millisecond)
 	baseline := scalePushes.Load()
@@ -374,8 +374,7 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 		}).
 		Return(nil)
 
-	// One ephemeral push from LoadedMetadata (0 → Read=4/Write=2), one from
-	// the drain (Read drops to 2).
+	// One ephemeral push from Start (0 → Read=4/Write=2), one from the drain (Read drops to 2).
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	s.startManager(4, initial)
@@ -421,7 +420,7 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
-	// Only the LoadedMetadata push (0 → Read=4/Write=2) is expected.
+	// Only the push on Start (0 → Read=4/Write=2) is expected.
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
 
 	var dbWrites atomic.Int32

@@ -142,7 +142,7 @@ type PartitionScaleManagerSettings struct {
 	// DrainBufferTime is how long to wait until after scaling down before we can consider
 	// draining queues. It's needed because there's a tiny window where tasks may be written
 	// after a scale down, since draining state is only checked at the start of an RPC. This
-	// should be set to the maximum time of an AddTask call. Note that query/nexus tasks will
-	// be processed without interruption even after scale down.
+	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
+	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
 }

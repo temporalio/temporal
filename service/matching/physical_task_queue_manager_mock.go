@@ -214,18 +214,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(incl
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus)
 }
 
-// LoadedMetadata mocks base method.
-func (m *MockphysicalTaskQueueManager) LoadedMetadata(arg0 *persistence.PartitionScaleState) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "LoadedMetadata", arg0)
-}
-
-// LoadedMetadata indicates an expected call of LoadedMetadata.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) LoadedMetadata(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadedMetadata", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).LoadedMetadata), arg0)
-}
-
 // MakePollerScalingDecision mocks base method.
 func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueue.PollerScalingDecision {
 	m.ctrl.T.Helper()
@@ -367,6 +355,18 @@ func (m *MockphysicalTaskQueueManager) Start() {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Start))
+}
+
+// StartScaleManager mocks base method.
+func (m *MockphysicalTaskQueueManager) StartScaleManager(arg0 *persistence.PartitionScaleState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartScaleManager", arg0)
+}
+
+// StartScaleManager indicates an expected call of StartScaleManager.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) StartScaleManager(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartScaleManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).StartScaleManager), arg0)
 }
 
 // Stop mocks base method.
