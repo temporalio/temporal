@@ -148,6 +148,12 @@ type (
 		newTasks           map[any][]taskWithAttributes // component value -> task & attributes
 		immediatePureTasks map[any][]taskWithAttributes // similar to newTasks, but will be executed at the end of the transaction
 
+		// mapStructuralChanges holds component nodes whose chasm.Map children changed
+		// this transaction. hasNewTransactionSideEffects returns true for these nodes
+		// so the component is always written when its map structure changes, even if
+		// its own Data bytes are unchanged.
+		mapStructuralChanges map[*Node]struct{}
+
 		// Node value -> node
 		// Only component and data node values are tracked right now
 		valueToNode map[any]*Node
@@ -330,6 +336,7 @@ func newTreeHelper(
 		},
 		newTasks:               make(map[any][]taskWithAttributes),
 		immediatePureTasks:     make(map[any][]taskWithAttributes),
+		mapStructuralChanges:   make(map[*Node]struct{}),
 		valueToNode:            make(map[any]*Node),
 		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
 		needsPointerResolution: false,
@@ -785,9 +792,10 @@ func (n *Node) setSerializedNode(
 
 // hasNewTransactionSideEffects returns true when the transaction has observable
 // effects that must be persisted regardless of whether data bytes changed:
-// new tasks scheduled on this node, or lifecycle termination.
+// new tasks scheduled on this node, lifecycle termination, or Map children added/removed.
 func (n *Node) hasNewTransactionSideEffects() bool {
-	return len(n.newTasks[n.value]) > 0 || n.terminated
+	_, mapChanged := n.nodeBase.mapStructuralChanges[n]
+	return len(n.newTasks[n.value]) > 0 || n.terminated || mapChanged
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -961,6 +969,12 @@ func (n *Node) syncSubComponents() error {
 					fmt.Errorf("node %s got %s", n.nodeName, mapValT))
 			}
 
+			// Snapshot child keys before processing so we can detect structural changes.
+			prevChildKeys := make(map[string]struct{}, len(collectionNode.children))
+			for k := range collectionNode.children {
+				prevChildKeys[k] = struct{}{}
+			}
+
 			collectionItemsToKeep := make(map[string]struct{})
 			for _, mapKeyV := range field.val.MapKeys() {
 				mapItemV := field.val.MapIndex(mapKeyV)
@@ -983,7 +997,11 @@ func (n *Node) syncSubComponents() error {
 			if err := collectionNode.deleteChildren(collectionItemsToKeep); err != nil {
 				return err
 			}
-			collectionNode.setValueState(min(valueStateNeedSerialize, collectionNode.valueState))
+
+			if !maps.Equal(prevChildKeys, collectionItemsToKeep) {
+				n.nodeBase.mapStructuralChanges[n] = struct{}{}
+			}
+			collectionNode.setValueState(valueStateNeedSerialize)
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
@@ -1762,7 +1780,9 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+		// Collection/map nodes are excluded: they carry no Data, so bytes.Equal(nil, nil)
+		// would always be true and the skip would incorrectly suppress their write.
+		skipIfClean := (node.isComponent() || node.isData()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
@@ -2252,6 +2272,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+	n.mapStructuralChanges = make(map[*Node]struct{})
 	if len(n.immediatePureTasks) != 0 {
 		// n.immediatePureTasks should already be empty after executeImmediatePureTasks()
 		// unless there's an error.
@@ -2513,14 +2534,12 @@ func (n *Node) applyUpdates(
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
 			node.serializedNode = updatedNode
-
-			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
-			// Parent node is pointing to the Node struct.
 		}
 	}
 
 	return nil
 }
+
 
 func (n *Node) RefreshTasks() error {
 	for _, node := range n.andAllChildren() {

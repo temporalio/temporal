@@ -409,7 +409,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
 			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
-			s.Empty(mutation.UpdatedNodes)
+			s.Contains(mutation.UpdatedNodes, "", "root component must be in UpdatedNodes when map children change")
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 

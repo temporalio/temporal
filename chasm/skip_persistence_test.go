@@ -152,3 +152,42 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	componentAttr := secondMutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(componentAttr.SideEffectTasks, 1, "side-effect task must be written to the persisted node")
 }
+
+// TestSkipPersistenceIfClean_ParentWrittenWhenMapChildrenChange verifies that a parent
+// component is included in UpdatedChasmNodes when its Map children change, even if
+// the component's own Data bytes are unchanged.
+func (s *nodeSuite) TestSkipPersistenceIfClean_ParentWrittenWhenMapChildrenChange() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	// First transaction: create root with one map entry.
+	activeNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	root := s.minimalTestComponent()
+	ctx1 := NewMutableContext(context.Background(), activeNode)
+	root.SubComponents = Map[string, *TestSubComponent1]{
+		"first": NewComponentField[*TestSubComponent1](ctx1, &TestSubComponent1{
+			SubComponent1Data: &persistencespb.WorkflowExecutionState{RunId: "sub-first"},
+		}),
+	}
+	s.NoError(activeNode.SetRootComponent(root))
+	firstMutation, err := activeNode.CloseTransaction()
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
+
+	// Second transaction: add a new entry. The parent component's Data bytes are
+	// unchanged, but mapStructuralChanges must force it into UpdatedChasmNodes.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	activeNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	s.NoError(err)
+	ctx2 := NewMutableContext(context.Background(), activeNode2)
+	rootComp2, err := activeNode2.Component(ctx2, ComponentRef{})
+	s.NoError(err)
+	rootComp2.(*TestComponent).SubComponents["second"] = NewComponentField[*TestSubComponent1](ctx2, &TestSubComponent1{
+		SubComponent1Data: &persistencespb.WorkflowExecutionState{RunId: "sub-second"},
+	})
+	secondMutation, err := activeNode2.CloseTransaction()
+	s.NoError(err)
+
+	s.Contains(secondMutation.UpdatedNodes, "",
+		"parent component must be in UpdatedChasmNodes when Map children change")
+}
