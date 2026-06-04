@@ -696,6 +696,7 @@ message CountWorkersRequest {
 }
 
 message CountWorkersResponse {
+    // Number of workers matching the query.
     int64 count = 1;
 }
 
