@@ -58,22 +58,4 @@ type (
 		// ProcessTaskAdd is called for each Task addition (whether sync or async matching)
 		ProcessTaskAdd(ctx context.Context, event *TaskAddHookDetails)
 	}
-
-	QueryTaskHookDetails struct {
-		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
-	}
-
-	QueryHookFactory interface {
-		// CreateQueryHook returns a QueryHook instance for the given task queue partition.
-		// May return nil if no hooking is desired for that partition.
-		CreateQueryHook(details *TaskHookFactoryCreateDetails) QueryHook
-	}
-	QueryHook interface {
-		// Start is called when the task queue partition manager for the hooks partition is started
-		Start()
-		// Stop is called when the task queue partition manager for the hooks partition is stopped
-		Stop()
-		// ProcessQueryTask is called when a query task is dispatched to a task queue partition
-		ProcessQueryTask(ctx context.Context, event *QueryTaskHookDetails)
-	}
 )

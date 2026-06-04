@@ -201,8 +201,7 @@ type (
 		// Rate limiter to limit the task dispatch
 		rateLimiter TaskDispatchRateLimiter
 
-		taskHookFactories  []hooks.TaskHookFactory
-		queryHookFactories []hooks.QueryHookFactory
+		taskHookFactories []hooks.TaskHookFactory
 	}
 )
 
@@ -283,7 +282,6 @@ func NewEngine(
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
-	queryHookFactories []hooks.QueryHookFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -328,7 +326,6 @@ func NewEngine(
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
-		queryHookFactories:        queryHookFactories,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(

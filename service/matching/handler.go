@@ -73,8 +73,7 @@ type (
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
-		TaskHookFactories             []hooks.TaskHookFactory  `group:"TaskHookFactories"`
-		QueryHookFactories            []hooks.QueryHookFactory `group:"QueryHookFactories"`
+		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
 	}
 )
 
@@ -118,7 +117,6 @@ func NewHandler(
 			params.RateLimiter,
 			params.Serializer,
 			params.TaskHookFactories,
-			params.QueryHookFactories,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,

@@ -85,8 +85,7 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		taskHooks  []hooks.TaskHook
-		queryHooks []hooks.QueryHook
+		taskHooks []hooks.TaskHook
 
 		goroGroup goro.Group
 
@@ -145,17 +144,6 @@ func newTaskQueuePartitionManager(
 		}
 	}
 
-	var queryHooks []hooks.QueryHook
-	for _, hookFactory := range e.queryHookFactories {
-		queryHook := hookFactory.CreateQueryHook(&hooks.TaskHookFactoryCreateDetails{
-			Namespace: ns,
-			Partition: partition,
-		})
-		if queryHook != nil {
-			queryHooks = append(queryHooks, queryHook)
-		}
-	}
-
 	pm := &taskQueuePartitionManagerImpl{
 		engine:                e,
 		partition:             partition,
@@ -171,7 +159,6 @@ func newTaskQueuePartitionManager(
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
 		taskHooks:             taskHooks,
-		queryHooks:            queryHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -279,9 +266,6 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	for _, hook := range pm.taskHooks {
 		hook.Start()
 	}
-	for _, hook := range pm.queryHooks {
-		hook.Start()
-	}
 
 	//nolint:errcheck
 	go pm.initialize()
@@ -315,9 +299,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Unlock()
 
 	for _, hook := range pm.taskHooks {
-		hook.Stop()
-	}
-	for _, hook := range pm.queryHooks {
 		hook.Stop()
 	}
 
@@ -639,14 +620,6 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
 			IsSyncMatch:       hookOutcome == hooks.SyncMatchOutcomeSuccess,
 			SyncMatchOutcome:  hookOutcome,
-		})
-	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) processQueryHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion) {
-	for _, h := range pm.queryHooks {
-		h.ProcessQueryTask(ctx, &hooks.QueryTaskHookDetails{
-			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
 		})
 	}
 }
@@ -988,9 +961,12 @@ reredirectTask:
 		return nil, err
 	}
 
-	// Fire query hooks before dispatch so scale-up signals are sent immediately,
-	// rather than after the query blocks and potentially times out waiting for a poller.
-	pm.processQueryHooks(ctx, targetVersion)
+	// If no pollers have been seen recently and this is not a forwarded query, fire the
+	// task hook so WCI can scale up before we block waiting for a poller.
+	if request.ForwardInfo == nil &&
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.QueryPollerUnavailableWindow())) {
+		pm.processTaskAddHooks(ctx, targetVersion, syncMatchNoPoller)
+	}
 
 	dbq := pm.defaultQueue()
 	if dbq == nil {
