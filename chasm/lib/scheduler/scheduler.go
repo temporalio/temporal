@@ -465,60 +465,64 @@ func (s *Scheduler) updateConflictToken() {
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
-	invoker := s.Invoker.Get(ctx)
-	recentActions := invoker.recentActions()
-
 	latest := util.MaxTime(
 		s.Info.GetCreateTime().AsTime(),
 		s.Info.GetUpdateTime().AsTime(),
 	)
-	if len(recentActions) > 0 {
-		latest = util.MaxTime(latest, recentActions[len(recentActions)-1].GetActualTime().AsTime())
+
+	// The recentActions list is unsorted.
+	for _, a := range s.Invoker.Get(ctx).recentActions() {
+		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
 	}
+
 	return latest
 }
 
-// getIdleExpiration returns an idle close time and the boolean value of 'true'
-// for when a schedule is idle (pending soft delete).
+// isHeldOpen reports whether the schedule must stay open regardless of having
+// no current work:
+// - Paused: customer expects to resume.
+// - Pending backfill: must drain (any pending backfill blocks idle).
+// - Sentinels are exempt .
+//
+// Manual-only schedules (empty spec, but active) idle out like any other -
+// matching V1's RetentionTime semantics, where lastEventTime is advanced by
+// manual triggers via recentActions.
+func (s *Scheduler) isHeldOpen() bool {
+	if s.IsSentinel() {
+		return false
+	}
+	return s.Schedule.GetState().GetPaused() ||
+		s.hasMoreBackfills()
+}
+
+// idleDeadline returns when the schedule becomes eligible to close. Sentinels
+// anchor on CreateTime - they have no Invoker (and thus no recentActions).
+func (s *Scheduler) idleDeadline(ctx chasm.Context, idleTime time.Duration) time.Time {
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime)
+	}
+	return s.getLastEventTime(ctx).Add(idleTime)
+}
+
+// getIdleExpiration returns an idle close time and whether the schedule is
+// idle. Generator-only: nextWakeup must reflect the spec's next pending wakeup
+// so the predicate can skip arming idle when work remains. Validate calls
+// isHeldOpen and idleDeadline directly.
 func (s *Scheduler) getIdleExpiration(
 	ctx chasm.Context,
 	idleTime time.Duration,
 	nextWakeup time.Time,
 ) (time.Time, bool) {
-	// The idle timer to close off the component is started only for schedules with
-	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.GetSchedule().GetState().GetPaused() ||
-		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
-		s.hasMoreAllowAllBackfills(ctx) {
+		s.isHeldOpen() ||
+		(!nextWakeup.IsZero() && s.useScheduledAction(false)) {
 		return time.Time{}, false
 	}
-
-	if s.IsSentinel() {
-		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
-	}
-	return s.getLastEventTime(ctx).Add(idleTime), true
+	return s.idleDeadline(ctx, idleTime), true
 }
 
-func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
-	for _, field := range s.Backfillers {
-		backfiller := field.Get(ctx)
-		var policy enumspb.ScheduleOverlapPolicy
-		switch request := backfiller.GetRequest().(type) {
-		case *schedulerpb.BackfillerState_BackfillRequest:
-			policy = request.BackfillRequest.OverlapPolicy
-		case *schedulerpb.BackfillerState_TriggerRequest:
-			policy = request.TriggerRequest.OverlapPolicy
-		default:
-			return false
-		}
-
-		if enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL == s.resolveOverlapPolicy(policy) {
-			return true
-		}
-	}
-
-	return false
+func (s *Scheduler) hasMoreBackfills() bool {
+	return len(s.Backfillers) > 0
 }
 
 type schedulerActionResult struct {
@@ -841,8 +845,7 @@ func (s *Scheduler) Update(
 	s.updateConflictToken()
 
 	// Since the spec may have been updated, kick off the generator.
-	generator := s.Generator.Get(ctx)
-	generator.Generate(ctx)
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return &schedulerpb.UpdateScheduleResponse{
 		FrontendResponse: &workflowservice.UpdateScheduleResponse{},
@@ -873,7 +876,6 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
-		s.Generator.Get(ctx).Generate(ctx)
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
@@ -882,6 +884,9 @@ func (s *Scheduler) Patch(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+
+	// Since the paused state may have been updated, kick off the generator.
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return &schedulerpb.PatchScheduleResponse{
 		FrontendResponse: &workflowservice.PatchScheduleResponse{},
