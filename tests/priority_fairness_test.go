@@ -412,9 +412,6 @@ func wrongorderness(vs []int) float64 {
 	return float64(wrong) / float64(l*(l-1)/2)
 }
 
-// fairnessPartitions is the number of read/write partitions used by FairnessSuite.
-const fairnessPartitions = 1
-
 type FairnessSuite struct {
 	parallelsuite.Suite[*FairnessSuite]
 }
@@ -427,14 +424,19 @@ func TestFairnessAutoEnableSuite(t *testing.T) {
 	parallelsuite.Run(t, &FairnessSuite{}, true)
 }
 
+// fairnessPartitions is the number of read/write partitions used by FairnessSuite.
+func (s *FairnessSuite) fairnessPartitions() int {
+	return 1
+}
+
 func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksBatchSize, 20),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksReloadAt, 5),
 		testcore.WithDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, 1000),
 		// TODO: disable this and use default later?
-		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, fairnessPartitions),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, fairnessPartitions),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.fairnessPartitions()),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.fairnessPartitions()),
 	}
 	if doAutoEnable {
 		baseOpts = append(baseOpts,
@@ -793,7 +795,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 func (s *FairnessSuite) countTasksByDrainingActive(env *testcore.TestEnv, tp enumspb.TaskQueueType) ( //nolint:revive // function-result-limit
 	tasksOnDraining, tasksOnActive, loadedOnDraining, loadedOnActive int64, hasDraining bool, retErr error,
 ) {
-	for i := range fairnessPartitions {
+	for i := range s.fairnessPartitions() {
 		res, err := env.AdminClient().DescribeTaskQueuePartition(s.Context(), &adminservice.DescribeTaskQueuePartitionRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
