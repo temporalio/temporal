@@ -1039,6 +1039,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		10,
 		`Maximum number of links allowed to be attached via a single API request.`,
 	)
+	MaxLinksPerComponent = NewNamespaceIntSetting(
+		"chasm.maxLinksPerComponent",
+		2000,
+		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
