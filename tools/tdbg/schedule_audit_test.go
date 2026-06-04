@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -29,6 +30,7 @@ func TestAuditInputs_Validate(t *testing.T) {
 			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
 			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
 			OutputDir:   "/tmp/out",
+			Format:      formatJSONL,
 		}
 	}
 
@@ -1142,6 +1144,99 @@ func TestWriter_Stdout_FlatCSV(t *testing.T) {
 		require.Contains(t, realMissTimes, "2026-05-19T00:19:00Z", "20th time present")
 		require.NotContains(t, realMissTimes, "2026-05-19T00:20:00Z", "21st time elided")
 		require.Contains(t, realMissTimes, "...+5 more")
+	})
+}
+
+func TestWriter_Stdout_FlatJSONL(t *testing.T) {
+	t.Run("emits one JSON object per line, no header, with structured real_miss_times", func(t *testing.T) {
+		missTime := mustParseTime("2026-05-19T19:00:00Z")
+		skipTime := mustParseTime("2026-05-19T20:00:00Z")
+		results := []scheduleResult{{
+			Namespace: "ns1", ScheduleID: "s1", WorkflowType: "Foo,Bar",
+			CatchupWindowSeconds: 600,
+			Expected:             5, Actual: 4, Matched: 3,
+			Missed: []time.Time{missTime, skipTime},
+			Categories: map[time.Time]string{
+				missTime: categoryRealMiss,
+				skipTime: categorySkipOverlap,
+			},
+			Counts: map[string]int{
+				categoryRealMiss:    1,
+				categorySkipOverlap: 1,
+			},
+		}}
+		var buf bytes.Buffer
+		require.NoError(t, writeFlatJSONL(&buf, results))
+		lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+		require.Len(t, lines, 1)
+		var row flatJSONLRow
+		require.NoError(t, json.Unmarshal([]byte(lines[0]), &row))
+		require.Equal(t, flatJSONLRow{
+			Namespace: "ns1", ScheduleID: "s1", WorkflowType: "Foo,Bar", // comma preserved (no CSV escaping needed)
+			Expected: 5, Actual: 4, Matched: 3, Missed: 2,
+			RealMiss: 1, SkipOverlap: 1, InconclusiveScheduleChanged: 0,
+			CatchupWindowSeconds: 600,
+			RealMissTimes:        []string{"2026-05-19T19:00:00Z"},
+		}, row)
+	})
+
+	t.Run("skips results with no missed fires", func(t *testing.T) {
+		results := []scheduleResult{{
+			Namespace: "ns1", ScheduleID: "perfect", WorkflowType: "W",
+			Expected: 5, Actual: 5, Matched: 5, Missed: nil,
+		}}
+		var buf bytes.Buffer
+		require.NoError(t, writeFlatJSONL(&buf, results))
+		require.Empty(t, buf.String(), "no output for results with no misses (no header in JSONL)")
+	})
+
+	t.Run("truncates real_miss_times beyond 20 (no '...+N more' suffix in array form)", func(t *testing.T) {
+		base := mustParseTime("2026-05-19T00:00:00Z")
+		var missed []time.Time
+		categories := map[time.Time]string{}
+		for i := range 25 {
+			tm := base.Add(time.Duration(i) * time.Minute)
+			missed = append(missed, tm)
+			categories[tm] = categoryRealMiss
+		}
+		results := []scheduleResult{{
+			Namespace: "ns1", ScheduleID: "s1", WorkflowType: "W",
+			Expected: 25, Missed: missed, Categories: categories,
+			Counts: map[string]int{categoryRealMiss: 25},
+		}}
+		var buf bytes.Buffer
+		require.NoError(t, writeFlatJSONL(&buf, results))
+		var row flatJSONLRow
+		require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &row))
+		require.Len(t, row.RealMissTimes, 20, "truncated to 20")
+		require.Equal(t, "2026-05-19T00:00:00Z", row.RealMissTimes[0])
+		require.Equal(t, "2026-05-19T00:19:00Z", row.RealMissTimes[19])
+	})
+}
+
+func TestAuditInputs_Validate_Format(t *testing.T) {
+	base := func() *auditInputs {
+		return &auditInputs{
+			Targets:     []auditTarget{{Namespace: "ns"}},
+			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
+			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
+			Format:      formatJSONL,
+		}
+	}
+	t.Run("jsonl accepted", func(t *testing.T) {
+		in := base()
+		in.Format = formatJSONL
+		require.NoError(t, in.validate())
+	})
+	t.Run("csv accepted", func(t *testing.T) {
+		in := base()
+		in.Format = formatCSV
+		require.NoError(t, in.validate())
+	})
+	t.Run("unknown format rejected", func(t *testing.T) {
+		in := base()
+		in.Format = "yaml"
+		require.ErrorContains(t, in.validate(), `--format "yaml"`)
 	})
 }
 

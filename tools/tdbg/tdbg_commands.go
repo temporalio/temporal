@@ -327,14 +327,15 @@ produced in the audit window, and classifies each fire against actual workflow e
 Designed to answer: did the scheduler fire when it should have, during a specific time range?
 
 OUTPUT FORMAT
-  With --output-dir set, two file types are written:
-    summary.csv                  one row per flagged namespace (aggregated counts)
-    per-namespace/<ns>.csv       one row per flagged schedule
+  --format jsonl (default) emits one JSON object per line; --format csv emits CSV.
 
-  Without --output-dir, a single CSV stream of every flagged row across all namespaces is written to stdout, with one
-  header and no summary file. The same per-schedule columns are used.
+  With --output-dir set, two file types are written (extension follows --format):
+    summary.<ext>                  one row per flagged namespace (aggregated counts)
+    per-namespace/<ns>.<ext>       one row per flagged schedule
 
-  Per-schedule columns (identical in both modes, in order):
+  Without --output-dir, every flagged row across all namespaces is streamed to stdout (no summary).
+
+  Per-schedule fields (identical across both formats; CSV uses these as column headers, JSONL as object keys):
     namespace                      namespace the schedule lives in
     schedule_id                    schedule's ID
     workflow_type                  workflow type the schedule's action starts
@@ -436,13 +437,18 @@ EXAMPLES
 				&cli.StringFlag{
 					Name:    FlagOutputDir,
 					Aliases: FlagOutputDirAlias,
-					Usage: "Directory to write summary.csv + per-namespace/<ns>.csv (will be created if missing). " +
-						"If unset, writes one CSV stream (all rows from all namespaces, single header) to stdout instead.",
+					Usage: "Directory to write summary + per-namespace/<ns> files (will be created if missing). " +
+						"File extension follows --format. If unset, streams all rows to stdout instead.",
 				},
 				&cli.IntFlag{
 					Name:  FlagNamespaceConcurrency,
 					Usage: "How many namespaces to audit in parallel.",
 					Value: 8,
+				},
+				&cli.StringFlag{
+					Name:  FlagFormat,
+					Usage: "Output format: jsonl (one object per line, jq-friendly) or csv.",
+					Value: "jsonl",
 				},
 			},
 			Action: func(c *cli.Context) error {

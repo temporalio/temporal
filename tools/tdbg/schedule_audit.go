@@ -103,7 +103,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	_, _ = fmt.Fprintf(os.Stderr, "audit complete: %d total flagged across %d target(s) in %s\n",
 		len(allResults), total, time.Since(auditStart).Round(time.Second))
 	if in.OutputDir == "" {
-		// Stdout mode: one CSV stream, all rows, single header, no summary file.
+		// Stdout mode: stream all rows, no summary file.
 		// Sort across namespaces (per-namespace.run() only sorts within its own batch).
 		sort.Slice(allResults, func(i, j int) bool {
 			if allResults[i].Namespace != allResults[j].Namespace {
@@ -111,9 +111,9 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 			}
 			return allResults[i].ScheduleID < allResults[j].ScheduleID
 		})
-		return writeFlatCSV(os.Stdout, allResults)
+		return writeFlat(os.Stdout, allResults, in.Format)
 	}
-	return writeOutput(in.OutputDir, allResults)
+	return writeOutput(in.OutputDir, allResults, in.Format)
 }
 
 type auditTarget struct {
@@ -127,15 +127,20 @@ type auditInputs struct {
 	WindowEnd            time.Time
 	OutputDir            string
 	NamespaceConcurrency int
+	Format               string
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	in := &auditInputs{
 		OutputDir:            c.String(FlagOutputDir),
 		NamespaceConcurrency: c.Int(FlagNamespaceConcurrency),
+		Format:               strings.ToLower(strings.TrimSpace(c.String(FlagFormat))),
 	}
 	if in.NamespaceConcurrency <= 0 {
 		in.NamespaceConcurrency = 1
+	}
+	if in.Format == "" {
+		in.Format = formatJSONL
 	}
 
 	targets, err := resolveTargetsFromFlags(c.String(FlagNamespace), c.String(FlagScheduleID), c.String(FlagFile), os.Stdin)
@@ -165,6 +170,11 @@ func (in *auditInputs) validate() error {
 		return fmt.Errorf("--end (%s) must be after --start (%s)",
 			in.WindowEnd.UTC().Format(time.RFC3339),
 			in.WindowStart.UTC().Format(time.RFC3339))
+	}
+	switch in.Format {
+	case formatJSONL, formatCSV:
+	default:
+		return fmt.Errorf("--format %q: must be %q or %q", in.Format, formatJSONL, formatCSV)
 	}
 	return nil
 }
@@ -1028,6 +1038,96 @@ func decodeNominalStartTime(payload *commonpb.Payload) (time.Time, bool) {
 	return t, true
 }
 
+const (
+	formatJSONL = "jsonl"
+	formatCSV   = "csv"
+)
+
+// writeFlat dispatches to the format-specific row writer for stdout / per-namespace files.
+func writeFlat(w io.Writer, results []scheduleResult, format string) error {
+	if format == formatCSV {
+		return writeFlatCSV(w, results)
+	}
+	return writeFlatJSONL(w, results)
+}
+
+func formatExt(format string) string {
+	if format == formatCSV {
+		return "csv"
+	}
+	return "jsonl"
+}
+
+// flatJSONLRow is the per-schedule JSONL output shape.
+type flatJSONLRow struct {
+	Namespace                   string   `json:"namespace"`
+	ScheduleID                  string   `json:"schedule_id"`
+	WorkflowType                string   `json:"workflow_type"`
+	Expected                    int      `json:"expected"`
+	Actual                      int      `json:"actual"`
+	Matched                     int      `json:"matched"`
+	Missed                      int      `json:"missed"`
+	RealMiss                    int      `json:"real_miss"`
+	SkipOverlap                 int      `json:"skip_overlap"`
+	InconclusiveScheduleChanged int      `json:"inconclusive_schedule_changed"`
+	CatchupWindowSeconds        int64    `json:"catchup_window_s"`
+	RealMissTimes               []string `json:"real_miss_times"`
+}
+
+// summaryJSONLRow is the per-namespace JSONL summary shape.
+type summaryJSONLRow struct {
+	Namespace                   string `json:"namespace"`
+	SchedulesFlagged            int    `json:"schedules_flagged"`
+	RealMiss                    int    `json:"real_miss"`
+	SkipOverlap                 int    `json:"skip_overlap"`
+	InconclusiveScheduleChanged int    `json:"inconclusive_schedule_changed"`
+}
+
+func writeFlatJSONL(w io.Writer, results []scheduleResult) error {
+	enc := json.NewEncoder(w)
+	for _, r := range results {
+		if len(r.Missed) == 0 {
+			continue
+		}
+		if err := enc.Encode(jsonlRow(r)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func jsonlRow(r scheduleResult) flatJSONLRow {
+	var realMissTimes []time.Time
+	for _, t := range r.Missed {
+		if r.Categories[t] == categoryRealMiss {
+			realMissTimes = append(realMissTimes, t)
+		}
+	}
+	sort.Slice(realMissTimes, func(i, j int) bool { return realMissTimes[i].Before(realMissTimes[j]) })
+	const maxTimes = 20
+	if len(realMissTimes) > maxTimes {
+		realMissTimes = realMissTimes[:maxTimes]
+	}
+	rmt := make([]string, 0, len(realMissTimes))
+	for _, t := range realMissTimes {
+		rmt = append(rmt, t.UTC().Format(time.RFC3339))
+	}
+	return flatJSONLRow{
+		Namespace:                   r.Namespace,
+		ScheduleID:                  r.ScheduleID,
+		WorkflowType:                r.WorkflowType,
+		Expected:                    r.Expected,
+		Actual:                      r.Actual,
+		Matched:                     r.Matched,
+		Missed:                      len(r.Missed),
+		RealMiss:                    r.Counts[categoryRealMiss],
+		SkipOverlap:                 r.Counts[categorySkipOverlap],
+		InconclusiveScheduleChanged: r.Counts[categoryInconclusiveChanged],
+		CatchupWindowSeconds:        r.CatchupWindowSeconds,
+		RealMissTimes:               rmt,
+	}
+}
+
 var flatCSVBaseHeader = []string{
 	"namespace",
 	"schedule_id",
@@ -1106,9 +1206,11 @@ func joinTimes(times []time.Time, maxItems int) string {
 
 // writeOutput writes a per-namespace bundle directory:
 //
-//	<dir>/summary.csv
-//	<dir>/per-namespace/<ns>.csv
-func writeOutput(dir string, results []scheduleResult) error {
+//	<dir>/summary.<ext>
+//	<dir>/per-namespace/<ns>.<ext>
+//
+// where <ext> is jsonl (default) or csv based on the format argument.
+func writeOutput(dir string, results []scheduleResult, format string) error {
 	perNSDir := filepath.Join(dir, "per-namespace")
 	if err := os.MkdirAll(perNSDir, 0o755); err != nil {
 		return err
@@ -1122,16 +1224,17 @@ func writeOutput(dir string, results []scheduleResult) error {
 		byNS[r.Namespace] = append(byNS[r.Namespace], r)
 	}
 
+	ext := formatExt(format)
 	for ns, rs := range byNS {
 		// Sanitize path separators and dots so namespaces with literal dots (e.g. "foo.bar") or pathological values
 		// like ".." cannot escape perNSDir or produce hidden files.
 		safeName := strings.NewReplacer("/", "_", string(filepath.Separator), "_", ".", "_").Replace(ns)
-		path := filepath.Join(perNSDir, safeName+".csv")
+		path := filepath.Join(perNSDir, safeName+"."+ext)
 		f, err := os.Create(path)
 		if err != nil {
 			return err
 		}
-		if err := writeFlatCSV(f, rs); err != nil {
+		if err := writeFlat(f, rs, format); err != nil {
 			_ = f.Close()
 			return err
 		}
@@ -1140,7 +1243,53 @@ func writeOutput(dir string, results []scheduleResult) error {
 		}
 	}
 
-	return writeSummaryCSV(filepath.Join(dir, "summary.csv"), byNS)
+	return writeSummary(filepath.Join(dir, "summary."+ext), byNS, format)
+}
+
+// writeSummary dispatches to the format-specific summary writer.
+func writeSummary(path string, byNS map[string][]scheduleResult, format string) error {
+	if format == formatCSV {
+		return writeSummaryCSV(path, byNS)
+	}
+	return writeSummaryJSONL(path, byNS)
+}
+
+// writeSummaryJSONL emits one JSON object per line (one per namespace) with aggregated counts.
+func writeSummaryJSONL(path string, byNS map[string][]scheduleResult) (retErr error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
+	enc := json.NewEncoder(f)
+	nss := make([]string, 0, len(byNS))
+	for ns := range byNS {
+		nss = append(nss, ns)
+	}
+	sort.Strings(nss)
+	for _, ns := range nss {
+		rs := byNS[ns]
+		var realMisses, skips, specChanged int
+		for _, r := range rs {
+			realMisses += r.Counts[categoryRealMiss]
+			skips += r.Counts[categorySkipOverlap]
+			specChanged += r.Counts[categoryInconclusiveChanged]
+		}
+		if err := enc.Encode(summaryJSONLRow{
+			Namespace:                   ns,
+			SchedulesFlagged:            len(rs),
+			RealMiss:                    realMisses,
+			SkipOverlap:                 skips,
+			InconclusiveScheduleChanged: specChanged,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeSummaryCSV emits one row per namespace with aggregated counts across the namespace's flagged schedules.

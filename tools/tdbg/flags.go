@@ -85,6 +85,7 @@ var (
 	FlagEnd                        = "end"
 	FlagOutputDir                  = "output-dir"
 	FlagNamespaceConcurrency       = "namespace-concurrency"
+	FlagFormat                     = "format"
 )
 
 var (
