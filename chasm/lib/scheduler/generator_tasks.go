@@ -154,8 +154,7 @@ func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.
 	spec := jsonStringer{sched.Schedule.Spec}
 	policies := jsonStringer{sched.Schedule.Policies}
 
-	tw := g.config.Tweakables(sched.Namespace)
-	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies), tw.EventLogMaxEntries, tw.EventLogMaxMessageLen)
+	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies))
 	logger.Info(msg,
 		tag.Stringer("spec", spec),
 		tag.Stringer("policies", policies))
