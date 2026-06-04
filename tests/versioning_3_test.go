@@ -6225,6 +6225,8 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		expectedFailures, expectedCompletes = 0, 1
 	case modeResetBlockedByCurrentRunOnly:
 		expectedFailures, expectedCompletes = 1, 0
+	default:
+		s.Fail("unrecognized mode")
 	}
 
 	s.Await(func(s *Versioning3Suite) {
@@ -6238,12 +6240,7 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		s.Equal(expectedCompletes, resp.GetCompleteOperationCount())
 	}, 60*time.Second, 500*time.Millisecond)
 
-	switch mode {
-	case modeResetCurrentRunBuild:
-		targetBuildID = tv2.BuildID()
-	case modeResetPreviousRunBuild:
-		targetBuildID = tv1.BuildID()
-	case modeResetBlockedByCurrentRunOnly:
+	if mode == modeResetBlockedByCurrentRunOnly {
 		// Nothing was reset: the current run is still RUNNING (a successful
 		// walk-back-and-reset would have terminated it), and no new run was
 		// created — the latest run for the workflow ID is still canRunID.
