@@ -172,6 +172,15 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 	suite.Run(p.T(), s)
 }
 
+// TestPostgreSQLVisibilityPersistenceSuitePGXSP exercises the visibility
+// persistence suite against the pgx plugin in simple-protocol mode
+func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuitePGXSP() {
+	s := &VisibilityPersistenceSuite{
+		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLPGXSPTestClusterOption()),
+	}
+	suite.Run(p.T(), s)
+}
+
 // TODO: Merge persistence-tests into the tests directory.
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {

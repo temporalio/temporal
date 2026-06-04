@@ -106,6 +106,23 @@ func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	}
 }
 
+// GetPostgreSQLPGXSPTestClusterOption return test options for the pgx plugin in
+// simple-protocol mode, the configuration users land on when fronting Postgres
+// with PgBouncer in transaction pooling
+func GetPostgreSQLPGXSPTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName:   postgresql.PluginNamePGX,
+		DBName:            "test_" + GenerateRandomDBName(3),
+		DBUsername:        testPostgreSQLUser,
+		DBPassword:        testPostgreSQLPassword,
+		DBHost:            environment.GetPostgreSQLAddress(),
+		DBPort:            environment.GetPostgreSQLPort(),
+		SchemaDir:         testPostgreSQLSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{"default_query_exec_mode": "simple_protocol"},
+	}
+}
+
 // GetSQLiteFileTestClusterOption return test options
 func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
