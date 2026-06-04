@@ -484,23 +484,21 @@ func (a *activities) startTaskProcessor(
 					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 						var eventId int64
 						var err error
-						//nolint:staticcheck // SA1019: worker versioning v0.31
+						//nolint:staticcheck - ResetReapplyType deprecated in favor of ResetReapplyExcludeType
 						var resetReapplyType enumspb.ResetReapplyType
 						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 						if operation.ResetOperation.Options != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
-							//nolint:staticcheck // SA1019: worker versioning v0.31
 							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
-							//nolint:staticcheck // SA1019: worker versioning v0.31
+							//nolint:staticcheck - ResetReapplyType deprecated in favor of ResetReapplyExcludeType
 							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
-							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyExcludeTypes = operation.ResetOperation.Options.ResetReapplyExcludeTypes
 						} else {
-							// Old fields
-							//nolint:staticcheck // SA1019: worker versioning v0.31
+							// Using ResetType
+							//nolint:staticcheck - ResetReapplyType deprecated in favor of ResetReapplyExcludeType
 							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
-							//nolint:staticcheck // SA1019: worker versioning v0.31
+							//nolint:staticcheck - ResetReapplyType deprecated in favor of ResetReapplyExcludeType
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}
 						if err != nil {
