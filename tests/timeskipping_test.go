@@ -67,8 +67,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
-	inputBound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-		MaxSkippedDuration: durationpb.New(time.Hour),
+	inputBound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+		MaxElapsedDuration: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
@@ -132,12 +132,12 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	maxSkippedDuration := time.Hour
+	maxElapsedDuration := time.Hour
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: durationpb.New(maxSkippedDuration),
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+			MaxElapsedDuration: durationpb.New(maxElapsedDuration),
 		},
 	}
 
@@ -182,8 +182,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 // TestTimeSkipping_UpdateWorkflowOptions_DCEnabled exercises the full UpdateWorkflowExecutionOptions
 // lifecycle for TimeSkippingConfig:
 //  1. Start workflow with no time-skipping — assert mutable state has no config.
-//  2. First update: enable with MaxSkippedDuration bound — check MS and event 1 attributes.
-//  3. Second update: change bound to MaxElapsedDuration, add DisablePropagation — check MS and event 2 attributes.
+//  2. First update: enable with MaxElapsedDuration bound — check MS and event 1 attributes.
+//  3. Second update: change the MaxElapsedDuration value — check MS and event 2 attributes.
 //  4. Third update: disable (Enabled=false) — check MS and event 3 attributes.
 //  5. Assert exactly 3 WorkflowExecutionOptionsUpdated events appear in history.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled() {
@@ -236,7 +236,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// First update: enable with a bound.
 	config1 := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
 	}
 	updateOptions(config1)
 
@@ -246,7 +246,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	s.Len(events, 1)
 	s.True(proto.Equal(config1, events[0].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
 
-	// Second update: change bound type, add DisablePropagation.
+	// Second update: change the bound duration.
 	config2 := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
@@ -314,7 +314,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
 	}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
