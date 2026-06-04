@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -21,9 +22,12 @@ type (
 	messageData struct {
 		Type string
 
-		WorkflowIdGetter string
-		RunIdGetter      string
-		TaskTokenGetter  string
+		WorkflowIDGetter  string
+		RunIDGetter       string
+		TaskTokenGetter   string
+		ActivityIDGetter  string
+		OperationIDGetter string
+		ChasmRunIDGetter  string
 	}
 
 	grpcServerData struct {
@@ -67,12 +71,20 @@ var (
 		GetTaskToken() []byte
 	})(nil)).Elem()
 
-	workflowIdGetterT = reflect.TypeOf((*interface {
+	workflowIDGetterT = reflect.TypeOf((*interface {
 		GetWorkflowId() string
 	})(nil)).Elem()
 
-	runIdGetterT = reflect.TypeOf((*interface {
+	runIDGetterT = reflect.TypeOf((*interface {
 		GetRunId() string
+	})(nil)).Elem()
+
+	activityIDGetterT = reflect.TypeOf((*interface {
+		GetActivityId() string
+	})(nil)).Elem()
+
+	operationIDGetterT = reflect.TypeOf((*interface {
+		GetOperationId() string
 	})(nil)).Elem()
 )
 
@@ -120,11 +132,11 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 
 	switch {
 	case messageType.AssignableTo(executionGetterT):
-		pd.WorkflowIdGetter = "GetExecution().GetWorkflowId()"
-		pd.RunIdGetter = "GetExecution().GetRunId()"
+		pd.WorkflowIDGetter = "GetExecution().GetWorkflowId()"
+		pd.RunIDGetter = "GetExecution().GetRunId()"
 	case messageType.AssignableTo(workflowExecutionGetterT):
-		pd.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
-		pd.RunIdGetter = "GetWorkflowExecution().GetRunId()"
+		pd.WorkflowIDGetter = "GetWorkflowExecution().GetWorkflowId()"
+		pd.RunIDGetter = "GetWorkflowExecution().GetRunId()"
 	case messageType.AssignableTo(taskTokenGetterT):
 		for _, ert := range excludeTaskTokenTypes {
 			if messageType.AssignableTo(ert) {
@@ -133,22 +145,24 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 		}
 		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
-		// Might be one of these, both, or neither.
-		if messageType.AssignableTo(workflowIdGetterT) {
-			pd.WorkflowIdGetter = "GetWorkflowId()"
+		// Might have any combination of these, or none.
+		if messageType.AssignableTo(workflowIDGetterT) {
+			pd.WorkflowIDGetter = "GetWorkflowId()"
 		}
-		if messageType.AssignableTo(runIdGetterT) {
-			pd.RunIdGetter = "GetRunId()"
+		if messageType.AssignableTo(runIDGetterT) {
+			pd.RunIDGetter = "GetRunId()"
+		}
+		if messageType.AssignableTo(activityIDGetterT) {
+			pd.ActivityIDGetter = "GetActivityId()"
+		}
+		if messageType.AssignableTo(operationIDGetterT) {
+			pd.OperationIDGetter = "GetOperationId()"
 		}
 	}
 
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
 	for fieldNum := 0; fieldNum < messageType.Elem().NumField(); fieldNum++ {
-		if (pd.WorkflowIdGetter != "" && pd.RunIdGetter != "") || pd.TaskTokenGetter != "" {
-			break
-		}
-
 		nestedRequest := messageType.Elem().Field(fieldNum)
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
@@ -162,15 +176,32 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 
 		nestedRd := workflowTagGetters(nestedRequest.Type, depth+1)
 		// First match wins: if getter is already set, it won't be overwritten.
-		if pd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
-			pd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
+		if pd.WorkflowIDGetter == "" && nestedRd.WorkflowIDGetter != "" {
+			pd.WorkflowIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIDGetter)
 		}
-		if pd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
-			pd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
+		if pd.RunIDGetter == "" && nestedRd.RunIDGetter != "" {
+			pd.RunIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIDGetter)
 		}
 		if pd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
 			pd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
 		}
+		if pd.ActivityIDGetter == "" && nestedRd.ActivityIDGetter != "" {
+			pd.ActivityIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.ActivityIDGetter)
+		}
+		if pd.OperationIDGetter == "" && nestedRd.OperationIDGetter != "" {
+			pd.OperationIDGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.OperationIDGetter)
+		}
 	}
+
+	// When a business ID (activity or operation) is present without a workflow ID,
+	// the run_id is not a workflow run ID. Only apply at the top level.
+	if depth == 0 {
+		hasChasmBusinessID := pd.WorkflowIDGetter == "" && cmp.Or(pd.ActivityIDGetter, pd.OperationIDGetter) != ""
+		if hasChasmBusinessID && pd.RunIDGetter != "" {
+			pd.ChasmRunIDGetter = pd.RunIDGetter
+			pd.RunIDGetter = ""
+		}
+	}
+
 	return pd
 }

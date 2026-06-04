@@ -182,7 +182,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ReadHistoryBranch. Close operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ReadHistoryBranch", err)
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -334,7 +334,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
 	}
 
 	response := &p.InternalGetAllHistoryTreeBranchesResponse{

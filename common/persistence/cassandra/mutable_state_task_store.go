@@ -217,7 +217,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
-			return serviceerror.NewUnavailable("AddTasks operation failed: %v")
+			return serviceerror.NewUnavailable("AddTasks operation failed because of conditional failure.")
 		}
 	}
 	return nil

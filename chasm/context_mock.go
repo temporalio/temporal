@@ -2,13 +2,20 @@ package chasm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/metadata"
 )
 
 var _ Context = (*MockContext)(nil)
@@ -21,16 +28,58 @@ type MockContext struct {
 	HandleRef                  func(component Component) ([]byte, error)
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
+	HandleExecutionInfo        func() ExecutionInfo
+	HandleLibrary              func(name string) (Library, bool)
+	HandleNamespaceEntry       func() *namespace.Namespace
+	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
 	HandleMetricsHandler       func() metrics.Handler
+	HandleLinks                func(component Component) []*commonpb.Link
+	HandleRequestLinks         func(component Component, requestID string) ([]*commonpb.Link, error)
+	HandleUserMetadata         func(component Component) *sdkpb.UserMetadata
 
-	ctx context.Context
+	// GoCtx is the underlying context.Context used for context value lookups.
+	// Any values set on it will be available via the CHASM mock context's Value method,
+	// and take precedence over any registered context values.
+	// Defaults to context.Background() if nil.
+	GoCtx context.Context
+
+	registeredContextValues map[any]any
+}
+
+func (c *MockContext) RegisterComponentContextValues(
+	keyValues map[any]any,
+) {
+	if c.registeredContextValues == nil {
+		c.registeredContextValues = make(map[any]any)
+	}
+	for k, v := range keyValues {
+		if _, exists := c.registeredContextValues[k]; exists {
+			// nolint:forbidigo
+			panic(fmt.Sprintf("context value key already registered: %v", k))
+		}
+		c.registeredContextValues[k] = v
+	}
 }
 
 func (c *MockContext) goContext() context.Context {
-	if c.ctx == nil {
-		c.ctx = context.Background()
+	if c.GoCtx == nil {
+		c.GoCtx = context.Background()
 	}
-	return c.ctx
+	return c.GoCtx
+}
+
+func (c *MockContext) RequestHeader(key string) string {
+	if values := metadata.ValueFromIncomingContext(c.goContext(), key); len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	if c.HandleEndpointByName != nil {
+		return c.HandleEndpointByName(name)
+	}
+	return nil, errors.New("endpoint registry not available")
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -58,18 +107,18 @@ func (c *MockContext) ExecutionKey() ExecutionKey {
 	return ExecutionKey{}
 }
 
-func (c *MockContext) ExecutionCloseTime() time.Time {
-	if c.HandleExecutionCloseTime != nil {
-		return c.HandleExecutionCloseTime()
+func (c *MockContext) ExecutionInfo() ExecutionInfo {
+	if c.HandleExecutionInfo != nil {
+		return c.HandleExecutionInfo()
 	}
-	return time.Time{}
+	return ExecutionInfo{}
 }
 
-func (c *MockContext) StateTransitionCount() int64 {
-	if c.HandleStateTransitionCount != nil {
-		return c.HandleStateTransitionCount()
+func (c *MockContext) NamespaceEntry() *namespace.Namespace {
+	if c.HandleNamespaceEntry != nil {
+		return c.HandleNamespaceEntry()
 	}
-	return 0
+	return nil
 }
 
 func (c *MockContext) Logger() log.Logger {
@@ -92,15 +141,40 @@ func (c *MockContext) Value(key any) any {
 	return c.goContext().Value(key)
 }
 
+func (c *MockContext) Links(component Component) []*commonpb.Link {
+	if c.HandleLinks != nil {
+		return c.HandleLinks(component)
+	}
+	return nil
+}
+
+func (c *MockContext) RequestLinks(component Component, requestID string) ([]*commonpb.Link, error) {
+	if c.HandleRequestLinks != nil {
+		return c.HandleRequestLinks(component, requestID)
+	}
+	return nil, nil
+}
+
+func (c *MockContext) UserMetadata(component Component) *sdkpb.UserMetadata {
+	if c.HandleUserMetadata != nil {
+		return c.HandleUserMetadata(component)
+	}
+	return nil
+}
+
 func (c *MockContext) withValue(key any, value any) Context {
 	return &MockContext{
-		HandleExecutionKey:         c.HandleExecutionKey,
-		HandleNow:                  c.HandleNow,
-		HandleRef:                  c.HandleRef,
-		HandleExecutionCloseTime:   c.HandleExecutionCloseTime,
-		HandleStateTransitionCount: c.HandleStateTransitionCount,
-		HandleMetricsHandler:       c.HandleMetricsHandler,
-		ctx:                        context.WithValue(c.goContext(), key, value),
+		HandleExecutionKey:   c.HandleExecutionKey,
+		HandleNow:            c.HandleNow,
+		HandleRef:            c.HandleRef,
+		HandleExecutionInfo:  c.HandleExecutionInfo,
+		HandleMetricsHandler: c.HandleMetricsHandler,
+		GoCtx:                context.WithValue(c.goContext(), key, value),
+		HandleNamespaceEntry: c.HandleNamespaceEntry,
+		HandleEndpointByName: c.HandleEndpointByName,
+		HandleLinks:          c.HandleLinks,
+		HandleRequestLinks:   c.HandleRequestLinks,
+		HandleUserMetadata:   c.HandleUserMetadata,
 	}
 }
 
@@ -109,14 +183,45 @@ func (c *MockContext) withValue(key any, value any) Context {
 type MockMutableContext struct {
 	MockContext
 
-	mu    sync.Mutex
-	Tasks []MockTask
+	mu                      sync.Mutex
+	Tasks                   []MockTask
+	LinksByRequest          map[Component]map[string][]*commonpb.Link
+	UserMetadataByComponent map[Component]*sdkpb.UserMetadata
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Tasks = append(c.Tasks, MockTask{component, attributes, payload})
+}
+
+func (c *MockMutableContext) SetRequestLinks(component Component, requestID string, links []*commonpb.Link) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.LinksByRequest == nil {
+		c.LinksByRequest = make(map[Component]map[string][]*commonpb.Link)
+	}
+	perRequest, ok := c.LinksByRequest[component]
+	if !ok {
+		perRequest = make(map[string][]*commonpb.Link)
+		c.LinksByRequest[component] = perRequest
+	}
+	if len(links) == 0 {
+		delete(perRequest, requestID)
+	} else {
+		perRequest[requestID] = links
+	}
+	return nil
+}
+
+func (c *MockMutableContext) SetUserMetadata(component Component, md *sdkpb.UserMetadata) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.UserMetadataByComponent == nil {
+		c.UserMetadataByComponent = make(map[Component]*sdkpb.UserMetadata)
+	}
+	c.UserMetadataByComponent[component] = md
+	return nil
 }
 
 func (c *MockMutableContext) withValue(key any, value any) Context {

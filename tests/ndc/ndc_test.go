@@ -1960,11 +1960,11 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 			token,
 		)
 		s.NoError(err)
-		s.True(len(resp.HistoryBatches) <= 1)
+		s.LessOrEqual(len(resp.HistoryBatches), 1)
 		batchCount++
 		token = resp.NextPageToken
 	}
-	s.Equal(batchCount, 4)
+	s.Equal(4, batchCount)
 
 	// GetWorkflowExecutionRawHistoryV2 start and end not on the same branch
 	token = nil
@@ -1983,11 +1983,11 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 			token,
 		)
 		s.NoError(err)
-		s.True(len(resp.HistoryBatches) <= 1)
+		s.LessOrEqual(len(resp.HistoryBatches), 1)
 		batchCount++
 		token = resp.NextPageToken
 	}
-	s.Equal(batchCount, 2)
+	s.Equal(2, batchCount)
 
 	// GetWorkflowExecutionRawHistoryV2 start boundary
 	token = nil
@@ -2006,11 +2006,11 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 			token,
 		)
 		s.NoError(err)
-		s.True(len(resp.HistoryBatches) <= 1)
+		s.LessOrEqual(len(resp.HistoryBatches), 1)
 		batchCount++
 		token = resp.NextPageToken
 	}
-	s.Equal(batchCount, 3)
+	s.Equal(3, batchCount)
 
 	// GetWorkflowExecutionRawHistoryV2 end boundary
 	token = nil
@@ -2029,11 +2029,11 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 			token,
 		)
 		s.NoError(err)
-		s.True(len(resp.HistoryBatches) <= 1)
+		s.LessOrEqual(len(resp.HistoryBatches), 1)
 		batchCount++
 		token = resp.NextPageToken
 	}
-	s.Equal(batchCount, 10)
+	s.Equal(10, batchCount)
 }
 
 func (s *NDCFunctionalTestSuite) registerNamespace() {
@@ -2314,7 +2314,7 @@ func (s *NDCFunctionalTestSuite) verifyEventHistorySize(
 	s.NoError(err)
 	// NOTE: non current branch can contain force termination event
 	//  so calculation should be updated, for now only assert below
-	s.True(historySize <= describeWorkflow.WorkflowExecutionInfo.HistorySizeBytes)
+	s.LessOrEqual(historySize, describeWorkflow.WorkflowExecutionInfo.HistorySizeBytes)
 }
 
 func (s *NDCFunctionalTestSuite) verifyVersionHistory(

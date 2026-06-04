@@ -7,12 +7,9 @@ import (
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 )
 
-type (
-	PayloadTTLPureTaskExecutor  struct{}
-	PayloadTTLPureTaskValidator struct{}
-)
+type PayloadTTLPureTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func (e *PayloadTTLPureTaskExecutor) Execute(
+func (h *PayloadTTLPureTaskHandler) Execute(
 	mutableContext chasm.MutableContext,
 	store *PayloadStore,
 	_ chasm.TaskAttributes,
@@ -26,7 +23,7 @@ func (e *PayloadTTLPureTaskExecutor) Execute(
 	return err
 }
 
-func (v *PayloadTTLPureTaskValidator) Validate(
+func (h *PayloadTTLPureTaskHandler) Validate(
 	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
@@ -35,12 +32,11 @@ func (v *PayloadTTLPureTaskValidator) Validate(
 	return validateTask(chasmContext, store, attributes, task.PayloadKey)
 }
 
-type (
-	PayloadTTLSideEffectTaskExecutor  struct{}
-	PayloadTTLSideEffectTaskValidator struct{}
-)
+type PayloadTTLSideEffectTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*testspb.TestPayloadTTLSideEffectTask]
+}
 
-func (e *PayloadTTLSideEffectTaskExecutor) Execute(
+func (h *PayloadTTLSideEffectTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
@@ -55,7 +51,7 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 	return err
 }
 
-func (v *PayloadTTLSideEffectTaskValidator) Validate(
+func (h *PayloadTTLSideEffectTaskHandler) Validate(
 	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -116,6 +117,9 @@ func (s *conflictResolverSuite) TestRebuild() {
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		},
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 	s.mockMutableState.EXPECT().GetExternalPayloadSize().Return(externalPayloadSize).AnyTimes()
@@ -159,7 +163,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	}, nil)
 
 	s.mockContext.EXPECT().Clear()
-	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1, requestID)
+	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())

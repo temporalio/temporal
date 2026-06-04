@@ -10,6 +10,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -18,8 +19,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -32,10 +31,10 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
-	healthcheck "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -49,12 +48,14 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteexecution"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
@@ -67,7 +68,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
-	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -81,14 +81,12 @@ type (
 		tokenSerializer              *tasktoken.Serializer
 		config                       *configs.Config
 		eventNotifier                events.Notifier
+		deepHealthCheckHandler       deepHealthCheckHandler
 		logger                       log.Logger
 		throttledLogger              log.Logger
 		persistenceExecutionManager  persistence.ExecutionManager
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
-		persistenceHealthSignal      persistence.HealthSignalAggregator
-		healthServer                 *health.Server
-		historyHealthSignal          interceptor.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -207,124 +205,7 @@ func (h *Handler) DeepHealthCheck(
 	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (*historyservice.DeepHealthCheckResponse, error) {
-
-	var checks []*healthspb.HealthCheck
-	overallState := enumsspb.HEALTH_STATE_SERVING
-
-	// Check 1: gRPC health (graceful shutdown / hysteresis).
-	// If this fails, return early with only this check — no point running
-	// metric checks if we can't even reach the gRPC health server.
-	status, err := h.healthServer.Check(ctx, &grpchealthspb.HealthCheckRequest{Service: serviceName})
-	if err != nil {
-		checks = append(checks, &healthspb.HealthCheck{
-			CheckType: healthcheck.CheckTypeGRPCHealth,
-			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
-			Message:   fmt.Sprintf("gRPC health check failed: %v", err),
-		})
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{
-			State:  enumsspb.HEALTH_STATE_NOT_SERVING,
-			Checks: checks,
-		}, nil
-	}
-	grpcState := enumsspb.HEALTH_STATE_SERVING
-	grpcMsg := ""
-	if status.Status != grpchealthspb.HealthCheckResponse_SERVING {
-		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
-		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
-		grpcMsg = "gRPC health server not serving"
-	}
-	checks = append(checks, &healthspb.HealthCheck{
-		CheckType: healthcheck.CheckTypeGRPCHealth,
-		State:     grpcState,
-		Message:   grpcMsg,
-	})
-
-	// Check 2: RPC latency
-	rpcLatency := h.historyHealthSignal.AverageLatency()
-	rpcLatencyThreshold := h.config.HealthRPCLatencyFailure()
-	rpcLatencyState := enumsspb.HEALTH_STATE_SERVING
-	rpcLatencyMsg := ""
-	if rpcLatency > rpcLatencyThreshold {
-		rpcLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
-		rpcLatencyMsg = fmt.Sprintf("RPC latency %.2fms exceeded %.2fms threshold", rpcLatency, rpcLatencyThreshold)
-		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		}
-	}
-	checks = append(checks, &healthspb.HealthCheck{
-		CheckType: healthcheck.CheckTypeRPCLatency,
-		State:     rpcLatencyState,
-		Value:     rpcLatency,
-		Threshold: rpcLatencyThreshold,
-		Message:   rpcLatencyMsg,
-	})
-
-	// Check 3: RPC error ratio
-	rpcErrRatio := h.historyHealthSignal.ErrorRatio()
-	rpcErrThreshold := h.config.HealthRPCErrorRatio()
-	rpcErrState := enumsspb.HEALTH_STATE_SERVING
-	rpcErrMsg := ""
-	if rpcErrRatio > rpcErrThreshold {
-		rpcErrState = enumsspb.HEALTH_STATE_NOT_SERVING
-		rpcErrMsg = fmt.Sprintf("RPC error ratio %.4f exceeded %.4f threshold", rpcErrRatio, rpcErrThreshold)
-		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		}
-	}
-	checks = append(checks, &healthspb.HealthCheck{
-		CheckType: healthcheck.CheckTypeRPCErrorRatio,
-		State:     rpcErrState,
-		Value:     rpcErrRatio,
-		Threshold: rpcErrThreshold,
-		Message:   rpcErrMsg,
-	})
-
-	// Check 4: Persistence latency
-	persLatency := h.persistenceHealthSignal.AverageLatency()
-	persLatencyThreshold := h.config.HealthPersistenceLatencyFailure()
-	persLatencyState := enumsspb.HEALTH_STATE_SERVING
-	persLatencyMsg := ""
-	if persLatency > persLatencyThreshold {
-		persLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
-		persLatencyMsg = fmt.Sprintf("Persistence latency %.2fms exceeded %.2fms threshold", persLatency, persLatencyThreshold)
-		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		}
-	}
-	checks = append(checks, &healthspb.HealthCheck{
-		CheckType: healthcheck.CheckTypePersistenceLatency,
-		State:     persLatencyState,
-		Value:     persLatency,
-		Threshold: persLatencyThreshold,
-		Message:   persLatencyMsg,
-	})
-
-	// Check 5: Persistence error ratio
-	persErrRatio := h.persistenceHealthSignal.ErrorRatio()
-	persErrThreshold := h.config.HealthPersistenceErrorRatio()
-	persErrState := enumsspb.HEALTH_STATE_SERVING
-	persErrMsg := ""
-	if persErrRatio > persErrThreshold {
-		persErrState = enumsspb.HEALTH_STATE_NOT_SERVING
-		persErrMsg = fmt.Sprintf("Persistence error ratio %.4f exceeded %.4f threshold", persErrRatio, persErrThreshold)
-		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		}
-	}
-	checks = append(checks, &healthspb.HealthCheck{
-		CheckType: healthcheck.CheckTypePersistenceErrRatio,
-		State:     persErrState,
-		Value:     persErrRatio,
-		Threshold: persErrThreshold,
-		Message:   persErrMsg,
-	})
-
-	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
-	return &historyservice.DeepHealthCheckResponse{
-		State:  overallState,
-		Checks: checks,
-	}, nil
+	return h.deepHealthCheckHandler.DeepHealthCheck(ctx, time.Now())
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -401,6 +282,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
+	}
+
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -459,10 +346,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
-	}
 	return response, nil
 }
 
@@ -518,11 +401,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -530,11 +408,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			activity.RespondCompletedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -579,11 +452,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -591,11 +459,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			activity.RespondFailedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -640,11 +503,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -652,11 +510,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			activity.RespondCancelledEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -1998,7 +1851,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retErr error) {
 	// Note that since this is not a unary RPC, we cannot use the interceptor to capture panics.
-	metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
 	getter := headers.NewGRPCHeaderGetter(server.Context())
 	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(getter)
 	if err != nil {
@@ -2168,6 +2021,21 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	)
 }
 
+func (h *Handler) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+) (*historyservice.DeleteExecutionResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	h.logger.Info("DeleteExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(request.GetExecution().GetRunId()))
+	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
+}
+
 func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
@@ -2283,9 +2151,32 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	componentRef := request.GetCompletion().GetComponentRef()
+	if len(componentRef) == 0 {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
+	// Ignore transition-history fields when applying completion,
+	// use Request ID to accept or reject the completion instead.
+	// TODO(stephan): This should be a CHASM transition option.
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(componentRef); err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
+	var err error
+	componentRef, err = ref.Marshal()
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
 	completion := &persistencespb.ChasmNexusCompletion{
-		CloseTime: request.CloseTime,
-		RequestId: request.Completion.RequestId,
+		StartTime:      request.StartTime,
+		CloseTime:      request.CloseTime,
+		RequestId:      request.Completion.RequestId,
+		Links:          request.Links,
+		OperationToken: request.OperationToken,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
@@ -2304,9 +2195,9 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent(
+	_, _, err = chasm.UpdateComponent(
 		ctx,
-		request.GetCompletion().GetComponentRef(),
+		componentRef,
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
@@ -2321,6 +2212,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
+// NOTE: Keep in sync with ChasmEngine.convertError in chasm_engine.go, which is a superset of this function.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
@@ -2616,7 +2508,7 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := payloads.Encode(r.ValueAsAny())
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")

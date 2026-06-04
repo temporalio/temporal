@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"strconv"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -293,6 +292,10 @@ func (tm *priTaskMatcher) forwardPolls(
 	ft pollForwarderType,
 	target *tqid.NormalPartition,
 ) {
+	policy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithMaximumInterval(tm.config.ForwardPollRetryMaxInterval()).
+		WithExpirationInterval(backoff.NoInterval)
+	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	forwarderTask := newPollForwarderTask(effectivePriority, ft)
 	ctxs := []context.Context{ctx} // ctx should be equal to or child of tm.tqCtx
 	for ctx.Err() == nil {
@@ -332,6 +335,10 @@ func (tm *priTaskMatcher) forwardPolls(
 		_ = stop()
 		if err == nil {
 			tm.data.FinishMatchAfterPollForward(poller, task)
+			retrier.Reset()
+			if ft == priorityBacklogPollForwarder {
+				metrics.PriorityBacklogForwardedPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
 		} else if ft == priorityBacklogPollForwarder && errors.Is(err, errNoTasks) {
 			// There are no tasks of the priority we're looking for on the target. This goroutine
 			// will probably get canceled as soon as ephemeral data updates. In the meantime, wait.
@@ -340,6 +347,10 @@ func (tm *priTaskMatcher) forwardPolls(
 			// 4× to allow for a few rounds plus propagation.
 			interval := cmp.Or(tm.config.EphemeralDataUpdateInterval(), time.Minute)
 			_ = util.InterruptibleSleep(ctx, 4*interval)
+		} else if common.IsResourceExhausted(err) {
+			// Rate limited: re-enqueue with forwarding still enabled so it retries.
+			tm.data.ReenqueuePollerIfNotMatched(poller)
+			_ = util.InterruptibleSleep(ctx, retrier.NextBackOff(err))
 		} else {
 			// Re-enqueue to let it match again, if it hasn't gotten a context timeout already.
 			poller.forwardCtx = nil // disable forwarding next time
@@ -377,19 +388,20 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
-	finish := func() (bool, error) {
+
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return false, nil
+			return syncMatchUnspecified, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return true, nil
+				return syncMatchSuccess, nil
 			}
-			return false, nil // forward error, give up here
+			return syncMatchNoPoller, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -397,32 +409,36 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		return true, res.startErr
+		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
+		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
+		return syncMatchSuccess, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
-	if canMatch, gotMatch := tm.data.MatchTaskImmediately(task); gotMatch {
+	outcome := tm.data.MatchTaskImmediately(task)
+	switch outcome {
+	case syncMatchSuccess:
 		return finish()
-	} else if !canMatch {
-		return false, nil
-	}
-
-	// We only block if we are the root and the task is forwarded from a backlog.
-	// Otherwise, stop here.
-	if tm.isForwardingAllowed() ||
-		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
-		!task.isForwarded() {
-		return false, nil
+	case syncMatchBacklogPresent:
+		return outcome, nil
+	default:
+		// We only block if we are the root and the task is forwarded from a backlog.
+		// Otherwise, stop here.
+		if tm.isForwardingAllowed() ||
+			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
+			!task.isForwarded() {
+			return outcome, nil
+		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return false, res.ctxErr
+		return syncMatchNoPoller, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return false, nil
+		return syncMatchNoPoller, nil
 	}
 
 	return finish()
@@ -506,6 +522,9 @@ func (tm *priTaskMatcher) AddTask(task *internalTask) error {
 }
 
 func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if tm.config.EmitTaskDispatchLatencyAtPoll() {
+		return // metric will be emitted at poll response
+	}
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
@@ -513,7 +532,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
 	)
 }
@@ -587,6 +606,7 @@ func (tm *priTaskMatcher) poll(
 	start := time.Now()
 	pollWasForwarded := false
 	var priority int32
+	pollResult := "failed"
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
@@ -594,8 +614,9 @@ func (tm *priTaskMatcher) poll(
 			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
-				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
+				metrics.ForwardedTag(pollWasForwarded),
 				metrics.MatchingTaskPriorityTag(priority),
+				metrics.PollResultTag(pollResult),
 			)
 		}
 	}()
@@ -616,11 +637,13 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	if res == nil {
+		pollResult = "timeout"
 		return nil, errNoTasks // only possible for MatchPollerImmediately
 	} else if res.ctxErr != nil {
 		if res.ctxErrIdx == 0 {
 			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
+		pollResult = "timeout"
 		return nil, errNoTasks
 	}
 
@@ -631,6 +654,7 @@ func (tm *priTaskMatcher) poll(
 	task := res.task
 	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
+	pollResult = "dispatch"
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
@@ -647,6 +671,10 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	return task, nil
+}
+
+func (tm *priTaskMatcher) HasWaitingPoller() bool {
+	return tm.data.HasWaitingPoller()
 }
 
 func (tm *priTaskMatcher) isForwardingAllowed() bool {

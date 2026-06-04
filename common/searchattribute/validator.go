@@ -96,7 +96,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
 		if err != nil {
-			if errors.Is(err, ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				return v.validationError(
 					"search attribute %s is not defined",
 					saFieldName,
@@ -120,7 +120,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				)
 			}
 		}
-		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
+		saValue, err := sadefs.DecodeValue(saPayload, saType, v.allowList(namespace))
 		if err != nil {
 			var invalidValue any
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {

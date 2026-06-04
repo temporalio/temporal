@@ -22,6 +22,33 @@ type (
 
 var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
 
+func NewPriorityRateLimiterHelper(
+	rateBurstFn RateBurst,
+	operatorRPSRatio func() float64,
+	requestPriorityFn RequestPriorityFn,
+	prioritiesOrdered []int,
+) RequestRateLimiter {
+	rateLimiters := make(map[int]RequestRateLimiter)
+	for _, priority := range prioritiesOrdered {
+		if priority == OperatorPriority {
+			rateLimiters[priority] = NewRequestRateLimiterAdapter(
+				NewDynamicRateLimiter(
+					NewOperatorRateBurst(rateBurstFn, operatorRPSRatio),
+					defaultRefreshInterval,
+				),
+			)
+		} else {
+			rateLimiters[priority] = NewRequestRateLimiterAdapter(
+				NewDynamicRateLimiter(
+					rateBurstFn,
+					defaultRefreshInterval,
+				),
+			)
+		}
+	}
+	return NewPriorityRateLimiter(requestPriorityFn, rateLimiters)
+}
+
 // NewPriorityRateLimiter returns a new rate limiter that can handle dynamic
 // configuration updates
 func NewPriorityRateLimiter(

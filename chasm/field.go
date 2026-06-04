@@ -51,8 +51,10 @@ func NewComponentField[C Component](
 }
 
 // ComponentPointerTo returns a CHASM field populated with a pointer to the given
-// component. Pointers are resolved at the time the transaction is closed, and the
-// transaction will fail if any pointers cannot be resolved.
+// component. The target component must be a proper ancestor of the referring
+// component within the same component tree. Pointers to non-ancestor components
+// (e.g., siblings, descendants, or components from a different tree) will cause
+// the transaction to fail when it is closed.
 func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,

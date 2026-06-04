@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -101,7 +102,7 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 			p.clusterMu[idx].Lock()
 			// Double-check after acquiring lock
 			if p.usageCounts[idx].Load() > int64(p.maxUsage) && p.clusters[idx] != nil {
-				if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
+				if err := p.clusters[idx].tearDownTestCluster(); err != nil {
 					t.Logf("Failed to tear down cluster %d: %v", idx, err)
 				}
 				p.clusters[idx] = createCluster()
@@ -117,6 +118,21 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	})
 
 	cluster := p.clusters[idx]
+
+	// Swap out poisoned clusters. The poisoned cluster will tear itself down during its last
+	// test run's cleanup.
+	if cluster.Poisoned() {
+		p.clusterMu[idx].Lock()
+		if p.clusters[idx].Poisoned() {
+			p.clusters[idx] = createCluster()
+			if p.maxUsage > 0 {
+				p.usageCounts[idx].Store(1)
+			}
+		}
+		cluster = p.clusters[idx]
+		p.clusterMu[idx].Unlock()
+	}
+
 	cluster.SetT(t)
 	return cluster
 }
@@ -132,32 +148,86 @@ func (p *pool) acquireSlot(t *testing.T) {
 }
 
 type clusterPool struct {
-	shared    *pool
-	dedicated *pool
+	shared      *pool
+	dedicated   *pool
+	suiteScoped sync.Map
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if dedicated || len(dynamicConfig) > 0 {
-		return p.getDedicated(t, dynamicConfig)
+type suiteScopedCluster struct {
+	once    sync.Once
+	cluster *FunctionalTestBase
+}
+
+// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
+// The cluster is created on first use and torn down when `t` completes.
+//
+// Deprecated: this only exists for backwards-compatibility with legacy sequential
+// suite execution.
+func UseSuiteScopedCluster(t *testing.T) {
+	t.Helper()
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	if t.Name() != rootName {
+		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
+	}
+	testClusterPool.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+
+	t.Cleanup(func() {
+		suiteClusterAny, ok := testClusterPool.suiteScoped.Load(rootName)
+		if ok {
+			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
+			if suiteCluster.cluster != nil {
+				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
+					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
+				}
+			}
+		}
+		testClusterPool.suiteScoped.Delete(rootName)
+	})
+}
+
+func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+	defer func() {
+		tb.RegisterTest(t)
+	}()
+	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
+		return p.getDedicated(t, dynamicConfig, clusterOpts)
+	}
+	if cluster := p.getSuiteScoped(t); cluster != nil {
+		return cluster
 	}
 	return p.getShared(t)
 }
 
 func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, true)
+		return p.createCluster(t, nil, true, nil)
 	})
 }
 
-func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if len(dynamicConfig) > 0 {
-		// Custom dynamic config requires a fresh cluster (can't reuse).
+func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	if _, ok := p.suiteScoped.Load(rootName); !ok {
+		return nil
+	}
+
+	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
+	suiteCluster.once.Do(func() {
+		suiteCluster.cluster = p.createCluster(t, nil, true, nil)
+	})
+	suiteCluster.cluster.SetT(t)
+	return suiteCluster.cluster
+}
+
+func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
+		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.acquireSlot(t)
-		cluster := p.createCluster(t, dynamicConfig, false)
+		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
-			if err := cluster.testCluster.TearDownCluster(); err != nil {
+			if err := cluster.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down cluster: %v", err)
 			}
 		})
@@ -165,23 +235,25 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 		return cluster
 	}
 
-	// If no custom dynamic config is provided, reuse an existing cluster.
+	// If no custom config is provided, reuse an existing cluster.
 	return p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, false)
+		return p.createCluster(t, nil, false, nil)
 	})
 }
 
-func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool) *FunctionalTestBase {
+func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	var opts []TestClusterOption
+	// Keep the worker service off unless explicitly enabled via WithWorkerService.
+	opts := []TestClusterOption{withWorkerService(false)}
 	if shared {
 		opts = append(opts, WithSharedCluster())
 	}
 	if len(dynamicConfig) > 0 {
 		opts = append(opts, WithDynamicConfigOverrides(dynamicConfig))
 	}
+	opts = append(opts, clusterOpts...)
 
 	tbase.setupCluster(opts...)
 

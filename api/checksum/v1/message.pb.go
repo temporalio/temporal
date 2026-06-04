@@ -273,7 +273,7 @@ var File_temporal_server_api_checksum_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_checksum_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/checksum/v1/message.proto\x12\x1ftemporal.server.api.checksum.v1\x1a$temporal/api/enums/v1/workflow.proto\x1a,temporal/server/api/history/v1/message.proto\x1a+temporal/server/api/enums/v1/workflow.proto\"\xa2\f\n" +
+	"-temporal/server/api/checksum/v1/message.proto\x12\x1ftemporal.server.api.checksum.v1\x1a$temporal/api/enums/v1/workflow.proto\x1a+temporal/server/api/enums/v1/workflow.proto\x1a,temporal/server/api/history/v1/message.proto\"\xa2\f\n" +
 	"\x1bMutableStateChecksumPayload\x12)\n" +
 	"\x10cancel_requested\x18\x01 \x01(\bR\x0fcancelRequested\x12J\n" +
 	"\x05state\x18\x02 \x01(\x0e24.temporal.server.api.enums.v1.WorkflowExecutionStateR\x05state\x12F\n" +

@@ -26,6 +26,10 @@ type (
 		rcByFqn    map[string]*RegistrableComponent       // fully qualified type name -> component
 		rcByID     map[uint32]*RegistrableComponent       // component type ID -> component
 		rcByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
+		// rcContextValues is aggregated context values from all components,
+		// used for easy lookup when Context.Value(key) is called.
+		// Registration process will check for key conflicts and return error if same key is registered by multiple components.
+		rcContextValues map[any]valueWithFqn
 
 		// rt stands for RegistrableTask.
 		rtByFqn    map[string]*RegistrableTask       // fully qualified type name -> task
@@ -39,6 +43,13 @@ type (
 	}
 )
 
+// valueWithFqn is a wrapper struct that associates a value with
+// the fully qualified name (FQN) of the component that registered it.
+type valueWithFqn struct {
+	v   any
+	fqn string
+}
+
 func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
 		libraries:              make(map[string]Library),
@@ -48,6 +59,7 @@ func NewRegistry(logger log.Logger) *Registry {
 		rtByFqn:                make(map[string]*RegistrableTask),
 		rtByID:                 make(map[uint32]*RegistrableTask),
 		rtByGoType:             make(map[reflect.Type]*RegistrableTask),
+		rcContextValues:        make(map[any]valueWithFqn),
 		nexusServices:          make(map[string]*nexus.Service),
 		NexusEndpointProcessor: NewNexusEndpointProcessor(),
 		logger:                 logger,
@@ -244,6 +256,16 @@ func (r *Registry) registerComponent(
 		return fmt.Errorf("component ID %d collision between %s and %s", id, fqn, existingComponent.fqType())
 	}
 
+	for key, value := range rc.contextValues {
+		if existingValue, ok := r.rcContextValues[key]; ok {
+			return fmt.Errorf("context value key %v registered by component %s conflicts with component %s", key, fqn, existingValue.fqn)
+		}
+		r.rcContextValues[key] = valueWithFqn{
+			v:   value,
+			fqn: fqn,
+		}
+	}
+
 	// rc.goType implements Component interface; therefore, it must be a struct.
 	// This check to protect against the interface itself being registered.
 	if !(rc.goType.Kind() == reflect.Struct ||
@@ -357,4 +379,11 @@ func (r *Registry) NexusServices() map[string]*nexus.Service {
 	services := make(map[string]*nexus.Service, len(r.nexusServices))
 	maps.Copy(services, r.nexusServices)
 	return services
+}
+
+func (r *Registry) componentContextValue(key any) any {
+	if v, ok := r.rcContextValues[key]; ok {
+		return v.v
+	}
+	return nil
 }

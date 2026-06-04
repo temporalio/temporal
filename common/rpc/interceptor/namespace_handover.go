@@ -26,13 +26,14 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceHandoverInterceptor)(nil).Interce
 type (
 	// NamespaceHandoverInterceptor handles the namespace in handover replication state
 	NamespaceHandoverInterceptor struct {
-		namespaceRegistry      namespace.Registry
-		timeSource             clock.TimeSource
-		enabledForNS           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
-		metricsHandler         metrics.Handler
-		logger                 log.Logger
-		requestErrorHandler    ErrorHandler
+		namespaceRegistry                      namespace.Registry
+		timeSource                             clock.TimeSource
+		enabledForNS                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
+		metricsHandler                         metrics.Handler
+		logger                                 log.Logger
+		requestErrorHandler                    ErrorHandler
+		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 )
 
@@ -43,16 +44,23 @@ func NewNamespaceHandoverInterceptor(
 	logger log.Logger,
 	timeSource clock.TimeSource,
 	requestErrorHandler ErrorHandler,
+	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceHandoverInterceptor {
 
+	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
+	for _, m := range additionalAllowedMethodsDuringHandover {
+		additional[m] = struct{}{}
+	}
+
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
-		nsCacheRefreshInterval: dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
-		namespaceRegistry:      namespaceRegistry,
-		metricsHandler:         metricsHandler,
-		logger:                 logger,
-		timeSource:             timeSource,
-		requestErrorHandler:    requestErrorHandler,
+		enabledForNS:                           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
+		nsCacheRefreshInterval:                 dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
+		namespaceRegistry:                      namespaceRegistry,
+		metricsHandler:                         metricsHandler,
+		logger:                                 logger,
+		timeSource:                             timeSource,
+		requestErrorHandler:                    requestErrorHandler,
+		additionalAllowedMethodsDuringHandover: additional,
 	}
 }
 
@@ -114,13 +122,17 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil, nil
 	}
+	if _, ok := i.additionalAllowedMethodsDuringHandover[methodName]; ok {
+		return nil, nil
+	}
 
 	startTime := i.timeSource.Now()
 	namespaceData, err := i.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return nil, err
 	}
-	if namespaceData.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER {
+	businessID := GetRoutingKeyFromContext(ctx).ID
+	if namespaceData.ReplicationState(businessID) == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
 		waitReplicationStateUpdate := make(chan struct{})
 		i.namespaceRegistry.RegisterStateChangeCallback(cbID, func(ns *namespace.Namespace, deletedFromDb bool) {
@@ -129,7 +141,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 			}
 			if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED ||
 				deletedFromDb ||
-				ns.ReplicationState() != enumspb.REPLICATION_STATE_HANDOVER ||
+				ns.ReplicationState(businessID) != enumspb.REPLICATION_STATE_HANDOVER ||
 				!ns.IsGlobalNamespace() {
 				// Stop wait on state change if:
 				// 1. namespace is deleting/deleted

@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -154,57 +156,61 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 
 func (p *visibilityManagerImpl) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	response, err := p.store.ListChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	rc, ok := p.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := p.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeId))
 	}
 	mapper := rc.SearchAttributesMapper()
 
-	executions := make([]*chasm.ExecutionInfo[*commonpb.Payload], 0, len(response.Executions))
+	executions := make([]*chasmspb.VisibilityExecutionInfo, 0, len(response.Executions))
 	for _, exec := range response.Executions {
-		executionInfo, err := p.convertToChasmExecutionInfo(exec, mapper, request.Namespace)
+		executionInfo, err := p.convertToChasmExecutionInfo(
+			exec,
+			mapper,
+			namespace.Name(request.Namespace),
+		)
 		if err != nil {
 			return nil, err
 		}
 		executions = append(executions, executionInfo)
 	}
 
-	return &chasm.ListExecutionsResponse[*commonpb.Payload]{
+	return &visibilityservice.ListChasmExecutionsResponse{
 		Executions:    executions,
 		NextPageToken: response.NextPageToken,
 	}, nil
 }
 
-// convertInternalExecutionToChasmInfo converts a store.InternalExecutionInfo to chasm.ExecutionInfo.
+// convertInternalExecutionToChasmInfo converts a store.InternalExecutionInfo to ChasmExecutionInfo.
 func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 	exec *store.InternalExecutionInfo,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 	namespaceName namespace.Name,
-) (*chasm.ExecutionInfo[*commonpb.Payload], error) {
+) (*chasmspb.VisibilityExecutionInfo, error) {
 	customSAs, chasmSAs := splitSearchAttributes(exec.SearchAttributes)
 
-	chasmTypeMap := searchattribute.NewNameTypeMap(mapper.SATypeMap())
-	decodedChasmSAs, err := searchattribute.Decode(chasmSAs, &chasmTypeMap, false)
-	if err != nil {
-		return nil, err
-	}
-	chasmAliasedSAs, err := aliasChasmSearchAttributes(decodedChasmSAs, mapper)
+	chasmAliasedSAs, err := aliasChasmSearchAttributes(chasmSAs, mapper)
 	if err != nil {
 		return nil, err
 	}
 
-	if chasmAliasedSAs == nil {
-		chasmAliasedSAs = make(map[string]chasm.VisibilityValue)
+	if len(chasmAliasedSAs.GetIndexedFields()) == 0 {
+		chasmAliasedSAs = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
 	}
 	if exec.TaskQueue != "" {
-		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueString(exec.TaskQueue)
+		chasmAliasedSAs.IndexedFields[sadefs.TaskQueue] = sadefs.MustEncodeValue(
+			exec.TaskQueue,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		)
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
@@ -221,16 +227,16 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
-	return &chasm.ExecutionInfo[*commonpb.Payload]{
-		BusinessID:             exec.WorkflowID,
-		RunID:                  exec.RunID,
-		StartTime:              exec.StartTime,
-		CloseTime:              exec.CloseTime,
+	return &chasmspb.VisibilityExecutionInfo{
+		BusinessId:             exec.WorkflowID,
+		RunId:                  exec.RunID,
+		StartTime:              timestamppb.New(exec.StartTime),
+		CloseTime:              timestamppb.New(exec.CloseTime),
 		HistoryLength:          exec.HistoryLength,
 		HistorySizeBytes:       exec.HistorySizeBytes,
 		StateTransitionCount:   exec.StateTransitionCount,
-		ChasmSearchAttributes:  chasm.NewSearchAttributesMap(chasmAliasedSAs),
-		CustomSearchAttributes: customAliasedSAs.GetIndexedFields(),
+		ChasmSearchAttributes:  chasmAliasedSAs,
+		CustomSearchAttributes: customAliasedSAs,
 		Memo:                   userMemo,
 		ChasmMemo:              chasmMemoPayload,
 	}, nil
@@ -274,8 +280,8 @@ func splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonp
 
 func (p *visibilityManagerImpl) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	internalResp, err := p.store.CountChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
@@ -340,17 +346,20 @@ func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
 
 func (p *visibilityManagerImpl) convertToCountChasmExecutionsResponse(
 	internal *store.InternalCountExecutionsResponse,
-) (*chasm.CountExecutionsResponse, error) {
-	response := &chasm.CountExecutionsResponse{
-		Count:  internal.Count,
-		Groups: make([]chasm.Group, 0, len(internal.Groups)),
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
+	response := &visibilityservice.CountChasmExecutionsResponse{
+		Count: internal.Count,
+		Groups: make(
+			[]*visibilityservice.CountChasmExecutionsResponse_AggregationGroup,
+			len(internal.Groups),
+		),
 	}
 
-	for _, group := range internal.Groups {
-		response.Groups = append(response.Groups, chasm.Group{
-			Values: group.GroupValues,
-			Count:  group.Count,
-		})
+	for k, group := range internal.Groups {
+		response.Groups[k] = &visibilityservice.CountChasmExecutionsResponse_AggregationGroup{
+			GroupValues: group.GroupValues,
+			Count:       group.Count,
+		}
 	}
 
 	return response, nil
@@ -546,18 +555,20 @@ func isChasmExecution(searchAttributes *commonpb.SearchAttributes) bool {
 	return false
 }
 
-// aliasChasmSearchAttributes aliases CHASM search attribute field names and converts them to VisibilityValue.
+// aliasChasmSearchAttributes aliases CHASM search attribute field names.
 // This function mirrors the pattern of searchattribute.AliasFields for custom search attributes.
 func aliasChasmSearchAttributes(
-	decodedSearchAttributes map[string]any,
+	searchAttributes *commonpb.SearchAttributes,
 	mapper *chasm.VisibilitySearchAttributesMapper,
-) (map[string]chasm.VisibilityValue, error) {
-	if mapper == nil || len(decodedSearchAttributes) == 0 {
+) (*commonpb.SearchAttributes, error) {
+	if mapper == nil || len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
 
-	result := make(map[string]chasm.VisibilityValue)
-	for fieldName, value := range decodedSearchAttributes {
+	result := &commonpb.SearchAttributes{
+		IndexedFields: make(map[string]*commonpb.Payload),
+	}
+	for fieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !sadefs.IsChasmSearchAttribute(fieldName) {
 			continue
 		}
@@ -573,44 +584,8 @@ func aliasChasmSearchAttributes(
 			return nil, err
 		}
 
-		// Convert value to VisibilityValue (types should be correct after Decode)
-		visValue := convertToVisibilityValue(value)
-		result[aliasName] = visValue
+		result.IndexedFields[aliasName] = saPayload
 	}
 
 	return result, nil
-}
-
-// convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.
-// After Decode, the types should be correct, so simple type detection is sufficient.
-func convertToVisibilityValue(value any) chasm.VisibilityValue {
-	switch val := value.(type) {
-	case int:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int32:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int64:
-		return chasm.VisibilityValueInt64(val)
-	case float32:
-		return chasm.VisibilityValueFloat64(float64(val))
-	case float64:
-		return chasm.VisibilityValueFloat64(val)
-	case bool:
-		return chasm.VisibilityValueBool(val)
-	case time.Time:
-		return chasm.VisibilityValueTime(val)
-	case string:
-		// Try to parse as datetime first
-		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
-			return chasm.VisibilityValueTime(parsedTime)
-		}
-		return chasm.VisibilityValueString(val)
-	case []byte:
-		return chasm.VisibilityValueByteSlice(val)
-	case []string:
-		return chasm.VisibilityValueStringSlice(val)
-	default:
-		// Return as string if type is unknown
-		return chasm.VisibilityValueString(fmt.Sprintf("%v", val))
-	}
 }

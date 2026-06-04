@@ -14,7 +14,9 @@ type (
 		validateFn              validateFn
 		pureTaskExecuteFn       pureTaskExecuteFn
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
+		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
 		isPureTask              bool
+		outboundTaskGroup       string // For grouping on the outbound queue. See [WithTaskGroup] for details.
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -26,13 +28,14 @@ type (
 	validateFn              func(Context, any, TaskAttributes, any, *Registry) (bool, error)
 	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
 	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
+	sideEffectTaskDiscardFn func(context.Context, ComponentRef, TaskAttributes, any) error
 )
 
-// NOTE: C is not Component but any.
+// NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
+// The handler's Discard method is called on standby clusters when a task has been pending past the discard delay.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor SideEffectTaskExecutor[C, T],
+	handler SideEffectTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
@@ -46,8 +49,8 @@ func NewRegistrableSideEffectTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
-			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+			return handler.Validate(
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -60,17 +63,19 @@ func NewRegistrableSideEffectTask[C any, T any](
 			taskAttrs TaskAttributes,
 			taskData any,
 		) error {
-			return executor.Execute(ctx, componentRef, taskAttrs, taskData.(T))
+			return handler.Execute(ctx, componentRef, taskAttrs, taskData.(T))
 		},
 		false,
+		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
+			return handler.Discard(ctx, ref, attrs, task.(T))
+		},
 		opts...,
 	)
 }
 
 func NewRegistrablePureTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor PureTaskExecutor[C, T],
+	handler PureTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
@@ -84,8 +89,8 @@ func NewRegistrablePureTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
-			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+			return handler.Validate(
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -98,8 +103,8 @@ func NewRegistrablePureTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) error {
-			return executor.Execute(
-				AugmentContextForComponent(ctx, component, registry),
+			return handler.Execute(
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -107,6 +112,7 @@ func NewRegistrablePureTask[C any, T any](
 		},
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
+		nil, // sideEffectTaskDiscardFn is not used for pure tasks
 		opts...,
 	)
 }
@@ -118,6 +124,7 @@ func newRegistrableTask(
 	pureTaskExecuteFn pureTaskExecuteFn,
 	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
+	sideEffectTaskDiscardFn sideEffectTaskDiscardFn,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
@@ -127,6 +134,7 @@ func newRegistrableTask(
 		validateFn:              validateFn,
 		pureTaskExecuteFn:       pureTaskExecuteFn,
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
+		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
 		isPureTask:              isPureTask,
 	}
 
@@ -148,7 +156,17 @@ func (rt *RegistrableTask) registerToLibrary(
 
 	fqn := rt.fqType()
 	rt.taskTypeID = GenerateTypeID(fqn)
+	// If outboundTaskGroup wasn't set on creation default it here,
+	// since this is the first place we will have the fqn.
+	if rt.outboundTaskGroup == "" {
+		rt.outboundTaskGroup = fqn
+	}
 	return fqn, rt.taskTypeID, nil
+}
+
+// TaskGroup returns the side-effect task group for the task.
+func (rt *RegistrableTask) TaskGroup() string {
+	return rt.outboundTaskGroup
 }
 
 // GoType returns the reflect.Type of the task's Go struct.
@@ -165,4 +183,14 @@ func (rt *RegistrableTask) fqType() string {
 		panic("task is not registered to a library")
 	}
 	return FullyQualifiedName(rt.library.Name(), rt.taskType)
+}
+
+// WithTaskGroup sets the task group for the task. The task group is used when
+// the side effect's destination is specified for grouping semantics on the outbound queue,
+// affects multi-cursor and the circuit breaker.
+// If task group isn't provided, the task group will default to the fully qualified name at library registration.
+func WithTaskGroup(taskgroup string) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.outboundTaskGroup = taskgroup
+	}
 }

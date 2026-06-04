@@ -84,7 +84,7 @@ func Invoke(
 	}
 
 	// If workflow execution is closed or in passive cluster.
-	if err := workflowDeleteManager.AddDeleteWorkflowExecutionTask(
+	if err := workflowDeleteManager.AddDeleteExecutionTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		&commonpb.WorkflowExecution{

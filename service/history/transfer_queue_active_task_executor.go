@@ -54,7 +54,7 @@ type (
 
 		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
-		versionMembershipCache  worker_versioning.VersionMembershipCache
+		versionCache            worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -69,7 +69,7 @@ func newTransferQueueActiveTaskExecutor(
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -93,7 +93,7 @@ func newTransferQueueActiveTaskExecutor(
 			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		versionMembershipCache: versionMembershipCache,
+		versionCache: versionCache,
 	}
 }
 
@@ -106,6 +106,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -190,7 +191,6 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	return executeChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
-		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)
@@ -663,6 +663,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	if targetNamespaceEntry == nil {
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -682,6 +687,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// handle workflow signal itself
 	if task.NamespaceID == targetNamespaceID.String() && task.WorkflowID == attributes.GetWorkflowExecution().GetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -708,7 +718,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by returning nil error.
 		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-			// for retryable error just return
+			// Transient errors are retried by the task framework; don't emit the failure metric here.
 			return err
 		}
 		var failedCause enumspb.SignalExternalWorkflowExecutionFailedCause
@@ -721,8 +731,21 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
 			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
+			metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+				1,
+				metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED.String()),
+				metrics.StringTag("source", "remote_call"),
+			)
 			return err
 		}
+		// Metric is emitted when the failure cause is detected, before recording the
+		// SignalExternalWorkflowExecutionFailed history event. If the event fails to
+		// commit, the task will be retried and the metric emitted again.
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(failedCause.String()),
+			metrics.StringTag("source", "remote_call"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -925,7 +948,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedVersion = nil
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
 				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
@@ -955,15 +978,16 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
 		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-				SourceDeploymentVersion:        sourceDeploymentVersion,
-				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+				SourceDeploymentVersion:                sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+				ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
 			}
 
 			newTQ := attributes.GetTaskQueue().GetName()
 			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
 				inheritedAutoUpgradeInfo = nil
 			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
 				if err != nil {
 					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 				}
@@ -1632,15 +1656,17 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:             childRequestID,
-		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-		RetryPolicy:           attributes.RetryPolicy,
-		CronSchedule:          attributes.CronSchedule,
-		Memo:                  attributes.Memo,
-		SearchAttributes:      attributes.SearchAttributes,
-		UserMetadata:          userMetadata,
-		VersioningOverride:    inheritedPinnedOverride,
-		Priority:              priority,
+		RequestId:                childRequestID,
+		WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		RetryPolicy:              attributes.RetryPolicy,
+		CronSchedule:             attributes.CronSchedule,
+		Memo:                     attributes.Memo,
+		SearchAttributes:         attributes.SearchAttributes,
+		UserMetadata:             userMetadata,
+		VersioningOverride:       inheritedPinnedOverride,
+		Priority:                 priority,
+		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
@@ -1664,6 +1690,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
+	request.InitialSkippedDuration = attributes.GetInitialSkippedDuration()
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {
@@ -1739,7 +1766,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		uuid.NewString(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

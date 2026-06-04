@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,23 +12,31 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NamespaceInterceptorTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*NamespaceInterceptorTestSuite]
 }
 
 func TestNamespaceInterceptorTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(NamespaceInterceptorTestSuite))
+	parallelsuite.Run(t, &NamespaceInterceptorTestSuite{})
 }
 
-func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {
-	sut := newSystemUnderTestConnector(s)
+func (s *NamespaceInterceptorTestSuite) TestNamespaceInterceptorServerRejectsInvalidRequests() {
+	env := testcore.NewEnv(s.T())
+	id := uuid.NewString()
+	sut := &sutConnector{
+		env:             env,
+		identity:        "worker-1",
+		taskQueue:       &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		stickyTaskQueue: &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id},
+		id:              id,
+	}
 
-	customersNamespace := s.Namespace()
+	customersNamespace := env.Namespace()
 	err := sut.startWorkflowExecution(customersNamespace)
 	s.NoError(err)
 
@@ -45,7 +52,7 @@ func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {
 }
 
 type sutConnector struct {
-	suite           *NamespaceInterceptorTestSuite
+	env             *testcore.TestEnv
 	identity        string
 	taskQueue       *taskqueuepb.TaskQueue
 	stickyTaskQueue *taskqueuepb.TaskQueue
@@ -53,28 +60,27 @@ type sutConnector struct {
 	taskToken       []byte
 }
 
-func newSystemUnderTestConnector(s *NamespaceInterceptorTestSuite) *sutConnector {
-	id := uuid.NewString()
-	return &sutConnector{
-		suite:           s,
-		identity:        "worker-1",
-		taskQueue:       &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		stickyTaskQueue: &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id},
-		id:              id,
-	}
-
-}
-
 func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
-	request := newStartWorkflowExecutionRequest(ns, b.id, b.identity, b.taskQueue)
-
-	_, err := b.suite.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	_, err := b.env.FrontendClient().StartWorkflowExecution(b.env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           ns.String(),
+		WorkflowId:          b.id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "functional-workflow-namespace-validator-interceptor"},
+		TaskQueue:           b.taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
+		Identity:            b.identity,
+	})
 	return err
 }
 
 func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) {
-	request := newPollWorkflowTaskQueueRequest(ns, b.identity, b.taskQueue)
-	resp, err := b.suite.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), request)
+	resp, err := b.env.FrontendClient().PollWorkflowTaskQueue(b.env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: ns.String(),
+		TaskQueue: b.taskQueue,
+		Identity:  b.identity,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -83,38 +89,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 }
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
-	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, token)
-	_, err := b.suite.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), request)
-	return err
-}
-
-func newStartWorkflowExecutionRequest(ns namespace.Name, workflowId string, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.StartWorkflowExecutionRequest {
-	wt := "functional-workflow-namespace-validator-interceptor"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           ns.String(),
-		WorkflowId:          workflowId,
-		WorkflowType:        workflowType,
-		TaskQueue:           queue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
-		Identity:            identity,
-	}
-	return request
-}
-
-func newPollWorkflowTaskQueueRequest(ns namespace.Name, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.PollWorkflowTaskQueueRequest {
-	return &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns.String(),
-		TaskQueue: queue,
-		Identity:  identity,
-	}
-}
-
-func newRespondWorkflowTaskCompletedRequest(ns namespace.Name, stickyQueue *taskqueuepb.TaskQueue, token []byte) *workflowservice.RespondWorkflowTaskCompletedRequest {
-	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := b.env.FrontendClient().RespondWorkflowTaskCompleted(b.env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: ns.String(),
 		TaskToken: token,
 		Commands: []*commandpb.Command{
@@ -127,10 +102,11 @@ func newRespondWorkflowTaskCompletedRequest(ns namespace.Name, stickyQueue *task
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stickyQueue,
+			WorkerTaskQueue:        b.stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
-	}
+	})
+	return err
 }

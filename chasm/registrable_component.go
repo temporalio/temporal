@@ -162,6 +162,10 @@ func WithSearchAttributes(
 //
 // This is useful for propagating values needed for those processing logic but are not avaiable via the
 // component's struct definition, such as configurations.
+//
+// Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
+//
+// Manually added key-value pairs via ContextWithValue() will take precedence over registered context values.
 func WithContextValues(
 	keyVals map[any]any,
 ) RegistrableComponentOption {

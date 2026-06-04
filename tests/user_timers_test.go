@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,20 +15,22 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type UserTimersTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*UserTimersTestSuite]
 }
 
 func TestUserTimersTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(UserTimersTestSuite))
+	parallelsuite.Run(t, &UserTimersTestSuite{})
 }
 
-func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
+func (s *UserTimersTestSuite) TestUserTimersSequential() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"
 	tl := "functional-user-timers-sequential-test-taskqueue"
@@ -37,7 +38,7 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -47,10 +48,10 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowComplete := false
 	timerCount := int32(4)
@@ -59,7 +60,7 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, timerCounter))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
@@ -79,19 +80,19 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	for range 4 {
 		_, err := poller.PollAndProcessWorkflowTask()
-		s.Logger.Info("PollAndProcessWorkflowTask: completed")
+		env.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)
 	}
 

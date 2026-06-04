@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.scheduler.proto.v1;
 
-option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
-
 import "google/protobuf/duration.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
 // Fires when the scheduler's idle period has lapsed, and the scheduler should
 // be closed.
@@ -13,6 +13,11 @@ message SchedulerIdleTask {
   // controlling idle time changes, task validation will be aware.
   google.protobuf.Duration idle_time_total = 1;
 }
+
+// Ensures that callbacks for all running buffered starts are attached. Used only
+// during migration from V1, as workflows started by CHASM scheduler are started
+// with callbacks attached.
+message SchedulerCallbacksTask {}
 
 // Buffers actions based on the schedule's specification.
 message GeneratorTask {}
@@ -26,3 +31,6 @@ message InvokerExecuteTask {}
 
 // Buffers actions based on a manually-requested backfill.
 message BackfillerTask {}
+
+// Triggers migration from CHASM (V2) to workflow-backed (V1) scheduler.
+message SchedulerMigrateToWorkflowTask {}

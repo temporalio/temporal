@@ -41,6 +41,7 @@ const (
 	testGetStringPropertyFilteredByNamespaceKey       = "testGetStringPropertyFilteredByNamespaceKey"
 	testGetStringPropertyFilteredByNamespaceIDKey     = "testGetStringPropertyFilteredByNamespaceIDKey"
 	testGetIntPropertyFilteredByDestinationKey        = "testGetIntPropertyFilteredByDestinationKey"
+	testGetDurationPropertyFilteredByChasmTaskTypeKey = "testGetDurationPropertyFilteredByChasmTaskTypeKey"
 )
 
 // Note: fileBasedClientSuite also heavily tests Collection, since some tests are easier with data
@@ -198,6 +199,15 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
 	s.Equal(time.Second, value(taskType))
 	s.client.SetValue(testGetDurationPropertyFilteredByTaskTypeKey, time.Minute)
 	s.Equal(time.Minute, value(taskType))
+}
+
+func (s *collectionSuite) TestGetDurationPropertyFilteredByChasmTaskType() {
+	setting := dynamicconfig.NewChasmTaskTypeDurationSetting(testGetDurationPropertyFilteredByChasmTaskTypeKey, time.Second, "")
+	chasmTaskType := "activity.dispatch"
+	value := setting.Get(s.cln)
+	s.Equal(time.Second, value(chasmTaskType))
+	s.client.SetValue(testGetDurationPropertyFilteredByChasmTaskTypeKey, time.Minute)
+	s.Equal(time.Minute, value(chasmTaskType))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {

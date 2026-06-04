@@ -150,6 +150,7 @@ type unusedDependencies struct {
 	client.Bean
 	sdk.ClientFactory
 	resource.MatchingRawClient
+	resource.MatchingClient
 	resource.HistoryRawClient
 	manager.VisibilityManager
 	archival.Archiver
@@ -158,5 +159,5 @@ type unusedDependencies struct {
 	cache.Cache
 	chasm.Engine
 	ChasmRegistry *chasm.Registry
-	worker_versioning.VersionMembershipCache
+	worker_versioning.VersionMembershipAndReactivationStatusCache
 }

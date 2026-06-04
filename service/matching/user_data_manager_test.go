@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -656,28 +657,39 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		Version: 1,
 		Data:    mkUserData(1),
 	}
+	eph1 := &taskqueuespb.VersionedEphemeralData{
+		Version: 123456789,
+		Data: &taskqueuespb.EphemeralData{
+			Partition: []*taskqueuespb.EphemeralData_ByPartition{
+				&taskqueuespb.EphemeralData_ByPartition{Partition: 1},
+			},
+		},
+	}
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
 		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId,
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0,
-			WaitNewData:              false,
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: -1,
+			WaitNewData:                   false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			UserData: data1,
+			UserData:      data1,
+			EphemeralData: eph1, // return some data, expect it to be ignored
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
 		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId,
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 1,
-			WaitNewData:              true, // after first successful poll, there would be long polls
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      1,
+			LastKnownEphemeralDataVersion: -1,
+			WaitNewData:                   true, // after first successful poll, there would be long polls
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -690,6 +702,58 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
+	ephMerged, _ := m.getMergedEphemeralData()
+	require.Nil(t, ephMerged, "activity root should not process ephemeral data from workflow root")
+	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
+}
+
+func TestUserData_GetEphemeralData(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.dbq = dbq
+
+	m := createUserDataManager(t, controller, tqCfg)
+	m.Start()
+	require.NoError(t, m.WaitUntilInitialized(ctx))
+
+	// set some ephemeral data
+	m.LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64{
+		PhysicalTaskQueueVersion{}: 10,
+	})
+
+	// get it
+	res, err := m.HandleGetUserDataRequest(context.Background(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: 0,
+			WaitNewData:                   false,
+		})
+	require.NoError(t, err)
+	require.Nil(t, res.UserData)
+	require.NotNil(t, res.EphemeralData)
+
+	// don't return it when not requested
+	res, err = m.HandleGetUserDataRequest(context.Background(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: -1,
+			WaitNewData:                   false,
+		})
+	require.NoError(t, err)
+	require.Nil(t, res.UserData)
+	require.Nil(t, res.EphemeralData)
+
 	m.Stop()
 	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -23,7 +24,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -214,7 +214,8 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	err = node.syncSubComponents()
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
-	s.Len(node.mutation.DeletedNodes, 1)
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -251,6 +252,7 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	err := node.serialize()
 	s.NoError(err)
 	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal(enumspb.ENCODING_TYPE_PROTO3, node.serializedNode.GetData().GetEncodingType())
 	s.Equal([]byte{0xa, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
 	s.Equal(valueStateSynced, node.valueState)
 }
@@ -311,8 +313,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			s.NoError(err)
 
 			rootComponent := tc.initComponent()
-			rootNode.value = rootComponent
-			rootNode.valueState = valueStateNeedSyncStructure
+			err = rootNode.SetRootComponent(rootComponent)
+			s.NoError(err)
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -382,7 +384,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 		})
 
@@ -406,7 +409,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 
@@ -433,10 +437,83 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			// Now map is empty and must be deleted.
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
+			s.Empty(mutation.UpdatedNodes)
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
+
+		s.Run("Nil map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field that was never set (nil) should not produce any DeletedNodes
+			// entries when the first transaction is closed — there is nothing in persistence
+			// to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			err = rootNode.SetRootComponent(&TestComponent{}) // all map fields are nil
+			s.NoError(err)
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a map that never existed")
+		})
+
+		s.Run("Empty (non-nil) map "+tc.name+" on first transaction produces no deletions", func() {
+			// A map field initialized to an empty (non-nil) map should also not produce
+			// any DeletedNodes entries — an empty map is equivalent to nil at the
+			// persistence layer and there is nothing to delete.
+			var nilSerializedNodes map[string]*persistencespb.ChasmNode
+			rootNode, err := s.newTestTree(nilSerializedNodes)
+			s.NoError(err)
+
+			var rootComponent TestComponent
+			switch tc.mapField {
+			case "SubComponents":
+				rootComponent.SubComponents = Map[string, *TestSubComponent1]{}
+			case "PendingActivities":
+				rootComponent.PendingActivities = Map[int, *TestSubComponent1]{}
+			default:
+				s.Failf("unexpected mapField", "unknown mapField %q in test case", tc.mapField)
+			}
+			err = rootNode.SetRootComponent(&rootComponent)
+			s.NoError(err)
+
+			mutation, err := rootNode.CloseTransaction()
+			s.NoError(err)
+			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a newly-created empty map")
+		})
 	}
+}
+
+func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
+	// Verify that a Map field that was never set deserializes to an empty (non-nil)
+	// map so callers can range over it without nil checks.
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	rootNode, err := s.newTestTree(nilSerializedNodes)
+	s.NoError(err)
+
+	err = rootNode.SetRootComponent(&TestComponent{})
+	s.NoError(err)
+
+	mutations, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	// Only root is updated; no collection nodes because maps were nil/empty.
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Empty(mutations.DeletedNodes)
+
+	persistedNodes := common.CloneProtoMap(mutations.UpdatedNodes)
+
+	rootNode2, err := s.newTestTree(persistedNodes)
+	s.NoError(err)
+
+	err = rootNode2.deserialize(reflect.TypeFor[*TestComponent]())
+	s.NoError(err)
+
+	rootComponent := rootNode2.value.(*TestComponent)
+	s.NotNil(rootComponent.SubComponents, "SubComponents must be non-nil after deserialization")
+	s.Empty(rootComponent.SubComponents)
+	s.NotNil(rootComponent.PendingActivities, "PendingActivities must be non-nil after deserialization")
+	s.Empty(rootComponent.PendingActivities)
 }
 
 func (s *nodeSuite) TestPointerAttributes() {
@@ -455,7 +532,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent11: NewComponentField(nil, sc11),
 	}
 
-	s.Run("Sync and serialize component with pointer", func() {
+	s.Run("Sync and serialize component with ancestor pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
@@ -466,26 +543,33 @@ func (s *nodeSuite) TestPointerAttributes() {
 			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
-			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
+
+		// sc11 points to root (grandparent) -- an ancestor pointer.
+		sc11.GrandparentPointer = ComponentPointerTo(ctx, rootComponent)
+
 		s.NoError(rootNode.SetRootComponent(rootComponent))
 
-		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
+		s.Equal(fieldTypeDeferredPointer, sc11.GrandparentPointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, SubComponent11Pointer, and SubComponentInterfacePointer must be updated")
+		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, GrandparentPointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
 
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
+		sc11Node := rootNode.children["SubComponent1"].children["SubComponent11"]
+		s.Equal(
+			[]string{},
+			sc11Node.children["GrandparentPointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath(),
+		)
 
-		// Save it use in other subtests.
+		// Save for use in other subtests.
 		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
 	})
 
 	s.NotNil(persistedNodes)
 
-	s.Run("Deserialize pointer component", func() {
+	s.Run("Deserialize ancestor pointer component", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -497,9 +581,14 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NotNil(testComponent.MSPointer)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des := testComponent.SubComponent11Pointer.Get(chasmContext)
+		sc1Des := testComponent.SubComponent1.Get(chasmContext)
+		s.NotNil(sc1Des)
+		sc11Des := sc1Des.SubComponent11.Get(chasmContext)
 		s.NotNil(sc11Des)
-		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+
+		rootViaPointer := sc11Des.GrandparentPointer.Get(chasmContext)
+		s.NotNil(rootViaPointer)
+		s.Equal(testComponent, rootViaPointer)
 
 		ifacePtr := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NotNil(ifacePtr)
@@ -509,7 +598,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
-	s.Run("Clear pointer by setting it to the empty field", func() {
+	s.Run("Clear ancestor pointer by setting it to the empty field", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -517,13 +606,16 @@ func (s *nodeSuite) TestPointerAttributes() {
 		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
+		sc1Des := testComponent.SubComponent1.Get(mutableContext)
+		sc11Des := sc1Des.SubComponent11.Get(mutableContext)
 
-		testComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+		sc11Des.GrandparentPointer = NewEmptyField[*TestComponent]()
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutation.UpdatedNodes, 1, "root should be updated")
-		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
+		// The parent component's data bytes are unchanged; the pointer deletion is recorded in DeletedNodes.
+		s.Empty(mutation.UpdatedNodes)
+		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
 
@@ -602,8 +694,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 1)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	// SubComponent11 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -623,11 +715,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 3)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
-
+	// SubComponent1 and its children were never persisted (nil LVT), so no storage deletes are needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"])
 }
 
@@ -811,7 +900,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 
 func (s *nodeSuite) TestApplyMutation() {
 	mustEncode := func(m proto.Message) *commonpb.DataBlob {
-		taskBlob, err := serialization.ProtoEncode(m)
+		taskBlob, err := encodeChasmBlob(m)
 		s.NoError(err)
 		return taskBlob
 	}
@@ -1012,6 +1101,61 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Len(root.taskValueCache, 1)
 }
 
+func (s *nodeSuite) TestApplyMutation_DeleteUpdateSamePath() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First apply a mutation to delete "SubComponent1" node.
+	err = root.ApplyMutation(NodesMutation{
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {},
+		},
+	})
+	s.NoError(err)
+	s.Empty(root.mutation.UpdatedNodes)
+	s.Len(root.mutation.DeletedNodes, 1)
+
+	// Then apply another mutation to update "SubComponent1" node.
+	// This simulates the applyMutation logic in mutable state where the logic
+	// first applies a deletion only mutation for recorded chasm node tombstones,
+	// and then applies an update only mutation for updated nodes.
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	}
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+	s.Len(root.mutation.UpdatedNodes, 1)
+	s.Empty(root.mutation.DeletedNodes, 1)
+
+}
+
 func (s *nodeSuite) TestApplySnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -1056,9 +1200,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 	// - a new node "SubComponent2" is added.
 
 	now := timestamppb.Now()
-	updatedRootData, err := serialization.ProtoEncode(&protoMessageType{
-		StartTime: now,
-	})
+	updatedRootData, err := encodeChasmBlob(&protoMessageType{StartTime: now})
 	s.NoError(err)
 	incomingSnapshot := NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
@@ -1112,6 +1254,45 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Len(root.currentSA, 3)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+}
+
+func (s *nodeSuite) TestApplySnapshot_EmptySnapshot() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// Apply an empty snapshot to simulate the case where
+	// chasm is disabled in source cluster or chasm tree is empty in
+	// source cluster.
+	err = root.ApplySnapshot(NodesSnapshot{})
+	s.NoError(err)
+
+	// Validate that nodeBase.mutation reflects the applied snapshot.
+	expectedMutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{},
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {}, // NOTE: root component can't be deleted.
+		},
+	}
+	s.Equal(expectedMutation, root.mutation)
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
@@ -1599,7 +1780,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			}
 
 			// Validation begins on the target node, checking ancestors only.
-			err = node.validateAccess(ctx)
+			err = node.validateAccess(ctx, false)
 			if tc.valid {
 				s.NoError(err)
 			} else {
@@ -1916,7 +2097,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	expectedBlob, err := serialization.ProtoEncode(payload)
+	expectedBlob, err := encodeChasmBlob(payload)
 	s.NoError(err)
 
 	testCases := []struct {
@@ -1948,11 +2129,11 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 		{
 			name: "StructWithProtoField",
 			task: &TestPureTask{
-				Payload: payload,
+				Data: payload.Data,
 			},
 			expectedData: expectedBlob.GetData(),
 			equalFn: func(t1, t2 any) {
-				protorequire.ProtoEqual(s.T(), t1.(*TestPureTask).Payload, t2.(*TestPureTask).Payload)
+				protorequire.ProtoEqual(s.T(), t1.(*TestPureTask), t2.(*TestPureTask))
 			},
 		},
 	}
@@ -1991,16 +2172,16 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
-	s.Len(mutations.DeletedNodes, 1)
-	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(mutations.DeletedNodes)
 
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
-	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	// SubComponent1 was read but not mutated, so its data bytes are unchanged and the write is skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 }
 
@@ -2152,12 +2333,102 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 }
 
+func (s *nodeSuite) TestCloseTransaction_CleanupTasksAfterInvalidTask() {
+	now := s.timeSource.Now().UTC()
+
+	task1Attributes := TaskAttributes{}
+	task1 := &TestPureTask{
+		Data: []byte("some-random-data"),
+	}
+	task2 := &TestPureTask{
+		Data: []byte("more-random-data"),
+	}
+	task1Blob, err := encodeChasmBlob(task1)
+	s.NoError(err)
+	task2Blob, err := encodeChasmBlob(task2)
+	s.NoError(err)
+
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								Data:                      task1Blob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(1 * time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								Data:                      task2Blob,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+	s.NotNil(root)
+
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(task1Attributes), gomock.Eq(task1)).
+		Return(false, nil).
+		Times(1)
+	executed, err := root.ExecutePureTask(s.T().Context(), task1Attributes, task1)
+	s.NoError(err)
+	s.False(executed)
+	s.Equal(valueStateSynced, root.valueState)
+
+	nextTransitionCount := int64(1)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), protoEq(task1)).
+		Return(false, nil).
+		Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), protoEq(task2)).
+		Return(true, nil).
+		Times(1)
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.Equal(now.Add(1*time.Minute), s.nodeBackend.LastDeletePureTaskCall())
+
+	s.Len(mutation.UpdatedNodes, 1)
+	for _, updatedNode := range mutation.UpdatedNodes {
+		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount)
+	}
+	s.Empty(mutation.DeletedNodes)
+
+	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+	s.Len(componentAttr.PureTasks, 1)
+	s.Equal(testPureTaskTypeID, componentAttr.PureTasks[0].GetTypeId())
+	s.ProtoEqual(task2Blob, componentAttr.PureTasks[0].GetData())
+	s.Equal(1, s.nodeBackend.NumTasksAdded()) // physical task is generated for the second pure task
+}
+
 func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncode(payload)
+	taskBlob, err := encodeChasmBlob(payload)
 	s.NoError(err)
+	emptyTaskBlob := s.emptyDataBlob()
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -2179,11 +2450,8 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 								TypeId:                    testOutboundSideEffectTaskTypeID,
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
-								Data: &commonpb.DataBlob{
-									Data:         nil,
-									EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-								},
-								PhysicalTaskStatus: physicalTaskStatusCreated,
+								Data:                      emptyTaskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
 							},
 						},
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
@@ -2240,11 +2508,11 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	_, err = root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
 	mutation, err := root.CloseTransaction()
@@ -2266,6 +2534,206 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	componentAttr = root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Empty(componentAttr.SideEffectTasks)
+}
+
+// TestCloseTransaction_PausedStateInvalidatesTasks verifies that all logical tasks are
+// invalidated when a component (or one of its non-detached ancestors) is paused, without
+// invoking the task-specific validator.
+func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
+	payload := &commonpb.Payload{
+		Data: []byte("some-random-data"),
+	}
+	taskBlob, err := encodeChasmBlob(payload)
+	s.NoError(err)
+
+	makeTask := func(typeID uint32, offset int64) *persistencespb.ChasmComponentAttributes_Task {
+		return &persistencespb.ChasmComponentAttributes_Task{
+			TypeId:                    typeID,
+			VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+			VersionedTransitionOffset: offset,
+			Data:                      taskBlob,
+			PhysicalTaskStatus:        physicalTaskStatusCreated,
+		}
+	}
+
+	s.Run("paused component invalidates its own tasks without calling task validator", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+							PureTasks:       []*persistencespb.ChasmComponentAttributes_Task{makeTask(testPureTaskTypeID, 2)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root component.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		// Task-specific validators must NOT be called - paused state short-circuits them.
+		// (no EXPECT calls on mock handlers)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+		s.Empty(componentAttr.SideEffectTasks, "paused component should have no side-effect tasks")
+		s.Empty(componentAttr.PureTasks, "paused component should have no pure tasks")
+
+		// Node must be marked updated so the invalidation is persisted.
+		s.Len(mutation.UpdatedNodes, 1)
+	})
+
+	s.Run("paused parent invalidates non-detached sub-component tasks", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testSubComponent1TypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+							PureTasks:       []*persistencespb.ChasmComponentAttributes_Task{makeTask(testPureTaskTypeID, 2)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root - its non-detached sub-component's tasks should also be invalidated.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+		s.Empty(subAttr.SideEffectTasks, "non-detached sub-component tasks should be invalidated when parent is paused")
+		s.Empty(subAttr.PureTasks)
+		s.Len(mutation.UpdatedNodes, 2) // root (paused) + SubComponent1 (task cleanup)
+	})
+
+	s.Run("detached sub-component tasks are NOT invalidated by parent pause", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testSubComponent1TypeID,
+							Detached:        true,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		// The detached sub-component's validator IS called (it decides independently).
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+		s.Len(subAttr.SideEffectTasks, 1, "detached sub-component tasks should survive parent pause")
+		_ = mutation
+	})
+
+	s.Run("write access accepted on paused component", func() {
+		// Requirement: for now accept chasm engine requests on paused component.
+		root, err := s.newTestTree(testComponentSerializedNodes())
+		s.NoError(err)
+
+		ctx := NewContext(
+			newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+			root,
+		)
+
+		// Pause the root.
+		err = root.prepareComponentValue(ctx)
+		s.NoError(err)
+		root.value.(*TestComponent).Pause(NewMutableContext(context.Background(), root))
+
+		// validateAccess should still succeed - paused does NOT block writes.
+		subNode, ok := root.findNode([]string{"SubComponent1"})
+		s.True(ok)
+		err = subNode.validateAccess(ctx, false)
+		s.NoError(err, "write access to sub-component of paused parent should be accepted")
+	})
+}
+
+func (s *nodeSuite) TestCloseTransaction_LifecycleChange_PausedRootKeepsRunning() {
+	// When the root component is paused, the execution state should remain RUNNING
+	// because paused is an OPEN lifecycle state.
+	node := s.testComponentTree()
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	rootComp, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+	rootComp.(*TestComponent).Pause(chasmCtx)
+
+	_, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
@@ -2317,7 +2785,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.NoError(err)
 
 	// Add a valid side effect task.
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	testComponent := c.(*TestComponent)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
@@ -2326,7 +2794,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	// Add an invalid outbound side effect task.
 	// the invalid task should not be created.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2335,34 +2803,30 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	)
 
 	// Add a valid pure task.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
-				Data: []byte("valid-pure-task"),
-			},
+			Data: []byte("valid-pure-task"),
 		},
 	)
 
 	// Add an invalid pure task.
 	// the invalid task should not be created.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
-				Data: []byte("invalid-pure-task"),
-			},
+			Data: []byte("invalid-pure-task"),
 		},
 	)
 
 	// Add a valid outbound side effect task to a sub-component.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	subComponent2 := testComponent.SubComponent2.Get(mutableContext)
 	mutableContext.AddTask(
@@ -2380,7 +2844,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
 	newSideEffectTask := rootAttr.SideEffectTasks[0]
 	newSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testSideEffectTaskTypeID,
 		ScheduledTime:             timestamppb.New(time.Time{}),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2396,12 +2860,14 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
+		TaskVersionedTransition:                &persistencespb.VersionedTransition{TransitionCount: 2},
+		TaskVersionedTransitionOffset:          1,
 	}, chasmTask.Info)
 
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
 	newPureTask := rootAttr.PureTasks[0]
 	newPureTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testPureTaskTypeID,
 		ScheduledTime:             timestamppb.New(s.timeSource.Now()),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2416,7 +2882,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
 	newOutboundSideEffectTask := subComponent2Attr.SideEffectTasks[0]
 	newOutboundSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testOutboundSideEffectTaskTypeID,
 		Destination:               "destination",
 		ScheduledTime:             timestamppb.New(time.Time{}),
@@ -2433,6 +2899,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
+		TaskVersionedTransition:                &persistencespb.VersionedTransition{TransitionCount: 2},
+		TaskVersionedTransitionOffset:          3,
 	}, chasmTask.Info)
 }
 
@@ -2654,7 +3122,8 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
+	// The terminated state is unchanged from the prior transaction, so the write is skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
@@ -2727,31 +3196,17 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	var nilSerializedNodes map[string]*persistencespb.ChasmNode
-	// Create an empty tree.
 	node, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
-	s.Nil(node.value)
 
-	// Get an empty top-level component from the empty tree.
-	err = node.deserialize(reflect.TypeFor[*TestComponent]())
+	tc := &TestComponent{}
+	setTestComponentFields(tc, s.nodeBackend)
+	err = node.SetRootComponent(tc)
 	s.NoError(err)
-	s.NotNil(node.value)
-	s.IsType(&TestComponent{}, node.value)
-	s.Equal(valueStateSynced, node.valueState)
-
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
-	s.NoError(err)
-	s.Equal(valueStateNeedSyncStructure, node.valueState)
-	// Create subcomponents by assigning fields to TestComponent instance.
-	setTestComponentFields(tc.(*TestComponent), s.nodeBackend)
-
-	// Sync tree with subcomponents of TestComponent.
-	err = node.syncSubComponents()
 	s.False(node.needsPointerResolution)
-	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
-	return node // maybe tc too
+	return node
 }
 
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
@@ -2772,7 +3227,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		testComponent,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+			Data: []byte("root-task-payload"),
 		},
 	)
 
@@ -2782,16 +3237,16 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		sc1,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("sc1-task-payload")},
+			Data: []byte("sc1-task-payload"),
 		},
 	)
 
 	// One valid task, one invalid task
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskExecutor.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
 			gomock.Any(),
@@ -2801,7 +3256,8 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	// Immediate pure tasks run inline without changing data bytes, so all writes are skipped.
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
@@ -2812,7 +3268,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
 	mustEncode := func(m proto.Message) *commonpb.DataBlob {
-		taskBlob, err := serialization.ProtoEncode(m)
+		taskBlob, err := encodeChasmBlob(m)
 		s.NoError(err)
 		return taskBlob
 	}
@@ -2942,18 +3398,18 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	processedTaskData := [][]byte{}
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
-		s.NotNil(executor)
+	err = root.EachPureTask(now.Add(time.Minute), func(handler NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
+		s.NotNil(handler)
 		s.NotNil(taskAttributes)
 
 		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
-		processedTaskData = append(processedTaskData, testPureTask.Payload.Data)
+		processedTaskData = append(processedTaskData, testPureTask.Data)
 
 		// When processing root component task, delete SubComponent2 to verify its task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Data,
 			[]byte("some-random-data-root"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -2965,7 +3421,7 @@ func (s *nodeSuite) TestEachPureTask() {
 
 		// When processing task for SubComponent11, delete its parent SubComponent1 so that the remaining task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Data,
 			[]byte("some-random-data-sc11-2"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -3002,9 +3458,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
-			Data: []byte("some-random-data"),
-		},
+		Data: []byte("some-random-data"),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -3013,7 +3467,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	ctx := context.Background()
 
 	expectExecute := func(result error) {
-		s.testLibrary.mockPureTaskExecutor.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Execute(
 				gomock.AssignableToTypeOf(&mutableCtx{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
@@ -3023,8 +3477,10 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).
+			Return(retValue, errValue).
+			Times(1)
 	}
 
 	// Succeed task execution and validation (happy case).
@@ -3052,7 +3508,8 @@ func (s *nodeSuite) TestExecutePureTask() {
 	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.False(executed)
-	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
+	s.Equal(valueStateSynced, root.valueState)
+	s.True(root.isActiveStateDirty)
 
 	// Error during task validation (no execution occurs).
 	root.setValueState(valueStateSynced)
@@ -3065,9 +3522,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 func (s *nodeSuite) TestValidatePureTask() {
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
-			Data: []byte("some-random-data"),
-		},
+		Data: []byte("some-random-data"),
 	}
 
 	root := s.testComponentTree()
@@ -3076,7 +3531,7 @@ func (s *nodeSuite) TestValidatePureTask() {
 
 	ctx := context.Background()
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -3130,8 +3585,19 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
 	}
 
+	emptyTaskBlob := s.emptyDataBlob()
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
@@ -3139,12 +3605,10 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
 		},
-		Path:   rootPath,
-		TypeId: testSideEffectTaskTypeID,
-		Data: &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
+		Path:        []string{"SubComponent1"},
+		TypeId:      testSideEffectTaskTypeID,
+		ArchetypeId: testComponentTypeID,
+		Data:        emptyTaskBlob,
 	}
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
@@ -3181,7 +3645,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	}
 	expectValidate := func(valid bool, validationErr error) {
 		backendValidtionFnCalled = false
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(
 			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
@@ -3189,7 +3653,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		).Return(valid, validationErr).Times(1)
 	}
 	expectExecute := func(result error) {
-		s.testLibrary.mockSideEffectTaskExecutor.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
@@ -3201,12 +3665,14 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
 				s.NotNil(ref.validationFn)
+				s.Equal(taskInfo.GetArchetypeId(), uint32(ref.archetypeID))
 
 				// Accessing the Component should trigger the validationFn.
-				_, err := root.Component(chasmContext, ref)
+				component, err := root.Component(chasmContext, ref)
 				if err != nil {
 					return err
 				}
+				s.IsType(&TestSubComponent1{}, component)
 				return result
 			}).Times(1)
 	}
@@ -3214,7 +3680,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Succeed task execution.
 	expectValidate(true, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
 	s.True(backendValidtionFnCalled)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3222,7 +3688,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Invalid task.
 	expectValidate(false, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3231,7 +3697,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	validationErr := errors.New("validation error")
 	expectValidate(false, validationErr)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(validationErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -3239,13 +3705,185 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectValidate(true, nil)
 	executionErr := errors.New("execution error")
 	expectExecute(executionErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
+func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
+	setup := func() (*Node, *tasks.ChasmTask, ExecutionKey, context.Context, Context) {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testSubComponent1TypeID,
+						},
+					},
+				},
+			},
+		}
+
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+		s.NotNil(root)
+
+		workflowKey := definition.NewWorkflowKey(
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+		)
+		emptyTaskBlob := s.emptyDataBlob()
+		chasmTask := &tasks.ChasmTask{
+			WorkflowKey:         workflowKey,
+			VisibilityTimestamp: s.timeSource.Now(),
+			TaskID:              123,
+			Category:            tasks.CategoryOutbound,
+			Destination:         "destination",
+			Info: &persistencespb.ChasmTaskInfo{
+				ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				Path:        []string{"SubComponent1"},
+				TypeId:      testDiscardableSideEffectTaskTypeID,
+				ArchetypeId: testComponentTypeID,
+				Data:        emptyTaskBlob,
+			},
+		}
+		executionKey := ExecutionKey{
+			NamespaceID: chasmTask.NamespaceID,
+			BusinessID:  chasmTask.WorkflowID,
+			RunID:       chasmTask.RunID,
+		}
+
+		mockEngine := NewMockEngine(s.controller)
+		ctx := NewEngineContext(context.Background(), mockEngine)
+		chasmContext := NewMutableContext(ctx, root)
+
+		return root, chasmTask, executionKey, ctx, chasmContext
+	}
+
+	s.Run("Success", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			s.NotNil(ref.validationFn)
+			s.Equal(chasmTask.Info.GetArchetypeId(), uint32(ref.archetypeID))
+			component, err := root.Component(chasmContext, ref)
+			if err != nil {
+				return err
+			}
+			s.IsType(&TestSubComponent1{}, component)
+			return nil
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
+		s.NoError(err)
+		s.True(validationFnCalled)
+		s.True(chasmTask.DeserializedTask.IsValid())
+	})
+
+	s.Run("InvalidTask", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.ErrorAs(err, new(*serviceerror.NotFound))
+	})
+
+	s.Run("ValidationError", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		validationErr := errors.New("validation error")
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, validationErr).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(
+			ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.ErrorIs(err, validationErr)
+	})
+
+	s.Run("DiscardHandlerError", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		discardErr := errors.New("discard error")
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			s.NotNil(ref.validationFn)
+			if _, err := root.Component(chasmContext, ref); err != nil {
+				return err
+			}
+			return discardErr
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
+		s.ErrorIs(err, discardErr)
+		s.True(validationFnCalled)
+	})
+}
+
 func (s *nodeSuite) TestValidateSideEffectTask() {
+	emptyTaskBlob := s.emptyDataBlob()
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount:          1,
@@ -3257,10 +3895,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		},
 		Path:   rootPath,
 		TypeId: testSideEffectTaskTypeID,
-		Data: &commonpb.DataBlob{
-			Data:         nil,
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
+		Data:   emptyTaskBlob,
 	}
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
@@ -3281,7 +3916,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	expectValidate := func(componentType any, retValue bool, errValue error) {
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(
 				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
@@ -3349,6 +3984,39 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }
 
+func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
+	// Build a tree deep enough to trigger Go's slice capacity doubling.
+	// append grows cap: 0→1→2→4. At depth 3, the path slice has len=3, cap=4,
+	// so a 4th append reuses the backing array. If node P at depth 3 has siblings
+	// S1 and S2 at depth 4, the second sibling's append overwrites S1's path.
+	//
+	// Tree: root → A → B → C → {S1, S2}
+	root := &Node{
+		nodeName: "",
+		children: map[string]*Node{
+			"A": {nodeName: "A", children: map[string]*Node{
+				"B": {nodeName: "B", children: map[string]*Node{
+					"C": {nodeName: "C", children: map[string]*Node{
+						"S1": {nodeName: "S1", children: map[string]*Node{}},
+						"S2": {nodeName: "S2", children: map[string]*Node{}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	// Store raw path slices (not copies!) so we can detect mutation.
+	collected := make(map[string][]string)
+	for path, node := range root.andAllChildren() {
+		collected[node.nodeName] = path
+	}
+
+	// Verify S1/S2 do not have a corrupted path
+	// because append reused the backing array at depth 3→4.
+	s.Equal([]string{"A", "B", "C", "S1"}, collected["S1"])
+	s.Equal([]string{"A", "B", "C", "S2"}, collected["S2"])
+}
+
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
@@ -3356,4 +4024,387 @@ func (s *nodeSuite) newTestTree(
 		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
 	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+}
+
+func (s *nodeSuite) emptyDataBlob() *commonpb.DataBlob {
+	blob, err := encodeChasmBlob(nil)
+	s.NoError(err)
+	return blob
+}
+
+type protoMatcher struct {
+	x proto.Message
+}
+
+func (e protoMatcher) Matches(x any) bool {
+	if xx, ok := x.(proto.Message); ok {
+		return proto.Equal(e.x, xx)
+	}
+	return false
+}
+
+func (e protoMatcher) String() string {
+	return fmt.Sprintf("is proto equal to %s (%T)", e.x, e.x)
+}
+
+func protoEq(x proto.Message) gomock.Matcher {
+	return protoMatcher{x: x}
+}
+
+// TestCloseTransaction_AppliesPendingComponentMetadata verifies that
+// SetRequestLinks/SetUserMetadata writes are written onto the root component's
+// ChasmComponentAttributes during CloseTransaction, that the touched node is
+// added to NodesMutation.UpdatedNodes, and that its LastUpdateVersionedTransition
+// is bumped.
+func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
+	const requestID = "req-1"
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	md := &sdkpb.UserMetadata{Summary: &commonpb.Payload{Data: []byte("summary")}}
+
+	root := s.testComponentTree() // sets HandleNextTransitionCount = 1, HandleGetCurrentVersion = 1
+
+	// Initial create transaction must close cleanly before we exercise the metadata path.
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Bump the transition count so we can verify LastUpdateVersionedTransition was updated.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	s.NoError(ctx.SetRequestLinks(c, requestID, []*commonpb.Link{link}))
+	s.NoError(ctx.SetUserMetadata(c, md))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	rootSerialized, ok := mutation.UpdatedNodes[""]
+	s.True(ok, "root node must appear in UpdatedNodes after staging metadata")
+	attrs := rootSerialized.GetMetadata().GetComponentAttributes()
+	s.NotNil(attrs)
+	s.Equal([]*commonpb.Link{link}, attrs.GetRequests()[requestID].GetLinks())
+	s.Equal(md.GetSummary().GetData(), attrs.GetUserMetadata().GetSummary().GetData())
+	s.Equal(int64(2), rootSerialized.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
+
+	// Pending maps must be cleared after CloseTransaction so a subsequent transaction
+	// does not re-apply the same writes.
+	s.Empty(root.pendingRequestLinks)
+	s.Empty(root.pendingUserMetadata)
+}
+
+// TestSetComponentMetadata_MarksTreeDirty verifies that staging a
+// SetRequestLinks or SetUserMetadata write flips IsDirty()/IsStateDirty()
+// before CloseTransaction runs.
+func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.False(root.IsDirty(), "tree must be clean after the initial close")
+	s.False(root.IsStateDirty())
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}}))
+	s.True(root.IsStateDirty(), "staging SetRequestLinks must mark the tree dirty")
+	s.True(root.IsDirty())
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+	s.False(root.IsStateDirty(), "CloseTransaction must clear the dirty flag")
+
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("summary")},
+	}))
+	s.True(root.IsStateDirty(), "staging SetUserMetadata must mark the tree dirty")
+	s.True(root.IsDirty())
+}
+
+// TestCloseTransaction_DropsOrphanedComponentMetadata verifies that pending
+// SetRequestLinks/SetUserMetadata writes against a component value that is
+// not registered in the tree are silently dropped during CloseTransaction
+// (rather than panicking or surfacing an error), and that the pending maps
+// are cleared afterwards.
+func (s *nodeSuite) TestCloseTransaction_DropsOrphanedComponentMetadata() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+
+	// Stage writes against a component value that was never set on the tree.
+	orphan := &TestComponent{}
+	s.NoError(ctx.SetRequestLinks(orphan, "req-id", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}}))
+	s.NoError(ctx.SetUserMetadata(orphan, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("orphan")},
+	}))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.NotContains(mutation.UpdatedNodes, "", "root must not be updated by orphaned writes")
+	s.Empty(root.pendingRequestLinks)
+	s.Empty(root.pendingUserMetadata)
+}
+
+// TestSetComponentRequestLinks_RejectsEmptyRequestID verifies the framework
+// hard-rejects empty requestIDs so two callers cannot silently collide on the
+// empty-string key.
+func (s *nodeSuite) TestSetComponentRequestLinks_RejectsEmptyRequestID() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	err = ctx.SetRequestLinks(c, "", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}})
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+
+	_, err = ctx.RequestLinks(c, "")
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+// TestSetRequestLinks_MultipleRequestsCoexist verifies that two distinct
+// request IDs on the same component land as separate entries in
+// ChasmComponentAttributes.requests.
+func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+	s.NoError(ctx.SetRequestLinks(c, "req-a", []*commonpb.Link{linkA}))
+	s.NoError(ctx.SetRequestLinks(c, "req-b", []*commonpb.Link{linkB}))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(attrs.GetRequests(), 2)
+	s.Equal([]*commonpb.Link{linkA}, attrs.GetRequests()["req-a"].GetLinks())
+	s.Equal([]*commonpb.Link{linkB}, attrs.GetRequests()["req-b"].GetLinks())
+}
+
+// TestSetRequestLinks_ReplacesEntryForSameRequestID verifies that two
+// SetRequestLinks calls with the same requestID — within or across
+// transactions — leave only the second value in attrs.Requests.
+func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+
+	// Within a single transaction: second SetRequestLinks for the same requestID
+	// must overwrite the first.
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkB}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{linkB},
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
+		"second SetRequestLinks within a transaction must overwrite the first",
+	)
+
+	// Across transactions: a later write for the same requestID must replace the
+	// previously persisted entry.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{linkA},
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
+		"a follow-up transaction's SetRequestLinks must replace the persisted entry",
+	)
+}
+
+// TestSetRequestLinks_RemovesEntryWhenEmptyLinks verifies that passing nil/empty
+// links for a previously-stored requestID removes that entry from
+// ChasmComponentAttributes.requests.
+func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+
+	// First persist a link under "req".
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests(), "req")
+
+	// Then clear it with an empty links slice.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", nil))
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.NotContains(attrs.GetRequests(), "req", "empty links must remove the entry for requestID")
+}
+
+// TestRequestLinks_PrefersPendingOverPersisted verifies that an in-transaction
+// SetRequestLinks shadow-reads via RequestLinks / Links return the staged
+// (pending) value rather than the previously-persisted entry, so callers
+// reading-then-writing within a single transaction never observe stale state.
+func (s *nodeSuite) TestRequestLinks_PrefersPendingOverPersisted() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	oldLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "old", RunId: "run"},
+	}}
+	newLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "new", RunId: "run"},
+	}}
+
+	// Persist [oldLink] under "req".
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{oldLink}))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Open a new transaction, stage a replace with [newLink] under the same
+	// requestID, then read via both APIs before close.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{newLink}))
+
+	got, err := ctx.RequestLinks(c, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{newLink}, got, "RequestLinks must prefer pending over persisted for the same requestID")
+	s.Equal([]*commonpb.Link{newLink}, ctx.Links(c),
+		"Links must prefer pending and not return old+new duplicates for the same requestID")
+}
+
+// TestCloseTransaction_PersistsAcrossTransactions verifies the realistic
+// production flow: write metadata in transaction A, commit, open transaction
+// B, read it back through the framework APIs.
+func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	md := &sdkpb.UserMetadata{Summary: &commonpb.Payload{Data: []byte("summary")}}
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
+	s.NoError(ctx.SetUserMetadata(c, md))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// New transaction: framework getters must surface the persisted attrs.
+	nextTC = 3
+	ctx2 := NewMutableContext(context.Background(), root)
+	c2, err := root.Component(ctx2, ComponentRef{})
+	s.NoError(err)
+
+	got, err := ctx2.RequestLinks(c2, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{link}, got)
+	s.Equal([]*commonpb.Link{link}, ctx2.Links(c2))
+	s.ProtoEqual(md, ctx2.UserMetadata(c2))
+}
+
+// TestSetUserMetadata_NilClearsPersistedValue verifies that SetUserMetadata
+// called with nil clears any previously-persisted user metadata on the
+// component (rather than being treated as a no-op).
+func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Persist user metadata.
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("first")},
+	}))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Clear with nil.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, nil))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
 }

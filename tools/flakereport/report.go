@@ -9,6 +9,8 @@ import (
 
 const boldFlakeRateThreshold = 5.0
 
+var sparklineRunes = []rune("▁▂▃▄▅▆▇█")
+
 // hoursAgo formats a timestamp as "Xh ago" relative to now.
 func hoursAgo(t time.Time) string {
 	h := math.Round(time.Since(t).Hours())
@@ -26,8 +28,8 @@ func formatReportLines(reports []TestReport) []string {
 		if r.TotalRuns > 0 {
 			pct = float64(r.FailureCount) / float64(r.TotalRuns) * 100.0
 		}
-		lines = append(lines, fmt.Sprintf("• %.1f%% (%d failures): `%s`",
-			pct, r.FailureCount, r.TestName))
+		lines = append(lines, fmt.Sprintf("• %.1f%% (%d/%d): `%s`",
+			pct, r.FailureCount, r.TotalRuns, r.TestName))
 	}
 	return lines
 }
@@ -43,6 +45,30 @@ func formatLinks(urls []string, maxLinks int) string {
 		parts = append(parts, fmt.Sprintf("[%d](%s)", i+1, urls[i]))
 	}
 	return strings.Join(parts, " ")
+}
+
+func formatSparkline(points []int) string {
+	if len(points) == 0 {
+		return "-"
+	}
+
+	maxPoint := 0
+	for _, point := range points {
+		if point > maxPoint {
+			maxPoint = point
+		}
+	}
+	var sb strings.Builder
+	sb.Grow(len(points))
+	for _, point := range points {
+		if point == 0 {
+			sb.WriteRune(sparklineRunes[0])
+			continue
+		}
+		idx := int(math.Ceil(float64(point) / float64(maxPoint) * float64(len(sparklineRunes)-1)))
+		sb.WriteRune(sparklineRunes[idx])
+	}
+	return sb.String()
 }
 
 // generateSuiteBreakdownTable creates a markdown table of per-suite flake data
@@ -70,15 +96,15 @@ func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 	return sb.String()
 }
 
-// generateTestReportTable creates a markdown table of per-test flake data
-func generateTestReportTable(reports []TestReport, maxLinks int) string {
+// generateTestReportTable creates a markdown table of test reports with rate column.
+func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks int) string {
 	if len(reports) == 0 {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString("| Test | Flake Rate | Last Failure | Links |\n")
-	sb.WriteString("|------|------------|-------------|-------|\n")
+	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Trend | Links |\n", rateHeader))
+	sb.WriteString("|------|------------|-------------|-------|-------|\n")
 
 	for _, report := range reports {
 		pct := 0.0
@@ -94,32 +120,8 @@ func generateTestReportTable(reports []TestReport, maxLinks int) string {
 		if pct > boldFlakeRateThreshold {
 			rate = "**" + rate + "**"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-			report.TestName, rate, lastFailure, links))
-	}
-
-	return sb.String()
-}
-
-// generateCIBreakerTable creates a markdown table for CI breakers (no flake rate column)
-func generateCIBreakerTable(reports []TestReport, maxLinks int) string {
-	if len(reports) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-	sb.WriteString("| Test | CI Runs Broken | Total Failures | Last Failure | Links |\n")
-	sb.WriteString("|------|---------------|----------------|-------------|-------|\n")
-
-	for _, report := range reports {
-		links := formatLinks(report.GitHubURLs, maxLinks)
-		lastFailure := "N/A"
-		if !report.LastFailure.IsZero() {
-			lastFailure = hoursAgo(report.LastFailure)
-		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %d | %d | %s | %s |\n",
-			report.TestName, report.CIRunsBroken, report.FailureCount,
-			lastFailure, links))
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | `%s` | %s |\n",
+			report.TestName, rate, lastFailure, formatSparkline(report.TrendPoints), links))
 	}
 
 	return sb.String()

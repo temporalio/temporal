@@ -49,12 +49,12 @@ func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 
 func (s *WorkflowResetWithChildSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.Worker().RegisterWorkflow(s.WorkflowWithChildren)
-	s.Worker().RegisterWorkflow(s.WorkflowWithWaitingChild)
-	s.Worker().RegisterWorkflow(child)
-	s.Worker().RegisterWorkflow(s.waitingChild)
-	s.Worker().RegisterActivity(simpleActivity)
-	err := s.Worker().Start()
+	s.SdkWorker().RegisterWorkflow(s.WorkflowWithChildren)
+	s.SdkWorker().RegisterWorkflow(s.WorkflowWithWaitingChild)
+	s.SdkWorker().RegisterWorkflow(child)
+	s.SdkWorker().RegisterWorkflow(s.waitingChild)
+	s.SdkWorker().RegisterActivity(simpleActivity)
+	err := s.SdkWorker().Start()
 	s.NoError(err)
 }
 

@@ -194,7 +194,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
-	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, err := sadefs.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"Keyword01": saPayload,
@@ -238,7 +238,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		executionInfo,
 	)
 	s.Error(err)
-	s.Contains(err.Error(), "cannot use internal per namespace task queue")
+	s.Contains(err.Error(), "cannot use internal per-namespace task queue")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, fc)
 
 	executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
@@ -286,7 +286,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
-	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, _ := sadefs.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 
 	deploymentRestrictedAttributes := []string{
@@ -837,6 +837,63 @@ func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_In
 				s.ErrorAs(err, &invalidArgument)
 			} else {
 				s.NoError(err)
+			}
+		})
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_WorkflowTaskQueue() {
+	testCases := []struct {
+		name              string
+		workflowTaskQueue string
+		activityTaskQueue string
+		expectError       bool
+	}{
+		{
+			name:              "normal workflow scheduling activity on normal task queue is allowed",
+			workflowTaskQueue: "user-task-queue",
+			activityTaskQueue: "user-task-queue",
+			expectError:       false,
+		},
+		{
+			name:              "normal workflow scheduling activity on per-ns-tq is blocked",
+			workflowTaskQueue: "user-task-queue",
+			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
+			expectError:       true,
+		},
+		{
+			name:              "per-ns-tq workflow scheduling activity on per-ns-tq is allowed",
+			workflowTaskQueue: primitives.PerNSWorkerTaskQueue,
+			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
+			expectError:       false,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:          "test-activity-id",
+				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: tt.activityTaskQueue},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+			}
+
+			fc, err := s.validator.ValidateActivityScheduleAttributes(
+				s.testNamespaceID,
+				attributes,
+				durationpb.New(0),
+				tt.workflowTaskQueue,
+			)
+
+			if tt.expectError {
+				s.Error(err)
+				var invalidArgument *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgument)
+				s.Contains(err.Error(), "internal per-namespace task queue")
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, fc)
+			} else {
+				s.NoError(err)
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 			}
 		})
 	}

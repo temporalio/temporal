@@ -5,9 +5,9 @@ package temporal.server.api.enums.v1;
 option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
 enum WorkflowTaskType {
-    WORKFLOW_TASK_TYPE_UNSPECIFIED = 0;
-    WORKFLOW_TASK_TYPE_NORMAL = 1;
-    // TODO (alex): TRANSIENT is not current used. Needs to be set when Attempt>1.
-    WORKFLOW_TASK_TYPE_TRANSIENT = 2;
-    WORKFLOW_TASK_TYPE_SPECULATIVE = 3;
+  WORKFLOW_TASK_TYPE_UNSPECIFIED = 0;
+  WORKFLOW_TASK_TYPE_NORMAL = 1;
+  // TODO (alex): TRANSIENT is not current used. Needs to be set when Attempt>1.
+  WORKFLOW_TASK_TYPE_TRANSIENT = 2;
+  WORKFLOW_TASK_TYPE_SPECULATIVE = 3;
 }

@@ -41,10 +41,12 @@ jobs:
           load: true
 
       - name: Save Docker image as artifact
+        env:
+          BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag }}
         run: |
-          docker save temporaliotest/server:${{ steps.build-docker.outputs.branch-tag }} -o /tmp/temporal-server.tar
-          docker save temporaliotest/admin-tools:${{ steps.build-docker.outputs.branch-tag }} -o /tmp/temporal-admin-tools.tar
-          echo ${{ steps.build-docker.outputs.branch-tag }} > /tmp/image_tag
+          docker save "temporaliotest/server:${BRANCH_TAG}" -o /tmp/temporal-server.tar
+          docker save "temporaliotest/admin-tools:${BRANCH_TAG}" -o /tmp/temporal-admin-tools.tar
+          echo "${BRANCH_TAG}" > /tmp/image_tag
 
       - name: Prepare artifact
         working-directory: ${{ github.workspace }}
@@ -54,7 +56,7 @@ jobs:
           cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
 
       - name: Upload Docker artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: temporal-server-docker
           path: |

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -128,20 +129,20 @@ func (s *activitiesSuite) SetupTest() {
 		Return(&testNamespace, nil).AnyTimes()
 
 	chasmRegistry := chasm.NewRegistry(s.logger)
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	s.a = &activities{
-		namespaceRegistry:                s.mockNamespaceRegistry,
+		NamespaceRegistry:                s.mockNamespaceRegistry,
 		namespaceReplicationQueue:        s.mockNamespaceReplicationQueue,
 		clientFactory:                    s.mockClientFactory,
 		clientBean:                       s.mockClientBean,
 		taskManager:                      s.mockTaskManager,
 		frontendClient:                   s.mockFrontendClient,
 		adminClient:                      s.mockAdminClient,
-		historyClient:                    s.mockHistoryClient,
-		logger:                           s.logger,
-		metricsHandler:                   s.mockMetricsHandler,
+		HistoryClient:                    s.mockHistoryClient,
+		Logger:                           s.logger,
+		MetricsHandler:                   s.mockMetricsHandler,
 		forceReplicationMetricsHandler:   s.mockMetricsHandler,
 		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
 		enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
@@ -181,6 +182,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 
@@ -202,6 +204,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 				RunId:      execution2.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution2.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(r.resp, r.err).Times(1)
 	}
@@ -272,6 +275,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -328,6 +332,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).AnyTimes()
 
@@ -384,6 +389,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 	result, err := s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[0])
@@ -398,6 +404,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution2.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution2.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, serviceerror.NewNotFound("")).Times(1)
 
@@ -412,6 +419,23 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 	})).Return(completeState, nil).AnyTimes()
 
 	result, err = s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[1])
+	s.NoError(err)
+	s.False(result.isVerified())
+
+	// Test busy workflow — treated as not-yet-replicated, not an error
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace: mockedNamespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution1.BusinessID,
+			RunId:      execution1.RunID,
+		},
+		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
+		SkipForceReload: true,
+	})).Return(nil, &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+	}).Times(1)
+	result, err = s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[0])
 	s.NoError(err)
 	s.False(result.isVerified())
 }
@@ -446,6 +470,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 		case executionNotfound:
@@ -456,6 +481,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 			break Loop
@@ -467,6 +493,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewInternal("")).Times(1)
 		}
@@ -616,6 +643,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -661,6 +689,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 

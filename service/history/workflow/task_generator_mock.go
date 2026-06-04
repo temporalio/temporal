@@ -14,6 +14,7 @@ import (
 	time "time"
 
 	history "go.temporal.io/api/history/v1"
+	worker "go.temporal.io/api/worker/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	hsm "go.temporal.io/server/service/history/hsm"
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -301,6 +302,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateUserTimerTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateUserTimerTasks))
 }
 
+// GenerateWorkerCommandsTasks mocks base method.
+func (m *MockTaskGenerator) GenerateWorkerCommandsTasks(commands []*worker.WorkerCommand, controlQueue string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateWorkerCommandsTasks", commands, controlQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateWorkerCommandsTasks indicates an expected call of GenerateWorkerCommandsTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateWorkerCommandsTasks(commands, controlQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkerCommandsTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkerCommandsTasks), commands, controlQueue)
+}
+
 // GenerateWorkflowCloseTasks mocks base method.
 func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime time.Time, deleteAfterClose, skipCloseTransferTask bool) error {
 	m.ctrl.T.Helper()
@@ -342,4 +357,18 @@ func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *history.Histo
 func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowStartTasks(startEvent any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowStartTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowStartTasks), startEvent)
+}
+
+// RegenerateTimerTasksForTimeSkipping mocks base method.
+func (m *MockTaskGenerator) RegenerateTimerTasksForTimeSkipping() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegenerateTimerTasksForTimeSkipping")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegenerateTimerTasksForTimeSkipping indicates an expected call of RegenerateTimerTasksForTimeSkipping.
+func (mr *MockTaskGeneratorMockRecorder) RegenerateTimerTasksForTimeSkipping() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateTimerTasksForTimeSkipping", reflect.TypeOf((*MockTaskGenerator)(nil).RegenerateTimerTasksForTimeSkipping))
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -29,8 +30,9 @@ type (
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
-		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
+		// TrySyncMatch tries to match task to a local or remote poller. Returns a syncMatchOutcome
+		// indicating success or the reason the match failed.
+		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		// TODO(pri): old matcher cleanup
@@ -44,10 +46,10 @@ type (
 		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		DispatchQueryTask(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
 		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
 		// error is returned, if dispatched to local poller then nil and nil is returned.
-		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
+		DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		RemovePoller(pollerIdentity)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
@@ -64,5 +66,8 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
+		// RecordTaskAdd records the outcome of a task add to this physical queue using
+		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
+		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
 	}
 )

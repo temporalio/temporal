@@ -523,12 +523,19 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
 			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: func() time.Duration {
-				return 0 // Setting cleanup delay to 0 to continuously delete channels.
+				// Use a small positive delay (not 0) so that cleanupLoop blocks on the
+				// timer channel instead of spinning in a tight loop. Cleanup is triggered
+				// by advancing the fake time source below.
+				return time.Nanosecond
 			},
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		log.NewTestLogger(),
 	)
+	// Use the suite's EventTimeSource so cleanup timers only fire when we
+	// explicitly advance fake time, preventing the cleanup goroutine from
+	// spinning in a tight loop with a real-time zero-duration timer.
+	s.scheduler.ts = s.ts
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
 	s.mockFIFOScheduler.EXPECT().Stop()
@@ -554,20 +561,28 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 		taskWG.Add(1)
 		s.scheduler.Submit(mockTask0)
 		taskWG.Wait()
+		// Advance past the 1ns delay to trigger cleanup asynchronously, creating
+		// a concurrent race between cleanup and the next Submit call.
+		s.ts.Advance(2 * time.Nanosecond)
 
 		taskWG.Add(1)
 		s.scheduler.Submit(mockTask1)
 		taskWG.Wait()
+		s.ts.Advance(2 * time.Nanosecond)
 
 		taskWG.Add(1)
 		s.scheduler.Submit(mockTask2)
 		taskWG.Wait()
+		s.ts.Advance(2 * time.Nanosecond)
 
 		taskWG.Add(1)
 		s.scheduler.Submit(mockTask3)
 		taskWG.Wait()
+		s.ts.Advance(2 * time.Nanosecond)
 	}
 
+	// Trigger a final cleanup and give the cleanup goroutine time to run.
+	s.ts.Advance(2 * time.Nanosecond)
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 	s.Empty(s.scheduler.channels())
 }

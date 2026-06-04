@@ -1,15 +1,19 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -94,4 +98,86 @@ func TestSentinelHandler_DeleteSchedule(t *testing.T) {
 		})
 		return err
 	})
+}
+
+func TestSentinelHandler_MigrateToWorkflow(t *testing.T) {
+	runSentinelHandlerTestCase(t, func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, _ *legacyscheduler.SpecBuilder) error {
+		_, err := sentinel.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+			NamespaceId: namespaceID,
+			ScheduleId:  scheduleID,
+		})
+		return err
+	})
+}
+
+func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
+
+	h := scheduler.NewTestHandler(logger)
+	testEngine := chasmtest.NewEngine(t, registry)
+	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+		},
+		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	_, err = h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: namespaceID,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState: &schedulerpb.SchedulerState{
+				ScheduleId: scheduleID,
+			},
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+}
+
+func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
+
+	h := scheduler.NewTestHandler(logger)
+	testEngine := chasmtest.NewEngine(t, registry)
+	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+		},
+		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	_, err = h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
 }

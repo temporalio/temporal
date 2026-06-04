@@ -82,7 +82,10 @@ the 1.31.0 release and will be made the default.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
       # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
-    component.callbacks.allowedAddresses:
+    # From version 1.32.x
+    callback.allowedAddresses:
+    # Uncomment versions older than 1.32.x
+    # component.callbacks.allowedAddresses:
       # Limits which callback URLs are accepted by the server.
       # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
       # For production, restrict allowed hosts and set AllowInsecure to false
@@ -91,22 +94,6 @@ the 1.31.0 release and will be made the default.
          - Pattern: "*" # Update to restrict allowed callers, e.g. "$PUBLIC_URL:7243/*"
            AllowInsecure: true # In production, set to false and ensure traffic is HTTPS/TLS encrypted
     ```
-
-
-## Disabling Nexus
-
-To disable Nexus completely a server restart is required as the outbound queue processor (detailed below) is started
-if `system.enableNexus` is on, but does not shut itself down when this config is disabled. See [Disabling
-the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutting off processing on a running server.
-
-## Downgrading to a Pre-Nexus Server Release
-
-In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
-(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
-triggered.
-
-After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
-[DLQ](../admin/dlq.md) without any retries. Workflows with pending Nexus operations will be stuck.
 
 # Components
 

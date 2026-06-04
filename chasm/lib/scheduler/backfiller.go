@@ -18,6 +18,8 @@ type Backfiller struct {
 	*schedulerpb.BackfillerState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 type BackfillRequestType int
@@ -34,18 +36,24 @@ func addBackfiller(
 	scheduler *Scheduler,
 ) *Backfiller {
 	id := schedulescommon.GenerateBackfillerID()
-	backfiller := &Backfiller{
-		BackfillerState: &schedulerpb.BackfillerState{
-			BackfillId:        id,
-			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
-		},
-	}
+	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
+		BackfillId:        id,
+		LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
+	})
 
 	if scheduler.Backfillers == nil {
 		scheduler.Backfillers = make(chasm.Map[string, *Backfiller])
 	}
 	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
 
+	return backfiller
+}
+
+func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.BackfillerState) *Backfiller {
+	backfiller := &Backfiller{
+		BackfillerState: state,
+		EventLog:        chasm.NewComponentField(ctx, NewEventLog(ctx)),
+	}
 	backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
 	return backfiller
 }

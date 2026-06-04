@@ -29,10 +29,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -49,7 +49,7 @@ var (
 type batchProcessorConfig struct {
 	namespace         string
 	adjustedQuery     string
-	rps               float64
+	rps               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -60,7 +60,7 @@ type batchWorkerProcessor func(
 	ctx context.Context,
 	taskCh chan task,
 	respCh chan taskResponse,
-	rateLimiter *rate.Limiter,
+	rateLimiter quotas.RateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -133,6 +133,10 @@ func fetchPage(
 		Query:         config.adjustedQuery,
 	})
 	if err != nil {
+		var invalidArgErr *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgErr) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+		}
 		return nil, err
 	}
 
@@ -159,9 +163,9 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	logger log.Logger,
 	hbd HeartBeatDetails,
 ) (HeartBeatDetails, error) {
-	rateLimit := rate.Limit(config.rps)
-	burstLimit := int(math.Ceil(config.rps)) // should never be zero because everything would be rejected
-	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
+	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+		return float64(config.rps(config.namespace))
+	})
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
 
@@ -266,8 +270,19 @@ type activities struct {
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-func (a *activities) checkNamespaceID(namespaceID string) error {
-	if namespaceID != a.namespaceID.String() {
+// checkNamespace validates that batchParams targets the worker's own namespace.
+// The NamespaceId, Request.Namespace (if set), and AdminRequest.Namespace (if set)
+// must all agree with the worker's bound namespace. This prevents cross-namespace
+// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
+func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
+	if batchParams.NamespaceId != a.namespaceID.String() {
+		return errNamespaceMismatch
+	}
+	ns := a.namespace.String()
+	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
+		return errNamespaceMismatch
+	}
+	if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -280,14 +295,15 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespaceID(batchParams.NamespaceId); err != nil {
+	if err := a.checkNamespace(batchParams); err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
+	ns := a.namespace.String()
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     a.namespace.String(),
+		Namespace:     ns,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	startOver := true
@@ -299,19 +315,16 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	// Get namespace and query based on request type (public vs admin)
-	var ns string
+	// Get executions based on request type (public vs admin).
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		ns = adminReq.Namespace
 		visibilityQuery = adminReq.GetVisibilityQuery()
 		executions = adminReq.GetExecutions()
 	} else {
-		ns = batchParams.Request.Namespace
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
 	}
@@ -325,6 +338,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				var invalidArgErr *serviceerror.InvalidArgument
+				if errors.As(err, &invalidArgErr) {
+					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+				}
 				return HeartBeatDetails{}, err
 			}
 			estimateCount = resp.GetCount()
@@ -336,7 +353,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	config := batchProcessorConfig{
 		namespace:         ns,
 		adjustedQuery:     visibilityQuery,
-		rps:               float64(a.rps(ns)),
+		rps:               a.rps,
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
 		initialExecutions: executions,
@@ -347,7 +364,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		ctx context.Context,
 		taskCh chan task,
 		respCh chan taskResponse,
-		rateLimiter *rate.Limiter,
+		rateLimiter quotas.RateLimiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
@@ -403,7 +420,7 @@ func (a *activities) startTaskProcessor(
 	namespace string,
 	taskCh chan task,
 	respCh chan taskResponse,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -482,7 +499,7 @@ func (a *activities) startTaskProcessor(
 						} else {
 							// Old fields
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Request.Namespace, executionInfo.Execution, frontendClient, logger)
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}
@@ -656,7 +673,7 @@ func (a *activities) processAdminTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 ) error {
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
@@ -684,7 +701,7 @@ func (a *activities) processAdminTask(
 
 func processTask(
 	ctx context.Context,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 	task task,
 	procFn func(*workflowpb.WorkflowExecutionInfo) error,
 ) error {

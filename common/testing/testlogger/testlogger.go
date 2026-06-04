@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -138,6 +139,15 @@ type sharedTestLoggerState struct {
 	logExpectations bool
 	logCaller       bool
 	level           zapcore.Level
+	failure         atomic.Pointer[Failure]
+}
+
+// Failure describes a log call that shouldFailTest considered a test-failing log.
+type Failure struct {
+	Level Level
+	Msg   string
+	Tags  []tag.Tag
+	Stack string
 }
 
 // TestLogger is a log.Logger implementation that logs to the test's logger
@@ -146,9 +156,6 @@ type TestLogger struct {
 	wrapped log.Logger
 	state   *sharedTestLoggerState
 	tags    []tag.Tag
-	// If false the caller will not be logged by Zap. This is used when we process the
-	// logs from a subprocesses' STDOUT as we don't care about where in the main process
-	// the call came from, just where it was logged by the child.
 }
 
 type LoggerOption func(*TestLogger)
@@ -199,10 +206,10 @@ func WithoutCaller() LoggerOption {
 // SetLogLevel overrides the temporal test log level during this test.
 func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 	return func(t *TestLogger) {
-		oldLevel := os.Getenv("TEMPORAL_TEST_LOG_LEVEL")
-		_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", level.String())
+		oldLevel := os.Getenv(log.TestLogLevelEnvVar)
+		_ = os.Setenv(log.TestLogLevelEnvVar, level.String())
 		tt.Cleanup(func() {
-			_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", oldLevel)
+			_ = os.Setenv(log.TestLogLevelEnvVar, oldLevel)
 		})
 
 		t.state.level = level
@@ -210,6 +217,46 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 }
 
 var _ log.Logger = (*TestLogger)(nil)
+
+// globalFileCore is a process-wide singleton zapcore.Core that writes to the file specified
+// by TEMPORAL_TEST_LOG_FILE. It is a NopCore when the env var is unset.
+var (
+	globalFileCore     zapcore.Core = zapcore.NewNopCore()
+	globalFileCoreOnce sync.Once
+)
+
+func getGlobalFileCore() zapcore.Core {
+	globalFileCoreOnce.Do(func() {
+		logFile := os.Getenv(log.TestLogFileEnvVar)
+		if logFile == "" {
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to create log file dir %s: %v\n", filepath.Dir(logFile), err)
+			return
+		}
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to open log file %s: %v\n", logFile, err)
+			return
+		}
+		format := cmp.Or(os.Getenv(log.TestLogFileFormatEnvVar), "json")
+		var enc zapcore.Encoder
+		switch strings.ToLower(format) {
+		case "console":
+			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+		default: // "json" and anything unrecognized
+			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+		}
+		level := zapcore.DebugLevel
+		if levelV := os.Getenv(log.TestLogFileLevelEnvVar); levelV != "" {
+			level = log.ParseZapLevel(levelV)
+		}
+		globalFileCore = zapcore.NewCore(enc, zapcore.AddSync(f), level)
+		fmt.Fprintf(os.Stderr, "testlogger: file logging enabled → %s (format=%s level=%s)\n", logFile, format, level)
+	})
+	return globalFileCore
+}
 
 // NewTestLogger creates a new TestLogger that logs to the provided testing.T.
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
@@ -232,24 +279,27 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	}
 	if tl.wrapped == nil {
 		writer := zaptest.NewTestingWriter(t)
-		var enc zapcore.Encoder
+
+		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
+		var consoleEnc zapcore.Encoder
 		format := cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console")
 		switch strings.ToLower(format) {
 		case "console":
-			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
 		case "json":
-			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
 		default:
 			t.Fatalf("unknown log encoding %q", format)
 		}
-		level := tl.state.level
+		consoleLevel := tl.state.level
 		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
-			level = log.ParseZapLevel(levelV)
+			consoleLevel = log.ParseZapLevel(levelV)
 		}
-		core := zapcore.NewCore(enc, writer, level)
+		core := zapcore.NewTee(
+			zapcore.NewCore(consoleEnc, writer, consoleLevel),
+			getGlobalFileCore())
+
 		zapOptions := []zap.Option{
-			// Send zap errors to the same writer and mark the test as failed if
-			// that happens.
 			zap.ErrorOutput(writer.WithMarkFailed(true)),
 			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
 			zap.WithCaller(tl.state.logCaller),
@@ -337,6 +387,30 @@ func (tl *TestLogger) FailOnError(b bool) bool {
 // Note that Fatal-level logs still panic
 func (tl *TestLogger) FailOnFatal(b bool) bool {
 	return tl.state.failOnFatal.Swap(b)
+}
+
+// Failure returns the first Failure that shouldFailTest considered a test-failing
+// log, or nil if no such log has been observed. Sticky: first failure wins.
+func (tl *TestLogger) Failure() *Failure {
+	return tl.state.failure.Load()
+}
+
+// recordFailure stores the first observed failure (first-failure-wins via CAS).
+// Tags are copied so the recorded value is independent of the caller's slice.
+func (tl *TestLogger) recordFailure(level Level, msg string, tags []tag.Tag) {
+	if tl.state.failure.Load() != nil {
+		// fast-path: already recorded; avoid the copy and the stack capture.
+		return
+	}
+	tagsCopy := make([]tag.Tag, len(tags))
+	copy(tagsCopy, tags)
+	f := &Failure{
+		Level: level,
+		Msg:   msg,
+		Tags:  tagsCopy,
+		Stack: captureStack(3), // skip captureStack, recordFailure, and the log.Logger method that called it
+	}
+	tl.state.failure.CompareAndSwap(nil, f)
 }
 
 func (tl *TestLogger) mergeWithLoggerTags(tags []tag.Tag) []tag.Tag {
@@ -475,24 +549,34 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 // the failure arose.
 func (tl *TestLogger) failTest(level Level, msg string, tags ...tag.Tag) {
 	tl.state.t.Helper()
-	skip := 2                   // skip the invocation of failTest and the log.Logger function that called it
-	pcs := make([]uintptr, 128) // 128 is likely larger that we'll ever need.
+	tl.recordFailure(level, msg, tags)
+	// skip captureStack, failTest, and the log.Logger function that called failTest
+	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), captureStack(3))
+}
+
+// captureStack returns a formatted stack trace, skipping the first `skip` frames
+// (including the captureStack frame itself).
+func captureStack(skip int) string {
+	pcs := make([]uintptr, 128) // 128 is likely larger than we'll ever need.
 	frameCount := runtime.Callers(skip, pcs)
 
 	// runtime.Callers truncates the recorded stacktrace to fit the provided slice.
 	// Just keep doubling in size until we have enough space.
 	for frameCount == len(pcs) {
 		pcs = make([]uintptr, len(pcs)*2)
-		frameCount = runtime.Callers(skip+2, pcs)
+		frameCount = runtime.Callers(skip, pcs)
 	}
 
-	stackFrames := runtime.CallersFrames(pcs)
+	stackFrames := runtime.CallersFrames(pcs[:frameCount])
 	var stackTrace strings.Builder
-	for frame, more := stackFrames.Next(); more; frame, more = stackFrames.Next() {
+	for {
+		frame, more := stackFrames.Next()
 		fmt.Fprintf(&stackTrace, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
+		if !more {
+			break
+		}
 	}
-
-	tl.state.t.Fatalf("%s\n%s", failureMessage(level, msg, tags), stackTrace.String())
+	return stackTrace.String()
 }
 
 // WithTags gives you a new logger, copying the tags of the source, appending the provided new Tags

@@ -6,7 +6,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -147,7 +146,7 @@ func (q *QueueStore) ReadMessages(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ReadMessages operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ReadMessages", err)
 	}
 
 	return result, nil
@@ -182,7 +181,7 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 		nextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, nil, serviceerror.NewUnavailablef("ReadMessagesFromDLQ operation failed. Error: %v", err)
+		return nil, nil, gocql.ConvertError("ReadMessagesFromDLQ", err)
 	}
 
 	return result, nextPageToken, nil
@@ -195,7 +194,7 @@ func (q *QueueStore) DeleteMessagesBefore(
 
 	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("DeleteMessagesBefore operation failed. Error %v", err)
+		return gocql.ConvertError("DeleteMessagesBefore", err)
 	}
 	return nil
 }
@@ -208,7 +207,7 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("DeleteMessageFromDLQ operation failed. Error %v", err)
+		return gocql.ConvertError("DeleteMessageFromDLQ", err)
 	}
 
 	return nil
@@ -223,7 +222,7 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("RangeDeleteMessagesFromDLQ operation failed. Error %v", err)
+		return gocql.ConvertError("RangeDeleteMessagesFromDLQ", err)
 	}
 
 	return nil

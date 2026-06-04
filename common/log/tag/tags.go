@@ -147,11 +147,6 @@ func WorkflowBinaryChecksum(cs string) ZapTag {
 	return NewStringTag("wf-binary-checksum", cs)
 }
 
-// WorkflowActivityID returns tag for WorkflowActivityID
-func WorkflowActivityID(id string) ZapTag {
-	return NewStringTag("wf-activity-id", id)
-}
-
 // WorkflowTimerID returns tag for WorkflowTimerID
 func WorkflowTimerID(id string) ZapTag {
 	return NewStringTag("wf-timer-id", id)
@@ -917,9 +912,19 @@ func ActivityInfo(activityInfo any) ZapTag {
 	return NewAnyTag("activity-info", activityInfo)
 }
 
-// ActivityID returns tag for a standalone activity ID
+// ActivityID returns tag for an activity ID
 func ActivityID(id string) ZapTag {
 	return NewStringTag("activity-id", id)
+}
+
+// OperationID returns tag for a nexus operation ID
+func OperationID(id string) ZapTag {
+	return NewStringTag("operation-id", id)
+}
+
+// ChasmRunID returns tag for an entity run ID
+func ChasmRunID(id string) ZapTag {
+	return NewStringTag("run-id", id)
 }
 
 // ActivitySize returns a tag for a standalone activity size

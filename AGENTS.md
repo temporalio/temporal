@@ -76,6 +76,8 @@ Before starting the implementation of any request, you MUST REVIEW the following
 - Run tests after altering code or tests
 - Start with unit tests for fastest feedback
 - Prefer `require` over `assert`, avoid testify suites in unit tests (functional tests require suites for test cluster setup), use `require.Eventually` instead of `time.Sleep` (forbidden by linter)
+- For float comparisons in tests, use `InDelta` or `InEpsilon` instead of `Equal` (enforced by `testifylint`)
+- For error assertions in testify suites, use `s.Require().NoError(err)` instead of `s.NoError(err)` (enforced by `testifylint`)
 
 # Primary Workflows
 ## Software Engineering Tasks

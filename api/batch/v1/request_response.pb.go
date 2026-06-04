@@ -135,7 +135,7 @@ var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDe
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\x1a\x1egoogle/protobuf/duration.proto\"\xb0\x04\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\"\xb0\x04\n" +
 	"\x13BatchOperationInput\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12 \n" +
 	"\vconcurrency\x18\x02 \x01(\x03R\vconcurrency\x12=\n" +

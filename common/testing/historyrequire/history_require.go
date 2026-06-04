@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -44,6 +45,43 @@ func New(t require.TestingT) HistoryRequire {
 //  - Funcs like WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
 //  - oneof support
 //  - enums as strings not as ints
+
+func (h HistoryRequire) historyEvents(events []*historypb.HistoryEvent, eventType enumspb.EventType) []*historypb.HistoryEvent {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+	return util.FilterSlice(events, func(e *historypb.HistoryEvent) bool { return e.EventType == eventType })
+}
+
+// RequireHistoryEvent returns the single event matching the given event type.
+// It fails the test if no matching event is found or if more than one is found.
+func (h HistoryRequire) RequireHistoryEvent(events []*historypb.HistoryEvent, eventType enumspb.EventType) *historypb.HistoryEvent {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+	matches := h.historyEvents(events, eventType)
+	switch len(matches) {
+	case 0:
+		require.Failf(h.t, "missing history event", "expected %s event in history", eventType)
+		return nil
+	case 1:
+		return matches[0]
+	default:
+		require.Failf(h.t, "too many history events", "expected one %s event in history, found %d", eventType, len(matches))
+		return matches[0]
+	}
+}
+
+// RequireNoHistoryEvent fails the test if any event matches the given event type.
+func (h HistoryRequire) RequireNoHistoryEvent(events []*historypb.HistoryEvent, eventType enumspb.EventType) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+	matches := h.historyEvents(events, eventType)
+	if len(matches) > 0 {
+		require.Failf(h.t, "unexpected history event", "expected no %s event(s) in history, found %d", eventType, len(matches))
+	}
+}
 
 func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
 	if th, ok := h.t.(helper); ok {

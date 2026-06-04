@@ -2,10 +2,10 @@ package finalizer
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
