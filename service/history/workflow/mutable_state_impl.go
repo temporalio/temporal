@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -2095,9 +2096,7 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
 	payloadSize := request.Details.Size()
-	hasDetails := "false"
 	if payloadSize > 0 {
-		hasDetails = "true"
 		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
 			int64(payloadSize),
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
@@ -2106,7 +2105,7 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.metricsHandler.Counter(metrics.ActivityHeartbeatCount.Name()).Record(1,
 		metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-		metrics.StringTag("has_details", hasDetails))
+		metrics.StringTag("has_details", strconv.FormatBool(payloadSize > 0)))
 }
 
 // UpdateActivityInfo applies the necessary activity information
