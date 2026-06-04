@@ -28,10 +28,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -5910,6 +5912,146 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 		})
 
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+}
+
+// Flow:
+//  1. Start a pinned workflow on v1 and fail a normal WFT before any target change.
+//  2. Move matching's current version to v2, poll a hidden transient WFT, and fail it after it notifies v2.
+//  3. Verify the notification is still outstanding in mutable state, with no durable started-event flag in history.
+//  4. Roll matching back to v1 and assert the next WFT re-fires the outstanding target-version notification.
+func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+
+	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
+	defer cancel()
+
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	setCurrentInMatching := func(tv *testvars.TestVars, revisionNumber int64, previous ...*testvars.TestVars) {
+		routingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            revisionNumber,
+		}
+		upsertVersions := map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+		}
+		for _, prev := range previous {
+			upsertVersions[prev.DeploymentVersion().GetBuildId()] = &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			}
+		}
+		s.syncTaskQueueDeploymentDataWithRoutingConfig(env, tv, routingConfig, upsertVersions, []string{}, tqTypeWf)
+		s.waitForDeploymentDataPropagation(env, tv, versionStatusCurrent, false, tqTypeWf)
+	}
+
+	lastStartedEvent := func(events []*historypb.HistoryEvent) *historypb.HistoryEvent {
+		var lastStarted *historypb.HistoryEvent
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				lastStarted = event
+			}
+		}
+		return lastStarted
+	}
+
+	assertNoPersistedTargetChange := func(execution *commonpb.WorkflowExecution) {
+		for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+					"persisted parent history should not expose targetWorkerDeploymentVersionChanged=true")
+			}
+		}
+	}
+
+	setCurrentInMatching(tv1, 1)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	normalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(normalTask.GetTaskToken())
+	normalStarted := lastStartedEvent(normalTask.GetHistory().GetEvents())
+	s.NotNil(normalStarted)
+	s.False(normalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged())
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: normalTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	setCurrentInMatching(tv2, 2, tv1)
+
+	hiddenTransientTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(hiddenTransientTask.GetTaskToken())
+	s.verifyTransientTask(hiddenTransientTask)
+	hiddenStarted := lastStartedEvent(hiddenTransientTask.GetHistory().GetEvents())
+	s.NotNil(hiddenStarted)
+	s.True(hiddenStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"transient WFT should notify the worker about v2")
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: hiddenTransientTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	ms, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	lastNotified := ms.GetDatabaseMutableState().GetExecutionInfo().GetLastNotifiedTargetVersion()
+	s.NotNil(lastNotified, "failed transient notification should remain as an outstanding notification")
+	s.Equal(tv2.BuildID(), lastNotified.GetDeploymentVersion().GetBuildId())
+	s.Equal(int64(2), lastNotified.GetRevisionNumber())
+	assertNoPersistedTargetChange(execution)
+
+	s.rollbackTaskQueueToVersion(env, tv1)
+
+	finalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(finalTask.GetTaskToken())
+	finalStarted := lastStartedEvent(finalTask.GetHistory().GetEvents())
+	s.NotNil(finalStarted)
+	s.True(finalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"outstanding notification should re-fire even when matching is rolled back to v1")
 }
 
 // Scenario: a pinned v1 workflow auto-upgrades to v2 via Continue-As-New, v1 is
