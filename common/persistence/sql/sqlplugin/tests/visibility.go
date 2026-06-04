@@ -1341,19 +1341,24 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 	historyLength *int64,
 ) sqlplugin.VisibilityRow {
 	s.version++
+	var executionDuration *int64
+	if closeTime != nil {
+		executionDuration = new(closeTime.Sub(executionTime).Nanoseconds())
+	}
 	return sqlplugin.VisibilityRow{
-		NamespaceID:      namespaceID.String(),
-		RunID:            runID.String(),
-		WorkflowTypeName: workflowTypeName,
-		WorkflowID:       workflowID,
-		StartTime:        startTime,
-		ExecutionTime:    executionTime,
-		Status:           status,
-		CloseTime:        closeTime,
-		HistoryLength:    historyLength,
-		Memo:             shuffle.Bytes(testVisibilityData),
-		Encoding:         testVisibilityEncoding,
-		Version:          s.version,
+		NamespaceID:       namespaceID.String(),
+		RunID:             runID.String(),
+		WorkflowTypeName:  workflowTypeName,
+		WorkflowID:        workflowID,
+		StartTime:         startTime,
+		ExecutionTime:     executionTime,
+		Status:            status,
+		CloseTime:         closeTime,
+		HistoryLength:     historyLength,
+		ExecutionDuration: executionDuration,
+		Memo:              shuffle.Bytes(testVisibilityData),
+		Encoding:          testVisibilityEncoding,
+		Version:           s.version,
 	}
 }
 
