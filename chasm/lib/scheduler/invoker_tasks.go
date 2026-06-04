@@ -166,10 +166,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			}
 			callback = common.CloneProto(cb)
 
-			// Capture the framework clock for any BackoffTime stamps computed
-			// outside this read closure - in tests the wall clock and the
-			// injected TimeSource diverge, and BackoffTime must match the
-			// clock used by LastProcessedTime/eligibility checks.
+			// Captured here for applyBackoff (runs outside this closure): BackoffTime
+			// must be framework-clock to match LastProcessedTime and task deadlines.
 			now = ctx.Now(i)
 
 			return struct{}{}, nil

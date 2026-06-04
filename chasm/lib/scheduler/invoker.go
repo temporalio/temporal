@@ -104,15 +104,8 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	i.LastProcessedTime = timestamppb.New(ctx.Now(i))
 
 	// Re-arm tasks if this call changed state, or if the LastProcessedTime advance
-	// just unblocked backed-off starts. Spurious re-arms are tolerated
-	// because recordExecuteResult is idempotent per RequestId.
-	if len(result.startWorkflows) > 0 ||
-		len(result.discardStarts) > 0 ||
-		len(result.cancelWorkflows) > 0 ||
-		len(result.terminateWorkflows) > 0 ||
-		len(i.getEligibleBufferedStarts()) > 0 {
-		i.addTasks(ctx)
-	}
+	// just unblocked backed-off starts.
+	i.addTasks(ctx)
 }
 
 type executeResult struct {
@@ -266,44 +259,61 @@ func (i *Invoker) recordCompletedAction(
 
 // addTasks adds both ProcessBuffer and Execute tasks as needed. It should be
 // called when completing processing/executing tasks, to drive backoff/retry.
-// Walks the buffer once to classify starts and compute the next deadline.
-// Running and deferred starts are skipped: they wait on completion events
-// (Nexus callback / recordCompletedAction), not on a wall-clock deadline.
 func (i *Invoker) addTasks(ctx chasm.MutableContext) {
-	lastProcessed := i.GetLastProcessedTime().AsTime()
-	var nextDeadline time.Time
-	hasUnprocessed := false
-	pending, eligible := 0, 0
-	for _, start := range i.GetBufferedStarts() {
-		if start.GetRunId() != "" || start.GetCompleted() != nil || start.GetAttempt() < 0 {
-			continue
-		}
-		switch {
-		case start.GetAttempt() == 0:
-			pending++
-			hasUnprocessed = true
-		case start.GetBackoffTime().AsTime().After(lastProcessed):
-			pending++
-			backoff := start.GetBackoffTime().AsTime()
-			if nextDeadline.IsZero() || backoff.Before(nextDeadline) {
-				nextDeadline = backoff
-			}
-		default:
-			eligible++
-		}
+	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
+	// have starts that are backing off, add a timer task for the earliest backoff time.
+	if i.hasUnprocessedStarts() {
+		ctx.AddTask(i, chasm.TaskAttributes{
+			ScheduledTime: chasm.TaskScheduledTimeImmediate,
+		}, &schedulerpb.InvokerProcessBufferTask{})
+	} else if deadline := i.nextBackoffDeadline(); !deadline.IsZero() {
+		ctx.AddTask(i, chasm.TaskAttributes{
+			ScheduledTime: deadline,
+		}, &schedulerpb.InvokerProcessBufferTask{})
 	}
 
-	if pending > 0 {
-		scheduledTime := nextDeadline
-		if hasUnprocessed {
-			scheduledTime = chasm.TaskScheduledTimeImmediate
-		}
-		ctx.AddTask(i, chasm.TaskAttributes{ScheduledTime: scheduledTime}, &schedulerpb.InvokerProcessBufferTask{})
-	}
-
-	if len(i.GetCancelWorkflows()) > 0 || len(i.GetTerminateWorkflows()) > 0 || eligible > 0 {
+	// Execute drains work that's ready now: pending cancels/terminates, and
+	// starts that are past their backoff.
+	if len(i.GetCancelWorkflows()) > 0 ||
+		len(i.GetTerminateWorkflows()) > 0 ||
+		len(i.getEligibleBufferedStarts()) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	}
+}
+
+// hasUnprocessedStarts reports whether any BufferedStart is still awaiting its
+// initial ProcessBuffer pass (Attempt == 0).
+func (i *Invoker) hasUnprocessedStarts() bool {
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetAttempt() == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// nextBackoffDeadline returns the earliest BackoffTime among starts that are
+// retrying, or the zero time if none are.
+func (i *Invoker) nextBackoffDeadline() time.Time {
+	var deadline time.Time
+	lastProcessedTime := i.LastProcessedTime.AsTime()
+	for _, start := range i.GetBufferedStarts() {
+		backoff := start.GetBackoffTime().AsTime()
+		// We only care about starts that are retrying.
+		if start.GetAttempt() <= 0 ||
+			start.GetRunId() != "" ||
+			start.GetCompleted() != nil ||
+			// Backed-off starts will be selected by getEligibleBufferedStarts and kick off
+			// an Execute task, instead.
+			start.BackoffTime.AsTime().Before(lastProcessedTime) {
+			continue
+		}
+		if deadline.IsZero() || backoff.Before(deadline) {
+			deadline = backoff
+		}
+	}
+
+	return deadline
 }
 
 // getEligibleBufferedStarts returns all BufferedStarts that are marked for
