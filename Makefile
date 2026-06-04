@@ -559,9 +559,10 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
-print-test-summary: $(TEST_OUTPUT_ROOT)
-	@go run ./cmd/tools/test-runner print-summary \
-		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
+generate-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner generate-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
+		--summary-output-dir=$(TEST_OUTPUT_ROOT)
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es

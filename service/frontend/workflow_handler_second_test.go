@@ -63,6 +63,7 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 
 			config := NewConfig(dc.NewNoopCollection(), 1)
 			config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(tc.enableCreation)
+			config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
 			config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(tc.enableRouting)
 			config.AllowedExperiments = dc.GetTypedPropertyFnFilteredByNamespace(tc.allowedExp)
 
@@ -73,7 +74,7 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(headers.ExperimentHeaderName, ChasmSchedulerExperiment))
 			}
 
-			require.Equal(t, tc.expectCreation, wh.chasmSchedulerCreationEnabled(ctx, "test-namespace"))
+			require.Equal(t, tc.expectCreation, wh.chasmSchedulerCreationEnabled(ctx, "test-namespace", "test-schedule"))
 			require.Equal(t, tc.expectRouting, wh.chasmSchedulerEnabled(ctx, "test-namespace"))
 		})
 	}

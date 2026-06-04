@@ -60,6 +60,15 @@ func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivitySt
 	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 }
 
+// activityPendingRetry returns true if an activity has failed
+// and retry has scheduled but not yet started
+func activityPendingRetry(ai *persistencespb.ActivityInfo) bool {
+	return GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
+		!ai.Paused &&
+		ai.HasRetryPolicy &&
+		ai.Attempt > 1
+}
+
 // ClearActivityStartedState resets the per-attempt "started" fields on an ActivityInfo.
 // Called when an activity leaves the started state (retry, pause, etc.) so that stale
 // values from the previous attempt don't leak into the next one.

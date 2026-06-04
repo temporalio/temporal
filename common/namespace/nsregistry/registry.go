@@ -269,7 +269,7 @@ func (r *registry) GetPingChecks() []pingable.Check {
 	}
 }
 
-func (r *registry) getAllNamespace() []*namespace.Namespace {
+func (r *registry) GetAllNamespaces() []*namespace.Namespace {
 	r.nsMapsLock.RLock()
 	defer r.nsMapsLock.RUnlock()
 	return expmaps.Values(r.idToNamespace)
@@ -599,7 +599,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	newIDToNamespace := make(map[namespace.ID]*namespace.Namespace)
 
 	var deletedEntries []*namespace.Namespace
-	for _, ns := range r.getAllNamespace() {
+	for _, ns := range r.GetAllNamespaces() {
 		if _, namespaceExistsDb := namespaceIDsDb[ns.ID()]; !namespaceExistsDb {
 			deletedEntries = append(deletedEntries, ns)
 			continue

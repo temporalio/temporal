@@ -350,8 +350,11 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 					},
 				)
 				s.NoError(err)
-				s.Len(getHistoryResponse.History.Events, 1)
-				startEvent := getHistoryResponse.History.Events[0]
+				startEvent := s.RequireHistoryEvent(
+					getHistoryResponse.History.Events,
+					enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				)
+
 				// Start event links is empty since it's deduped.
 				s.Empty(startEvent.Links)
 				startEventAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()

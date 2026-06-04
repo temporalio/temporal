@@ -146,3 +146,49 @@ func TestTestLogger_Uncaught(t *testing.T) {
 		})
 	}
 }
+
+// TestTestLogger_Failure_StickyOnAnyUnexpected verifies that Failure() captures
+// the first failure-worthy log in FailOnAnyUnexpectedError mode and that
+// subsequent failures do not overwrite it (first-failure-wins via CAS).
+func TestTestLogger_Failure_StickyOnAnyUnexpected(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
+	require.Nil(t, tl.Failure())
+
+	tl.Error("first")
+	first := tl.Failure()
+	require.NotNil(t, first)
+	require.Equal(t, testlogger.Error, first.Level)
+	require.Equal(t, "first", first.Msg)
+	require.NotEmpty(t, first.Stack)
+
+	tl.Error("second")
+	require.Same(t, first, tl.Failure(), "first failure should win")
+}
+
+// TestTestLogger_Failure_OnExpectedMatch is the soft-assert path: in
+// FailOnExpectedErrorOnly mode, an Error matching a registered expectation
+// (e.g. tag.FailedAssertion) should mark Failure().
+func TestTestLogger_Failure_OnExpectedMatch(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
+	tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+	require.Nil(t, tl.Failure())
+
+	tl.Error("failed assertion: bad", tag.FailedAssertion)
+
+	f := tl.Failure()
+	require.NotNil(t, f)
+	require.Equal(t, "failed assertion: bad", f.Msg)
+}
+
+// TestTestLogger_Failure_NoMatch verifies that FailOnExpectedErrorOnly remains an
+// escape hatch: an Error with no matching expectation does not flip Failure().
+func TestTestLogger_Failure_NoMatch(t *testing.T) {
+	mt := &mockT{T: t}
+	tl := testlogger.NewTestLogger(mt, testlogger.FailOnExpectedErrorOnly)
+	require.Nil(t, tl.Failure())
+
+	tl.Error("ignored")
+	require.Nil(t, tl.Failure())
+}

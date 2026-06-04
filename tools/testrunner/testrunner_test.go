@@ -1,7 +1,6 @@
 package testrunner
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,26 +238,41 @@ func TestRunnerPrintSummary(t *testing.T) {
 	require.NoError(t, report2.write())
 
 	r := newRunner()
+	summaryMarkdownPath := filepath.Join(dir, "test-summary.md")
+	summaryJSONPath := filepath.Join(dir, "test-summary.json")
 	_, err := r.sanitizeAndParseArgs(summaryCommand, []string{
 		"--junit-glob=" + filepath.Join(dir, "junit.*.xml"),
+		"--summary-output-dir=" + dir,
 	})
 	require.NoError(t, err)
 
-	stdout := os.Stdout
-	rpipe, wpipe, err := os.Pipe()
-	require.NoError(t, err)
-	defer func() {
-		os.Stdout = stdout
-		require.NoError(t, rpipe.Close())
-	}()
-
-	os.Stdout = wpipe
-	require.NoError(t, r.printSummary())
-	require.NoError(t, wpipe.Close())
-
-	body, err := io.ReadAll(rpipe)
+	require.NoError(t, r.generateSummary())
+	body, err := os.ReadFile(summaryMarkdownPath)
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(string(body), "<table>"))
 	require.Contains(t, string(body), "TestAlpha")
 	require.Contains(t, string(body), "TestBeta")
+
+	jsonBody, err := os.ReadFile(summaryJSONPath)
+	require.NoError(t, err)
+	require.Contains(t, string(jsonBody), `"name": "TestAlpha"`)
+	require.Contains(t, string(jsonBody), `"name": "TestBeta"`)
+}
+
+func TestRunnerPrintSummarySkipsEmptySummary(t *testing.T) {
+	dir := t.TempDir()
+	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
+	report.path = filepath.Join(dir, "junit.empty.xml")
+	require.NoError(t, report.write())
+
+	r := newRunner()
+	_, err := r.sanitizeAndParseArgs(summaryCommand, []string{
+		"--junit-glob=" + filepath.Join(dir, "junit.*.xml"),
+		"--summary-output-dir=" + dir,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, r.generateSummary())
+	require.NoFileExists(t, filepath.Join(dir, "test-summary.md"))
+	require.NoFileExists(t, filepath.Join(dir, "test-summary.json"))
 }
