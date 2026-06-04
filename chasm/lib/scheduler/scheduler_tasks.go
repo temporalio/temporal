@@ -67,9 +67,6 @@ const (
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
 )
 
-// The expiration-shift drop assumes the Generator has re-armed at the new
-// deadline. Validate deliberately does not re-derive "is the spec exhausted" -
-// that's an arm-time concern.
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
