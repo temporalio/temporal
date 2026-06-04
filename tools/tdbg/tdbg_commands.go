@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -338,36 +337,23 @@ OUTPUT FORMAT
   Per-schedule columns (identical in both modes, in order):
     namespace                      namespace the schedule lives in
     schedule_id                    schedule's ID
-    workflow_type                  workflow type the schedule's action starts 
-    jitter_s                       schedule's configured jitter in seconds
+    workflow_type                  workflow type the schedule's action starts
     expected                       how many fires the spec should have produced
     actual                         unique workflows observed in visibility (multiple ContinueAsNew links of one
                                    fire are counted once)
     matched                        fires whose nominal time aligns with a workflow
-    missed                         total unmatched expected fires (real_miss + skip_overlap + inconclusive + unsupported)
+    missed                         total unmatched expected fires (real_miss + skip_overlap + inconclusive)
     real_miss                      expected fires with no matching workflow and nothing else from this schedule
-                                   running to justify a skip; counts here warrant investigation (see CAVEATS for
-                                   known by-design patterns)
+                                   running to justify a skip. Covers all overlap policies. Counts here warrant
+                                   investigation (see CAVEATS for known by-design patterns).
     skip_overlap                   fires the scheduler correctly skipped because a prior workflow from this schedule
-                                   was still running
+                                   was still running (SKIP / BUFFER_ONE / BUFFER_ALL policies)
     inconclusive_schedule_changed  schedule's spec was modified DURING the audit window; current spec doesn't describe
-                                   what was firing earlier, so unmatched fires can't be classified as real_miss
+                                   what was firing earlier, so all fires for this schedule are marked inconclusive
                                    (the row stays for inspection)
-    unsupported_policy             fires belonging to a schedule using a policy this audit does not fully model;
-                                   exposed rather than counted as real_miss (see unsupported_reason for which one)
-    unsupported_reason             which policy was detected; semicolon-separated if multiple. Possible values:
-                                     keep_original_workflow_id  -- all fires share one WorkflowID, so the audit can't
-                                                                   distinguish individual fires from each other
-                                     overlap_buffer_all         -- fires can be queued for arbitrary durations, beyond
-                                                                   our 24h query buffer; we may miss the workflow
-                                     overlap_allow_all          -- scheduler never skips on overlap, so skip_overlap
-                                                                   labels for this schedule may actually be real misses
-                                     overlap_cancel_other       -- new fire cancels prior; workflow lifecycle differs
-                                                                   from the standard model 
-                                     overlap_terminate_other    -- same as cancel_other
     catchup_window_s               the schedule's configured catchupWindow in seconds
-    real_miss_times                up to 20 nominal times classified as real_miss after post-process reclassification
-                                   (excludes skip_overlap, inconclusive_schedule_changed, unsupported_policy times)
+    real_miss_times                up to 20 nominal times classified as real_miss
+                                   (excludes skip_overlap, inconclusive_schedule_changed times)
 
 CAVEATS AND LIMITATIONS
   Retention: the audit will not process a namespace whose windowStart is past (retention - 24h). Visibility purges
@@ -375,11 +361,7 @@ CAVEATS AND LIMITATIONS
     namespaces are logged to stderr.
 
   Schedule modified during window: see inconclusive_schedule_changed. The audit can't compute the historical spec,
-    so any unmatched fires for these schedules are reclassified rather than counted.
-
-  Unsupported policies: the audit's algorithm doesn't fully model a few overlap policies and keep_original_workflow_id.
-    Real_miss entries on schedules using those are moved to unsupported_policy with the specific reason in
-    unsupported_reason.
+    so the schedule's row is marked inconclusive rather than producing untrustworthy classifications.
 
   Paused / exhausted schedules: dropped from analysis (their spec evaluates to fire times but the scheduler won't fire).
 
@@ -396,10 +378,6 @@ CAVEATS AND LIMITATIONS
     numbers, followed by a multi-minute gap, then a single WORKFLOW_TASK_COMPLETED that resumes normal cadence;
     (3) compare the identity field on WORKFLOW_TASK_STARTED across affected schedules. A shared worker identity points
     to a single sick worker pod; distinct identities point to a broader frontend/matching/persistence issue.
-
-  Window size cap: --start and --end must span no more than the value of --max-window (default 168h = 7 days).
-    Raise --max-window to audit lower-frequency schedules (e.g. quarterly, yearly); see the --max-window flag help
-    for details and unit caveats. Wider windows are proportionally slower and use more memory.
 
 FILE FORMAT (for --file / stdin)
   One audit target per line as 'namespace[,schedule_id]'. Examples:
@@ -454,14 +432,6 @@ EXAMPLES
 					Name:     FlagEnd,
 					Usage:    "Window end (RFC3339)",
 					Required: true,
-				},
-				&cli.DurationFlag{
-					Name: FlagMaxWindow,
-					Usage: "Maximum allowed window between --start and --end. Default 168h (7d). Raise this " +
-						"to audit schedules that fire less frequently (e.g. quarterly, yearly); larger windows " +
-						"are proportionally slower and use more memory. Use hour units (e.g. 9600h for 400 days); " +
-						"day suffixes are not supported by Go's duration parser.",
-					Value: 7 * 24 * time.Hour,
 				},
 				&cli.StringFlag{
 					Name:    FlagOutputDir,

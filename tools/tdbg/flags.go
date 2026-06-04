@@ -83,7 +83,6 @@ var (
 	FlagFile                       = "file"
 	FlagStart                      = "start"
 	FlagEnd                        = "end"
-	FlagMaxWindow                  = "max-window"
 	FlagOutputDir                  = "output-dir"
 	FlagNamespaceConcurrency       = "namespace-concurrency"
 )

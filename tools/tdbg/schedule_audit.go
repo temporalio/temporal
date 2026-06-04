@@ -125,7 +125,6 @@ type auditInputs struct {
 	Targets              []auditTarget
 	WindowStart          time.Time
 	WindowEnd            time.Time
-	MaxWindow            time.Duration
 	OutputDir            string
 	NamespaceConcurrency int
 }
@@ -134,13 +133,9 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	in := &auditInputs{
 		OutputDir:            c.String(FlagOutputDir),
 		NamespaceConcurrency: c.Int(FlagNamespaceConcurrency),
-		MaxWindow:            c.Duration(FlagMaxWindow),
 	}
 	if in.NamespaceConcurrency <= 0 {
 		in.NamespaceConcurrency = 1
-	}
-	if in.MaxWindow <= 0 {
-		in.MaxWindow = defaultMaxAuditWindow
 	}
 
 	targets, err := resolveTargetsFromFlags(c.String(FlagNamespace), c.String(FlagScheduleID), c.String(FlagFile), os.Stdin)
@@ -159,19 +154,8 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	if err := in.validate(); err != nil {
 		return nil, err
 	}
-
-	if d := in.WindowEnd.Sub(in.WindowStart); d > defaultMaxAuditWindow {
-		_, _ = fmt.Fprintf(os.Stderr, "warning: window is %s (longer than default cap %s); proportionally slower and more memory-intensive\n",
-			d.Round(time.Hour), defaultMaxAuditWindow)
-	}
-
 	return in, nil
 }
-
-// defaultMaxAuditWindow caps how wide a single audit window can be by default. Catches typos (e.g. wrong month in
-// --end) and discourages expensive multi-day runs that should be chunked into separate invocations. Operators can
-// raise the cap via --max-window for schedules that fire less frequently (quarterly, yearly).
-const defaultMaxAuditWindow = 7 * 24 * time.Hour
 
 func (in *auditInputs) validate() error {
 	if len(in.Targets) == 0 {
@@ -181,14 +165,6 @@ func (in *auditInputs) validate() error {
 		return fmt.Errorf("--end (%s) must be after --start (%s)",
 			in.WindowEnd.UTC().Format(time.RFC3339),
 			in.WindowStart.UTC().Format(time.RFC3339))
-	}
-	if d := in.WindowEnd.Sub(in.WindowStart); d > in.MaxWindow {
-		return fmt.Errorf("window is %s (--start %s to --end %s); max is %s. Pass --max-window=%s if intentional",
-			d.Round(time.Hour),
-			in.WindowStart.UTC().Format(time.RFC3339),
-			in.WindowEnd.UTC().Format(time.RFC3339),
-			in.MaxWindow,
-			d.Round(time.Hour))
 	}
 	return nil
 }
@@ -381,28 +357,43 @@ func (t *timeline) matchNominal(expected time.Time) *workflowChain {
 }
 
 // classifyFirings diffs expected fire times against the timeline and populates the classification fields on r.
-// Classification at this stage is binary: "skip_overlap" when some chain was active at the expected fire moment,
-// "real_miss" otherwise. (Other buckets like inconclusive_schedule_changed and unsupported_policy are not assigned
-// here as they're populated later by postProcess based on DescribeSchedule output.)
-func classifyFirings(r *scheduleResult, expected []time.Time, tl *timeline) {
+// For "never-skip-by-design" overlap policies (ALLOW_ALL, CANCEL_OTHER, TERMINATE_OTHER), the skip_overlap heuristic
+// is bypassed because the policy never policy-skips a fire; any unmatched nominal time must be a true real_miss.
+// For all other policies (SKIP, BUFFER_ONE, BUFFER_ALL, UNSPECIFIED), the heuristic applies: skip_overlap when some
+// chain was active at the expected fire moment, real_miss otherwise.
+func classifyFirings(r *scheduleResult, expected []time.Time, tl *timeline, policies *schedulepb.SchedulePolicies) {
 	r.Categories = map[time.Time]string{}
 	r.Counts = map[string]int{}
 	r.Expected = len(expected)
 	r.Actual = len(tl.byWorkflowID)
 
+	neverSkips := neverSkipsByPolicy(policies)
 	for _, et := range expected {
 		if tl.matchNominal(et) != nil {
 			r.Matched++
 			continue
 		}
 		r.Missed = append(r.Missed, et)
-		if len(tl.activeAt(et)) > 0 {
+		if !neverSkips && len(tl.activeAt(et)) > 0 {
 			r.Categories[et] = categorySkipOverlap
 			r.Counts[categorySkipOverlap]++
 			continue
 		}
 		r.Categories[et] = categoryRealMiss
 		r.Counts[categoryRealMiss]++
+	}
+}
+
+// neverSkipsByPolicy reports whether the overlap policy always dispatches per nominal fire. For these policies,
+// any unmatched nominal is a real_miss.
+func neverSkipsByPolicy(policies *schedulepb.SchedulePolicies) bool {
+	switch policies.GetOverlapPolicy() {
+	case enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
+		enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -420,43 +411,28 @@ const retentionSafetyBuffer = 24 * time.Hour
 
 // scheduleLoader fetches schedule specs from the cluster.
 type scheduleLoader interface {
-	// ListSchedules pages through every schedule in the namespace and projects each ScheduleListEntry into a
-	// scheduleEntry (ID, spec, workflow type, jitter, paused). Paginated under the hood; one logical call may issue
-	// many RPCs.
+	// ListSchedules pages through every schedule in the namespace, calls DescribeSchedule per schedule, and projects
+	// the combined data into a scheduleEntry.
 	ListSchedules(ctx context.Context, namespace string) ([]scheduleEntry, error)
-	// LookupSchedule fetches a single schedule entry via DescribeSchedule
+	// LookupSchedule fetches a single schedule's full data via DescribeSchedule.
 	LookupSchedule(ctx context.Context, namespace, scheduleID string) (scheduleEntry, error)
-	// DescribeSchedule fetches a schedule's full metadata (create/update times, exhausted state, policies, catchup
-	// window) via a single DescribeSchedule RPC, projected into scheduleDescription.
-	DescribeSchedule(ctx context.Context, namespace, scheduleID string) (scheduleDescription, error)
 	// NamespaceRetention returns the workflow execution retention TTL for the namespace.
 	NamespaceRetention(ctx context.Context, namespace string) (time.Duration, error)
 }
 
-type scheduleDescription struct {
+// scheduleEntry carries everything the audit needs to classify a schedule
+type scheduleEntry struct {
+	ID           string
+	Spec         *schedulepb.ScheduleSpec
+	WorkflowType string
+	// Paused: skip analysis to avoid flagging never-fired runs as real_miss.
+	Paused     bool
+	Policies   *schedulepb.SchedulePolicies
 	CreateTime time.Time
 	UpdateTime time.Time
-	// Exhausted is true when the schedule has limited_actions enabled and remaining_actions == 0. It won't fire anymore
-	// even though its spec still evaluates to fire times.
-	Exhausted bool
-	// UnsupportedReason is non-empty when the schedule uses a policy our algorithm doesn't currently handle correctly.
-	// Multiple reasons are joined with ";". When set, real_miss entries are reclassified into the unsupported_policy
-	// bucket so operators can see which schedules need manual review.
-	UnsupportedReason string
-	// CatchupWindow is the schedule's configured catchup window. Recorded to troubleshoot dropped firings if the
-	// catchup window is shorter than the observed gap between the expected fire time and the actual workflow start time.
+	// Exhausted: limited_actions schedule with remaining_actions == 0; dropped at load time.
+	Exhausted     bool
 	CatchupWindow time.Duration
-}
-
-// scheduleEntry is a minimal projection of ScheduleListEntry - exactly what the audit needs.
-type scheduleEntry struct {
-	ID            string
-	Spec          *schedulepb.ScheduleSpec
-	WorkflowType  string
-	JitterSeconds int64
-	// Paused schedules never fire even though their spec evaluates to fire times. Analysis skips them entirely to avoid
-	// flagging expected-but-never-fired runs as real_miss.
-	Paused bool
 }
 
 // executionLoader fetches every scheduled workflow that was alive at some moment in [windowStart, queryEnd] -- where
@@ -467,8 +443,6 @@ type scheduleEntry struct {
 type executionLoader interface {
 	ListExecutions(ctx context.Context, namespace, scheduleIDFilter string, windowStart, queryEnd time.Time) (map[string][]timelineEntry, error)
 }
-
-// --- auditor ---
 
 // scheduleAuditor performs the audit for one namespace and time window.
 type scheduleAuditor struct {
@@ -492,15 +466,13 @@ const (
 	categoryRealMiss            = "real_miss"
 	categorySkipOverlap         = "skip_overlap"
 	categoryInconclusiveChanged = "inconclusive_schedule_changed"
-	categoryUnsupportedPolicy   = "unsupported_policy"
 )
 
 // scheduleResult is the per-schedule output for downstream writers.
 type scheduleResult struct {
-	Namespace     string
-	ScheduleID    string
-	WorkflowType  string
-	JitterSeconds int64
+	Namespace    string
+	ScheduleID   string
+	WorkflowType string
 
 	Expected   int
 	Actual     int
@@ -508,12 +480,8 @@ type scheduleResult struct {
 	Missed     []time.Time
 	Categories map[time.Time]string
 	Counts     map[string]int
-	// UnsupportedReason, when non-empty, names the policy/state config that caused this row's real_miss entries to be
-	// reclassified into the unsupported_policy bucket. Mirrored from scheduleDescription.
-	UnsupportedReason string
-	// CatchupWindowSeconds is the schedule's configured catchup window in seconds. Populated only when DescribeSchedule
-	// was called (i.e. real_miss > 0); zero/unset otherwise. Lets operators correlate a real_miss with a known scheduler
-	// outage duration: if catchup_window < outage gap, fires are dropped permanently.
+	// CatchupWindowSeconds is the schedule's configured catchup window in seconds. Lets operators correlate a
+	// real_miss with a known scheduler outage duration: if catchup_window < outage gap, fires are dropped permanently.
 	CatchupWindowSeconds int64
 }
 
@@ -542,11 +510,6 @@ func (a *scheduleAuditor) run(ctx context.Context) ([]scheduleResult, error) {
 	}
 
 	results, err := a.analyzeAll(scheds, executions)
-	if err != nil {
-		return nil, err
-	}
-
-	results, err = a.postProcess(ctx, scheds, executions, results)
 	if err != nil {
 		return nil, err
 	}
@@ -583,9 +546,15 @@ func (a *scheduleAuditor) checkRetention(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// loadSchedules returns the schedules to analyze: either the single --schedule-id target (one DescribeSchedule RPC) or
-// every active schedule in the namespace (paginated ListSchedules). Paused schedules are dropped in both modes -- their
-// specs still produce expected fire times but nothing fires, which would otherwise show up as false-positive real_miss.
+// loadSchedules returns the schedules to analyze. Each entry carries everything needed for classification (Spec,
+// Policies, CreateTime, UpdateTime, Exhausted, CatchupWindow, etc.), fetched via DescribeSchedule per schedule
+// either as part of ListSchedules pagination or as a one-shot LookupSchedule when --schedule-id is set. Schedules
+// that cannot possibly produce a useful audit row are dropped here:
+//   - Paused: spec evaluates to fire times but the scheduler won't fire them.
+//   - Exhausted: limited_actions with remaining_actions == 0; same outcome as paused.
+//   - CreateTime >= WindowEnd: schedule didn't exist for any part of the audit window.
+//
+// Schedules deleted between list and describe (NotFound race) are also skipped inside the loader.
 func (a *scheduleAuditor) loadSchedules(ctx context.Context) ([]scheduleEntry, error) {
 	var scheds []scheduleEntry
 	if a.ScheduleID != "" {
@@ -607,9 +576,13 @@ func (a *scheduleAuditor) loadSchedules(ctx context.Context) ([]scheduleEntry, e
 
 	active := scheds[:0]
 	for _, s := range scheds {
-		if !s.Paused {
-			active = append(active, s)
+		if s.Paused || s.Exhausted {
+			continue
 		}
+		if !s.CreateTime.IsZero() && !s.CreateTime.Before(a.WindowEnd) {
+			continue
+		}
+		active = append(active, s)
 	}
 	return active, nil
 }
@@ -642,7 +615,7 @@ func (a *scheduleAuditor) analyzeAll(scheds []scheduleEntry, executions map[stri
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			res, err := a.analyzeSchedule(s, entries, a.WindowStart)
+			res, err := a.analyzeSchedule(s, entries)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -663,121 +636,19 @@ func (a *scheduleAuditor) analyzeAll(scheds []scheduleEntry, executions map[stri
 	return results, nil
 }
 
-// postProcess re-examines schedules flagged with real_miss > 0 by calling DescribeSchedule and applying the following
-// reclassification rules (checked in order; first match wins):
-//
-//   - NotFound (deleted between list and describe)  -> drop the row.
-//   - UpdateTime > windowStart (spec changed mid-window) -> reclassify real_miss to inconclusive_schedule_changed.
-//   - Exhausted (limited_actions, remaining_actions == 0) -> drop the row.
-//   - UnsupportedReason != "" -> reclassify real_miss to unsupported_policy and stamp the reason. These are
-//     corner-case policy/state configs the algorithm does not model correctly today, so we move the count out of
-//     the trusted real_miss bucket and surface the row for manual review. Reasons currently detected:
-//   - keep_original_workflow_id  -- defined in the API but not server-supported today (and not on the near-term roadmap).
-//   - overlap_buffer_all         -- fires can be queued for arbitrary durations, beyond our 24h query buffer.
-//   - overlap_allow_all          -- scheduler never skips on overlap, so skip_overlap labels may be wrong.
-//   - overlap_cancel_other       -- new fire cancels prior; chain lifecycle differs (likely works, unverified).
-//   - overlap_terminate_other    -- same as cancel_other; likely works, unverified.
-//   - CreateTime >= windowEnd -> drop the row. The schedule was created after the audit window ended, so it could
-//     not have fired during the window. The expected fires we computed are phantom -- the spec compiler is
-//     stateless and doesn't know when the schedule was created, so it generates fires the schedule never had a
-//     chance to run. Dropping the row removes the false-positive real_miss count entirely.
-//   - CreateTime > windowStart (created mid-window) -> re-analyze with expectedStart = CreateTime. The schedule
-//     existed for part of the window but not all of it. Fires before CreateTime are phantom (same reason as
-//     above) but fires at-or-after CreateTime are real. Re-running classifyFirings with the lower bound advanced
-//     to CreateTime drops the phantom expected fires while preserving any genuine misses that occurred after the
-//     schedule came online.
-//   - Otherwise: row stands as real_miss.
-//
-// Done sequentially to keep describe RPCs gentle on the frontend.
-func (a *scheduleAuditor) postProcess(ctx context.Context, scheds []scheduleEntry, executions map[string][]timelineEntry, results []scheduleResult) ([]scheduleResult, error) {
-	schedByID := make(map[string]scheduleEntry, len(scheds))
-	for _, s := range scheds {
-		schedByID[s.ID] = s
+// analyzeSchedule runs the audit for a single schedule against the pre-fetched timeline entries.
+func (a *scheduleAuditor) analyzeSchedule(s scheduleEntry, entries []timelineEntry) (*scheduleResult, error) {
+	// If the spec was modified after the audit window began, the current spec doesn't describe what was firing
+	// earlier in the window. Short-circuit: mark all fires as inconclusive_schedule_changed; don't attempt to match.
+	if !s.UpdateTime.IsZero() && s.UpdateTime.After(a.WindowStart) {
+		return a.inconclusiveResult(s)
 	}
-	revised := results[:0]
-	for _, r := range results {
-		if r.Counts[categoryRealMiss] == 0 {
-			revised = append(revised, r)
-			continue
-		}
-		newR, err := a.reclassifyOne(ctx, r, schedByID, executions)
-		if err != nil {
-			return nil, err
-		}
-		if newR != nil {
-			revised = append(revised, *newR)
-		}
+	// Truncate expectedStart to CreateTime when the schedule was created mid-window. Drops phantom expected fires
+	// from before the schedule existed.
+	expectedStart := a.WindowStart
+	if !s.CreateTime.IsZero() && s.CreateTime.After(expectedStart) {
+		expectedStart = s.CreateTime
 	}
-	return revised, nil
-}
-
-// reclassifyOne applies the post-process rules to a single result with real_miss > 0. Returns (nil, nil) when the row
-// should be dropped (NotFound race, exhausted, or created after windowEnd) and (newRow, nil) when it should be kept
-// (possibly reclassified or re-analyzed against a truncated window).
-func (a *scheduleAuditor) reclassifyOne(ctx context.Context, r scheduleResult, schedByID map[string]scheduleEntry, executions map[string][]timelineEntry) (*scheduleResult, error) {
-	desc, err := a.Schedules.DescribeSchedule(ctx, a.Namespace, r.ScheduleID)
-	if err != nil {
-		// Race: ListSchedules saw this schedule but it was deleted before our post-process call. Drop the row -- we
-		// can't classify real_miss for a schedule that no longer exists.
-		if status.Code(err) == codes.NotFound {
-			_, _ = fmt.Fprintf(a.Progress, "    %s: %s: deleted between list and describe, dropping row\n",
-				a.Namespace, r.ScheduleID)
-			return nil, nil
-		}
-		return nil, fmt.Errorf("describe %s: %w", r.ScheduleID, err)
-	}
-	// Record to help correlate real_miss, especially for short catch-ups
-	r.CatchupWindowSeconds = int64(desc.CatchupWindow.Seconds())
-
-	switch {
-	// Spec modified during window: current spec doesn't describe what was firing pre-modification.
-	case !desc.UpdateTime.IsZero() && desc.UpdateTime.After(a.WindowStart):
-		recategorize(&r, categoryRealMiss, categoryInconclusiveChanged)
-		return &r, nil
-	// Exhausted (limited_actions with remaining_actions==0): won't fire anymore even though spec still produces fire
-	// times. Drop.
-	case desc.Exhausted:
-		return nil, nil
-	// Unsupported policy/state: algorithm doesn't fully model these (keepOriginalWorkflowId, BUFFER_ALL, etc). Surface
-	// for manual review but don't claim the misses are real.
-	case desc.UnsupportedReason != "":
-		recategorize(&r, categoryRealMiss, categoryUnsupportedPolicy)
-		r.UnsupportedReason = desc.UnsupportedReason
-		return &r, nil
-	// Created after windowEnd: couldn't have fired during the window.
-	case !desc.CreateTime.IsZero() && !desc.CreateTime.Before(a.WindowEnd):
-		return nil, nil
-	// Created mid-window: re-analyze with truncated expected.
-	case !desc.CreateTime.IsZero() && desc.CreateTime.After(a.WindowStart):
-		return a.reanalyzeFromCreate(r, desc.CreateTime, schedByID, executions)
-	}
-	// Schedule unchanged and pre-existing: result stands.
-	return &r, nil
-}
-
-// reanalyzeFromCreate handles the "created mid-window" branch: re-runs the per-schedule analysis with expectedStart
-// advanced to the schedule's CreateTime, so phantom expected fires from before the schedule existed are dropped.
-func (a *scheduleAuditor) reanalyzeFromCreate(r scheduleResult, createTime time.Time, schedByID map[string]scheduleEntry, executions map[string][]timelineEntry) (*scheduleResult, error) {
-	s, ok := schedByID[r.ScheduleID]
-	if !ok {
-		return &r, nil
-	}
-	newR, err := a.analyzeSchedule(s, executions[r.ScheduleID], createTime)
-	if err != nil {
-		return nil, fmt.Errorf("re-analyze %s: %w", r.ScheduleID, err)
-	}
-	if newR == nil {
-		return nil, nil
-	}
-	newR.CatchupWindowSeconds = r.CatchupWindowSeconds
-	return newR, nil
-}
-
-// analyzeSchedule runs the audit for a single schedule entry against the pre-fetched timeline entries. expectedStart
-// bounds the lower edge of expected fires; pass a.WindowStart for the normal case, or a schedule's createTime (when
-// later than WindowStart) to suppress false-positive real_miss for schedules that didn't yet exist at the start of the
-// audit window.
-func (a *scheduleAuditor) analyzeSchedule(s scheduleEntry, entries []timelineEntry, expectedStart time.Time) (*scheduleResult, error) {
 	expected, err := expectedFireTimes(s.Spec, expectedStart, a.WindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("expected fires for %s: %w", s.ID, err)
@@ -790,29 +661,40 @@ func (a *scheduleAuditor) analyzeSchedule(s scheduleEntry, entries []timelineEnt
 		tl.addExecution(e)
 	}
 	r := &scheduleResult{
-		Namespace:     a.Namespace,
-		ScheduleID:    s.ID,
-		WorkflowType:  s.WorkflowType,
-		JitterSeconds: s.JitterSeconds,
+		Namespace:            a.Namespace,
+		ScheduleID:           s.ID,
+		WorkflowType:         s.WorkflowType,
+		CatchupWindowSeconds: int64(s.CatchupWindow.Seconds()),
 	}
-	classifyFirings(r, expected, tl)
+	classifyFirings(r, expected, tl, s.Policies)
 	return r, nil
 }
 
-// recategorize moves all entries currently classified as `from` into `to`, updating both the per-fire Categories map
-// and the aggregate Counts. Used by the post-process to reclassify real_miss entries when we can't trust the spec (e.g.
-// the schedule was modified during the audit window).
-func recategorize(r *scheduleResult, from, to string) {
-	if r.Counts[from] == 0 {
-		return
+// inconclusiveResult constructs a result for a schedule whose spec was modified mid-window. All expected fires are
+// labeled inconclusive_schedule_changed because the current spec can't be trusted to describe what was firing
+// earlier in the window.
+func (a *scheduleAuditor) inconclusiveResult(s scheduleEntry) (*scheduleResult, error) {
+	expected, err := expectedFireTimes(s.Spec, a.WindowStart, a.WindowEnd)
+	if err != nil {
+		return nil, fmt.Errorf("expected fires for %s: %w", s.ID, err)
 	}
-	for t, cat := range r.Categories {
-		if cat == from {
-			r.Categories[t] = to
-		}
+	if len(expected) == 0 {
+		return nil, nil
 	}
-	r.Counts[to] += r.Counts[from]
-	delete(r.Counts, from)
+	r := &scheduleResult{
+		Namespace:            a.Namespace,
+		ScheduleID:           s.ID,
+		WorkflowType:         s.WorkflowType,
+		CatchupWindowSeconds: int64(s.CatchupWindow.Seconds()),
+		Expected:             len(expected),
+		Missed:               append([]time.Time(nil), expected...),
+		Categories:           make(map[time.Time]string, len(expected)),
+		Counts:               map[string]int{categoryInconclusiveChanged: len(expected)},
+	}
+	for _, et := range expected {
+		r.Categories[et] = categoryInconclusiveChanged
+	}
+	return r, nil
 }
 
 // grpcRetrier wraps RPCs with retry-on-ResourceExhausted
@@ -871,8 +753,10 @@ type grpcScheduleLoader struct {
 	retrier *grpcRetrier
 }
 
+// ListSchedules pages through ListSchedules, then calls DescribeSchedule sequentially per schedule to populate the
+// full scheduleEntry (Policies, CreateTime, UpdateTime, Exhausted, CatchupWindow).
 func (l *grpcScheduleLoader) ListSchedules(ctx context.Context, namespace string) ([]scheduleEntry, error) {
-	var out []scheduleEntry
+	var ids []string
 	var pageToken []byte
 	for {
 		var resp *workflowservice.ListSchedulesResponse
@@ -880,7 +764,7 @@ func (l *grpcScheduleLoader) ListSchedules(ctx context.Context, namespace string
 			var rpcErr error
 			resp, rpcErr = l.client.ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 				Namespace:       namespace,
-				MaximumPageSize: 1000,
+				MaximumPageSize: visibilityPageSize,
 				NextPageToken:   pageToken,
 			})
 			return rpcErr
@@ -889,31 +773,34 @@ func (l *grpcScheduleLoader) ListSchedules(ctx context.Context, namespace string
 			return nil, err
 		}
 		for _, s := range resp.GetSchedules() {
-			info := s.GetInfo()
-			if info == nil {
+			if s.GetInfo() == nil {
 				continue
 			}
-			var jitterSecs int64
-			if j := info.GetSpec().GetJitter(); j != nil {
-				jitterSecs = int64(j.AsDuration().Seconds())
-			}
-			out = append(out, scheduleEntry{
-				ID:            s.GetScheduleId(),
-				Spec:          info.GetSpec(),
-				WorkflowType:  info.GetWorkflowType().GetName(),
-				JitterSeconds: jitterSecs,
-				Paused:        info.GetPaused(),
-			})
+			ids = append(ids, s.GetScheduleId())
 		}
 		if len(resp.GetNextPageToken()) == 0 {
 			break
 		}
 		pageToken = resp.GetNextPageToken()
 	}
+
+	out := make([]scheduleEntry, 0, len(ids))
+	for _, id := range ids {
+		entry, err := l.LookupSchedule(ctx, namespace, id)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				// Deleted between list and describe, so skip.
+				continue
+			}
+			return nil, fmt.Errorf("describe %s/%s: %w", namespace, id, err)
+		}
+		out = append(out, entry)
+	}
 	return out, nil
 }
 
-// LookupSchedule fetches a single schedule via DescribeSchedule and projects the response into a scheduleEntry
+// LookupSchedule fetches a single schedule via DescribeSchedule and projects the response into a scheduleEntry,
+// including the policies, create/update times, exhausted/paused state, and catchup window needed for classification.
 func (l *grpcScheduleLoader) LookupSchedule(ctx context.Context, namespace, scheduleID string) (scheduleEntry, error) {
 	var resp *workflowservice.DescribeScheduleResponse
 	err := l.retrier.do(ctx, fmt.Sprintf("DescribeSchedule(%s/%s)", namespace, scheduleID), func() error {
@@ -927,19 +814,29 @@ func (l *grpcScheduleLoader) LookupSchedule(ctx context.Context, namespace, sche
 	if err != nil {
 		return scheduleEntry{}, err
 	}
+	info := resp.GetInfo()
 	sched := resp.GetSchedule()
 	spec := sched.GetSpec()
-	var jitterSecs int64
-	if j := spec.GetJitter(); j != nil {
-		jitterSecs = int64(j.AsDuration().Seconds())
+	state := sched.GetState()
+	policies := sched.GetPolicies()
+	entry := scheduleEntry{
+		ID:           scheduleID,
+		Spec:         spec,
+		WorkflowType: sched.GetAction().GetStartWorkflow().GetWorkflowType().GetName(),
+		Paused:       state.GetPaused(),
+		Policies:     policies,
+		Exhausted:    state.GetLimitedActions() && state.GetRemainingActions() == 0,
 	}
-	return scheduleEntry{
-		ID:            scheduleID,
-		Spec:          spec,
-		WorkflowType:  sched.GetAction().GetStartWorkflow().GetWorkflowType().GetName(),
-		JitterSeconds: jitterSecs,
-		Paused:        sched.GetState().GetPaused(),
-	}, nil
+	if ct := info.GetCreateTime(); ct != nil {
+		entry.CreateTime = ct.AsTime()
+	}
+	if ut := info.GetUpdateTime(); ut != nil {
+		entry.UpdateTime = ut.AsTime()
+	}
+	if cw := policies.GetCatchupWindow(); cw != nil {
+		entry.CatchupWindow = cw.AsDuration()
+	}
+	return entry, nil
 }
 
 // NamespaceRetention returns the workflow execution retention TTL via DescribeNamespace. One RPC per namespace.
@@ -961,75 +858,6 @@ func (l *grpcScheduleLoader) NamespaceRetention(ctx context.Context, namespace s
 	return 0, nil
 }
 
-// DescribeSchedule fetches a schedule's metadata via one DescribeSchedule RPC, projected into scheduleDescription
-func (l *grpcScheduleLoader) DescribeSchedule(ctx context.Context, namespace, scheduleID string) (scheduleDescription, error) {
-	var resp *workflowservice.DescribeScheduleResponse
-	err := l.retrier.do(ctx, fmt.Sprintf("DescribeSchedule(%s/%s)", namespace, scheduleID), func() error {
-		var rpcErr error
-		resp, rpcErr = l.client.DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  namespace,
-			ScheduleId: scheduleID,
-		})
-		return rpcErr
-	})
-	if err != nil {
-		return scheduleDescription{}, err
-	}
-	info := resp.GetInfo()
-	sched := resp.GetSchedule()
-	state := sched.GetState()
-	policies := sched.GetPolicies()
-	var desc scheduleDescription
-	if ct := info.GetCreateTime(); ct != nil {
-		desc.CreateTime = ct.AsTime()
-	}
-	if ut := info.GetUpdateTime(); ut != nil {
-		desc.UpdateTime = ut.AsTime()
-	}
-	desc.Exhausted = state.GetLimitedActions() && state.GetRemainingActions() == 0
-	desc.UnsupportedReason = unsupportedPolicyReason(policies)
-	if cw := policies.GetCatchupWindow(); cw != nil {
-		desc.CatchupWindow = cw.AsDuration()
-	}
-	return desc, nil
-}
-
-// unsupportedPolicyReason returns a non-empty string when a schedule's policies/state use a configuration our audit
-// doesn't fully handle. Multiple reasons are joined with ";". Operators see this in the report and know those rows need
-// manual review rather than being trusted as real_miss.
-func unsupportedPolicyReason(policies *schedulepb.SchedulePolicies) string {
-	if policies == nil {
-		return ""
-	}
-	var reasons []string
-	if policies.GetKeepOriginalWorkflowId() {
-		// All fires share one WorkflowID, breaking our chain-by-WorkflowID model.
-		reasons = append(reasons, "keep_original_workflow_id")
-	}
-	switch policies.GetOverlapPolicy() {
-	case enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL:
-		// Fires can be buffered for arbitrary durations; our delayedFireBuffer of 24h may miss the workflow.
-		reasons = append(reasons, "overlap_buffer_all")
-	case enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER:
-		// Each new fire cancels the running one; chain lifecycle differs from the standard model. Likely works but
-		// unverified.
-		reasons = append(reasons, "overlap_cancel_other")
-	case enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
-		// Similar to CANCEL_OTHER. Likely works but unverified.
-		reasons = append(reasons, "overlap_terminate_other")
-	case enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL:
-		// ALLOW_ALL never skips on overlap, so classifyFirings can mis-label
-		// real_miss as skip_overlap when a long-running prior fire is active
-		// at the expected time. Surface for inspection; we don't reclassify
-		// here because the skip_overlap labels were already computed before
-		// post-process and DescribeSchedule isn't called for skip-only rows.
-		reasons = append(reasons, "overlap_allow_all")
-	default:
-		// SKIP, BUFFER_ONE, and UNSPECIFIED are fully modeled; nothing to flag.
-	}
-	return strings.Join(reasons, ";")
-}
-
 // grpcExecutionLoader pages through ListWorkflowExecutions for an entire namespace in a single visibility query,
 // returning entries grouped by schedule ID. The query uses `TemporalScheduledById IS NOT NULL` so the server can
 // satisfy it with an index scan, and pagination is shared across all schedules.
@@ -1039,11 +867,10 @@ type grpcExecutionLoader struct {
 	log     io.Writer
 }
 
-// visibilityPageSize is the per-call ListWorkflowExecutions page size. 1000 is a safe default; the server may
-// silently clamp to a lower max. Larger values reduce RPC count but each call returns more bytes (4MB gRPC limit
-// caps practical sizes around ~5000).
+// visibilityPageSize is the per-call page size for visibility queries (ListWorkflowExecutions, ListSchedules).
+// 1000 is a safe default; the server may silently clamp to a lower max. Larger values reduce RPC count but each
+// call returns more bytes (4MB gRPC limit caps practical sizes around ~5000).
 const visibilityPageSize = 1000
-
 const pageProgressEvery = 5
 
 // ListExecutions issues one paginated visibility query that returns every scheduled workflow alive at some moment in
@@ -1205,7 +1032,6 @@ var flatCSVBaseHeader = []string{
 	"namespace",
 	"schedule_id",
 	"workflow_type",
-	"jitter_s",
 	"expected",
 	"actual",
 	"matched",
@@ -1213,8 +1039,6 @@ var flatCSVBaseHeader = []string{
 	categoryRealMiss,
 	categorySkipOverlap,
 	categoryInconclusiveChanged,
-	categoryUnsupportedPolicy,
-	"unsupported_reason",
 	"catchup_window_s",
 	"real_miss_times",
 }
@@ -1237,9 +1061,8 @@ func writeFlatCSV(w io.Writer, results []scheduleResult) error {
 }
 
 func flatRow(r scheduleResult) []string {
-	// Only emit the real_miss times -- the other buckets (skip_overlap, inconclusive_schedule_changed, unsupported_policy)
-	// all have valid reasons, so their timestamps add noise to the output column. Categories may have been mutated by
-	// recategorize during post-process, so filter on the final classification.
+	// Only emit the real_miss times -- the other buckets (skip_overlap, inconclusive_schedule_changed) all have
+	// valid reasons, so their timestamps add noise to the output column.
 	var realMissTimes []time.Time
 	for _, t := range r.Missed {
 		if r.Categories[t] == categoryRealMiss {
@@ -1250,7 +1073,6 @@ func flatRow(r scheduleResult) []string {
 		r.Namespace,
 		r.ScheduleID,
 		strings.ReplaceAll(r.WorkflowType, ",", ";"),
-		fmt.Sprintf("%d", r.JitterSeconds),
 		fmt.Sprintf("%d", r.Expected),
 		fmt.Sprintf("%d", r.Actual),
 		fmt.Sprintf("%d", r.Matched),
@@ -1258,8 +1080,6 @@ func flatRow(r scheduleResult) []string {
 		fmt.Sprintf("%d", r.Counts[categoryRealMiss]),
 		fmt.Sprintf("%d", r.Counts[categorySkipOverlap]),
 		fmt.Sprintf("%d", r.Counts[categoryInconclusiveChanged]),
-		fmt.Sprintf("%d", r.Counts[categoryUnsupportedPolicy]),
-		strings.ReplaceAll(r.UnsupportedReason, ",", ";"),
 		fmt.Sprintf("%d", r.CatchupWindowSeconds),
 		joinTimes(realMissTimes, 20),
 	}
@@ -1303,8 +1123,9 @@ func writeOutput(dir string, results []scheduleResult) error {
 	}
 
 	for ns, rs := range byNS {
-		// Sanitize "/" -> "_"
-		safeName := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(ns)
+		// Sanitize path separators and dots so namespaces with literal dots (e.g. "foo.bar") or pathological values
+		// like ".." cannot escape perNSDir or produce hidden files.
+		safeName := strings.NewReplacer("/", "_", string(filepath.Separator), "_", ".", "_").Replace(ns)
 		path := filepath.Join(perNSDir, safeName+".csv")
 		f, err := os.Create(path)
 		if err != nil {
@@ -1338,7 +1159,6 @@ func writeSummaryCSV(path string, byNS map[string][]scheduleResult) (retErr erro
 	if err := cw.Write([]string{
 		"namespace", "schedules_flagged",
 		categoryRealMiss, categorySkipOverlap, categoryInconclusiveChanged,
-		categoryUnsupportedPolicy,
 	}); err != nil {
 		return err
 	}
@@ -1349,12 +1169,11 @@ func writeSummaryCSV(path string, byNS map[string][]scheduleResult) (retErr erro
 	sort.Strings(nss)
 	for _, ns := range nss {
 		rs := byNS[ns]
-		var realMisses, skips, specChanged, unsupported int
+		var realMisses, skips, specChanged int
 		for _, r := range rs {
 			realMisses += r.Counts[categoryRealMiss]
 			skips += r.Counts[categorySkipOverlap]
 			specChanged += r.Counts[categoryInconclusiveChanged]
-			unsupported += r.Counts[categoryUnsupportedPolicy]
 		}
 		if err := cw.Write([]string{
 			ns,
@@ -1362,7 +1181,6 @@ func writeSummaryCSV(path string, byNS map[string][]scheduleResult) (retErr erro
 			fmt.Sprintf("%d", realMisses),
 			fmt.Sprintf("%d", skips),
 			fmt.Sprintf("%d", specChanged),
-			fmt.Sprintf("%d", unsupported),
 		}); err != nil {
 			return err
 		}

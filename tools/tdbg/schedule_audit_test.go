@@ -28,7 +28,6 @@ func TestAuditInputs_Validate(t *testing.T) {
 			Targets:     []auditTarget{{Namespace: "ns"}},
 			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
 			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
-			MaxWindow:   defaultMaxAuditWindow,
 			OutputDir:   "/tmp/out",
 		}
 	}
@@ -70,36 +69,6 @@ func TestAuditInputs_Validate(t *testing.T) {
 		in := base()
 		in.WindowEnd = in.WindowStart
 		require.ErrorContains(t, in.validate(), "must be after")
-	})
-
-	t.Run("window at default cap accepted", func(t *testing.T) {
-		in := base()
-		in.WindowEnd = in.WindowStart.Add(defaultMaxAuditWindow)
-		require.NoError(t, in.validate())
-	})
-
-	t.Run("window over default cap rejected with override hint", func(t *testing.T) {
-		in := base()
-		in.WindowEnd = in.WindowStart.Add(defaultMaxAuditWindow + time.Second)
-		err := in.validate()
-		require.ErrorContains(t, err, "max is 168h")
-		require.ErrorContains(t, err, "Pass --max-window=")
-	})
-
-	t.Run("raised --max-window accepts wider window", func(t *testing.T) {
-		in := base()
-		in.MaxWindow = 400 * 24 * time.Hour
-		in.WindowEnd = in.WindowStart.Add(365 * 24 * time.Hour)
-		require.NoError(t, in.validate())
-	})
-
-	t.Run("--max-window still bounds the window", func(t *testing.T) {
-		in := base()
-		in.MaxWindow = 30 * 24 * time.Hour
-		in.WindowEnd = in.WindowStart.Add(31 * 24 * time.Hour)
-		err := in.validate()
-		require.ErrorContains(t, err, "max is 720h")
-		require.ErrorContains(t, err, "Pass --max-window=")
 	})
 }
 
@@ -552,7 +521,7 @@ func TestClassifyFirings(t *testing.T) {
 			NominalTime: mustParseTime("2026-05-19T19:00:00Z"),
 		})
 		res := &scheduleResult{}
-		classifyFirings(res, expectedFires, tl)
+		classifyFirings(res, expectedFires, tl, nil)
 		require.Equal(t, 2, res.Matched)
 		require.Empty(t, res.Missed)
 	})
@@ -573,7 +542,7 @@ func TestClassifyFirings(t *testing.T) {
 			NominalTime: mustParseTime("2026-05-19T18:00:00Z"),
 		})
 		res := &scheduleResult{}
-		classifyFirings(res, expectedFires, tl)
+		classifyFirings(res, expectedFires, tl, nil)
 		require.Equal(t, 1, res.Matched)
 		require.Len(t, res.Missed, 1)
 		require.Equal(t, "real_miss", res.Categories[res.Missed[0]])
@@ -593,21 +562,18 @@ func TestClassifyFirings(t *testing.T) {
 			NominalTime: mustParseTime("2026-05-19T18:00:00Z"),
 		})
 		res := &scheduleResult{}
-		classifyFirings(res, expectedFires, tl)
+		classifyFirings(res, expectedFires, tl, nil)
 		require.Equal(t, "skip_overlap", res.Categories[mustParseTime("2026-05-19T19:00:00Z")])
 	})
 }
 
 type fakeScheduleLoader struct {
+	// entries is the set of schedules the loader returns. Tests populate every field they care about
+	// (Spec, Policies, CreateTime, UpdateTime, Exhausted, Paused, CatchupWindow) directly on each entry, since
+	// the audit consumes a single source of describe-derived data per schedule.
 	entries []scheduleEntry
-	// describes, if set, returns these from DescribeSchedule. Lets tests model schedules created or modified after the
-	// audit window starts.
-	describes map[string]scheduleDescription
-	// describeErrors, if set for a given scheduleID, makes DescribeSchedule return that error instead of looking up
-	// a normal description. Used to model the "deleted between list and describe" race.
-	describeErrors map[string]error
-	// retention, if non-zero, is returned by NamespaceRetention. Defaults to 0, which the auditor treats as "no retention
-	// guard" -- fine for most tests that use synthetic times.
+	// retention, if non-zero, is returned by NamespaceRetention. Defaults to 0, which the auditor treats as
+	// "no retention guard" -- fine for most tests that use synthetic times.
 	retention time.Duration
 }
 
@@ -622,16 +588,6 @@ func (f *fakeScheduleLoader) LookupSchedule(_ context.Context, _, scheduleID str
 		}
 	}
 	return scheduleEntry{}, status.Error(codes.NotFound, "schedule not found")
-}
-
-func (f *fakeScheduleLoader) DescribeSchedule(_ context.Context, _, scheduleID string) (scheduleDescription, error) {
-	if err, ok := f.describeErrors[scheduleID]; ok {
-		return scheduleDescription{}, err
-	}
-	if f.describes == nil {
-		return scheduleDescription{}, nil
-	}
-	return f.describes[scheduleID], nil
 }
 
 func (f *fakeScheduleLoader) NamespaceRetention(_ context.Context, _ string) (time.Duration, error) {
@@ -932,25 +888,16 @@ func TestScheduleAuditor(t *testing.T) {
 		require.Equal(t, 3, r.Counts["skip_overlap"], "every fire should be skip_overlap")
 	})
 
-	t.Run("postProcess: created after windowEnd excluded from results", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
-			},
-		}
+	t.Run("created after windowEnd excluded from results", func(t *testing.T) {
+		spec := hourlyAllHoursSpec()
 		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}},
-			describes: map[string]scheduleDescription{
+			entries: []scheduleEntry{{
+				ID:           "s1",
+				Spec:         spec,
+				WorkflowType: "W",
 				// Created one day after the window ends.
-				"s1": {CreateTime: mustParseTime("2026-05-21T00:00:00Z")},
-			},
+				CreateTime: mustParseTime("2026-05-21T00:00:00Z"),
+			}},
 		}
 		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
 		a := &scheduleAuditor{
@@ -966,25 +913,16 @@ func TestScheduleAuditor(t *testing.T) {
 		require.Empty(t, results, "schedule was created after windowEnd, should produce no result")
 	})
 
-	t.Run("postProcess: created mid-window truncates expected", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
-			},
-		}
+	t.Run("created mid-window truncates expected", func(t *testing.T) {
+		spec := hourlyAllHoursSpec()
 		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}},
-			// Created in the middle of a 4-hour window (18:00 - 22:00).
-			describes: map[string]scheduleDescription{
-				"s1": {CreateTime: mustParseTime("2026-05-19T20:30:00Z")},
-			},
+			entries: []scheduleEntry{{
+				ID:           "s1",
+				Spec:         spec,
+				WorkflowType: "W",
+				// Created in the middle of a 4-hour window (18:00 - 22:00).
+				CreateTime: mustParseTime("2026-05-19T20:30:00Z"),
+			}},
 		}
 		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
 		a := &scheduleAuditor{
@@ -999,34 +937,23 @@ func TestScheduleAuditor(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, results, 1)
 		r := results[0]
-		// First-pass would have flagged 4 expected (19:00, 20:00, 21:00, 22:00) all real_miss. Re-analysis with
-		// createTime=20:30 truncates to fires at 21:00 and 22:00 only -> 2 real_miss.
+		// expectedStart is advanced to CreateTime=20:30, dropping the 19:00 and 20:00 phantom fires. Only 21:00
+		// and 22:00 remain expected; with no observed workflows both are real_miss.
 		require.Equal(t, 2, r.Counts["real_miss"],
 			"expected 2 real_miss (21:00, 22:00); 19:00 and 20:00 were pre-creation and shouldn't count")
 	})
 
-	t.Run("postProcess: modified during window -> inconclusive", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
-			},
-		}
+	t.Run("modified during window -> inconclusive", func(t *testing.T) {
+		spec := hourlyAllHoursSpec()
 		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}},
-			describes: map[string]scheduleDescription{
+			entries: []scheduleEntry{{
+				ID:           "s1",
+				Spec:         spec,
+				WorkflowType: "W",
 				// Created well before window, but spec updated mid-window.
-				"s1": {
-					CreateTime: mustParseTime("2026-01-01T00:00:00Z"),
-					UpdateTime: mustParseTime("2026-05-19T19:30:00Z"),
-				},
-			},
+				CreateTime: mustParseTime("2026-01-01T00:00:00Z"),
+				UpdateTime: mustParseTime("2026-05-19T19:30:00Z"),
+			}},
 		}
 		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
 		a := &scheduleAuditor{
@@ -1037,38 +964,27 @@ func TestScheduleAuditor(t *testing.T) {
 			Executions:  exec,
 			Progress:    io.Discard,
 		}
-		// With no executions and 4 expected hourly fires (19:00, 20:00, 21:00, 22:00), the initial analysis would produce 4
-		// real_miss. Because the spec was updated mid-window, all 4 should be moved to inconclusive_schedule_changed.
+		// With no executions and 4 expected hourly fires (19:00, 20:00, 21:00, 22:00), because the spec was updated
+		// mid-window, all 4 should be marked inconclusive_schedule_changed (the current spec can't be trusted to
+		// describe what was firing earlier).
 		results, err := a.run(context.Background())
 		require.NoError(t, err)
 		require.Len(t, results, 1)
 		r := results[0]
-		require.Zero(t, r.Counts["real_miss"], "expected real_miss reclassified")
+		require.Zero(t, r.Counts["real_miss"], "expected no real_miss (spec changed in window)")
 		require.Equal(t, 4, r.Counts["inconclusive_schedule_changed"])
 	})
 
-	t.Run("postProcess: exhausted excluded from results", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
-			},
-		}
+	t.Run("exhausted excluded from results", func(t *testing.T) {
+		spec := hourlyAllHoursSpec()
 		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}},
-			describes: map[string]scheduleDescription{
-				// Pre-existing schedule, never modified, but exhausted.
-				"s1": {
-					CreateTime: mustParseTime("2026-01-01T00:00:00Z"),
-					Exhausted:  true,
-				},
-			},
+			entries: []scheduleEntry{{
+				ID:           "s1",
+				Spec:         spec,
+				WorkflowType: "W",
+				CreateTime:   mustParseTime("2026-01-01T00:00:00Z"),
+				Exhausted:    true,
+			}},
 		}
 		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
 		a := &scheduleAuditor{
@@ -1084,29 +1000,41 @@ func TestScheduleAuditor(t *testing.T) {
 		require.Empty(t, results, "exhausted schedule should be dropped")
 	})
 
-	t.Run("postProcess: unsupported policy -> unsupported bucket", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+	t.Run("ALLOW_ALL: unmatched fires labeled real_miss (skip_overlap heuristic bypassed)", func(t *testing.T) {
+		spec := hourlyAllHoursSpec()
+		// Two concurrent workflows are active across the audit window -- under the old heuristic these would have
+		// caused unmatched fires to be mis-labeled as skip_overlap. With policy-aware classification, ALLOW_ALL
+		// schedules bypass the heuristic and label unmatched fires as real_miss directly.
+		closeTime := mustParseTime("2026-05-19T23:30:00Z")
+		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{
+			"s1": {
 				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+					WorkflowID:  "concurrent-A",
+					StartTime:   mustParseTime("2026-05-19T17:00:00Z"),
+					CloseTime:   &closeTime,
+					Status:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					NominalTime: mustParseTime("2026-05-19T17:00:00Z"),
+				},
+				{
+					WorkflowID:  "concurrent-B",
+					StartTime:   mustParseTime("2026-05-19T17:30:00Z"),
+					CloseTime:   &closeTime,
+					Status:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					NominalTime: mustParseTime("2026-05-19T17:30:00Z"),
 				},
 			},
-		}
+		}}
 		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}},
-			describes: map[string]scheduleDescription{
-				"s1": {
-					CreateTime:        mustParseTime("2026-01-01T00:00:00Z"),
-					UnsupportedReason: "overlap_buffer_all",
+			entries: []scheduleEntry{{
+				ID:           "s1",
+				Spec:         spec,
+				WorkflowType: "W",
+				CreateTime:   mustParseTime("2026-01-01T00:00:00Z"),
+				Policies: &schedulepb.SchedulePolicies{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 				},
-			},
+			}},
 		}
-		exec := &fakeExecutionLoader{byScheduleID: map[string][]timelineEntry{}}
 		a := &scheduleAuditor{
 			Namespace:   "ns",
 			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
@@ -1119,49 +1047,27 @@ func TestScheduleAuditor(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, results, 1)
 		r := results[0]
-		require.Zero(t, r.Counts["real_miss"], "real_miss reclassified")
-		require.Equal(t, 4, r.Counts["unsupported_policy"])
-		require.Equal(t, "overlap_buffer_all", r.UnsupportedReason)
+		require.Equal(t, 4, r.Counts["real_miss"], "all 4 unmatched fires should be real_miss under ALLOW_ALL")
+		require.Zero(t, r.Counts["skip_overlap"], "no skip_overlap labels for ALLOW_ALL")
 	})
 
-	t.Run("postProcess: NotFound race (deleted between list and describe)", func(t *testing.T) {
-		// Hourly spec; window contains 19:00 and 20:00. With no executions, both are real_miss -> postProcess runs.
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
-				{
-					Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-					Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
-					DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-					Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-					DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-				},
+}
+
+// hourlyAllHoursSpec returns a ScheduleSpec that fires at the top of every hour, every day, every month -- used
+// by integration tests as a simple deterministic generator of expected fire times.
+func hourlyAllHoursSpec() *schedulepb.ScheduleSpec {
+	return &schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{
+				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
+				DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
+				Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
+				DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
 			},
-		}
-		loader := &fakeScheduleLoader{
-			entries: []scheduleEntry{
-				{ID: "deleted", Spec: spec, WorkflowType: "W"},
-				{ID: "alive", Spec: spec, WorkflowType: "W"},
-			},
-			describeErrors: map[string]error{
-				// "deleted" returns NotFound when postProcess calls DescribeSchedule.
-				"deleted": status.Error(codes.NotFound, "schedule not found"),
-			},
-		}
-		a := &scheduleAuditor{
-			Namespace:   "ns",
-			WindowStart: mustParseTime("2026-05-19T18:30:00Z"),
-			WindowEnd:   mustParseTime("2026-05-19T20:30:00Z"),
-			Schedules:   loader,
-			Executions:  &fakeExecutionLoader{},
-			Progress:    io.Discard,
-		}
-		results, err := a.run(context.Background())
-		require.NoError(t, err, "NotFound during postProcess must not propagate as an error")
-		// "deleted" gets dropped silently; "alive" gets describe -> no UpdateTime/Exhausted/etc. -> row stands.
-		require.Len(t, results, 1)
-		require.Equal(t, "alive", results[0].ScheduleID)
-	})
+		},
+	}
 }
 
 func TestWriter_Stdout_FlatCSV(t *testing.T) {
@@ -1170,8 +1076,8 @@ func TestWriter_Stdout_FlatCSV(t *testing.T) {
 		skipTime := mustParseTime("2026-05-19T20:00:00Z")
 		results := []scheduleResult{{
 			Namespace: "ns1", ScheduleID: "s1", WorkflowType: "Foo,Bar",
-			JitterSeconds: 30, CatchupWindowSeconds: 600,
-			Expected: 5, Actual: 4, Matched: 3,
+			CatchupWindowSeconds: 600,
+			Expected:             5, Actual: 4, Matched: 3,
 			Missed: []time.Time{missTime, skipTime},
 			Categories: map[time.Time]string{
 				missTime: categoryRealMiss,
@@ -1181,7 +1087,6 @@ func TestWriter_Stdout_FlatCSV(t *testing.T) {
 				categoryRealMiss:    1,
 				categorySkipOverlap: 1,
 			},
-			UnsupportedReason: "",
 		}}
 		var buf bytes.Buffer
 		require.NoError(t, writeFlatCSV(&buf, results))
@@ -1191,11 +1096,9 @@ func TestWriter_Stdout_FlatCSV(t *testing.T) {
 		require.Equal(t, flatCSVBaseHeader, rows[0])
 		require.Equal(t, []string{
 			"ns1", "s1", "Foo;Bar", // comma in workflow type sanitized to semicolon
-			"30",          // jitter_s
 			"5", "4", "3", // expected, actual, matched
-			"2",                // missed
-			"1", "1", "0", "0", // real_miss, skip_overlap, inconclusive, unsupported
-			"",                     // unsupported_reason
+			"2",           // missed
+			"1", "1", "0", // real_miss, skip_overlap, inconclusive
 			"600",                  // catchup_window_s
 			"2026-05-19T19:00:00Z", // real_miss_times: only the real_miss, not the skip
 		}, rows[1])
@@ -1242,69 +1145,30 @@ func TestWriter_Stdout_FlatCSV(t *testing.T) {
 	})
 }
 
-// TestUnsupportedPolicyReason exercises every policy/state combination unsupportedPolicyReason recognizes, plus the
-// nil-policies and supported-policies cases that must return empty.
-func TestUnsupportedPolicyReason(t *testing.T) {
+// TestNeverSkipsByPolicy verifies the helper that decides whether classifyFirings should bypass its skip_overlap
+// heuristic. ALLOW_ALL / CANCEL_OTHER / TERMINATE_OTHER never policy-skip; everything else does (or might).
+func TestNeverSkipsByPolicy(t *testing.T) {
 	cases := []struct {
 		name     string
 		policies *schedulepb.SchedulePolicies
-		expected string
+		want     bool
 	}{
-		{"nil policies", nil, ""},
-		{"default SKIP (unspecified)", &schedulepb.SchedulePolicies{}, ""},
-		{
-			"explicit SKIP",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
-			"",
-		},
-		{
-			"BUFFER_ONE is supported",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE},
-			"",
-		},
-		{
-			"BUFFER_ALL flagged",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL},
-			"overlap_buffer_all",
-		},
-		{
-			"ALLOW_ALL flagged",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
-			"overlap_allow_all",
-		},
-		{
-			"CANCEL_OTHER flagged",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER},
-			"overlap_cancel_other",
-		},
-		{
-			"TERMINATE_OTHER flagged",
-			&schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER},
-			"overlap_terminate_other",
-		},
-		{
-			"KeepOriginalWorkflowId only",
-			&schedulepb.SchedulePolicies{KeepOriginalWorkflowId: true},
-			"keep_original_workflow_id",
-		},
-		{
-			"KeepOriginalWorkflowId + BUFFER_ALL joined with semicolon",
-			&schedulepb.SchedulePolicies{
-				KeepOriginalWorkflowId: true,
-				OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-			},
-			"keep_original_workflow_id;overlap_buffer_all",
-		},
+		{"nil policies (default SKIP)", nil, false},
+		{"unspecified", &schedulepb.SchedulePolicies{}, false},
+		{"SKIP", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP}, false},
+		{"BUFFER_ONE", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE}, false},
+		{"BUFFER_ALL", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL}, false},
+		{"ALLOW_ALL", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL}, true},
+		{"CANCEL_OTHER", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER}, true},
+		{"TERMINATE_OTHER", &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, unsupportedPolicyReason(tc.policies))
+			require.Equal(t, tc.want, neverSkipsByPolicy(tc.policies))
 		})
 	}
 }
 
-// TestPostProcess_NotFoundRace exercises the race-handling branch where DescribeSchedule returns NotFound for a
-// schedule that ListSchedules saw moments earlier. The row should be silently dropped (no error returned).
 // TestDecodePayloads covers the skip-on-failure contract of decodeScheduledByID and decodeNominalStartTime so the
 // caller can drop visibility rows with malformed search-attribute payloads instead of grouping them under empty keys.
 func TestDecodePayloads(t *testing.T) {
