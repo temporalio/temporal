@@ -283,7 +283,8 @@ func (s *FunctionalTestBase) TearDownSuite() {
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	// Acquire a slot from the dedicated test cluster pool.
-	testClusterPool.dedicated.acquireSlot(s.T())
+	params := ApplyTestClusterOptions(options)
+	testClusterPool.acquireDedicatedSlot(s.T(), params.EnableWorkerService)
 	s.setupCluster(options...)
 }
 

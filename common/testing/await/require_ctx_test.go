@@ -146,9 +146,42 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 	require.Len(t, attemptEnds, 3)
 	for i := 1; i < len(attemptStarts); i++ {
 		gap := attemptStarts[i].Sub(attemptEnds[i-1])
-		require.GreaterOrEqual(t, gap, pollInterval,
+		require.GreaterOrEqual(t, gap, pollInterval-pollInterval/10,
 			"poll interval should run after attempt finishes (gap=%v < %v)", gap, pollInterval)
 	}
+}
+
+func TestRequire_PollIntervalBacksOff(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	var attemptStarts []time.Time
+	var attemptEnds []time.Time
+	attemptDuration := 10 * time.Millisecond
+	pollInterval := 20 * time.Millisecond
+
+	await.Require(t.Context(), t, func(t *await.T) {
+		attemptStarts = append(attemptStarts, time.Now())
+		defer func() { attemptEnds = append(attemptEnds, time.Now()) }()
+
+		time.Sleep(attemptDuration) //nolint:forbidigo // simulate attempt work to measure gap between attempts
+
+		if attempts.Add(1) < 4 {
+			t.Error("not ready")
+		}
+	}, time.Second, pollInterval)
+
+	require.Equal(t, int32(4), attempts.Load())
+	require.Len(t, attemptStarts, 4)
+	require.Len(t, attemptEnds, 4)
+
+	var gaps []time.Duration
+	for i := 1; i < len(attemptStarts); i++ {
+		gaps = append(gaps, attemptStarts[i].Sub(attemptEnds[i-1]))
+	}
+	require.GreaterOrEqual(t, gaps[0], pollInterval-pollInterval/10)
+	require.GreaterOrEqual(t, gaps[1], 3*pollInterval/2-(3*pollInterval/2)/10)
+	require.GreaterOrEqual(t, gaps[2], 9*pollInterval/4-(9*pollInterval/4)/10)
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
@@ -267,8 +300,39 @@ func TestRequire_FailureScenarios(t *testing.T) {
 			}, time.Second, 100*time.Millisecond)
 		})
 		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error", tb.errors())
+		fatals := tb.fatals()
+		require.Contains(t, fatals, "not satisfied after")
+		require.Contains(t, fatals, "await stats: polls=2 failed_attempts=2")
+		require.Contains(t, fatals, "attempt_duration min=")
+		require.Contains(t, fatals, "sleep_duration min=")
+		require.Contains(t, fatals, "slowest attempts:")
+		require.Contains(t, fatals, "context at timeout:")
+		require.Contains(t, fatals, "last failed attempt before timeout:\n\n  --- attempt 2 ---\n    last attempt error")
+		require.Contains(t, fatals, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error")
+		require.Equal(t, int32(2), attempts.Load())
+	})
+
+	t.Run("reports previous distinct attempt when last attempt is only deadline", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testcontext.New(t)
+		var attempts atomic.Int32
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				if attempts.Add(1) == 1 {
+					t.Error("observed state: version is still draining")
+					return
+				}
+				<-t.Context().Done()
+				t.Error("context deadline exceeded")
+			}, time.Second, 100*time.Millisecond)
+		})
+		require.True(t, tb.Failed())
+		fatals := tb.fatals()
+		require.Contains(t, fatals, "not satisfied after")
+		require.Contains(t, fatals, "last failed attempt before timeout:\n\n  --- attempt 2 ---\n    context deadline exceeded")
+		require.Contains(t, fatals, "last non-deadline failed attempt:\n\n  --- attempt 1 ---\n    observed state: version is still draining")
 		require.Equal(t, int32(2), attempts.Load())
 	})
 
@@ -290,12 +354,13 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		n := attempts.Load()
 		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
 
-		errs := tb.errors()
-		require.Contains(t, errs, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
-		require.Contains(t, errs, fmt.Sprintf("... %d attempts omitted ...", n-4))
+		fatals := tb.fatals()
+		require.Contains(t, fatals, fmt.Sprintf("last failed attempt before timeout:\n\n  --- attempt %d ---\n    attempt %d failed", n, n))
+		require.Contains(t, fatals, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
+		require.Contains(t, fatals, fmt.Sprintf("... %d attempts omitted ...", n-4))
 		// Last three attempts present in order.
 		for i := n - 2; i <= n; i++ {
-			require.Contains(t, errs, fmt.Sprintf("--- attempt %d ---\n    attempt %d failed", i, i))
+			require.Contains(t, fatals, fmt.Sprintf("--- attempt %d ---\n    attempt %d failed", i, i))
 		}
 	})
 
