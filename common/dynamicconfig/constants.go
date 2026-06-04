@@ -3267,6 +3267,13 @@ When enabled, the scavenger will delete completed workflow execution data that a
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
+	WorkerSchedulerRetentionTime = NewNamespaceDurationSetting(
+		"worker.schedulerRetentionTime",
+		7*24*time.Hour,
+		`WorkerSchedulerRetentionTime is how long a V1 schedule workflow stays open after it has no more
+actions to take (no upcoming wakeup, not paused, no pending backfill). After this elapses the schedule
+workflow exits. Mirrors CHASM's IdleTime.`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
