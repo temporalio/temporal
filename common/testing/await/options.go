@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Option configures a Require2 / RequireTrue2 call.
+// Option configures a Require / RequireTrue call.
 type Option func(*config)
 
 // WithTimeout sets the total time the polling loop will run before failing.

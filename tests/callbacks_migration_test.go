@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -61,7 +62,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 
 	env := s.newTestEnv()
 
-	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
@@ -105,7 +105,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		CompletionCallbacks: []*commonpb.Callback{cb},
 	}
 
-	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -129,7 +129,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 
 	// Unblock the workflow by sending the continue signal
 	_, err = env.FrontendClient().SignalWorkflowExecution(
-		ctx,
+		s.Context(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
@@ -139,9 +139,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	s.NoError(err)
 
 	// Wait for workflow to complete
-	run := sdkClient.GetWorkflow(ctx, workflowID, "")
+	run := sdkClient.GetWorkflow(s.Context(), workflowID, "")
 	var result int
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal(1, result)
 
 	// Verify callback was invoked with successful completion
@@ -174,7 +174,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
-	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
@@ -218,7 +217,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		CompletionCallbacks: []*commonpb.Callback{cb},
 	}
 
-	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -240,7 +239,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 
 	// Unblock the workflow by sending the continue signal
 	_, err = env.FrontendClient().SignalWorkflowExecution(
-		ctx,
+		s.Context(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
@@ -250,9 +249,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	s.NoError(err)
 
 	// Wait for workflow to complete
-	run := sdkClient.GetWorkflow(ctx, workflowID, "")
+	run := sdkClient.GetWorkflow(s.Context(), workflowID, "")
 	var result int
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal(1, result)
 
 	// Verify callback was invoked with successful completion
@@ -280,7 +279,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	env := s.newTestEnv()
 
-	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
@@ -332,7 +330,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		CompletionCallbacks: []*commonpb.Callback{callback1},
 	}
 
-	response, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	response, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	workflowExecution := &commonpb.WorkflowExecution{
@@ -381,13 +379,13 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		},
 	}
 
-	response2, err := env.FrontendClient().StartWorkflowExecution(ctx, request2)
+	response2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request2)
 	s.NoError(err)
 	s.False(response2.Started)
 	s.Equal(workflowExecution.RunId, response2.RunId)
 
 	// Verify DescribeWorkflow shows both callbacks (1 HSM + 1 CHASM)
-	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	description, err := sdkClient.DescribeWorkflowExecution(s.Context(), workflowID, "")
 	s.NoError(err)
 	s.Len(description.Callbacks, 2, "should have 2 callbacks: 1 HSM + 1 CHASM")
 
@@ -401,7 +399,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	// Unblock the workflow by sending the continue signal
 	_, err = env.FrontendClient().SignalWorkflowExecution(
-		ctx,
+		s.Context(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: workflowExecution,
@@ -411,9 +409,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.NoError(err)
 
 	// Wait for workflow to complete
-	run := sdkClient.GetWorkflow(ctx, workflowID, "")
+	run := sdkClient.GetWorkflow(s.Context(), workflowID, "")
 	var result int
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal(1, result)
 
 	// Verify both callbacks were invoked with successful completion
@@ -443,7 +441,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	// Verify DescribeWorkflow shows both callbacks in SUCCEEDED state after completion
 	s.Await(func(suite *CallbacksMigrationSuite) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
+		description, err := sdkClient.DescribeWorkflowExecution(s.Context(), workflowID, "")
 		suite.NoError(err)
 		suite.Len(description.Callbacks, 2, "should still have 2 callbacks")
 
@@ -454,5 +452,5 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 			suite.Nil(callbackInfo.LastAttemptFailure)
 			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
-	}, 2*time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(2*time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 }

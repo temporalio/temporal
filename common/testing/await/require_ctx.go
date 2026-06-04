@@ -2,7 +2,6 @@ package await
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -51,32 +50,14 @@ func hardDeadlockTimeout() time.Duration {
 }
 
 // Require polls condition until it returns without assertion failures, or
-// until ctx is canceled or timeout expires (whichever is earliest).
+// until ctx is canceled or the configured timeout expires.
 //
 // Pass the *await.T to require.*/assert.* — failures cause a retry, not a
 // test failure. Use t.Context() inside the callback to honor the timeout.
-func Require(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration) {
-	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, ""), "Require", requireMisuseHint, true, false)
-}
-
-// Requiref is like [Require] but adds a formatted message to the timeout
-// failure.
-func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration, msg string, args ...any) {
-	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true, false)
-}
-
-// Require2 polls condition until it returns without assertion failures, or
-// until ctx is canceled or the configured total timeout expires.
-//
-// All knobs are optional - the common case is `await.Require2(ctx, t, fn)`.
-// Use [WithTimeout], [WithMinPollInterval], [WithMaxPollInterval],
-// [WithAttemptTimeout], [WithMessagef].
-func Require2(ctx context.Context, tb testing.TB, condition func(*T), opts ...Option) {
+func Require(ctx context.Context, tb testing.TB, condition func(*T), opts ...Option) {
 	tb.Helper()
 	cfg := newConfig(opts)
-	run(ctx, tb, condition, cfg, "Require2", requireMisuseHint, true, false)
+	run(ctx, tb, condition, cfg, "Require", requireMisuseHint, true, false)
 }
 
 func run(

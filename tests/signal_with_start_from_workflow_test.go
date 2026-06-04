@@ -914,5 +914,6 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.WorkflowExecutionInfo.Status)
-	}, startDelay+5*time.Second, 200*time.Millisecond)
+	}, await.WithTimeout(startDelay+5*time.Second), await.WithMinPollInterval(200*time.Millisecond), await.WithMaxPollInterval(200*time.Millisecond))
+
 }

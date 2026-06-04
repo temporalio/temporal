@@ -1,11 +1,9 @@
 // Package await provides polling-based test assertions as a replacement
 // for testify's Eventually, EventuallyWithT, and their formatted variants.
 //
-// The legacy API is [Require], [Requiref], [RequireTrue], and [RequireTruef],
-// which accept positional timeout and poll interval arguments. The option-based
-// API is [Require2] and [RequireTrue2]; use [WithTimeout],
-// [WithMinPollInterval], [WithMaxPollInterval], [WithAttemptTimeout], and
-// [WithMessagef] to configure it.
+// Use [Require] and [RequireTrue] with [WithTimeout], [WithMinPollInterval],
+// [WithMaxPollInterval], [WithAttemptTimeout], and [WithMessagef] to configure
+// polling.
 //
 // By default, the option-based API waits up to 30s total, caps each attempt at
 // 10s, starts polling at 500ms, and exponentially backs off to 2s. Set

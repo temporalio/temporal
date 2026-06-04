@@ -1121,14 +1121,15 @@ func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter() {
 	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
 	await.RequireTrue(s.T(), func() bool {
 		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
-	}, 20*time.Millisecond, time.Millisecond)
+	}, await.WithTimeout(20*time.Millisecond), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
 	await.RequireTrue(s.T(), func() bool {
 		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
-	}, 20*time.Millisecond, time.Millisecond)
+	}, await.WithTimeout(20*time.Millisecond), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
+
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
@@ -1141,7 +1142,7 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond)))
 	await.RequireTrue(s.T(), func() bool {
 		return !s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond))
-	}, 20*time.Millisecond, time.Millisecond)
+	}, await.WithTimeout(20*time.Millisecond), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
@@ -1158,7 +1159,7 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond)))
 	await.RequireTrue(s.T(), func() bool {
 		return !s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond))
-	}, 20*time.Millisecond, time.Millisecond)
+	}, await.WithTimeout(20*time.Millisecond), await.WithMinPollInterval(time.Millisecond), await.WithMaxPollInterval(time.Millisecond))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, true)

@@ -20,7 +20,7 @@ func TestRequireTrue_ImmediateSuccess(t *testing.T) {
 	await.RequireTrue(t, func() bool {
 		attempts++
 		return true
-	}, time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	require.Equal(t, 1, attempts, "condition should be called exactly once")
 }
@@ -32,7 +32,7 @@ func TestRequireTrue_RetriesFalseUntilTrue(t *testing.T) {
 
 	await.RequireTrue(t, func() bool {
 		return attempts.Add(1) >= 3
-	}, time.Second, 100*time.Millisecond)
+	}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	require.Equal(t, int32(3), attempts.Load())
 }
@@ -47,20 +47,21 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 		tb.run(func() {
 			await.RequireTrue(tb, func() bool {
 				return false
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
-	t.Run("RequireTruef includes message on timeout", func(t *testing.T) {
+	t.Run("RequireTrue includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
 		tb := newRecordingTB()
 		tb.run(func() {
-			await.RequireTruef(tb, func() bool {
+			await.RequireTrue(tb, func() bool {
 				return false
-			}, time.Second, 100*time.Millisecond, "workflow %s not ready", "wf-123")
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond), await.WithMessagef("workflow %s not ready", "wf-123"))
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "workflow wf-123 not ready")
@@ -84,7 +85,8 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 					await.RequireTrue(tb, func() bool {
 						tc.misuse(tb)
 						return true
-					}, time.Second, 100*time.Millisecond)
+					}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 				})
 				require.True(t, tb.Failed())
 				require.Contains(t, tb.fatals(), "do not use test assertions")
@@ -103,7 +105,8 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 			await.RequireTrue(tb, func() bool {
 				conditionCalled = true
 				return true
-			}, time.Second, 100*time.Millisecond)
+			}, await.WithTimeout(time.Second), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
+
 		})
 		require.True(t, tb.Failed())
 		require.Empty(t, tb.fatals())
@@ -121,8 +124,9 @@ func TestRequireTrue_DeadlockDetected(t *testing.T) {
 	start := time.Now()
 	tb.run(func() {
 		await.RequireTrue(tb, func() bool {
-			select {} // never returns; predicate has no way to honor cancellation
-		}, awaitTimeout, 50*time.Millisecond)
+			select {}
+		}, await.WithTimeout(awaitTimeout), await.WithMinPollInterval(50*time.Millisecond), await.WithMaxPollInterval(50*time.Millisecond))
+
 	})
 	elapsed := time.Since(start)
 	require.True(t, tb.Failed())

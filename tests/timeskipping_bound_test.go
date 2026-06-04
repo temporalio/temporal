@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -669,12 +670,12 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	// Wait for the bound TimeSkippingTimerTask to fire while paused. The executor
 	// writes the disable event regardless of pause status: HasReached becomes true
 	// and Config.Enabled becomes false.
-	s.AwaitTruef(func() bool {
+	s.AwaitTrue(func() bool {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 		bi := tsi.GetCurrentElapsedDurationBound()
 		return bi != nil && bi.GetHasReached()
-	}, 30*time.Second, 200*time.Millisecond, "expected bound timer task to fire while paused")
+	}, await.WithTimeout(30*time.Second), await.WithMinPollInterval(200*time.Millisecond), await.WithMaxPollInterval(200*time.Millisecond), await.WithMessagef("expected bound timer task to fire while paused"))
 
 	// Snapshot history while still paused: exactly two transitions — skip-to-timer1
 	// (from WT1 close-tx) and bound-disable (from the timer task that just fired).

@@ -433,7 +433,7 @@ func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.Workflo
 			}
 		}
 		require.Failf(t, "workflow task not found in DLQ", "run ID: %s", run.GetRunID())
-	}, dlqTestTimeout, 100*time.Millisecond)
+	}, await.WithTimeout(dlqTestTimeout), await.WithMinPollInterval(100*time.Millisecond), await.WithMaxPollInterval(100*time.Millisecond))
 
 	return run, found.MessageID
 }
