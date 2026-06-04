@@ -91,7 +91,9 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 		config,
 		nil,
 		scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-			Config: config,
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
 			Config: config,
