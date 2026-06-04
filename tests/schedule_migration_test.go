@@ -170,6 +170,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	// and the V1 activity treats that as success (logs warning, returns nil).
 	// The V1 workflow terminates, but the pre-existing V2 schedule retains
 	// its original state -- the V1 state is not applied.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
@@ -398,6 +399,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Issue migration from V1 to V2.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
@@ -1140,6 +1142,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	// Issue migration from V1 to V2. The previously deleted CHASM execution
 	// does not block creation of a new one -- StartExecution succeeds because
 	// closed executions allow reuse of the business ID.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
@@ -1259,8 +1262,10 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		return true
 	}, 15*time.Second, 500*time.Millisecond)
 
-	// Enable CHASM now so the migration activity can create the V2 schedule.
+	// Enable CHASM and migration, allowing it for schedules with running workflows.
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
 
 	// Migrate from V1 to V2 while the workflow is still running.
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
@@ -1334,7 +1339,6 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithWorkerService("V1 scheduler"),
-		testcore.WithSdkWorker(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
 
@@ -1402,8 +1406,10 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		return true
 	}, 15*time.Second, 500*time.Millisecond)
 
-	// Enable CHASM so the migration activity is able to create the V2 schedule.
+	// Enable CHASM and migration; the running-workflow gate stays off, so only the
+	// running action workflow can defer migration here.
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 
 	// A successful migration completes the V1 scheduler workflow; while migration
 	// is deferred it stays running.
