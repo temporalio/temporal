@@ -6069,10 +6069,10 @@ const (
 	modeResetCurrentRunBuild resetByBuildIDMode = iota
 	// Target v1's BuildID with CurrentRunOnly=false. v1's reset point lives
 	// in runID (previous run), so the batcher walks back and resets runID.
-	modeWalkBackToPreviousRun
+	modeResetPreviousRunBuild
 	// Target v1's BuildID with CurrentRunOnly=true. The batcher refuses to
 	// walk back, so no run is modified.
-	modeBlockedByCurrentRunOnly
+	modeResetBlockedByCurrentRunOnly
 )
 
 // TestPinnedCaN_ResetByBuildIDAfterRollback covers the "reset target is in the
@@ -6086,14 +6086,14 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 // path: when the reset point for the targeted build ID lives in a previous run,
 // the batcher walks back and resets that prior run.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByPreviousRunBuildID_AllRuns() {
-	s.resetByBuildIDAfterRollbackHelper(modeWalkBackToPreviousRun)
+	s.resetByBuildIDAfterRollbackHelper(modeResetPreviousRunBuild)
 }
 
 // TestPinnedCaN_ResetByPreviousRunBuildID_CurrentRunOnly covers the
 // CurrentRunOnly: true path: when the reset point for the targeted build ID
 // lives in a previous run, the batcher must refuse to walk back into that run.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByPreviousRunBuildID_CurrentRunOnly() {
-	s.resetByBuildIDAfterRollbackHelper(modeBlockedByCurrentRunOnly)
+	s.resetByBuildIDAfterRollbackHelper(modeResetBlockedByCurrentRunOnly)
 }
 
 // resetByBuildIDAfterRollbackHelper sets up a pinned workflow that runs on v1,
@@ -6188,12 +6188,15 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 
 	setCurrentVersion(tv1, tv2)
 
-	targetBuildID := tv2.BuildID()
-	currentRunOnly := false
-	if mode != modeResetCurrentRunBuild {
+	var targetBuildID string
+	var currentRunOnly bool
+	switch mode {
+	case modeResetCurrentRunBuild:
+		targetBuildID = tv2.BuildID()
+	case modeResetPreviousRunBuild:
 		targetBuildID = tv1.BuildID()
-	}
-	if mode == modeBlockedByCurrentRunOnly {
+	case modeResetBlockedByCurrentRunOnly:
+		targetBuildID = tv1.BuildID()
 		currentRunOnly = true
 	}
 
@@ -6216,11 +6219,14 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 	})
 	s.NoError(err)
 
-	expectedFailures := int64(0)
-	expectedCompletes := int64(1)
-	if mode == modeBlockedByCurrentRunOnly {
+	var expectedFailures, expectedCompletes int64
+	switch mode {
+	case modeResetCurrentRunBuild, modeResetPreviousRunBuild:
+		expectedFailures, expectedCompletes = 0, 1
+	case modeResetBlockedByCurrentRunOnly:
 		expectedFailures, expectedCompletes = 1, 0
 	}
+
 	s.Await(func(s *Versioning3Suite) {
 		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
 			Namespace: env.Namespace().String(),
@@ -6232,7 +6238,12 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		s.Equal(expectedCompletes, resp.GetCompleteOperationCount())
 	}, 60*time.Second, 500*time.Millisecond)
 
-	if mode == modeBlockedByCurrentRunOnly {
+	switch mode {
+	case modeResetCurrentRunBuild:
+		targetBuildID = tv2.BuildID()
+	case modeResetPreviousRunBuild:
+		targetBuildID = tv1.BuildID()
+	case modeResetBlockedByCurrentRunOnly:
 		// Nothing was reset: the current run is still RUNNING (a successful
 		// walk-back-and-reset would have terminated it), and no new run was
 		// created — the latest run for the workflow ID is still canRunID.
@@ -6280,7 +6291,7 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		})
 		s.NoError(err)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
-	case modeWalkBackToPreviousRun:
+	case modeResetPreviousRunBuild:
 		// Reset walked back to runID. The new run's WorkflowExecutionStarted
 		// event preserves the reset target's OriginalExecutionRunId, which
 		// equals runID — proof that the reset hit the previous run rather
@@ -6295,6 +6306,8 @@ func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildID
 		startedAttrs := history.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes()
 		s.NotNil(startedAttrs)
 		s.Equal(runID, startedAttrs.GetOriginalExecutionRunId())
+	default:
+		s.Fail("unrecognized mode")
 	}
 }
 
