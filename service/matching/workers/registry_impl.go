@@ -390,6 +390,8 @@ func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) 
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
 }
 
+// CountWorkers reuses filterWorkers (which collects the full slice) for simplicity.
+// The registry is in-memory so the allocation overhead is negligible.
 func (m *registryImpl) CountWorkers(nsID namespace.ID, query string) (int64, error) {
 	predicate, err := buildQueryPredicate(nsID, query)
 	if err != nil {
