@@ -367,40 +367,33 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 	m.metricsEmitter.emit(nsName, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
-	// Build the predicate for filtering
-	var predicate func(*workerpb.WorkerHeartbeat) bool
-	if params.Query == "" {
-		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
-	} else {
-		queryEngine, err := newWorkerQueryEngine(nsID.String(), params.Query)
-		if err != nil {
-			return ListWorkersResponse{}, err
-		}
-		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
-			result, err := queryEngine.EvaluateWorker(heartbeat)
-			return err == nil && result
-		}
+func buildQueryPredicate(nsID namespace.ID, query string) (func(*workerpb.WorkerHeartbeat) bool, error) {
+	if query == "" {
+		return func(_ *workerpb.WorkerHeartbeat) bool { return true }, nil
 	}
+	queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+	return func(heartbeat *workerpb.WorkerHeartbeat) bool {
+		result, err := queryEngine.EvaluateWorker(heartbeat)
+		return err == nil && result
+	}, nil
+}
 
-	// Get all matching workers and paginate
+func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
+	predicate, err := buildQueryPredicate(nsID, params.Query)
+	if err != nil {
+		return ListWorkersResponse{}, err
+	}
 	workers := m.filterWorkers(nsID, predicate)
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
 }
 
 func (m *registryImpl) CountWorkers(nsID namespace.ID, query string) (int64, error) {
-	var predicate func(*workerpb.WorkerHeartbeat) bool
-	if query == "" {
-		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
-	} else {
-		queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
-		if err != nil {
-			return 0, err
-		}
-		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
-			result, err := queryEngine.EvaluateWorker(heartbeat)
-			return err == nil && result
-		}
+	predicate, err := buildQueryPredicate(nsID, query)
+	if err != nil {
+		return 0, err
 	}
 	workers := m.filterWorkers(nsID, predicate)
 	return int64(len(workers)), nil

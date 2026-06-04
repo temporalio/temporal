@@ -233,7 +233,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 			Namespace: s.Namespace().String(),
 		})
 		s.Require().NoError(err)
-		s.Require().GreaterOrEqual(resp.GetCount(), int64(2))
+		s.Require().Equal(int64(2), resp.GetCount())
 	}
 
 	// Count with query filter
@@ -254,6 +254,15 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 		})
 		s.Require().NoError(err)
 		s.Require().Equal(int64(0), resp.GetCount())
+	}
+
+	// Count with invalid query returns error
+	{
+		_, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "InvalidField='foo'",
+		})
+		s.Require().Error(err)
 	}
 }
 
