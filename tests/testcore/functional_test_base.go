@@ -660,12 +660,6 @@ func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	return r
 }
 
-func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
-	s.T().Helper()
-	s.Greater(value, target-tolerance)
-	s.Less(value, target+tolerance)
-}
-
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
