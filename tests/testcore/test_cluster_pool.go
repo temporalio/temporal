@@ -102,7 +102,7 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 			p.clusterMu[idx].Lock()
 			// Double-check after acquiring lock
 			if p.usageCounts[idx].Load() > int64(p.maxUsage) && p.clusters[idx] != nil {
-				if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
+				if err := p.clusters[idx].tearDownTestCluster(); err != nil {
 					t.Logf("Failed to tear down cluster %d: %v", idx, err)
 				}
 				p.clusters[idx] = createCluster()
@@ -118,6 +118,21 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	})
 
 	cluster := p.clusters[idx]
+
+	// Swap out poisoned clusters. The poisoned cluster will tear itself down during its last
+	// test run's cleanup.
+	if cluster.Poisoned() {
+		p.clusterMu[idx].Lock()
+		if p.clusters[idx].Poisoned() {
+			p.clusters[idx] = createCluster()
+			if p.maxUsage > 0 {
+				p.usageCounts[idx].Store(1)
+			}
+		}
+		cluster = p.clusters[idx]
+		p.clusterMu[idx].Unlock()
+	}
+
 	cluster.SetT(t)
 	return cluster
 }
@@ -161,7 +176,7 @@ func UseSuiteScopedCluster(t *testing.T) {
 		if ok {
 			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 			if suiteCluster.cluster != nil {
-				if err := suiteCluster.cluster.testCluster.TearDownCluster(); err != nil {
+				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
 					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
 				}
 			}
@@ -170,7 +185,10 @@ func UseSuiteScopedCluster(t *testing.T) {
 	})
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+	defer func() {
+		tb.RegisterTest(t)
+	}()
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, dynamicConfig, clusterOpts)
 	}
@@ -209,7 +227,7 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
-			if err := cluster.testCluster.TearDownCluster(); err != nil {
+			if err := cluster.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down cluster: %v", err)
 			}
 		})
