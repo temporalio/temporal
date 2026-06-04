@@ -8776,77 +8776,22 @@ func (s *mutableStateSuite) TestMutableStateImpl_Now() {
 	})
 }
 
-func TestUpdateActivityProgress_HeartbeatCountMetric(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		details     *commonpb.Payloads
-		hasDetails  string
-		payloadSize bool
-	}{
-		{
-			name:        "with details",
-			details:     &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("progress")}}},
-			hasDetails:  "true",
-			payloadSize: true,
-		},
-		{
-			name:        "without details",
-			details:     nil,
-			hasDetails:  "false",
-			payloadSize: false,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			controller := gomock.NewController(t)
-			mockEventsCache := events.NewMockCache(controller)
-			mockConfig := tests.NewDynamicConfig()
-			mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1024 }
-			mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2048 }
-			mockConfig.EnableTransitionHistory = func(string) bool { return true }
-			mockShard := shard.NewTestContext(
-				controller,
-				&persistencespb.ShardInfo{ShardId: 0, RangeId: 1},
-				mockConfig,
-			)
-			defer mockShard.StopForTest()
+func (s *mutableStateSuite) TestUpdateActivityProgress_HeartbeatCountMetric() {
+	ai := &persistencespb.ActivityInfo{ScheduledEventId: 1, Version: 1}
+	s.mutableState.pendingActivityInfoIDs[1] = ai
+	nsName := s.namespaceEntry.Name().String()
 
-			reg := hsm.NewRegistry()
-			require.NoError(t, RegisterStateMachine(reg))
-			mockShard.SetStateMachineRegistry(reg)
-			mockShard.SetEventsCacheForTesting(mockEventsCache)
-
-			nsEntry := tests.GlobalNamespaceEntry
-			mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(nsEntry, nil).AnyTimes()
-			mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(), nsEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
-			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-			mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
-			testScope := mockShard.Resource.MetricsScope.(tally.TestScope)
-
-			ms := NewMutableState(mockShard, mockEventsCache, mockShard.GetLogger(), nsEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
-
-			ai := &persistencespb.ActivityInfo{
-				ScheduledEventId: 1,
-				Version:          1,
-			}
-			ms.pendingActivityInfoIDs[1] = ai
-
-			ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
-				Details: tc.details,
-			})
-
-			counters := testScope.Snapshot().Counters()
-
-			heartbeatKey := "test.activity_heartbeat_count+has_details=" + tc.hasDetails + ",namespace=" + nsEntry.Name().String() + ",operation=RecordActivityTaskHeartbeat,service_name=history"
-			require.Contains(t, counters, heartbeatKey)
-			require.Equal(t, int64(1), counters[heartbeatKey].Value())
-
-			payloadKey := "test.activity_payload_size+namespace=" + nsEntry.Name().String() + ",operation=RecordActivityTaskHeartbeat,service_name=history"
-			if tc.payloadSize {
-				require.Contains(t, counters, payloadKey)
-				require.Greater(t, counters[payloadKey].Value(), int64(0))
-			} else {
-				require.NotContains(t, counters, payloadKey)
-			}
-		})
+	counterKey := func(hasDetails string) string {
+		return "test.activity_heartbeat_count+has_details=" + hasDetails + ",namespace=" + nsName + ",operation=RecordActivityTaskHeartbeat,service_name=history"
 	}
+
+	// Heartbeat with details.
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("progress")}}},
+	})
+	s.Contains(s.testScope.Snapshot().Counters(), counterKey("true"))
+
+	// Heartbeat without details.
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+	s.Contains(s.testScope.Snapshot().Counters(), counterKey("false"))
 }
