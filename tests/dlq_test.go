@@ -25,6 +25,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
@@ -32,7 +33,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
@@ -66,13 +66,6 @@ type (
 		targetCluster       string
 		expectedNumMessages int
 	}
-	testExecutorWrapper struct {
-		suite *DLQSuite
-	}
-	testExecutor struct {
-		base  queues.Executor
-		suite *DLQSuite
-	}
 	testTaskQueueManager struct {
 		suite *DLQSuite
 		persistence.HistoryTaskQueueManager
@@ -92,15 +85,21 @@ func (s *DLQSuite) SetupSuite() {
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
 	s.FunctionalTestBase.SetupSuiteWithCluster(
+		// Return a terminal error that will cause workflow task to be added to the DLQ.
+		testcore.WithFaultInjectionConfig(&config.FaultInjection{
+			Injector: func(target config.FaultInjectionTarget) error {
+				if target.Store != config.ExecutionStoreName || target.Method != "GetWorkflowExecution" {
+					return nil
+				}
+				request, ok := target.Request.(*persistence.GetWorkflowExecutionRequest)
+				if !ok || !strings.HasPrefix(request.WorkflowID, *s.failingWorkflowIDPrefix.Load()) {
+					return nil
+				}
+				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
+			},
+		}),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
-			fx.Provide(
-				func() queues.ExecutorWrapper {
-					return &testExecutorWrapper{
-						suite: s,
-					}
-				},
-			),
 			fx.Decorate(
 				func(m persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 					return &testTaskQueueManager{
@@ -617,28 +616,6 @@ func (s *DLQSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persi
 	})
 	s.NoError(err)
 	return dlqTasks
-}
-
-// Wrap is used to wrap the executor with our own faulty one.
-func (t testExecutorWrapper) Wrap(delegate queues.Executor) queues.Executor {
-	return &testExecutor{
-		base:  delegate,
-		suite: t.suite,
-	}
-}
-
-// Execute is used to wrap the executor so that we can intercept the workflow task and ensure it fails with a terminal
-// error.
-//
-//nolint:err113
-func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.ExecuteResponse {
-	if strings.HasPrefix(e.GetWorkflowID(), *t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
-		// Return a terminal error that will cause this task to be added to the DLQ.
-		return queues.ExecuteResponse{
-			ExecutionErr: serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error")),
-		}
-	}
-	return t.base.Execute(ctx, e)
 }
 
 // ReadTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.

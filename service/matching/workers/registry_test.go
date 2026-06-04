@@ -60,7 +60,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "record worker in existing namespace",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "existing-worker",
 				}})
 			},
@@ -74,7 +74,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "update existing worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 					TaskQueue:         "tq1",
 				}})
@@ -101,12 +101,12 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 
 			// Check if namespace exists
 			nsBuket := r.getBucket(tt.nsID)
-			nsMap, exists := nsBuket.namespaces[tt.nsID]
+			ns, exists := nsBuket.namespaces[tt.nsID]
 			assert.True(t, exists, "namespace should exist")
-			assert.Len(t, nsMap, tt.expectedWorkers, "unexpected number of workers")
+			require.Len(t, ns.workers, tt.expectedWorkers, "unexpected number of workers")
 
 			// Check if specific worker exists
-			workerEntry, workerEntryExists := nsMap[tt.workerHeartbeat.WorkerInstanceKey]
+			workerEntry, workerEntryExists := ns.workers[tt.workerHeartbeat.WorkerInstanceKey]
 			assert.Equal(t, tt.expectedInStore, workerEntryExists, "worker existence mismatch")
 			if workerEntryExists {
 				assert.Equal(t, tt.workerHeartbeat, workerEntry.hb, "worker heartbeat should match")
@@ -145,7 +145,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -156,13 +156,13 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list multiple workers",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker3",
 				}})
 			},
@@ -174,11 +174,11 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 				// Setup namespace2
-				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace2", "namespace2_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
 			},
@@ -235,7 +235,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid query - basic filtering",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue2"},
 				})
@@ -248,7 +248,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid compound query - multiple conditions",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue2"},
 				})
@@ -261,7 +261,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid query - no matches",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 				})
 			},
@@ -273,7 +273,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "invalid query - malformed SQL",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1"},
 				})
 			},
@@ -295,11 +295,11 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 			name: "query returns requested namespace only",
 			setup: func(r *registryImpl) {
 				// Add workers to namespace1
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue"},
 				})
 				// Add workers to namespace2
-				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace2", "namespace2_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue"},
 				})
 			},
@@ -366,7 +366,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list empty worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -377,7 +377,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list single worker, doesn't exist",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -388,7 +388,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -399,11 +399,11 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 				// Setup namespace2
-				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace2", "namespace2_name", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
 			},
@@ -434,7 +434,7 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	// Add 5 workers in non-sorted order to verify sorting works
-	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-c"},
 		{WorkerInstanceKey: "worker-a"},
 		{WorkerInstanceKey: "worker-e"},
@@ -529,7 +529,7 @@ func TestRegistryImpl_ListWorkersPaginationWithDeletedCursor(t *testing.T) {
 func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
 		{WorkerInstanceKey: "worker-b"},
 		{WorkerInstanceKey: "worker-c"},
@@ -545,7 +545,7 @@ func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
 	})
 
@@ -558,7 +558,7 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	// Add workers on a user task queue and a system (internal) task queue.
-	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -409,21 +410,28 @@ func BusinessIDInterceptorProvider(
 	)
 }
 
+type NamespaceHandoverInterceptorParams struct {
+	fx.In
+	DynamicConfig                          *dynamicconfig.Collection
+	NamespaceRegistry                      namespace.Registry
+	Logger                                 log.Logger
+	MetricsHandler                         metrics.Handler
+	TimeSource                             clock.TimeSource
+	RequestErrorHandler                    *interceptor.RequestErrorHandler
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceHandoverInterceptorProvider(
-	dc *dynamicconfig.Collection,
-	namespaceCache namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-	requestErrorHandler *interceptor.RequestErrorHandler,
+	params NamespaceHandoverInterceptorParams,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
-		dc,
-		namespaceCache,
-		metricsHandler,
-		logger,
-		timeSource,
-		requestErrorHandler,
+		params.DynamicConfig,
+		params.NamespaceRegistry,
+		params.MetricsHandler,
+		params.Logger,
+		params.TimeSource,
+		params.RequestErrorHandler,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 
@@ -495,8 +503,12 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
-	return interceptor.NewContextMetadataInterceptor(false, logger)
+func ContextMetadataInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.ContextMetadataInterceptor {
+	setTrailer := dynamicconfig.FrontendContextMetadataSetTrailer.Get(dc)()
+	return interceptor.NewContextMetadataInterceptor(setTrailer, logger)
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
@@ -796,6 +808,7 @@ func NamespaceDLQHandlerProvider(
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -803,6 +816,7 @@ func NamespaceDLQHandlerProvider(
 		namespaceDataMerger,
 		namespaceAdmitter,
 		logger,
+		testHooks,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,

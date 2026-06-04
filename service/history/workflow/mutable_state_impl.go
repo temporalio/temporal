@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1906,11 +1907,7 @@ func (ms *MutableStateImpl) Now() time.Time {
 // (i.e. they may include skipped time); this offset is the amount to subtract to get real
 // wall-clock, used by AddTasks when persisting timer-category tasks.
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	info := ms.executionInfo.GetTimeSkippingInfo()
-	if info == nil || info.AccumulatedSkippedDuration == nil {
-		return 0
-	}
-	return info.AccumulatedSkippedDuration.AsDuration()
+	return ms.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // GetWorkflowCloseTime returns workflow closed time, returns a zero time for open workflow
@@ -2098,12 +2095,17 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
-	if payloadSize := request.Details.Size(); payloadSize > 0 {
+	payloadSize := request.Details.Size()
+	if payloadSize > 0 {
 		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
 			int64(payloadSize),
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
+	ms.metricsHandler.Counter(metrics.ActivityHeartbeatCount.Name()).Record(1,
+		metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.StringTag("has_details", strconv.FormatBool(payloadSize > 0)))
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -2704,6 +2706,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 			}
 		}
 	}
+	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
 	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
 
@@ -2761,7 +2764,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedBuildId:             inheritedBuildId,
 		InheritedPinnedVersion:       inheritedPinnedVersion,
 		VersioningOverride:           pinnedOverride,
-		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
+		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		InitialSkippedDuration:       newRunInitialSkipped,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -2817,11 +2820,17 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 // computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
-// pass to the next run at continue-as-new time:
+// pass to the next run when it inherits PINNED behavior:
 //   - If the current run was signaled about a target change (last_notified is set),
 //     that becomes the declined value (the SDK saw it and chose not to upgrade).
 //   - Otherwise, preserve the existing declined value from a prior CaN chain.
-func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+func computeDeclinedTargetVersionUpgrade(
+	info *persistencespb.WorkflowExecutionInfo,
+	inheritPinnedVersion bool,
+) *historypb.DeclinedTargetVersionUpgrade {
+	if !inheritPinnedVersion {
+		return nil
+	}
 	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
 		return &historypb.DeclinedTargetVersionUpgrade{
 			DeploymentVersion: lastNotified.GetDeploymentVersion(),
@@ -3505,11 +3514,10 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
-	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter,
-		suggestContinueAsNewReasons, targetWorkerDeploymentVersionChanged)
+		suggestContinueAsNewReasons)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -7239,8 +7247,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
 ) {
-	now := ms.timeSource.Now()
-	skip := ms.accumulatedSkippedDuration()
+	now := ms.Now()
 	for _, task := range newTasks {
 		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
 			chasmTask.GetCategory() == tasks.CategoryVisibility &&
@@ -7249,19 +7256,23 @@ func (ms *MutableStateImpl) AddTasks(
 		}
 
 		category := task.GetCategory()
+		// Drop tasks scheduled too far in the future. VisibilityTime hasn't been
+		// shifted to wall-clock yet (the conversion runs below), so both sides are
+		// virtual here; the difference is frame-invariant (skip cancels). Keep
+		// `now` from ms.Now() so both stay in the same frame.
 		if category.Type() == tasks.CategoryTypeScheduled &&
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
 		}
 
-		// Timer tasks are produced with VisibilityTime in the workflow's virtual frame (i.e.
-		// possibly inflated by accumulated skipped duration). The timer queue dispatches against
+		// Scheduled tasks are produced with VisibilityTime in the workflow's virtual frame (i.e.
+		// possibly inflated by accumulated skipped duration). Their dispatch queues run against
 		// real wall-clock, so convert here — callers outside MutableState don't see the virtual
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
-		if skip > 0 && category == tasks.CategoryTimer {
-			task.SetVisibilityTime(task.GetVisibilityTime().Add(-skip))
+		if category.Type() == tasks.CategoryTypeScheduled {
+			task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7326,6 +7337,11 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 	task.TaskID = taskID
+	// Producer stamps VisibilityTimestamp in the workflow's virtual frame (it's derived from
+	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
+	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
+	// same boundary contract as AddTasks for persisted scheduled tasks.
+	task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -9419,12 +9435,11 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
-			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
-			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
-			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                              incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,
+			SuggestContinueAsNew:        incoming.WorkflowTaskSuggestContinueAsNew,
+			SuggestContinueAsNewReasons: incoming.WorkflowTaskSuggestContinueAsNewReasons,
+			HistorySizeBytes:            incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                     incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter:      incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
 		workflowTaskVersionUpdated = true
 	}
@@ -10028,9 +10043,8 @@ func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
 			EventID:             currentEventID,
 		})
 	default:
-		// Non-elapsed bound types (e.g. MaxSkippedDuration) don't emit a
-		// wake-up task and must not leave a stale CurrentElapsedDurationBound
-		// from a previous elapsed-bound config.
+		// Non-elapsed bound types don't emit a wake-up task and must not leave a
+		// stale CurrentElapsedDurationBound from a previous elapsed-bound config.
 		tsi.CurrentElapsedDurationBound = nil
 	}
 }
@@ -10076,7 +10090,16 @@ func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string
 	if ms.HasPendingWorkflowTask() {
 		return true, "has pending workflow task"
 	}
-	if len(ms.GetPendingActivityInfos()) > 0 {
+	// A pending activity blocks time skipping unless it has failed and is still
+	// waiting out its retry backoff (next attempt strictly in the future) — that one
+	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
+	// strict future check is what keeps a just-scheduled or already-due activity (next
+	// attempt <= now) blocking.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		// if this activity is just a retry with backoff scheduled in the future
+		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
+			continue
+		}
 		return true, "has pending activity"
 	}
 	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
@@ -10162,10 +10185,10 @@ func (d timeSkippingTransition) isValid() bool {
 // 1. targetTime: the time to skip to
 // 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
 // right now the time points considered for target time are:
-// 1. the first expiry time of the pending user timers
-// 2. the start delay of the workflow execution
-// 3. the current elapsed duration bound of the time skipping config
-// 4. the remaining time to skip to the max skipped duration bound
+// - the first expiry time of the pending user timers
+// - the workflow execution retry backoff
+// - the current elapsed duration bound of the time skipping config
+// - the activity retry backoff
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
@@ -10177,6 +10200,15 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		advance(timerInfo.ExpiryTime.AsTime(), false)
+	}
+
+	// Activities waiting out a retry backoff are skip targets: advance to the earliest
+	// next-attempt time. No clock comparison is needed here — the idle check already
+	// guarantees each pending activity's next attempt is in the future when we get here.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
+			advance(ai.ScheduledTime.AsTime(), false)
+		}
 	}
 
 	if !ms.HadOrHasWorkflowTask() {
@@ -10201,31 +10233,21 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		return transition, nil
 	}
 
-	switch b := bound.(type) {
+	switch bound.(type) {
 	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
 		if info.GetCurrentElapsedDurationBound() == nil {
 			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
 		}
 		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-		// MaxSkippedDuration enforces its cap lazily: no wake-up task is emitted, and the
-		// remaining-skip candidate is consulted on every MS mutation. The cap can therefore
-		// only be observed at-or-below the limit on the next transition — accumulated >
-		// maxSkipped never persists past a single transaction.
-		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
-		maxSkipped := b.MaxSkippedDuration.AsDuration()
-		if accumulated > maxSkipped {
-			return timeSkippingTransition{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
-		}
-		if accumulated == maxSkipped {
-			// Cap exactly hit — emit a "disable, no skip" transition. Going through
-			// advance(ms.Now(), true) would set targetTime to now and trigger a no-op
-			// regen pass downstream.
-			return timeSkippingTransition{disabledAfterBound: true}, nil
-		}
-		advance(ms.Now().Add(maxSkipped-accumulated), true)
 	default:
 		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
 	return transition, nil
+}
+
+func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
+	if virtualTime.IsZero() {
+		return virtualTime
+	}
+	return virtualTime.Add(-ms.accumulatedSkippedDuration())
 }

@@ -88,9 +88,12 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 		SpecProcessor:  specProcessor,
 	}
 	return scheduler.NewLibrary(
+		config,
 		nil,
 		scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-			Config: config,
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
 			Config: config,
@@ -209,6 +212,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
 		HandleIsWorkflow:          func() bool { return false },
+		HandleGetNamespaceEntry:   tv.Namespace,
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
 			return &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
@@ -346,6 +350,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
 	nodeBackend.HandleIsWorkflow = func() bool { return false }
+	nodeBackend.HandleGetNamespaceEntry = tv.Namespace
 	nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
 		return &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,
