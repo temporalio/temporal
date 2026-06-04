@@ -130,8 +130,14 @@ func (g *GeneratorTaskHandler) Execute(
 		}, &schedulerpb.SchedulerIdleTask{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
 		})
+		// Record the idle-close deadline so it can be surfaced as the
+		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
+		scheduler.IdleCloseTime = timestamppb.New(idleExpiration)
 		return nil
 	}
+
+	// The schedule has work again, so it's no longer pending an idle close.
+	scheduler.IdleCloseTime = nil
 
 	// No more tasks if we're paused.
 	if scheduler.Schedule.State.Paused {

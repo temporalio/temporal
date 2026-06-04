@@ -301,10 +301,11 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
 
 	// Convert to reports with failure rates and sort
-	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks)
-	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks)
-	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks)
-	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks)
+	reportWindow := newReportWindow(reportSince, now)
+	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks, reportWindow)
+	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks, reportWindow)
+	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks, reportWindow)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks, reportWindow)
 
 	// Compute suite-level breakdown
 	suiteReports := generateSuiteReports(allFailures, allTestRuns)
