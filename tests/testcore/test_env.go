@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -89,10 +90,11 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
-	dedicatedCluster      bool
-	dedicatedReason       string
-	dynamicConfigSettings []dynamicConfigOverride
-	clusterOptions        []TestClusterOption
+	dedicatedCluster         bool
+	dedicatedReason          string
+	disableTestloggerFailure bool
+	dynamicConfigSettings    []dynamicConfigOverride
+	clusterOptions           []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -105,6 +107,20 @@ type dynamicConfigOverride struct {
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithDisableTestloggerFailure disables the test logger's behavior of failing
+// the test when an error log matches a registered expectation (e.g. soft-assert
+// errors tagged with tag.FailedAssertion). Use for tests that intentionally
+// trigger and then verify soft-assert errors. Implies WithDedicatedCluster,
+// because FailOnError is cluster-wide and disabling it on a shared cluster may
+// hide failures in concurrent tests.
+func WithDisableTestloggerFailure() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.disableTestloggerFailure = true
+		o.dedicatedReason = "testlogger failures disabled"
 	}
 }
 
@@ -141,6 +157,27 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
 		o.dedicatedReason = "fault injection config used"
+	}
+}
+
+// WithLogger sets a custom logger for the test's cluster, letting a test intercept
+// server log output. This implies a dedicated cluster, since a custom logger cannot
+// be shared across tests.
+func WithLogger(logger log.Logger) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
+		o.dedicatedReason = "custom logger used"
+	}
+}
+
+// WithHistoryShardCount sets the number of history shards for the test's cluster.
+// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
+func WithHistoryShardCount(n int32) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
+		o.dedicatedReason = "custom history shard count used"
 	}
 }
 
@@ -224,6 +261,15 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			t.Fatal(err)
 		}
 	})
+
+	if options.disableTestloggerFailure {
+		tl, ok := base.Logger.(*testlogger.TestLogger)
+		if !ok {
+			t.Fatalf("WithDisableTestloggerFailure requires a *testlogger.TestLogger logger, got %T", base.Logger)
+		}
+		prev := tl.FailOnError(false)
+		t.Cleanup(func() { tl.FailOnError(prev) })
+	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {

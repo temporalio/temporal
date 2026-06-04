@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 )
@@ -152,8 +153,6 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
-	t.Parallel()
-
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
@@ -183,6 +182,34 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
+	})
+
+	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
+		attemptTimeoutEnv := 50 * time.Millisecond
+		attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
+		pollInterval := 100 * time.Millisecond
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
+
+		ctx := testcontext.New(t)
+		var attempts atomic.Int32
+		var firstAttemptRemaining time.Duration
+
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				if attempts.Add(1) == 1 {
+					deadline, _ := t.Context().Deadline()
+					firstAttemptRemaining = time.Until(deadline)
+				}
+				<-t.Context().Done()
+			}, attemptTimeout+2*pollInterval, pollInterval)
+		})
+
+		require.True(t, tb.Failed())
+		require.Contains(t, tb.fatals(), "not satisfied after")
+		require.Positive(t, firstAttemptRemaining)
+		require.LessOrEqual(t, firstAttemptRemaining, attemptTimeout)
+		require.Greater(t, attempts.Load(), int32(1))
 	})
 
 	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
@@ -268,7 +295,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, "attempt errors:\n  attempt 1:\n    first attempt error\n  attempt 2:\n    last attempt error", tb.errors())
+		require.Equal(t, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error", tb.errors())
 		require.Equal(t, int32(2), attempts.Load())
 	})
 
@@ -291,11 +318,11 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
 
 		errs := tb.errors()
-		require.Contains(t, errs, "attempt errors:\n  attempt 1:\n    attempt 1 failed\n")
+		require.Contains(t, errs, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
 		require.Contains(t, errs, fmt.Sprintf("... %d attempts omitted ...", n-4))
 		// Last three attempts present in order.
 		for i := n - 2; i <= n; i++ {
-			require.Contains(t, errs, fmt.Sprintf("attempt %d:\n    attempt %d failed", i, i))
+			require.Contains(t, errs, fmt.Sprintf("--- attempt %d ---\n    attempt %d failed", i, i))
 		}
 	})
 

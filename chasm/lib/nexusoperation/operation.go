@@ -345,7 +345,7 @@ func (o *Operation) saveInvocationResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
-		links := convertResponseLinks(r.response.Links, ctx.Logger())
+		links := commonnexus.ConvertNexusLinksToProtoLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
@@ -539,6 +539,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		RequestId:               o.RequestId,
 		OperationToken:          o.OperationToken,
 		StateTransitionCount:    ctx.ExecutionInfo().StateTransitionCount,
+		StateSizeBytes:          int64(ctx.ExecutionInfo().ApproximateStateSize),
 		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: o.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 		},

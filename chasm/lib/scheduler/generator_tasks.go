@@ -65,7 +65,7 @@ func (g *GeneratorTaskHandler) Execute(
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
-		g.logSchedule(logger, "starting schedule", scheduler)
+		g.logSchedule(ctx, logger, "starting schedule", generator, scheduler)
 	}
 
 	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
@@ -139,7 +139,18 @@ func (g *GeneratorTaskHandler) Execute(
 		}, &schedulerpb.SchedulerIdleTask{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
 		})
-	} else if !result.NextWakeupTime.IsZero() {
+		// Record the idle-close deadline so it can be surfaced as the
+		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
+		scheduler.IdleCloseTime = timestamppb.New(idleExpiration)
+
+		return nil
+	}
+
+	// Not idle: the schedule has work again (or is being held open), so it's
+	// no longer pending an idle close.
+	scheduler.IdleCloseTime = nil
+
+	if !result.NextWakeupTime.IsZero() {
 		// Keep the generator task perpetually scheduled. When paused, the next
 		// fire will simply advance the HWM without appending actions (handled in
 		// ProcessTimeRange).
@@ -150,10 +161,14 @@ func (g *GeneratorTaskHandler) Execute(
 	return nil
 }
 
-func (g *GeneratorTaskHandler) logSchedule(logger log.Logger, msg string, sched *Scheduler) {
+func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.Logger, msg string, generator *Generator, sched *Scheduler) {
+	spec := jsonStringer{sched.Schedule.Spec}
+	policies := jsonStringer{sched.Schedule.Policies}
+
+	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies))
 	logger.Info(msg,
-		tag.Stringer("spec", jsonStringer{sched.Schedule.Spec}),
-		tag.Stringer("policies", jsonStringer{sched.Schedule.Policies}))
+		tag.Stringer("spec", spec),
+		tag.Stringer("policies", policies))
 }
 
 func (g *GeneratorTaskHandler) Validate(

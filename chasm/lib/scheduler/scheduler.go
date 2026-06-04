@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -47,6 +48,9 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	// Human-readable event history used for debugging.
+	EventLog chasm.Field[*EventLog]
+
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
@@ -64,7 +68,15 @@ var (
 	executionStatusCompleted = "Completed"
 )
 
-var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+const ScheduleNextActionTimeName = "ScheduleNextActionTime"
+const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
+
+var (
+	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+	scheduleIdleCloseTimeSearchAttribute  = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+)
+
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
 
 const (
@@ -117,6 +129,7 @@ func NewScheduler(
 		cacheConflictToken:   scheduler.InitialConflictToken,
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
@@ -258,6 +271,7 @@ func CreateSchedulerFromMigration(
 		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
 
@@ -277,9 +291,13 @@ func CreateSchedulerFromMigration(
 	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
 	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
-	// Schedule a callbacks task to attach Nexus callbacks to any migrated
-	// running workflows. The task self-invalidates if there's no work to do.
-	ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
+	// state; if there are none, generate directly.
+	if slices.ContainsFunc(state.GetInvokerState().GetBufferedStarts(), needsCallback) {
+		ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	} else {
+		sched.Generator.Get(ctx).Generate(ctx)
+	}
 
 	return sched, nil
 }
@@ -897,16 +915,25 @@ func (s *Scheduler) executionStatus() string {
 }
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
-func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	if s.Sentinel {
 		return []chasm.SearchAttributeKeyValue{
 			executionStatusSearchAttribute.Value(s.executionStatus()),
 		}
 	}
-	return []chasm.SearchAttributeKeyValue{
+	out := []chasm.SearchAttributeKeyValue{
 		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
+	if !s.Closed {
+		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
+			out = append(out, scheduleNextActionTimeSearchAttribute.Value(gen.FutureActionTimes[0].AsTime()))
+		}
+		if s.IdleCloseTime != nil {
+			out = append(out, scheduleIdleCloseTimeSearchAttribute.Value(s.IdleCloseTime.AsTime()))
+		}
+	}
+	return out
 }
 
 // Memo returns the scheduler's info block for visibility.

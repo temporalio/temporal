@@ -311,6 +311,8 @@ type (
 	FaultInjectionTarget struct {
 		Store  DataStoreName
 		Method string
+		// Request is optionally populated by fault injection wrappers for request-aware faults.
+		Request any
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
@@ -650,6 +652,14 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
