@@ -180,8 +180,10 @@ message ActivityRequestData {
   temporal.api.common.v1.Payloads input = 1;
   temporal.api.common.v1.Header header = 2;
 
-  // Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
-  temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+  // Deprecated: now stored in ChasmComponentAttributes.user_metadata. Kept here
+  // only to read state persisted before the migration; new activities leave
+  // this empty.
+  temporal.api.sdk.v1.UserMetadata user_metadata = 3 [deprecated = true];
 }
 
 message ActivityOutcome {

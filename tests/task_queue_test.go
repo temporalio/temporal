@@ -77,15 +77,17 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, useNewMatching),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions),
-
 		// exclude the effect of the default forwarding rate limit (10)
 		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxRatePerSecond, 1000),
-
 		// 30 tasks at 1 task per second is 30 seconds.
 		// if invalid tasks are NOT using the rate limit, then this should take well below that long.
 		// task forwarding between task queue partitions is rate-limited by default to 10 rps.
 		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0),
+		// Terminating workflows mid-backlog intentionally trips soft asserts in the
+		// matching task queue; disable fail-on-error so those logs don't poison the
+		// suite's shared cluster.
+		testcore.WithDisableTestloggerFailure(),
 	)
 
 	const maxBacklog = 30

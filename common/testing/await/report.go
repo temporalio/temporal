@@ -20,14 +20,39 @@ type attemptFailure struct {
 	errors  []string
 }
 
-// reportTimeout reports the timeout failure plus collected attempt errors.
-func reportTimeout(tb testing.TB, failures []attemptFailure, funcName, timeoutMsg string, effectiveTimeout time.Duration, polls int) {
-	reportAttemptErrors(tb, failures)
-	if timeoutMsg != "" {
-		tb.Fatalf("%s: %s (not satisfied after %v, %d polls)", funcName, timeoutMsg, effectiveTimeout, polls)
-	} else {
-		tb.Fatalf("%s: condition not satisfied after %v (%d polls)", funcName, effectiveTimeout, polls)
+type timeoutReport struct {
+	effectiveTimeout time.Duration
+	attempts         int
+	attemptTimeouts  int
+	failures         []attemptFailure
+}
+
+func (r *timeoutReport) nextPoll() {
+	r.attempts++
+}
+
+func (r *timeoutReport) recordErrors(errors []string) {
+	if len(errors) > 0 {
+		r.failures = append(r.failures, attemptFailure{attempt: r.attempts, errors: errors})
 	}
+}
+
+func (r *timeoutReport) recordAttemptTimeout() {
+	r.attemptTimeouts++
+}
+
+func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
+	reportAttemptErrors(tb, r.failures)
+}
+
+func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
+	r.reportAttemptErrors(tb)
+	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
+	if timeoutMsg != "" {
+		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.effectiveTimeout)
+	}
+	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
+		funcName, message, r.attempts, r.attemptTimeouts)
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
