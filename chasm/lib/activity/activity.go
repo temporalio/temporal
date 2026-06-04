@@ -413,9 +413,17 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
 	}
 
+	key := ctx.ExecutionKey()
+	backLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
+		Namespace:  ctx.NamespaceEntry().Name().String(),
+		ActivityId: key.BusinessID,
+		RunId:      key.RunID,
+	})
+
 	opts := nexusrpc.CompleteOperationOptions{
 		StartTime: a.GetScheduleTime().AsTime(),
 		CloseTime: ctx.ExecutionInfo().CloseTime,
+		Links:     []nexus.Link{backLink},
 	}
 
 	outcome := a.Outcome.Get(ctx)

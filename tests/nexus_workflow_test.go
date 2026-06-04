@@ -455,6 +455,160 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 	s.Equal(run.GetRunID(), nexusOpLink.GetRunId())
 }
 
+// TestNexusOperationAsyncStandaloneActivityCompletionBeforeStart verifies that when a standalone
+// activity completes and delivers its Nexus callback before the Nexus start request has been
+// responded to, Activity.GetNexusCompletion synthesizes a Link_Activity back-link. That link must
+// land on the caller workflow's fabricated EVENT_TYPE_NEXUS_OPERATION_STARTED event with the
+// activity's namespace/activityId/runId.
+func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityCompletionBeforeStart(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("standalone activity is only available with chasm enabled")
+	}
+
+	env := s.newTestEnv(chasmEnabled)
+	cluster := env.GetTestCluster()
+	nsValues := []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
+	}
+	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
+	ctx := env.Context()
+
+	callerTQ := testcore.RandomizeStr(s.T().Name() + "-caller")
+	activityTQ := testcore.RandomizeStr(s.T().Name() + "-activity")
+	activityID := testcore.RandomizeStr("saa-via-nexus")
+
+	// Worker-target endpoint so the caller's Nexus start request lands on the nexus task queue
+	// we poll below.
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: env.Namespace().String(),
+						TaskQueue: callerTQ,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: callerTQ,
+	}, "workflow")
+	s.NoError(err)
+
+	// Caller schedules the Nexus operation.
+	wfPollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: wfPollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "test-service",
+						Operation: "my-operation",
+						Input:     testcore.MustToPayload(s.T(), "input"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll the Nexus task to grab the callback URL/header, but do NOT respond yet —
+	// the activity completion must arrive first.
+	nexusTask, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  uuid.NewString(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.NoError(err)
+	start := nexusTask.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
+	if start.CallbackHeader == nil {
+		start.CallbackHeader = map[string]string{}
+	}
+	// Operation token routes the completion back to the caller's pending operation;
+	// use the activity id so it's recognizable in the fabricated started event.
+	start.CallbackHeader[nexus.HeaderOperationToken] = activityID
+
+	// Start the SAA with its completion callback wired to the Nexus callback URL.
+	startActResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:           env.Namespace().String(),
+		ActivityId:          activityID,
+		ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+		Identity:            "test",
+		Input:               payloads.EncodeString("saa-input"),
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: activityTQ},
+		StartToCloseTimeout: durationpb.New(time.Minute),
+		RequestId:           uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url:    start.Callback,
+						Header: start.CallbackHeader,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	activityRunID := startActResp.RunId
+
+	// Poll the activity task to transition it to STARTED, then complete by ID.
+	_, err = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: activityTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	_, err = env.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		Namespace:  env.Namespace().String(),
+		RunId:      activityRunID,
+		ActivityId: activityID,
+		Result:     payloads.EncodeString("saa-result"),
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	// The callback delivers BEFORE we respond to the Nexus start request — the caller's
+	// history must fabricate a NEXUS_OPERATION_STARTED event carrying the synthesized link.
+	var startedEvent *historypb.HistoryEvent
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+			WorkflowId: callerRun.GetID(),
+			RunId:      callerRun.GetRunID(),
+		})
+		for _, e := range hist {
+			if e.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED {
+				startedEvent = e
+				return
+			}
+		}
+		require.Fail(t, "missing NEXUS_OPERATION_STARTED event on caller workflow")
+	}, 10*time.Second, 100*time.Millisecond)
+
+	expectedLink := &commonpb.Link_Activity{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      activityRunID,
+	}
+	s.Len(startedEvent.GetLinks(), 1, "fabricated started event must carry exactly the SAA back-link")
+	s.ProtoEqual(expectedLink, startedEvent.GetLinks()[0].GetActivity())
+	s.Equal(activityID, startedEvent.GetNexusOperationStartedEventAttributes().GetOperationToken())
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
