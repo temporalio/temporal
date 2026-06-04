@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
@@ -550,7 +551,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		}
 		return false
 	}
-	s.Require().Eventually(pollerReady, 2*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), pollerReady, 2*time.Second, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,
