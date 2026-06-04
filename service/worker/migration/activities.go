@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -129,6 +130,12 @@ type (
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
+		// sdkClientFactory resolves the system SDK client lazily for the
+		// sharded ReplicateBatch activity's mid-flight ReleaseShards signal.
+		// Eager resolution at fx-wire time tries to dial the frontend before
+		// it's listening; the factory's internal sync.Once guarantees a
+		// single dial on first use.
+		sdkClientFactory sdk.ClientFactory
 	}
 
 	shardStatus struct {

@@ -1487,6 +1487,27 @@ var (
 	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
 	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
 
+	// Sharded force replication. The sharded ReplicateBatch activity runs
+	// many executions per invocation, so per-exec timing is the meaningful
+	// granularity — the batch-level *_tasks_latency timers above scale with
+	// BatchSize and aren't comparable across configurations.
+	GenerateReplicationTaskLatency = NewTimerDef("generate_replication_task_latency")
+	VerifyReplicationTaskLatency   = NewTimerDef("verify_replication_task_latency")
+	// VerifyReplicationTaskBusy counts verify attempts where the passive
+	// cluster returned RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW — the cache
+	// lock is held while history is being applied. A sign of progress that
+	// doesn't reset the per-shard no-progress timer.
+	VerifyReplicationTaskBusy = NewCounterDef("verify_replication_task_busy")
+	// VerifyReplicationTaskPending counts verify attempts where
+	// DescribeMutableState succeeded but the workflowVerifier saw the target
+	// lagging the source. A high pending vs. success ratio means verify is
+	// polling faster than apply can catch up.
+	VerifyReplicationTaskPending = NewCounterDef("verify_replication_task_pending")
+	// ReplicatedWorkflowCount accumulates verified-exec counts across each
+	// ReplicateBatch activity return. Emitted from the workflow so the
+	// counter is monotonic across activity retries.
+	ReplicatedWorkflowCount = NewCounterDef("replicated_workflow_count")
+
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")
 	NamespaceReplicationDLQAckLevelGauge  = NewGaugeDef("namespace_dlq_ack_level")
