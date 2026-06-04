@@ -940,6 +940,7 @@ var (
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                   = NewCounterDef("command")

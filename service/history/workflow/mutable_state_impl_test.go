@@ -8775,3 +8775,23 @@ func (s *mutableStateSuite) TestMutableStateImpl_Now() {
 		s.Equal(fixedBase.Add(skip), s.mutableState.Now())
 	})
 }
+
+func (s *mutableStateSuite) TestUpdateActivityProgress_HeartbeatCountMetric() {
+	ai := &persistencespb.ActivityInfo{ScheduledEventId: 1, Version: 1}
+	s.mutableState.pendingActivityInfoIDs[1] = ai
+	nsName := s.namespaceEntry.Name().String()
+
+	counterKey := func(hasDetails string) string {
+		return "test.activity_heartbeat_count+has_details=" + hasDetails + ",namespace=" + nsName + ",operation=RecordActivityTaskHeartbeat,service_name=history"
+	}
+
+	// Heartbeat with details.
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("progress")}}},
+	})
+	s.Contains(s.testScope.Snapshot().Counters(), counterKey("true"))
+
+	// Heartbeat without details.
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+	s.Contains(s.testScope.Snapshot().Counters(), counterKey("false"))
+}
