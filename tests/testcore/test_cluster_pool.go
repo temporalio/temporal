@@ -217,6 +217,15 @@ func UseSuiteScopedClusters(t *testing.T, size int) {
 	})
 }
 
+// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
+// The cluster is created on first use and torn down when `t` completes.
+//
+// Deprecated: use UseSuiteScopedClusters.
+func UseSuiteScopedCluster(t *testing.T) {
+	t.Helper()
+	UseSuiteScopedClusters(t, 1)
+}
+
 func (p *clusterPool) get(t *testing.T, dedicated bool, workerService bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
 	defer func() {
 		tb.RegisterTest(t)
