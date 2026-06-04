@@ -34,7 +34,6 @@ type EventStore struct {
 	// When appending the next event would push this above
 	// maxEventBatchSizeInBytes, the batch is rolled into
 	// memEventsBatches and a fresh memLatestBatch is started.
-	// Only used if maxEventBatchSizeInBytes returns a positive value.
 	memLatestBatchSize int
 
 	maxEventBatchSizeInBytes dynamicconfig.IntPropertyFn
@@ -108,13 +107,16 @@ func (b *EventStore) add(
 // first if the additional event would push the current batch over
 // maxEventBatchSizeInBytes. A value of <= 0 disables the check.
 func (b *EventStore) appendToLatestBatch(event *historypb.HistoryEvent) {
+	eventSize := proto.Size(event)
 	if limit := b.maxEventBatchSizeInBytes(); limit > 0 {
-		eventSize := proto.Size(event)
 		if len(b.memLatestBatch) > 0 && b.memLatestBatchSize+eventSize > limit {
 			b.FlushAndCreateNewBatch()
 		}
-		b.memLatestBatchSize += eventSize
 	}
+	// Always accumulate so the size reflects the full batch even when the
+	// limit is disabled. Otherwise, enabling maxEventBatchSizeInBytes mid-flight
+	// would start counting from that point and undercount the current batch.
+	b.memLatestBatchSize += eventSize
 	b.memLatestBatch = append(b.memLatestBatch, event)
 }
 
