@@ -2697,6 +2697,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	updateErrCh := make(chan error, 1)
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 
@@ -2715,7 +2716,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 				},
 			},
 		})
-		s.NoError(err)
+		updateErrCh <- err
 	}()
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
@@ -2725,6 +2726,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 		LastKnownUserDataVersion: 0, // must be zero to start
 		WaitNewData:              true,
 	})
+	s.NoError(<-updateErrCh)
 	s.NoError(err)
 	s.NotNil(res.UserData.Data.VersioningData)
 }
@@ -2751,6 +2753,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	updateErrCh := make(chan error, 1)
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 
@@ -2769,7 +2772,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 				},
 			},
 		})
-		s.NoError(err)
+		updateErrCh <- err
 	}()
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
@@ -2779,6 +2782,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		LastKnownUserDataVersion: userData.Version,
 		WaitNewData:              true,
 	})
+	s.NoError(<-updateErrCh)
 	s.NoError(err)
 	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
