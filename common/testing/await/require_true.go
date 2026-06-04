@@ -21,7 +21,7 @@ func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval tim
 		if !condition() {
 			t.Fail()
 		}
-	}, timeout, pollInterval, "", "RequireTrue", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, pollInterval, ""), "RequireTrue", requireTrueMisuseHint, false)
 }
 
 // RequireTruef is like [RequireTrue] but accepts a format string that is included
@@ -32,5 +32,5 @@ func RequireTruef(tb testing.TB, condition func() bool, timeout, pollInterval ti
 		if !condition() {
 			t.Fail()
 		}
-	}, timeout, pollInterval, fmt.Sprintf(msg, args...), "RequireTruef", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false)
 }
