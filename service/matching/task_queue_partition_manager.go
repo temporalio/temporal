@@ -85,7 +85,8 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		taskHooks []hooks.TaskHook
+		taskHooks  []hooks.TaskHook
+		queryHooks []hooks.QueryHook
 
 		goroGroup goro.Group
 
@@ -144,6 +145,17 @@ func newTaskQueuePartitionManager(
 		}
 	}
 
+	var queryHooks []hooks.QueryHook
+	for _, hookFactory := range e.queryHookFactories {
+		queryHook := hookFactory.CreateQueryHook(&hooks.TaskHookFactoryCreateDetails{
+			Namespace: ns,
+			Partition: partition,
+		})
+		if queryHook != nil {
+			queryHooks = append(queryHooks, queryHook)
+		}
+	}
+
 	pm := &taskQueuePartitionManagerImpl{
 		engine:                e,
 		partition:             partition,
@@ -159,6 +171,7 @@ func newTaskQueuePartitionManager(
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
 		taskHooks:             taskHooks,
+		queryHooks:            queryHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -266,6 +279,9 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	for _, hook := range pm.taskHooks {
 		hook.Start()
 	}
+	for _, hook := range pm.queryHooks {
+		hook.Start()
+	}
 
 	//nolint:errcheck
 	go pm.initialize()
@@ -299,6 +315,9 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Unlock()
 
 	for _, hook := range pm.taskHooks {
+		hook.Stop()
+	}
+	for _, hook := range pm.queryHooks {
 		hook.Stop()
 	}
 
@@ -624,6 +643,14 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 	}
 }
 
+func (pm *taskQueuePartitionManagerImpl) processQueryHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion) {
+	for _, h := range pm.queryHooks {
+		h.ProcessQueryTask(ctx, &hooks.QueryTaskHookDetails{
+			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
+		})
+	}
+}
+
 func taskAddErrResult(err error) string {
 	var resourceExhausted *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhausted) {
@@ -945,7 +972,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
-	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
+	_, syncMatchQueue, _, _, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
 		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
@@ -960,6 +987,10 @@ reredirectTask:
 	if err != nil {
 		return nil, err
 	}
+
+	// Fire query hooks before dispatch so scale-up signals are sent immediately,
+	// rather than after the query blocks and potentially times out waiting for a poller.
+	pm.processQueryHooks(ctx, targetVersion)
 
 	dbq := pm.defaultQueue()
 	if dbq == nil {

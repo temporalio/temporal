@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1815,6 +1816,125 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	s.Len(hook2.getCalls(), 1)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook1.getCalls()[0].SyncMatchOutcome)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
+}
+
+// capturingQueryHook records ProcessQueryTask calls for test assertions.
+type capturingQueryHook struct {
+	mu            sync.Mutex
+	taskQueueName string
+	calls         []capturedQueryDetails
+}
+
+type capturedQueryDetails struct {
+	TaskQueueName     string
+	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
+}
+
+func (h *capturingQueryHook) CreateQueryHook(details *hooks.TaskHookFactoryCreateDetails) hooks.QueryHook {
+	h.taskQueueName = details.Partition.TaskQueue().Name()
+	return h
+}
+
+func (h *capturingQueryHook) Start() {}
+func (h *capturingQueryHook) Stop()  {}
+
+func (h *capturingQueryHook) ProcessQueryTask(_ context.Context, event *hooks.QueryTaskHookDetails) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	d := capturedQueryDetails{TaskQueueName: h.taskQueueName}
+	if event.DeploymentVersion != nil {
+		d.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: event.DeploymentVersion.DeploymentName,
+			BuildId:        event.DeploymentVersion.BuildId,
+		}
+	}
+	h.calls = append(h.calls, d)
+}
+
+func (h *capturingQueryHook) getCalls() []capturedQueryDetails {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]capturedQueryDetails(nil), h.calls...)
+}
+
+// setupPartitionManagerWithQueryHookFactories creates a partition manager with the given query hook factories.
+func (s *PartitionManagerTestSuite) setupPartitionManagerWithQueryHookFactories(queryHookFactories []hooks.QueryHookFactory) (*taskQueuePartitionManagerImpl, func()) {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+	s.partitionMgr.engine.queryHookFactories = queryHookFactories
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, s.userDataMgr)
+	s.Require().NoError(err)
+	pm.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.Require().NoError(err)
+
+	return pm, func() { pm.Stop(unloadCauseUnspecified) }
+}
+
+func (s *PartitionManagerTestSuite) TestQueryHooks_FiresOnDispatchQueryTask() {
+	hook := &capturingQueryHook{}
+	pm, cleanup := s.setupPartitionManagerWithQueryHookFactories([]hooks.QueryHookFactory{hook})
+	defer cleanup()
+
+	// DispatchQueryTask blocks until context expires (no pollers), but processQueryHooks
+	// is called synchronously before that blocking point.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
+			},
+		})
+	}()
+
+	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Nil(calls[0].DeploymentVersion) // unversioned query; no deployment version
+
+	<-done
+}
+
+func (s *PartitionManagerTestSuite) TestQueryHooks_MultipleFactories() {
+	hook1 := &capturingQueryHook{}
+	hook2 := &capturingQueryHook{}
+	pm, cleanup := s.setupPartitionManagerWithQueryHookFactories([]hooks.QueryHookFactory{hook1, hook2})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", &matchingservice.QueryWorkflowRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			QueryRequest: &workflowservice.QueryWorkflowRequest{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
+			},
+		})
+	}()
+
+	s.Require().Eventually(func() bool { return len(hook1.getCalls()) >= 1 && len(hook2.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	s.Len(hook1.getCalls(), 1)
+	s.Len(hook2.getCalls(), 1)
+
+	<-done
 }
 
 type mockUserDataManager struct {
