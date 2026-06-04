@@ -11,7 +11,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -19,6 +18,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -44,20 +44,21 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 	return "done!", nil
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
+func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	env *testcore.TestEnv,
-) {
-	tv := env.Tv()
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tv.TaskQueue().Name,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	sa *commonpb.SearchAttributes,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	// Overriding identifiers so that we don't hit length limitations in any of the databases.
+	tv := testvars.New(s.T()).
+		WithTaskQueue("task-queue").
+		WithDeploymentSeries("deployment").
+		WithBuildID("build-id")
 
-	// Start versioned poller in background
+	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
 	go func() {
 		_, _ = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
-			TaskQueue: taskQueue,
+			TaskQueue: tv.TaskQueue(),
 			Identity:  "versioned-poller",
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 				DeploymentName:       tv.DeploymentSeries(),
@@ -86,15 +87,6 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 		a.NoError(err)
 		a.True(resp.GetIsMember())
 	}, 10*time.Second, 1*time.Second)
-}
-
-func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
-	env *testcore.TestEnv,
-	sa *commonpb.SearchAttributes,
-) (*workflowservice.StartWorkflowExecutionResponse, error) {
-	tv := env.Tv()
-	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	s.startVersionedPollerAndValidate(env)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
