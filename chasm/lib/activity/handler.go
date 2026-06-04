@@ -32,14 +32,22 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(
+	config *Config,
+	linkValidator *linkValidator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+) *handler {
 	return &handler{
 		config:            config,
+		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -71,6 +79,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
+			// Only enforce the per-component cap when we'll actually persist the links —
+			// i.e., when creating a new activity. On returning an existing activity
+			// without attach_links the request.Links field is dropped, so the cap check
+			// is skipped to avoid false rejects. Per-request shape/size/count is already
+			// validated by the frontend (the only caller of this handler).
+			if err := h.linkValidator.ValidateComponentTotal(request.GetNamespace(), 0, len(request.GetLinks())); err != nil {
+				return nil, err
+			}
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, err
@@ -103,17 +119,31 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	// Attach callbacks to an existing activity when on_conflict_options.attach_completion_callbacks is set.
+	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
 	cbs := frontendReq.GetCompletionCallbacks()
-	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
+				if attachCallbacks {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
 			},
 			nil,
 		)
