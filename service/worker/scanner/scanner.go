@@ -77,11 +77,13 @@ type (
 
 		// Schedule-invariants scanners. Each runs as an independent cron workflow; all three
 		// require advanced (Elasticsearch) visibility to be configured (otherwise they're skipped).
-		ScheduleInvariantsScannerOverdueNextActionTimeEnabled   dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerStuckOpenEnabled               dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerUnknownStateEnabled            dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerOverdueNextActionTimeTolerance dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerVisibilityRPS                  dynamicconfig.FloatPropertyFn
+		ScheduleInvariantsScannerOverdueNextActionTimeEnabled      dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerStuckOpenEnabled                  dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerUnknownStateEnabled               dynamicconfig.BoolPropertyFn
+		ScheduleInvariantsScannerOverdueNextActionTimeTolerance    dynamicconfig.DurationPropertyFn
+		ScheduleInvariantsScannerVisibilityRPS                     dynamicconfig.FloatPropertyFn
+		ScheduleInvariantsScannerScanInterval                      dynamicconfig.DurationPropertyFn
+		ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier dynamicconfig.IntPropertyFn
 	}
 
 	// scannerContext is the context object that gets
@@ -237,6 +239,8 @@ func (s *Scanner) Start() error {
 			clock.NewRealTimeSource(),
 			s.context.cfg.ScheduleInvariantsScannerVisibilityRPS,
 			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
+			s.context.cfg.ScheduleInvariantsScannerScanInterval,
+			s.context.cfg.ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier,
 		)
 
 		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {

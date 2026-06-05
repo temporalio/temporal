@@ -65,16 +65,18 @@ func (d *testDeps) newActivities() *Activities {
 	// A very high RPS rate-limiter so Wait() never blocks under test.
 	rl := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(dynamicconfig.GetFloatPropertyFn(10000.0)))
 	return &Activities{
-		logger:             log.NewNoopLogger(),
-		metricsHandler:     metrics.NoopMetricsHandler,
-		metadataManager:    d.metadataManager,
-		visibilityManager:  d.visibilityManager,
-		namespaceRegistry:  d.namespaceRegistry,
-		sdkClientFactory:   d.sdkClientFactory,
-		currentClusterName: testClusterName,
-		timeSource:         d.timeSource,
-		overdueTolerance:   dynamicconfig.GetDurationPropertyFn(10 * time.Minute),
-		rateLimiter:        rl,
+		logger:                            log.NewNoopLogger(),
+		metricsHandler:                    metrics.NoopMetricsHandler,
+		metadataManager:                   d.metadataManager,
+		visibilityManager:                 d.visibilityManager,
+		namespaceRegistry:                 d.namespaceRegistry,
+		sdkClientFactory:                  d.sdkClientFactory,
+		currentClusterName:                testClusterName,
+		timeSource:                        d.timeSource,
+		overdueTolerance:                  dynamicconfig.GetDurationPropertyFn(10 * time.Minute),
+		scanInterval:                      dynamicconfig.GetDurationPropertyFn(15 * time.Minute),
+		stuckOpenIdleTimeBufferMultiplier: dynamicconfig.GetIntPropertyFn(2),
+		rateLimiter:                       rl,
 	}
 }
 

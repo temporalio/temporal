@@ -25,16 +25,13 @@ import (
 )
 
 const (
-	// scanInterval is how often each scanner activity kicks off a fresh scan pass.
-	scanInterval = 15 * time.Minute
 	// heartbeatInterval is how often the background heartbeat goroutine pings the
 	// activity. It must be comfortably below the activity's HeartbeatTimeout.
 	heartbeatInterval = 10 * time.Second
 	// scheduleListPageSize controls pagination of ListChasmExecutions inside
 	// ScanOverdueNextActionTime. Each page is also one unit of rate-limited progress.
-	scheduleListPageSize             = 100
-	scheduleIdleTimeBufferMultiplier = 2
-	namespaceListPageSize            = 100
+	scheduleListPageSize  = 100
+	namespaceListPageSize = 100
 )
 
 // Activities holds shared dependencies for all three schedule-invariants scanner activities.
@@ -49,7 +46,12 @@ type Activities struct {
 	timeSource         clock.TimeSource
 
 	overdueTolerance dynamicconfig.DurationPropertyFn
-	rateLimiter      quotas.RateLimiter
+	// scanInterval is how often each scanner activity kicks off a fresh scan pass.
+	scanInterval dynamicconfig.DurationPropertyFn
+	// stuckOpenIdleTimeBufferMultiplier multiplies the configured schedule IdleTime to set
+	// how far past its idle-close deadline a schedule must be before ScanStuckOpen flags it.
+	stuckOpenIdleTimeBufferMultiplier dynamicconfig.IntPropertyFn
+	rateLimiter                       quotas.RateLimiter
 }
 
 func NewActivities(
@@ -63,18 +65,22 @@ func NewActivities(
 	timeSource clock.TimeSource,
 	visibilityRPS dynamicconfig.FloatPropertyFn,
 	overdueTolerance dynamicconfig.DurationPropertyFn,
+	scanInterval dynamicconfig.DurationPropertyFn,
+	stuckOpenIdleTimeBufferMultiplier dynamicconfig.IntPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:             logger,
-		metricsHandler:     metricsHandler.WithTags(metrics.OperationTag(metrics.ScheduleInvariantsScannerScope)),
-		metadataManager:    metadataManager,
-		visibilityManager:  visibilityManager,
-		namespaceRegistry:  namespaceRegistry,
-		sdkClientFactory:   sdkClientFactory,
-		currentClusterName: currentClusterName,
-		timeSource:         timeSource,
-		overdueTolerance:   overdueTolerance,
-		rateLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(visibilityRPS)),
+		logger:                            logger,
+		metricsHandler:                    metricsHandler.WithTags(metrics.OperationTag(metrics.ScheduleInvariantsScannerScope)),
+		metadataManager:                   metadataManager,
+		visibilityManager:                 visibilityManager,
+		namespaceRegistry:                 namespaceRegistry,
+		sdkClientFactory:                  sdkClientFactory,
+		currentClusterName:                currentClusterName,
+		timeSource:                        timeSource,
+		overdueTolerance:                  overdueTolerance,
+		scanInterval:                      scanInterval,
+		stuckOpenIdleTimeBufferMultiplier: stuckOpenIdleTimeBufferMultiplier,
+		rateLimiter:                       quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(visibilityRPS)),
 	}
 }
 
@@ -105,8 +111,9 @@ func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 // are excluded since they are intentionally held open and do not idle-close.
 func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
-		// two weeks ago
-		threshold := a.timeSource.Now().UTC().Add(-(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier)).Format(time.RFC3339Nano)
+		// two weeks ago (IdleTime, scaled by the configured buffer multiplier)
+		buffer := scheduler.DefaultTweakables.IdleTime * time.Duration(a.stuckOpenIdleTimeBufferMultiplier())
+		threshold := a.timeSource.Now().UTC().Add(-buffer).Format(time.RFC3339Nano)
 
 		// select schedules which went idle before two weeks ago
 		// and which are not paused and still appear to be running
@@ -135,8 +142,6 @@ func (a *Activities) ScanUnknownState(ctx context.Context) error {
 			scheduler.ScheduleNextActionTimeName,
 			scheduler.ScheduleIdleCloseTimeName,
 		)
-		a.logger.Info("schedule-invariants: starting unknown_state scan",
-			tag.NewStringTag("query", query))
 		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
 	})
 }
@@ -155,7 +160,7 @@ func (a *Activities) runForeverWithInterval(ctx context.Context, scanFn func(con
 		return err
 	}
 
-	ch, timer := a.timeSource.NewTimer(scanInterval)
+	ch, timer := a.timeSource.NewTimer(a.scanInterval())
 	defer timer.Stop()
 	for {
 		select {
@@ -165,7 +170,7 @@ func (a *Activities) runForeverWithInterval(ctx context.Context, scanFn func(con
 			if err := scanFn(ctx); err != nil {
 				return err
 			}
-			timer.Reset(scanInterval)
+			timer.Reset(a.scanInterval())
 		}
 	}
 }
@@ -360,7 +365,7 @@ func (a *Activities) forEachScheduleInNamespace(
 func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, scheduleID string) bool {
 	if err := a.rateLimiter.Wait(ctx); err != nil {
 		a.logger.Warn("rate-limiter wait failed during DescribeSchedule; counting schedule as anomaly",
-			tag.WorkflowNamespace(nsName), tag.NewStringTag("schedule_id", scheduleID), tag.Error(err))
+			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID), tag.Error(err))
 		return false
 	}
 	desc, err := a.sdkClientFactory.GetSystemClient().WorkflowService().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -369,7 +374,7 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 	})
 	if err != nil {
 		a.logger.Warn("DescribeSchedule failed",
-			tag.WorkflowNamespace(nsName), tag.NewStringTag("schedule_id", scheduleID), tag.Error(err))
+			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID), tag.Error(err))
 		return false
 	}
 

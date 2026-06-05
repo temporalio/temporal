@@ -635,6 +635,19 @@ TemporalScheduleNextActionTime must be before the schedule is flagged.`,
 		`ScheduleInvariantsScannerVisibilityRPS rate-limits visibility calls from the
 schedule-invariants scanner.`,
 	)
+	ScheduleInvariantsScannerScanInterval = NewGlobalDurationSetting(
+		"worker.scheduleInvariantsScannerScanInterval",
+		15*time.Minute,
+		`ScheduleInvariantsScannerScanInterval is how often each schedule-invariants scanner
+activity kicks off a fresh scan pass.`,
+	)
+	ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier = NewGlobalIntSetting(
+		"worker.scheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier",
+		2,
+		`ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier multiplies the configured
+schedule IdleTime to set how far past a schedule's idle-close deadline it must be before the
+stuck-open scanner flags it.`,
+	)
 
 	// keys for frontend
 	FrontendAllowedExperiments = NewNamespaceTypedSetting(
