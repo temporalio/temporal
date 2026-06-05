@@ -153,6 +153,16 @@ func WithWorkerService(reason string) TestOption {
 	}
 }
 
+// WithMTLS enables mutual TLS on the test's cluster. This implies a dedicated
+// cluster, since the TLS configuration cannot be shared across tests.
+func WithMTLS() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withMTLS())
+		o.dedicatedReason = "mTLS enabled"
+	}
+}
+
 // WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
 func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	return func(o *testOptions) {
