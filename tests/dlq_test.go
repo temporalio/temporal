@@ -24,7 +24,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -71,10 +70,6 @@ type (
 		env *dlqTestEnv
 		persistence.HistoryTaskQueueManager
 	}
-)
-
-const (
-	dlqTestTimeout = 10 * time.Second * debug.TimeoutMultiplier
 )
 
 func TestDLQSuite(t *testing.T) {
@@ -423,7 +418,7 @@ func (s *DLQSuite) executeDoomedWorkflow(env *dlqTestEnv) (sdkclient.WorkflowRun
 			}
 		}
 		require.Failf(t, "workflow task not found in DLQ", "run ID: %s", run.GetRunID())
-	}, dlqTestTimeout, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	return run, found.MessageID
 }
