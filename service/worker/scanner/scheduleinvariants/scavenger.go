@@ -35,9 +35,6 @@ const (
 	scheduleListPageSize             = 100
 	scheduleIdleTimeBufferMultiplier = 2
 	namespaceListPageSize            = 100
-	// the point at which the scanner gives up because either there's too many
-	// false positives or there's too many actual hits
-	overdueScheduleCap = 100
 )
 
 // Activities holds shared dependencies for all three schedule-invariants scanner activities.
@@ -120,9 +117,20 @@ func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 
 // ScanUnknownState is a long-running activity that periodically scans for running,
 // unpaused schedules with no TemporalScheduleNextActionTime set.
+//
+// The ScheduleIdleCloseTime IS NULL clause excludes schedules that have legitimately
+// run out of actions and are sitting in the idle/retention window before idle-close:
+// those are still Running and unpaused with no next action time, but carry a (future)
+// ScheduleIdleCloseTime. Without this clause every exhausted-but-retained schedule would
+// be a false positive for up to the retention window, and genuinely stuck-open schedules
+// (past ScheduleIdleCloseTime) would be double-counted with ScanStuckOpen.
 func (a *Activities) ScanUnknownState(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
-		query := fmt.Sprintf(`%s IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`, scheduler.ScheduleNextActionTimeName)
+		query := fmt.Sprintf(
+			`%s IS NULL AND %s IS NULL AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
+			scheduler.ScheduleNextActionTimeName,
+			scheduler.ScheduleIdleCloseTimeName,
+		)
 		a.logger.Info("schedule-invariants: starting unknown_state scan",
 			tag.NewStringTag("query", query))
 		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
