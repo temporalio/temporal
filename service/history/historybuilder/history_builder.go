@@ -16,6 +16,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
@@ -63,6 +64,7 @@ func New(
 	nextEventID int64,
 	dbBufferBatch []*historypb.HistoryEvent,
 	metricsHandler metrics.Handler,
+	maxEventBatchSizeInBytes dynamicconfig.IntPropertyFn,
 ) *HistoryBuilder {
 	return &HistoryBuilder{
 		EventStore: EventStore{
@@ -82,6 +84,8 @@ func New(
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: make(map[int64]int64),
 			requestIDToEventID:     make(map[string]int64),
+
+			maxEventBatchSizeInBytes: maxEventBatchSizeInBytes,
 
 			metricsHandler: metricsHandler,
 		},

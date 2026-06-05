@@ -409,6 +409,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 		s.metricsHandler,
+		s.config.MaximumEventBatchSizeInBytes,
 	)
 	s.taskGenerator = GetTaskGeneratorProvider().NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
@@ -527,6 +528,7 @@ func NewMutableStateFromDB(
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
+		mutableState.config.MaximumEventBatchSizeInBytes,
 	)
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -1156,6 +1158,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	return nil
@@ -8362,6 +8365,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
