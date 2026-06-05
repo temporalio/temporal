@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -229,6 +230,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
+		testhooks.TestHooks{},
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -363,6 +365,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
+		testhooks.TestHooks{},
 	).(*transferQueueActiveTaskExecutor)
 
 	// Execution should succeed.
