@@ -3237,12 +3237,12 @@ When enabled, the scavenger will delete completed workflow execution data that a
 	AdminBatcherHostRPS = NewGlobalIntSetting(
 		"worker.adminBatcherHostRPS",
 		100,
-		`AdminBatcherHostRPS controls number the rps of all admin batch operations per host`,
+		`AdminBatcherHostRPS controls the rps of all admin batch operations per host`,
 	)
 	AdminBatcherGlobalRPS = NewGlobalIntSetting(
 		"worker.adminBatcherGlobalRPS",
 		0,
-		`AdminBatcherGlobalRPS controls number the rps of all admin batch operations across all worker hosts.
+		`AdminBatcherGlobalRPS controls the rps of all admin batch operations across all worker hosts.
 The configured value will be divided by the number of worker hosts to get the per host rps limit. 
 0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
