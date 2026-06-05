@@ -65,10 +65,12 @@ type processBufferResult struct {
 	discardStarts []*schedulespb.BufferedStart
 
 	// Number of buffered starts dropped due to overlap policy during processing.
-	overlapSkipped int64
+	overlapSkipped         int64
+	overlapSkippedByPolicy map[enumspb.ScheduleOverlapPolicy]int64
 
-	// Nunmber of buffered starts dropped from missing the catchup window.
-	missedCatchupWindow int64
+	// Number of buffered starts dropped from missing the catchup window,
+	// bucketed by whether a running action contributed to the miss.
+	missedCatchupByActionRunning map[bool]int64
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
@@ -268,8 +270,10 @@ func (i *Invoker) recordCompletedAction(
 
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
-	// completing one start and kicking off the next). We set that on the first start
-	// pending execution.
+	// completing one start and kicking off the next). It also signals in processBuffer
+	// that this start was blocked behind a running action: if DesiredTime (the previous
+	// action's CloseTime) is past the start's catchup deadline, the previous action's
+	// duration caused the miss.
 	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0
 	})

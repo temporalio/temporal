@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
@@ -566,6 +567,16 @@ func (s *Scheduler) HandleNexusCompletion(
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
 		return nil
+	}
+
+	// Record how long it took for the callback to arrive after the action completed.
+	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
+	// and clamp to zero in case of clock skew.
+	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
+		latency := max(0, ctx.Now(s).Sub(closeTime))
+		newTaggedMetricsHandler(ctx.MetricsHandler(), s).
+			Timer(metrics.ScheduleCallbackLatency.Name()).
+			Record(latency)
 	}
 
 	// Handle last completed/failed status and payloads.
