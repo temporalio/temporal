@@ -81,7 +81,7 @@ func watchMembershipForClose[C any](
 	conns map[rpcAddress]clientConnection[C],
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) {
-	listenerName := fmt.Sprintf("historyConnectionPool-%s", uuid.New().String())
+	listenerName := fmt.Sprintf("%p", mu)
 	ch := make(chan *membership.ChangedEvent, 1)
 	if err := resolver.AddListener(listenerName, ch); err != nil {
 		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
