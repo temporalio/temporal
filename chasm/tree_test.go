@@ -3253,11 +3253,12 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	)
 
 	// One valid task, one invalid task.
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
-		DoAndReturn(func(_ Context, _ any, _ TaskAttributes, task *TestPureTask) (bool, error) {
-			return string(task.Payload.Data) != "root-task-payload", nil
-		}).Times(2)
+	gomock.InOrder(
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1),
+	)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
