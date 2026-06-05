@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -22,15 +20,16 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // listWorkersPageToken is the cursor for paginating ListWorkers results.
 // The cursor contains all sort-key fields of the last returned worker so that
 // the next page can resume from the correct position.
 type listWorkersPageToken struct {
-	LastTaskQueue          string `json:"t"`
-	LastStartTimestamp     int64  `json:"s"` // UnixNano
-	LastWorkerInstanceKey  string `json:"k"`
+	LastTaskQueue         string `json:"t"`
+	LastStartTimestamp    int64  `json:"s"` // UnixNano
+	LastWorkerInstanceKey string `json:"k"`
 }
 
 type (
