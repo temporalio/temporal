@@ -45,15 +45,12 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 }
 
 func (b *BackfillerTaskHandler) Validate(
-	ctx chasm.Context,
+	_ chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(
-		backfiller.GetLastProcessedTime(),
-		attrs.ScheduledTime,
-	)
+	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
 }
 
 func (b *BackfillerTaskHandler) Execute(
@@ -66,8 +63,9 @@ func (b *BackfillerTaskHandler) Execute(
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
-
 	invoker := scheduler.Invoker.Get(ctx)
+
+	backfiller.EventLog.Get(ctx).LogEvent(ctx, "backfillerTask executed")
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
@@ -110,6 +108,10 @@ func (b *BackfillerTaskHandler) Execute(
 		logger.Debug("backfill complete, deleting Backfiller",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
+
+		// Revive the Generator so it can re-evaluate idle/close eligibility now
+		// that this backfiller is gone.
+		scheduler.Generator.Get(ctx).Generate(ctx)
 		return nil
 	}
 

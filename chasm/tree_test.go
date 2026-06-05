@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -213,8 +214,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	err = node.syncSubComponents()
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
-	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
-	s.Empty(node.mutation.DeletedNodes)
+	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -312,8 +312,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			s.NoError(err)
 
 			rootComponent := tc.initComponent()
-			err = rootNode.SetRootComponent(rootComponent)
-			s.NoError(err)
+			rootNode.value = rootComponent
+			rootNode.valueState = valueStateNeedSyncStructure
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -383,8 +383,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
-			s.Empty(mutation.UpdatedNodes)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 		})
 
@@ -408,8 +407,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
-			s.Empty(mutation.UpdatedNodes)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 
@@ -436,8 +434,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			// Now map is empty and must be deleted.
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			// The root component's data bytes are unchanged; deletions are recorded in DeletedNodes.
-			s.Empty(mutation.UpdatedNodes)
+			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
 
@@ -449,8 +446,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootNode, err := s.newTestTree(nilSerializedNodes)
 			s.NoError(err)
 
-			err = rootNode.SetRootComponent(&TestComponent{}) // all map fields are nil
-			s.NoError(err)
+			rootNode.value = &TestComponent{} // all map fields are nil
+			rootNode.valueState = valueStateNeedSyncStructure
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -474,8 +471,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			default:
 				s.Failf("unexpected mapField", "unknown mapField %q in test case", tc.mapField)
 			}
-			err = rootNode.SetRootComponent(&rootComponent)
-			s.NoError(err)
+			rootNode.value = &rootComponent
+			rootNode.valueState = valueStateNeedSyncStructure
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -491,8 +488,8 @@ func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
 	rootNode, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
 
-	err = rootNode.SetRootComponent(&TestComponent{})
-	s.NoError(err)
+	rootNode.value = &TestComponent{}
+	rootNode.valueState = valueStateNeedSyncStructure
 
 	mutations, err := rootNode.CloseTransaction()
 	s.NoError(err)
@@ -612,8 +609,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		// The parent component's data bytes are unchanged; the pointer deletion is recorded in DeletedNodes.
-		s.Empty(mutation.UpdatedNodes)
+		s.NotEmpty(mutation.UpdatedNodes)
 		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
@@ -693,8 +689,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	// SubComponent11 was never persisted (nil LVT), so no storage delete is needed.
-	s.Empty(node.mutation.DeletedNodes)
+	s.Len(node.mutation.DeletedNodes, 1)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -714,8 +710,11 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	// SubComponent1 and its children were never persisted (nil LVT), so no storage deletes are needed.
-	s.Empty(node.mutation.DeletedNodes)
+	s.Len(node.mutation.DeletedNodes, 3)
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
+	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
+
 	s.Nil(node.children["SubComponent1"])
 }
 
@@ -2171,16 +2170,16 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
-	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
-	s.Empty(mutations.DeletedNodes)
+	s.Len(mutations.DeletedNodes, 1)
+	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
 
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	// SubComponent1 was read but not mutated, so its data bytes are unchanged and the write is skipped.
-	s.Empty(mutations.UpdatedNodes)
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Empty(mutations.DeletedNodes)
 }
 
@@ -3121,8 +3120,7 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	// The terminated state is unchanged from the prior transaction, so the write is skipped.
-	s.Empty(mutations.UpdatedNodes)
+	s.Len(mutations.UpdatedNodes, 1)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
@@ -3195,17 +3193,31 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	// Create an empty tree.
 	node, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
+	s.Nil(node.value)
 
-	tc := &TestComponent{}
-	setTestComponentFields(tc, s.nodeBackend)
-	err = node.SetRootComponent(tc)
+	// Get an empty top-level component from the empty tree.
+	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	s.Equal(valueStateSynced, node.valueState)
+
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+	s.Equal(valueStateNeedSyncStructure, node.valueState)
+	// Create subcomponents by assigning fields to TestComponent instance.
+	setTestComponentFields(tc.(*TestComponent), s.nodeBackend)
+
+	// Sync tree with subcomponents of TestComponent.
+	err = node.syncSubComponents()
 	s.False(node.needsPointerResolution)
+	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
-	return node
+	return node // maybe tc too
 }
 
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
@@ -3255,8 +3267,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
-	// Immediate pure tasks run inline without changing data bytes, so all writes are skipped.
-	s.Empty(mutations.UpdatedNodes)
+	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
@@ -4048,4 +4059,362 @@ func (e protoMatcher) String() string {
 
 func protoEq(x proto.Message) gomock.Matcher {
 	return protoMatcher{x: x}
+}
+
+// TestCloseTransaction_AppliesPendingComponentMetadata verifies that
+// SetRequestLinks/SetUserMetadata writes are written onto the root component's
+// ChasmComponentAttributes during CloseTransaction, that the touched node is
+// added to NodesMutation.UpdatedNodes, and that its LastUpdateVersionedTransition
+// is bumped.
+func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
+	const requestID = "req-1"
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	md := &sdkpb.UserMetadata{Summary: &commonpb.Payload{Data: []byte("summary")}}
+
+	root := s.testComponentTree() // sets HandleNextTransitionCount = 1, HandleGetCurrentVersion = 1
+
+	// Initial create transaction must close cleanly before we exercise the metadata path.
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Bump the transition count so we can verify LastUpdateVersionedTransition was updated.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	s.NoError(ctx.SetRequestLinks(c, requestID, []*commonpb.Link{link}))
+	s.NoError(ctx.SetUserMetadata(c, md))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	rootSerialized, ok := mutation.UpdatedNodes[""]
+	s.True(ok, "root node must appear in UpdatedNodes after staging metadata")
+	attrs := rootSerialized.GetMetadata().GetComponentAttributes()
+	s.NotNil(attrs)
+	s.Equal([]*commonpb.Link{link}, attrs.GetRequests()[requestID].GetLinks())
+	s.Equal(md.GetSummary().GetData(), attrs.GetUserMetadata().GetSummary().GetData())
+	s.Equal(int64(2), rootSerialized.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
+
+	// Pending maps must be cleared after CloseTransaction so a subsequent transaction
+	// does not re-apply the same writes.
+	s.Empty(root.pendingRequestLinks)
+	s.Empty(root.pendingUserMetadata)
+}
+
+// TestSetComponentMetadata_MarksTreeDirty verifies that staging a
+// SetRequestLinks or SetUserMetadata write flips IsDirty()/IsStateDirty()
+// before CloseTransaction runs.
+func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.False(root.IsDirty(), "tree must be clean after the initial close")
+	s.False(root.IsStateDirty())
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}}))
+	s.True(root.IsStateDirty(), "staging SetRequestLinks must mark the tree dirty")
+	s.True(root.IsDirty())
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+	s.False(root.IsStateDirty(), "CloseTransaction must clear the dirty flag")
+
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("summary")},
+	}))
+	s.True(root.IsStateDirty(), "staging SetUserMetadata must mark the tree dirty")
+	s.True(root.IsDirty())
+}
+
+// TestCloseTransaction_DropsOrphanedComponentMetadata verifies that pending
+// SetRequestLinks/SetUserMetadata writes against a component value that is
+// not registered in the tree are silently dropped during CloseTransaction
+// (rather than panicking or surfacing an error), and that the pending maps
+// are cleared afterwards.
+func (s *nodeSuite) TestCloseTransaction_DropsOrphanedComponentMetadata() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+
+	// Stage writes against a component value that was never set on the tree.
+	orphan := &TestComponent{}
+	s.NoError(ctx.SetRequestLinks(orphan, "req-id", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}}))
+	s.NoError(ctx.SetUserMetadata(orphan, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("orphan")},
+	}))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.NotContains(mutation.UpdatedNodes, "", "root must not be updated by orphaned writes")
+	s.Empty(root.pendingRequestLinks)
+	s.Empty(root.pendingUserMetadata)
+}
+
+// TestSetComponentRequestLinks_RejectsEmptyRequestID verifies the framework
+// hard-rejects empty requestIDs so two callers cannot silently collide on the
+// empty-string key.
+func (s *nodeSuite) TestSetComponentRequestLinks_RejectsEmptyRequestID() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	err = ctx.SetRequestLinks(c, "", []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+		},
+	}})
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+
+	_, err = ctx.RequestLinks(c, "")
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+// TestSetRequestLinks_MultipleRequestsCoexist verifies that two distinct
+// request IDs on the same component land as separate entries in
+// ChasmComponentAttributes.requests.
+func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+	s.NoError(ctx.SetRequestLinks(c, "req-a", []*commonpb.Link{linkA}))
+	s.NoError(ctx.SetRequestLinks(c, "req-b", []*commonpb.Link{linkB}))
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(attrs.GetRequests(), 2)
+	s.Equal([]*commonpb.Link{linkA}, attrs.GetRequests()["req-a"].GetLinks())
+	s.Equal([]*commonpb.Link{linkB}, attrs.GetRequests()["req-b"].GetLinks())
+}
+
+// TestSetRequestLinks_ReplacesEntryForSameRequestID verifies that two
+// SetRequestLinks calls with the same requestID — within or across
+// transactions — leave only the second value in attrs.Requests.
+func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "a", RunId: "run"},
+	}}
+	linkB := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "b", RunId: "run"},
+	}}
+
+	// Within a single transaction: second SetRequestLinks for the same requestID
+	// must overwrite the first.
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkB}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{linkB},
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
+		"second SetRequestLinks within a transaction must overwrite the first",
+	)
+
+	// Across transactions: a later write for the same requestID must replace the
+	// previously persisted entry.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{linkA},
+		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
+		"a follow-up transaction's SetRequestLinks must replace the persisted entry",
+	)
+}
+
+// TestSetRequestLinks_RemovesEntryWhenEmptyLinks verifies that passing nil/empty
+// links for a previously-stored requestID removes that entry from
+// ChasmComponentAttributes.requests.
+func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+
+	// First persist a link under "req".
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Contains(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests(), "req")
+
+	// Then clear it with an empty links slice.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", nil))
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.NotContains(attrs.GetRequests(), "req", "empty links must remove the entry for requestID")
+}
+
+// TestRequestLinks_PrefersPendingOverPersisted verifies that an in-transaction
+// SetRequestLinks shadow-reads via RequestLinks / Links return the staged
+// (pending) value rather than the previously-persisted entry, so callers
+// reading-then-writing within a single transaction never observe stale state.
+func (s *nodeSuite) TestRequestLinks_PrefersPendingOverPersisted() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	oldLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "old", RunId: "run"},
+	}}
+	newLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "new", RunId: "run"},
+	}}
+
+	// Persist [oldLink] under "req".
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{oldLink}))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Open a new transaction, stage a replace with [newLink] under the same
+	// requestID, then read via both APIs before close.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{newLink}))
+
+	got, err := ctx.RequestLinks(c, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{newLink}, got, "RequestLinks must prefer pending over persisted for the same requestID")
+	s.Equal([]*commonpb.Link{newLink}, ctx.Links(c),
+		"Links must prefer pending and not return old+new duplicates for the same requestID")
+}
+
+// TestCloseTransaction_PersistsAcrossTransactions verifies the realistic
+// production flow: write metadata in transaction A, commit, open transaction
+// B, read it back through the framework APIs.
+func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
+		WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "wf", RunId: "run"},
+	}}
+	md := &sdkpb.UserMetadata{Summary: &commonpb.Payload{Data: []byte("summary")}}
+
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
+	s.NoError(ctx.SetUserMetadata(c, md))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// New transaction: framework getters must surface the persisted attrs.
+	nextTC = 3
+	ctx2 := NewMutableContext(context.Background(), root)
+	c2, err := root.Component(ctx2, ComponentRef{})
+	s.NoError(err)
+
+	got, err := ctx2.RequestLinks(c2, "req")
+	s.NoError(err)
+	s.Equal([]*commonpb.Link{link}, got)
+	s.Equal([]*commonpb.Link{link}, ctx2.Links(c2))
+	s.ProtoEqual(md, ctx2.UserMetadata(c2))
+}
+
+// TestSetUserMetadata_NilClearsPersistedValue verifies that SetUserMetadata
+// called with nil clears any previously-persisted user metadata on the
+// component (rather than being treated as a no-op).
+func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Persist user metadata.
+	nextTC := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTC }
+	ctx := NewMutableContext(context.Background(), root)
+	c, err := root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{Data: []byte("first")},
+	}))
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Clear with nil.
+	nextTC = 3
+	ctx = NewMutableContext(context.Background(), root)
+	c, err = root.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	s.NoError(ctx.SetUserMetadata(c, nil))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
 }

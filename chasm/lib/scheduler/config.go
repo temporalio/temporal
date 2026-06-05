@@ -3,6 +3,7 @@ package scheduler
 import (
 	"time"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
@@ -27,6 +28,30 @@ type (
 		RetryPolicy        func() backoff.RetryPolicy
 	}
 )
+
+// tweakablesCtxKey keys the namespace-filtered Tweakables accessor that scheduler
+// components read via the CHASM context (registered in Library.Components).
+type tweakablesCtxKeyType struct{}
+
+var tweakablesCtxKey = tweakablesCtxKeyType{}
+
+// tweakablesFromContext returns the scheduler Tweakables for the context's namespace,
+// falling back to DefaultTweakables when no config is registered.
+func tweakablesFromContext(ctx chasm.Context) Tweakables {
+	if fn, ok := ctx.Value(tweakablesCtxKey).(dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]); ok && fn != nil {
+		return fn(ctx.NamespaceEntry().Name().String())
+	}
+	return DefaultTweakables
+}
+
+// contextValues builds the CHASM context values exposed to scheduler components.
+func (c *Config) contextValues() map[any]any {
+	var tweakables dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+	if c != nil {
+		tweakables = c.Tweakables
+	}
+	return map[any]any{tweakablesCtxKey: tweakables}
+}
 
 var (
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(

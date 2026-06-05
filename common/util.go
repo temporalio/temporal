@@ -319,6 +319,8 @@ func IsServiceClientTransientError(err error) bool {
 		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 	case *serviceerrors.ShardOwnershipLost:
 		return true
+	case *serviceerrors.StalePartitionCounts:
+		return true
 	default:
 		return false
 	}

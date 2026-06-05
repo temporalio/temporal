@@ -128,3 +128,21 @@ type PartitionScaleAllowedDrift struct {
 	Delta int32
 	Ratio float32
 }
+
+type PartitionScaleManagerSettings struct {
+	// MaxRate limits scale change frequency.
+	MaxRate float32
+	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
+	// reload.)
+	BatchSize int32
+	// BackgroundInterval is the interval for background work:
+	// - send signals to the scaler even if not a full batch of tasks has been received yet
+	// - check drained partition state
+	BackgroundInterval time.Duration
+	// DrainBufferTime is how long to wait until after scaling down before we can consider
+	// draining queues. It's needed because there's a tiny window where tasks may be written
+	// after a scale down, since draining state is only checked at the start of an RPC. This
+	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
+	// that query/nexus tasks will be processed without interruption even after scale down.
+	DrainBufferTime time.Duration
+}

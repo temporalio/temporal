@@ -112,9 +112,12 @@ type (
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
 		// without modifying state).
-		specBuilder          *SpecBuilder
-		cspec                *CompiledSpec
-		enableCHASMMigration bool
+		specBuilder *SpecBuilder
+		cspec       *CompiledSpec
+		// enableCHASMMigration and migrateWithRunningWorkflows are re-evaluated
+		// every iteration inside the "tweakables" MutableSideEffect.
+		enableCHASMMigration        func() bool
+		migrateWithRunningWorkflows func() bool
 
 		tweakables TweakablePolicies
 
@@ -159,7 +162,8 @@ type (
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
-		EnableCHASMMigration bool // Whether to automatically migrate this schedule to CHASM (V2)
+		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
+		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
 
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
@@ -224,10 +228,11 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
+	disabled := func() bool { return false }
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), disabled, disabled)
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -237,8 +242,9 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
 		}),
-		specBuilder:          specBuilder,
-		enableCHASMMigration: enableCHASMMigration,
+		specBuilder:                 specBuilder,
+		enableCHASMMigration:        enableCHASMMigration,
+		migrateWithRunningWorkflows: migrateWithRunningWorkflows,
 	}
 	return scheduler.run()
 }
@@ -322,7 +328,8 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		if s.tweakables.EnableCHASMMigration {
+		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
+			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
 			s.State.PendingMigration = true
 		}
 		if s.State.PendingMigration {
@@ -1283,10 +1290,11 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	enableCHASMMigration := s.enableCHASMMigration
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		p.EnableCHASMMigration = enableCHASMMigration
+		// Re-evaluates migration dynamic config each iteration.
+		p.EnableCHASMMigration = s.enableCHASMMigration()
+		p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }

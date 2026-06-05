@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	batchpb "go.temporal.io/api/batch/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -27,10 +28,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -5909,6 +5912,286 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 		})
 
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+}
+
+// Flow:
+//  1. Start a pinned workflow on v1 and fail a normal WFT before any target change.
+//  2. Move matching's current version to v2, poll a hidden transient WFT, and fail it after it notifies v2.
+//  3. Verify the notification is still outstanding in mutable state, with no durable started-event flag in history.
+//  4. Roll matching back to v1 and assert the next WFT re-fires the outstanding target-version notification.
+func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+
+	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
+	defer cancel()
+
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	setCurrentInMatching := func(tv *testvars.TestVars, revisionNumber int64, previous ...*testvars.TestVars) {
+		routingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            revisionNumber,
+		}
+		upsertVersions := map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+		}
+		for _, prev := range previous {
+			upsertVersions[prev.DeploymentVersion().GetBuildId()] = &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			}
+		}
+		s.syncTaskQueueDeploymentDataWithRoutingConfig(env, tv, routingConfig, upsertVersions, []string{}, tqTypeWf)
+		s.waitForDeploymentDataPropagation(env, tv, versionStatusCurrent, false, tqTypeWf)
+	}
+
+	lastStartedEvent := func(events []*historypb.HistoryEvent) *historypb.HistoryEvent {
+		var lastStarted *historypb.HistoryEvent
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				lastStarted = event
+			}
+		}
+		return lastStarted
+	}
+
+	assertNoPersistedTargetChange := func(execution *commonpb.WorkflowExecution) {
+		for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+					"persisted parent history should not expose targetWorkerDeploymentVersionChanged=true")
+			}
+		}
+	}
+
+	setCurrentInMatching(tv1, 1)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	normalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(normalTask.GetTaskToken())
+	normalStarted := lastStartedEvent(normalTask.GetHistory().GetEvents())
+	s.NotNil(normalStarted)
+	s.False(normalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged())
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: normalTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	setCurrentInMatching(tv2, 2, tv1)
+
+	hiddenTransientTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(hiddenTransientTask.GetTaskToken())
+	s.verifyTransientTask(hiddenTransientTask)
+	hiddenStarted := lastStartedEvent(hiddenTransientTask.GetHistory().GetEvents())
+	s.NotNil(hiddenStarted)
+	s.True(hiddenStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"transient WFT should notify the worker about v2")
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: hiddenTransientTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	ms, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	lastNotified := ms.GetDatabaseMutableState().GetExecutionInfo().GetLastNotifiedTargetVersion()
+	s.NotNil(lastNotified, "failed transient notification should remain as an outstanding notification")
+	s.Equal(tv2.BuildID(), lastNotified.GetDeploymentVersion().GetBuildId())
+	s.Equal(int64(2), lastNotified.GetRevisionNumber())
+	assertNoPersistedTargetChange(execution)
+
+	s.rollbackTaskQueueToVersion(env, tv1)
+
+	finalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(finalTask.GetTaskToken())
+	finalStarted := lastStartedEvent(finalTask.GetHistory().GetEvents())
+	s.NotNil(finalStarted)
+	s.True(finalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"outstanding notification should re-fire even when matching is rolled back to v1")
+}
+
+// Scenario: a pinned v1 workflow auto-upgrades to v2 via Continue-As-New, v1 is
+// made current again, then reset-by-build-ID resets the workflow before v2 usage
+// so the reset run resumes on v1.
+func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
+	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
+
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	revision := int64(1)
+	setCurrentVersion := func(current *testvars.TestVars, draining ...*testvars.TestVars) {
+		versions := map[string]*deploymentspb.WorkerDeploymentVersionData{
+			current.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+		}
+		for _, version := range draining {
+			versions[version.DeploymentVersion().GetBuildId()] = &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			}
+		}
+		s.updateTaskQueueDeploymentDataWithRoutingConfig(env, current, &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(current.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            revision,
+		}, versions, []string{}, tqTypeWf)
+		revision++
+	}
+
+	setCurrentVersion(tv1)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	setCurrentVersion(tv2, tv1)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType:              tv1.WorkflowType(),
+								TaskQueue:                 tv1.TaskQueue(),
+								Input:                     tv1.Any().Payloads(),
+								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	var canRunID string
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			canRunID = task.WorkflowExecution.GetRunId()
+			s.NotEqual(runID, canRunID)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv2, vbPinned, tv2.Deployment(), nil, nil)
+
+	query := fmt.Sprintf(
+		"WorkflowId = '%s' AND ExecutionStatus = 'Running' AND TemporalUsedWorkerDeploymentVersions = '%s'",
+		tv1.WorkflowID(),
+		tv2.DeploymentVersionStringV32(),
+	)
+	s.Await(func(s *Versioning3Suite) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	setCurrentVersion(tv1, tv2)
+
+	jobID := tv1.Any().String()
+	_, err := env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "reset by build ID after rollback",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_BuildId{
+						BuildId: tv2.BuildID(),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Await(func(s *Versioning3Suite) {
+		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+	}, 20*time.Second, 500*time.Millisecond)
+
+	var resetRunID string
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			resetRunID = task.WorkflowExecution.GetRunId()
+			s.NotEqual(runID, resetRunID)
+			s.NotEqual(canRunID, resetRunID)
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: tv1.WorkflowID(),
+			RunId:      canRunID,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
 }
 
 // TestOverride_SuppressesTargetVersionChangedSignal tests that a versioning override

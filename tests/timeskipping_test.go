@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -66,8 +67,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
-	inputBound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-		MaxSkippedDuration: durationpb.New(time.Hour),
+	inputBound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+		MaxElapsedDuration: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
@@ -131,12 +132,12 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	maxSkippedDuration := time.Hour
+	maxElapsedDuration := time.Hour
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: durationpb.New(maxSkippedDuration),
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+			MaxElapsedDuration: durationpb.New(maxElapsedDuration),
 		},
 	}
 
@@ -181,8 +182,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 // TestTimeSkipping_UpdateWorkflowOptions_DCEnabled exercises the full UpdateWorkflowExecutionOptions
 // lifecycle for TimeSkippingConfig:
 //  1. Start workflow with no time-skipping — assert mutable state has no config.
-//  2. First update: enable with MaxSkippedDuration bound — check MS and event 1 attributes.
-//  3. Second update: change bound to MaxElapsedDuration, add DisablePropagation — check MS and event 2 attributes.
+//  2. First update: enable with MaxElapsedDuration bound — check MS and event 1 attributes.
+//  3. Second update: change the MaxElapsedDuration value — check MS and event 2 attributes.
 //  4. Third update: disable (Enabled=false) — check MS and event 3 attributes.
 //  5. Assert exactly 3 WorkflowExecutionOptionsUpdated events appear in history.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled() {
@@ -235,7 +236,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// First update: enable with a bound.
 	config1 := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
 	}
 	updateOptions(config1)
 
@@ -245,7 +246,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	s.Len(events, 1)
 	s.True(proto.Equal(config1, events[0].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
 
-	// Second update: change bound type, add DisablePropagation.
+	// Second update: change the bound duration.
 	config2 := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
@@ -313,7 +314,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
 	}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
@@ -496,6 +497,90 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
+}
+
+// TestTimeSkipping_ActivityRetryBackoff verifies that when the only in-flight work
+// is an activity waiting out a retry backoff, time-skipping fires: it advances virtual
+// time to the activity's next-attempt time and re-stamps the activity retry timer to
+// near-now wall, so the retry is dispatched promptly instead of after the full backoff.
+//
+// Sequence:
+//
+//	WT1 → schedule an activity with a 1h retry InitialInterval (MaximumAttempts=2)
+//	AT1 → fail attempt 1; the server schedules the retry 1h out (virtual). The workflow
+//	      is now idle except for the backoff activity, so the close transaction skips ~1h
+//	      and re-stamps the ActivityRetryTimerTask to ~now wall.
+//	AT2 → retry is dispatchable promptly (well under 1h wall); complete it.
+//	WT2 → activity completed → complete the workflow.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	wallStart := time.Now()
+	// Run timeout must exceed the (virtual) backoff so the skipped-forward run-timeout
+	// task doesn't fire the workflow before the activity retries.
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 4*time.Hour)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: schedule an activity that backs off 1h between attempts. ScheduleToClose
+	// must exceed the backoff so the retry isn't cut off by the schedule-to-close deadline.
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(3 * time.Hour),
+							StartToCloseTimeout:    durationpb.New(30 * time.Second),
+							RetryPolicy: &commonpb.RetryPolicy{
+								InitialInterval:    durationpb.New(time.Hour),
+								BackoffCoefficient: 1.0,
+								MaximumAttempts:    2,
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// AT1: fail the activity, triggering a 1h retry backoff and (because the workflow
+	// is otherwise idle) a time-skipping transition on the close transaction.
+	_, err = poller.PollAndHandleActivityTask(tv, func(_ *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return nil, errors.New("fail attempt 1")
+	})
+	s.NoError(err)
+
+	// AT2: the retry is dispatchable promptly thanks to time-skipping; complete it.
+	_, err = poller.PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+
+	// WT2: activity completed → complete the workflow.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+	wallElapsed := time.Since(wallStart)
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED),
+		"activity must complete on its retry attempt")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"time-skipping transitioned event expected (the activity retry backoff was skipped)")
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
+
+	// Wall elapsed must be well under the 1h backoff — the retry was skipped, not waited out.
+	s.Less(wallElapsed, 3*time.Second,
+		"test wall elapsed = %v; the activity retry should be dispatched promptly after skipping the 1h backoff",
+		wallElapsed)
 }
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {

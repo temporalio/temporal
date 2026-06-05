@@ -945,6 +945,7 @@ var (
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                   = NewCounterDef("command")
@@ -1249,6 +1250,9 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
+	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
@@ -1274,6 +1278,14 @@ var (
 	WorkerRegistryActivitySlotsUsed = NewDimensionlessHistogramDef(
 		"worker_registry_activity_slots_used",
 		WithDescription("Number of activity slots in use per worker."),
+	)
+	WorkerRegistryWorkerCount = NewGaugeDef(
+		"worker_registry_worker_count",
+		WithDescription("Number of workers per namespace."),
+	)
+	WorkerRegistryWorkersPerProcess = NewDimensionlessHistogramDef(
+		"worker_registry_workers_per_process",
+		WithDescription("Number of workers per SDK process."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.

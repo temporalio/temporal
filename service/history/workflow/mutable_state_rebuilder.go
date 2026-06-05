@@ -237,7 +237,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetWorkerVersion(),
 				attributes.GetBuildIdRedirectCounter(),
 				attributes.GetSuggestContinueAsNewReasons(),
-				attributes.GetTargetWorkerDeploymentVersionChanged(),
 			)
 			if err != nil {
 				return nil, err

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -382,10 +383,12 @@ func TestGetNexusCompletion(t *testing.T) {
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.Nil(t, completion.Error)
-				require.Equal(t, &commonpb.Payload{
+				result, ok := completion.Result.(*commonpb.Payload)
+				require.True(t, ok)
+				protorequire.ProtoEqual(t, &commonpb.Payload{
 					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
 					Data:     []byte("3"),
-				}, completion.Result)
+				}, result)
 				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
