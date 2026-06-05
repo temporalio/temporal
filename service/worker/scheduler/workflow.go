@@ -328,13 +328,11 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		if s.tweakables.EnableCHASMMigration {
+		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
+			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
 			s.State.PendingMigration = true
 		}
-		if s.State.PendingMigration &&
-			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) &&
-			// re-check that EnableCHASMMigration is still true for the namespace's config
-			s.tweakables.EnableCHASMMigration {
+		if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
 				s.logger.Info("schedule migration to CHASM succeeded",

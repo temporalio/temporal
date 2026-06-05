@@ -1328,11 +1328,11 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 }
 
 // TestScheduleMigrationDeferredWithRunningWorkflow verifies that
-// EnableCHASMSchedulerMigrationWithRunningWorkflows gates migration of a V1
-// schedule that has a running workflow. When the gate is off (default),
-// migration is deferred while a workflow is running (the V1 scheduler keeps
+// EnableCHASMSchedulerMigrationWithRunningWorkflows gates automatic migration of a
+// V1 schedule that has a running workflow. When the gate is off (default),
+// auto-migration is deferred while a workflow is running (the scheduler keeps
 // running rather than migrating and completing); when the gate is turned on,
-// migration proceeds even with a running workflow.
+// auto-migration proceeds even with a running workflow.
 func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 	// Create the env without EnableChasm so that CreateSchedule produces a V1
 	// (workflow-backed) schedule rather than a CHASM sentinel.
@@ -1361,10 +1361,15 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
 
-	// Create a V1 schedule with an immediate trigger so it starts a workflow.
+	// Create a V1 schedule with a short interval, so the scheduler iterates often
+	// and re-evaluates the auto-migration decision, and an immediate trigger so it
+	// starts a workflow. SKIP keeps a single workflow running across intervals.
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(2 * time.Second)}},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
@@ -1428,29 +1433,13 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	}
 
-	// Request migration while the action workflow is still running. With the gate
-	// off, the V1 scheduler must defer: it does not migrate (stays running).
-	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
-		Namespace:  nsName,
-		ScheduleId: sid,
-		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-	})
-	require.NoError(t, err)
+	// With the gate off, auto-migration is deferred: the scheduler re-evaluates the
+	// decision every interval but keeps running rather than migrating.
 	require.Never(t, v1Migrated, 5*time.Second, 500*time.Millisecond,
 		"migration must be deferred while the schedule has a running workflow and the gate is off")
 
-	// Turn the gate on; migration now proceeds even with the workflow running.
+	// Turn the gate on; auto-migration now proceeds even with the workflow running.
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
-	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
-		Namespace:  nsName,
-		ScheduleId: sid,
-		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-	})
-	require.NoError(t, err)
 	require.Eventually(t, v1Migrated, 15*time.Second, 500*time.Millisecond,
 		"migration should proceed once the gate allows running workflows")
 
