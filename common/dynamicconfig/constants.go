@@ -3010,6 +3010,12 @@ instead of the previous HSM backed implementation.`,
 		`Controls whether signal with start from workflow is enabled.`,
 	)
 
+	EnableGetWorkflowExecutionResult = NewNamespaceBoolSetting(
+		"history.enableGetWorkflowExecutionResult",
+		false,
+		`Controls whether GetWorkflowExecutionResult is enabled.`,
+	)
+
 	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(
 		"history.enableCHASMSignalBacklinks",
 		false,

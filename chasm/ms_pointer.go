@@ -8,6 +8,12 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
+// IsWorkflowExecutionRunning returns true if the workflow execution is still running.
+func (m MSPointer) IsWorkflowExecutionRunning() bool {
+	state := m.backend.GetExecutionState()
+	return state.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+}
+
 // MSPointer is a special CHASM type which components can use to access their Node's underlying backend (i.e. mutable
 // state). It is used to expose methods needed from the mutable state without polluting the chasm.Context interface.
 // When deserializing components with fields of this type, the CHASM engine will set the value to its NodeBackend.

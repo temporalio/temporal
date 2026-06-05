@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/applicationservice/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -143,6 +144,19 @@ func (v *RequestValidator) ValidateSearchAttributes(searchAttributes *commonpb.S
 		return err
 	}
 	return v.saValidator.ValidateSize(searchAttributes, namespaceName)
+}
+
+func (v *RequestValidator) ValidateGetWorkflowExecutionResultRequest(request *applicationservice.GetWorkflowExecutionResultRequest) error {
+	if request == nil {
+		return serviceerror.NewInvalidArgument("Request is empty")
+	}
+	if request.GetNamespace() == "" {
+		return serviceerror.NewInvalidArgument("Namespace is not set on request")
+	}
+	if request.GetExecution().GetWorkflowId() == "" {
+		return serviceerror.NewInvalidArgument("WorkflowId is not set on request")
+	}
+	return nil
 }
 
 func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservice.SignalWithStartWorkflowExecutionRequest) error {
