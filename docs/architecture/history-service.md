@@ -307,7 +307,7 @@ Call sites:
 
 - Handling an RPC from the User Application, for example [`SignalWorkflow`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api/signalworkflow/api.go#L54).
 
-- Handling a `WorkflowTaskCompleted` RPC from the Worker in [`handleWorkflowTaskCompleted`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/workflow_task_handler_callbacks.go#L690)
+- Handling a `WorkflowTaskCompleted` RPC from the Worker in [`Invoke`](https://github.com/temporalio/temporal/blob/28dd23a0a1a6bb0906c98075220e157d2e983489/service/history/api/respondworkflowtaskcompleted/api.go#L623)
 
 - Timer task processor: [`executeUserTimerTimeoutTask`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/timer_queue_active_task_executor.go#L136) handles a `workflow.sleep()` timer set in user code by appending `TimerFired`, and `WorkflowTaskScheduled` events to Workflow History, and creating a Transfer Task for the Workflow Task.
 
