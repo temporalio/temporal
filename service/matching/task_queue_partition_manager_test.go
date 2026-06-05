@@ -14,6 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -30,7 +31,6 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1818,26 +1818,29 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
+func newTestQueryWorkflowRequest(forwardInfo *taskqueuespb.TaskForwardInfo) *matchingservice.QueryWorkflowRequest {
+	return &matchingservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID,
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
+		},
+		ForwardInfo: forwardInfo,
+	}
+}
+
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_FiresWhenNoPollers() {
 	hook := &capturingTaskMatchHook{}
 	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
 	defer cleanup()
 
-	// No pollers registered — DispatchQueryTask should fire processTaskAddHooks
-	// with SyncMatchOutcomeNotMatched before blocking on a poller.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", &matchingservice.QueryWorkflowRequest{
-			NamespaceId: namespaceID,
-			TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			QueryRequest: &workflowservice.QueryWorkflowRequest{
-				Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
-			},
-		})
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
 	}()
 
 	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
@@ -1846,7 +1849,119 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_FiresWhenNoPo
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
 
-	<-done
+	cancel()
+	s.Require().Eventually(func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQueueVersion() {
+	const (
+		deploymentName = "deployment"
+		currentBuildID = "current"
+		pinnedBuildID  = "pinned"
+	)
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									pinnedBuildID:  {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	req := newTestQueryWorkflowRequest(nil)
+	req.VersionDirective = &taskqueuespb.TaskVersionDirective{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        pinnedBuildID,
+		},
+		RevisionNumber: 1,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
+	}()
+
+	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.ProtoEqual(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        pinnedBuildID,
+	}, calls[0].DeploymentVersion)
+
+	cancel()
+	s.Require().Eventually(func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireWithRecentPoller() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	pm.defaultQueue().UpdatePollerInfo("poller-1", &pollMetadata{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
+	s.Require().Empty(hook.getCalls())
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireForForwardedQuery() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Forwarded queries must not fire the hook — the originating partition already did.
+	// Firing on every hop causes duplicate Lambda invocations since each Matching node
+	// has independent per-node batching state.
+	forwardInfo := &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"}
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(forwardInfo))
+	s.Require().Empty(hook.getCalls())
 }
 
 type mockUserDataManager struct {

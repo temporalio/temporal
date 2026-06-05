@@ -945,7 +945,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
-	_, syncMatchQueue, _, _, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx,
+	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
 		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
@@ -961,11 +961,13 @@ reredirectTask:
 		return nil, err
 	}
 
-	// If no pollers have been seen recently and this is not a forwarded query, fire the
-	// task hook so WCI can scale up before we block waiting for a poller.
+	// Fire the task hook so WCI can scale up before we block waiting for a poller.
+	// Only fire for non-forwarded queries: forwarded queries already had the hook fired
+	// on the originating partition.
 	if request.ForwardInfo == nil &&
 		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.QueryPollerUnavailableWindow())) {
-		pm.processTaskAddHooks(ctx, targetVersion, syncMatchNoPoller)
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
 	}
 
 	dbq := pm.defaultQueue()
