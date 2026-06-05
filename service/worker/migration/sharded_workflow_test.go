@@ -125,6 +125,9 @@ func registerShardedScaffoldingWithSeed(
 	seed func(context.Context, TaskQueueUserDataReplicationParamsWithNamespace) error,
 ) {
 	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: "GetMetadata"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
+		return &DescribeTargetClusterResponse{ShardCount: shardCount}, nil
+	}, activity.RegisterOptions{Name: "DescribeTargetCluster"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
 		return &countWorkflowResponse{WorkflowCount: 0}, nil
 	}, activity.RegisterOptions{Name: "CountWorkflow"})
@@ -163,9 +166,8 @@ func TestSharded_HappyPath_SingleCycle(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 4,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted(), "workflow should complete")
@@ -213,10 +215,9 @@ func TestSharded_ResumeShards_Packed(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 8,
-		ResumeShards:            resumeShards,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+		ResumeShards:      resumeShards,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -299,10 +300,9 @@ func TestSharded_ReleaseShards_FreesShardForReuse(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 2,
-		ConcurrentBatchCount:    2,
+		Namespace:            "test-ns",
+		TargetClusterName:    "remote_cluster",
+		ConcurrentBatchCount: 2,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -329,9 +329,8 @@ func TestSharded_ShardNoProgress_FailsWorkflow(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 2,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -396,11 +395,10 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 10,
-		BatchSize:               100,
-		MaxExecsPerShard:        10,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+		BatchSize:         100,
+		MaxExecsPerShard:  10,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -465,9 +463,8 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 4,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -516,10 +513,9 @@ func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 4,
-		DisableVerification:     true,
+		Namespace:           "test-ns",
+		TargetClusterName:   "remote_cluster",
+		DisableVerification: true,
 	})
 
 	require.True(t, env.IsWorkflowCompleted(), "workflow should complete")
@@ -534,9 +530,8 @@ func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
 }
 
 // TestSharded_InvalidInput: validateShardedForceReplicationParams
-// rejects an empty Namespace and a missing TargetClusterEndpoint /
-// TargetClusterName when verification is enabled. Mirrors the existing
-// force-replication TestInvalidInput.
+// rejects an empty Namespace and a missing TargetClusterName. Mirrors
+// the existing force-replication TestInvalidInput.
 func TestSharded_InvalidInput(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -547,7 +542,7 @@ func TestSharded_InvalidInput(t *testing.T) {
 			params: ShardedForceReplicationParams{},
 		},
 		{
-			name: "missing target with verification on",
+			name: "missing target cluster name",
 			params: ShardedForceReplicationParams{
 				Namespace: "test-ns",
 			},
@@ -589,9 +584,8 @@ func TestSharded_ListWorkflowsError(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 2,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -618,9 +612,8 @@ func TestSharded_ReplicateBatchRetryableError(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 2,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -654,9 +647,8 @@ func TestSharded_TaskQueueReplicationFailure(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
-		Namespace:               "test-ns",
-		TargetClusterName:       "remote_cluster",
-		TargetClusterShardCount: 2,
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

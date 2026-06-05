@@ -68,9 +68,9 @@ const (
 	defaultPerBatchGenerateRPS = 30.0
 
 	// defaultConcurrentBatchCap is the ceiling applied to the derived
-	// default of TargetClusterShardCount/4. Keeps the in-flight batch
-	// count safely inside per-worker concurrent-activity budgets and
-	// bounds the cluster blast radius of a single force-rep run.
+	// default of targetShardCount/4. Keeps the in-flight batch count
+	// safely inside per-worker concurrent-activity budgets and bounds
+	// the cluster blast radius of a single force-rep run.
 	defaultConcurrentBatchCap = 500
 )
 
@@ -215,15 +215,13 @@ func (p BatchPayload) merge(src BatchPayload) {
 // bottom is mutated each cycle.
 type ShardedForceReplicationParams struct {
 	// ---- Configuration ----
-	Namespace               string
-	Query                   string
-	BatchSize               int
-	MaxExecsPerShard        int
-	ListWorkflowsPageSize   int
-	TargetClusterEndpoint   string
-	TargetClusterName       string
-	TargetClusterShardCount int32
-	DisableVerification     bool
+	Namespace             string
+	Query                 string
+	BatchSize             int
+	MaxExecsPerShard      int
+	ListWorkflowsPageSize int
+	TargetClusterName     string
+	DisableVerification   bool
 
 	ShardNoProgress time.Duration
 	DrainGrace      time.Duration
@@ -238,11 +236,11 @@ type ShardedForceReplicationParams struct {
 
 	// ConcurrentBatchCount is the absolute ceiling on in-flight
 	// ReplicateBatch activities. Per-shard exclusivity already bounds
-	// concurrency to TargetClusterShardCount, but at large cluster
-	// sizes that's well past the worker's concurrent-activity budget.
-	// This cap keeps the workflow inside that budget and limits the
-	// cluster blast radius of a single force-rep run. Defaults to
-	// min(TargetClusterShardCount/4, defaultConcurrentBatchCap).
+	// concurrency to the target shard count, but at large cluster sizes
+	// that's well past the worker's concurrent-activity budget. This
+	// cap keeps the workflow inside that budget and limits the cluster
+	// blast radius of a single force-rep run. Defaults to
+	// min(targetShardCount/4, defaultConcurrentBatchCap).
 	ConcurrentBatchCount int
 
 	// EstimationMultiplier sizes the QPSQueue's initial slice capacity
@@ -314,8 +312,7 @@ type shardedBatchReq struct {
 	NamespaceID string
 	Executions  BatchPayload
 
-	TargetClusterEndpoint string
-	TargetClusterName     string
+	TargetClusterName string
 
 	Resume              bool
 	DisableVerification bool

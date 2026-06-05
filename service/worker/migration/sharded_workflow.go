@@ -109,8 +109,8 @@ func validateShardedForceReplicationParams(params *ShardedForceReplicationParams
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
-	if !params.DisableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
-		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
+	if len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterName is required", "InvalidArgument", nil)
 	}
 	return nil
 }
@@ -173,6 +173,12 @@ type shardedWorkflowState struct {
 	params *ShardedForceReplicationParams
 
 	namespaceID string
+
+	// targetShardCount is the target cluster's history shard count,
+	// fetched once via DescribeTargetCluster at state construction.
+	// Drives the per-exec shard hash (so packing groups execs by their
+	// destination shard) and the default ConcurrentBatchCount.
+	targetShardCount int32
 
 	// buckets accumulate execs that have been listed but not yet
 	// dispatched. Nested by destination shard then businessID, so a
@@ -258,8 +264,11 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 	if err := workflow.ExecuteActivity(metaCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
 		return nil, err
 	}
-	if params.TargetClusterShardCount <= 0 {
-		params.TargetClusterShardCount = md.ShardCount
+	var targetMd DescribeTargetClusterResponse
+	if err := workflow.ExecuteActivity(metaCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
+		TargetClusterName: params.TargetClusterName,
+	}).Get(ctx, &targetMd); err != nil {
+		return nil, err
 	}
 	if params.BatchSize <= 0 {
 		params.BatchSize = defaultBatchSize
@@ -283,7 +292,7 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 		params.PerBatchGenerateRPS = defaultPerBatchGenerateRPS
 	}
 	if params.ConcurrentBatchCount <= 0 {
-		params.ConcurrentBatchCount = defaultConcurrentBatchCount(params.TargetClusterShardCount)
+		params.ConcurrentBatchCount = defaultConcurrentBatchCount(targetMd.ShardCount)
 	}
 	if params.EstimationMultiplier <= 0 {
 		params.EstimationMultiplier = 2
@@ -297,13 +306,14 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 		params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 	}
 	s := &shardedWorkflowState{
-		params:        params,
-		namespaceID:   md.NamespaceID,
-		buckets:       BatchPayload{},
-		bucketCounts:  map[int32]int{},
-		shardInFlight: map[int32]bool{},
-		heldByBatch:   map[int64]map[int32]bool{},
-		batchExecs:    map[int64]BatchPayload{},
+		params:           params,
+		namespaceID:      md.NamespaceID,
+		targetShardCount: targetMd.ShardCount,
+		buckets:          BatchPayload{},
+		bucketCounts:     map[int32]int{},
+		shardInFlight:    map[int32]bool{},
+		heldByBatch:      map[int64]map[int32]bool{},
+		batchExecs:       map[int64]BatchPayload{},
 		metricsHandler: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 			metrics.OperationTagName: metrics.MigrationWorkflowScope,
 			NamespaceTagName:         params.Namespace,
@@ -371,7 +381,7 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 			return err
 		}
 		for _, ex := range listResp.Executions {
-			sh := common.WorkflowIDToHistoryShard(s.namespaceID, ex.BusinessID, s.params.TargetClusterShardCount)
+			sh := common.WorkflowIDToHistoryShard(s.namespaceID, ex.BusinessID, s.targetShardCount)
 			s.addToBucket(sh, ex.BusinessID, RunEntry{
 				RunID:       ex.RunID,
 				ArchetypeID: ex.ArchetypeID,
@@ -780,19 +790,18 @@ func (s *shardedWorkflowState) spawnBatch(
 	batchID := s.nextBatchID
 
 	req := &shardedBatchReq{
-		BatchID:               batchID,
-		Namespace:             s.params.Namespace,
-		NamespaceID:           s.namespaceID,
-		Executions:            payload,
-		TargetClusterEndpoint: s.params.TargetClusterEndpoint,
-		TargetClusterName:     s.params.TargetClusterName,
-		Resume:                resume,
-		DisableVerification:   s.params.DisableVerification,
-		NoProgressByShard:     noProgressByShard,
-		PerBatchGenerateRPS:   s.params.PerBatchGenerateRPS,
-		ShardNoProgress:       s.params.ShardNoProgress,
-		DrainGrace:            s.params.DrainGrace,
-		IdleShardCost:         s.params.IdleShardCost,
+		BatchID:             batchID,
+		Namespace:           s.params.Namespace,
+		NamespaceID:         s.namespaceID,
+		Executions:          payload,
+		TargetClusterName:   s.params.TargetClusterName,
+		Resume:              resume,
+		DisableVerification: s.params.DisableVerification,
+		NoProgressByShard:   noProgressByShard,
+		PerBatchGenerateRPS: s.params.PerBatchGenerateRPS,
+		ShardNoProgress:     s.params.ShardNoProgress,
+		DrainGrace:          s.params.DrainGrace,
+		IdleShardCost:       s.params.IdleShardCost,
 	}
 
 	held := make(map[int32]bool, len(payload))

@@ -72,12 +72,11 @@ type (
 	}
 
 	verifyReplicationTasksRequest struct {
-		Namespace             string
-		NamespaceID           string
-		TargetClusterEndpoint string
-		TargetClusterName     string
-		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []*ExecutionInfo
+		Namespace         string
+		NamespaceID       string
+		TargetClusterName string
+		VerifyInterval    time.Duration `validate:"gte=0"`
+		Executions        []*ExecutionInfo
 	}
 
 	verifyReplicationTasksResponse struct {
@@ -91,6 +90,14 @@ type (
 	MetadataResponse struct {
 		ShardCount  int32
 		NamespaceID string
+	}
+
+	DescribeTargetClusterRequest struct {
+		TargetClusterName string
+	}
+
+	DescribeTargetClusterResponse struct {
+		ShardCount int32
 	}
 
 	ReplicationStatus struct {
@@ -192,6 +199,23 @@ func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*M
 		ShardCount:  a.HistoryShardCount,
 		NamespaceID: string(nsEntry.ID()),
 	}, nil
+}
+
+// DescribeTargetCluster fetches the remote cluster's history shard count via
+// its admin DescribeCluster RPC. The remote must be registered with the
+// source cluster's cluster metadata (the cluster name doubles as the
+// adminClient cache key) — which is already a prerequisite for force
+// replication, since the source generates replication tasks against it.
+func (a *activities) DescribeTargetCluster(ctx context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(req.TargetClusterName)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := remoteAdminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return &DescribeTargetClusterResponse{ShardCount: resp.GetHistoryShardCount()}, nil
 }
 
 // GetMaxReplicationTaskIDs returns max replication task id per shard

@@ -38,7 +38,6 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
-		TargetClusterEndpoint   string
 		TargetClusterName       string
 		VerifyIntervalInSeconds int `validate:"gte=0"`
 
@@ -342,8 +341,8 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 
-	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
-		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
+	if params.EnableVerification && len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterName is required with verification enabled", "InvalidArgument", nil)
 	}
 
 	if params.ConcurrentActivityCount <= 0 {
@@ -512,12 +511,11 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 				actx,
 				a.VerifyReplicationTasks,
 				&verifyReplicationTasksRequest{
-					TargetClusterEndpoint: params.TargetClusterEndpoint,
-					TargetClusterName:     params.TargetClusterName,
-					Namespace:             params.Namespace,
-					NamespaceID:           namespaceID,
-					Executions:            migrationExecutions,
-					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					TargetClusterName: params.TargetClusterName,
+					Namespace:         params.Namespace,
+					NamespaceID:       namespaceID,
+					Executions:        migrationExecutions,
+					VerifyInterval:    time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
 			pendingVerifyTasks++
@@ -615,12 +613,11 @@ func enqueueReplicationTasksLocal(
 				lactx,
 				a.VerifyReplicationTasks,
 				&verifyReplicationTasksRequest{
-					TargetClusterEndpoint: params.TargetClusterEndpoint,
-					TargetClusterName:     params.TargetClusterName,
-					Namespace:             params.Namespace,
-					NamespaceID:           namespaceID,
-					Executions:            executions,
-					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					TargetClusterName: params.TargetClusterName,
+					Namespace:         params.Namespace,
+					NamespaceID:       namespaceID,
+					Executions:        executions,
+					VerifyInterval:    time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
 			pendingVerifyTasks++

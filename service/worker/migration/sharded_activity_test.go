@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.uber.org/mock/gomock"
@@ -23,21 +22,8 @@ import (
 // Sharded-activity tests reuse activitiesSuite's SetupTest so they get the
 // same mock graph (HistoryClient, AdminClient, ChasmRegistry, etc.) as the
 // legacy force-replication activity tests. ReplicateBatch resolves the
-// remote admin client via clientFactory.NewRemoteAdminClientWithTimeout
-// rather than clientBean.GetRemoteAdminClient, so each test arms a
-// NewRemoteAdminClientWithTimeout expectation that hands back the suite's
-// mockRemoteAdminClient.
-
-const remoteEndpoint = "remote.example:7233"
-
-// expectNewRemoteAdminClient arms the clientFactory mock so ReplicateBatch
-// gets the suite's mockRemoteAdminClient back. AnyTimes() because the
-// activity may build the client once per attempt and retries can fire.
-func (s *activitiesSuite) expectNewRemoteAdminClient() {
-	s.mockClientFactory.EXPECT().
-		NewRemoteAdminClientWithTimeout(remoteEndpoint, admin.DefaultTimeout, admin.DefaultLargeTimeout).
-		Return(s.mockRemoteAdminClient).AnyTimes()
-}
+// remote admin client via clientBean.GetRemoteAdminClient, which the suite
+// already arms with mockRemoteAdminClient — no per-test setup needed.
 
 // payloadFor wraps a single ExecutionInfo into a BatchPayload on the named
 // shard. Tests that need multiple execs across shards build the BatchPayload
@@ -54,16 +40,15 @@ func payloadFor(shard int32, ex *ExecutionInfo) BatchPayload {
 // (which needs the sdkClientFactory, nil here) doesn't fire.
 func newShardedReq(execs BatchPayload) *shardedBatchReq {
 	return &shardedBatchReq{
-		BatchID:               1,
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		Executions:            execs,
-		TargetClusterEndpoint: remoteEndpoint,
-		TargetClusterName:     remoteCluster,
-		PerBatchGenerateRPS:   defaultPerBatchGenerateRPS,
-		ShardNoProgress:       time.Hour,
-		DrainGrace:            time.Second,
-		IdleShardCost:         time.Hour,
+		BatchID:             1,
+		Namespace:           mockedNamespace,
+		NamespaceID:         mockedNamespaceID,
+		Executions:          execs,
+		TargetClusterName:   remoteCluster,
+		PerBatchGenerateRPS: defaultPerBatchGenerateRPS,
+		ShardNoProgress:     time.Hour,
+		DrainGrace:          time.Second,
+		IdleShardCost:       time.Hour,
 	}
 }
 
@@ -104,7 +89,6 @@ func (s *activitiesSuite) expectSourceDMS(ex *ExecutionInfo, resp *historyservic
 // TestGenerateReplicationTasks_Success.
 func (s *activitiesSuite) TestReplicateBatch_Success() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -150,7 +134,6 @@ func (s *activitiesSuite) TestReplicateBatch_Success() {
 // TestVerifyReplicationTasks_SkipWorkflowExecution.
 func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -176,7 +159,6 @@ func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 // Mirrors the existing Test_verifyReplicationTasksSkipRetention.
 func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 
 	retention := time.Hour
 	closeTime := time.Now().Add(-2 * retention) // deleteTime is in the past
@@ -228,7 +210,6 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 // the existing TestVerifyReplicationTasks_FailedNotFound.
 func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -262,7 +243,6 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 // (resume-via-heartbeat skips already-done work).
 func (s *activitiesSuite) TestReplicateBatch_Resume_SkipsInject() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -292,7 +272,6 @@ func (s *activitiesSuite) TestReplicateBatch_DisableVerification() {
 	// builds the client unconditionally even in inject-only mode, so we
 	// still need the factory to hand back something. Return without
 	// expecting any DMS calls on it.
-	s.expectNewRemoteAdminClient()
 
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).
 		Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
@@ -316,7 +295,6 @@ func (s *activitiesSuite) TestReplicateBatch_DisableVerification() {
 // assertion.
 func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
 	env, _ := s.initEnv()
-	s.expectNewRemoteAdminClient()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 

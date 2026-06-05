@@ -506,9 +506,11 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 // replication queue — but exercised through the sharded workflow
 // (registered name "force-replication-sharded" on
 // MigrationShardedActivityTQ). DisableVerification:true mirrors the
-// legacy test's EnableVerification:false default and lets the workflow
-// run without a TargetClusterName since this test only exercises the
-// task-queue-user-data side of force-replication.
+// legacy test's EnableVerification:false default; TargetClusterName is
+// still set (validation requires it, and the workflow fetches the
+// remote shard count even when there are no execs to replicate) but
+// the inject path is never reached here since this test only exercises
+// the task-queue-user-data side of force-replication.
 func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_Sharded() {
 	ctx := testcore.NewContext()
 	activeFrontendClient := s.clusters[0].FrontendClient()
@@ -593,7 +595,8 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
 		Namespace:           namespace,
-		DisableVerification: true, // mirrors legacy test's EnableVerification:false (no target needed)
+		TargetClusterName:   s.clusters[1].ClusterName(),
+		DisableVerification: true,
 	})
 	s.NoError(err)
 	err = run.Get(ctx, nil)

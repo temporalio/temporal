@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -39,8 +38,10 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		return replicateBatchResult{}, nil
 	}
 
-	remoteAdminClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
-		req.TargetClusterEndpoint, admin.DefaultTimeout, admin.DefaultLargeTimeout)
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(req.TargetClusterName)
+	if err != nil {
+		return replicateBatchResult{}, fmt.Errorf("get remote admin client for %s: %w", req.TargetClusterName, err)
+	}
 
 	var hb replicateBatchHeartbeat
 	if activity.HasHeartbeatDetails(ctx) {
@@ -456,10 +457,9 @@ func (a *activities) attemptVerifyExec(
 	}
 
 	vreq := &verifyReplicationTasksRequest{
-		Namespace:             req.Namespace,
-		NamespaceID:           req.NamespaceID,
-		TargetClusterEndpoint: req.TargetClusterEndpoint,
-		TargetClusterName:     req.TargetClusterName,
+		Namespace:         req.Namespace,
+		NamespaceID:       req.NamespaceID,
+		TargetClusterName: req.TargetClusterName,
 	}
 
 	describeStart := time.Now()

@@ -108,7 +108,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
-		TargetClusterEndpoint:   "test-target",
+		TargetClusterName:       "test-target",
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -167,8 +167,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 		PageCountPerExecution:   testMaxPageCountPerExecution,
 		NextPageToken:           []byte("fake-page-token-2"),
 		EnableVerification:      true,
-		TargetClusterEndpoint:   "test-target",
-		TargetClusterName:       "",
+		TargetClusterName:       "test-target",
 		VerifyIntervalInSeconds: defaultVerifyIntervalInSeconds,
 		LastCloseTime:           closeTime,
 		LastStartTime:           startTime,
@@ -194,7 +193,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 			ListWorkflowsPageSize:   1,
 			PageCountPerExecution:   testMaxPageCountPerExecution,
 			EnableVerification:      true,
-			TargetClusterEndpoint:   "test-target",
+			TargetClusterName:       "test-target",
 			NextPageToken:           []byte("fake-initial-page-token"),
 		},
 		expectContinueAsNew,
@@ -295,7 +294,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
 			// Empty namespace
 		},
 		{
-			// Empty TargetClusterEndpoint
+			// Empty TargetClusterName
 			Namespace:          uuid.NewString(),
 			EnableVerification: true,
 		},
@@ -438,7 +437,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
-		TargetClusterEndpoint:   "test-target",
+		TargetClusterName:       "test-target",
 	})
 
 	s.True(env.IsWorkflowCompleted())
@@ -495,7 +494,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
-		TargetClusterEndpoint:   "test-target",
+		TargetClusterName:       "test-target",
 	})
 
 	s.True(env.IsWorkflowCompleted())
