@@ -199,16 +199,14 @@ func (a *activities) evaluateVerifyIteration(
 		}, nil
 	}
 
-	// Per-shard cumulative no-progress backstop.
-	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, execCount); sErr != nil {
-		return false, replicateBatchResult{}, sErr
-	}
-
 	if draining {
 		// Drain-mode exit checks. No signals here — the return value
 		// carries everything the workflow needs (completed shards +
 		// unverified execs grouped by shard with their cumulative
-		// no-progress duration).
+		// no-progress duration). The per-shard no-progress backstop is
+		// deliberately skipped: drain is bounded by DrainGrace and the
+		// outstanding execs need to flow back via InFlight for CAN
+		// carry-over, not surface as a ShardNoProgress failure.
 		if shouldExitDrain(req, shards, drainStartAt) {
 			return true, replicateBatchResult{
 				CompletedShards: shards.allCompleted(),
@@ -217,6 +215,11 @@ func (a *activities) evaluateVerifyIteration(
 			}, nil
 		}
 		return false, replicateBatchResult{}, nil
+	}
+
+	// Per-shard cumulative no-progress backstop.
+	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, execCount); sErr != nil {
+		return false, replicateBatchResult{}, sErr
 	}
 
 	if err := a.maybeSignalRelease(ctx, req, shards); err != nil {

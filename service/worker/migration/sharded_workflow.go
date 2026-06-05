@@ -290,6 +290,11 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 	}).Get(ctx, &targetMd); err != nil {
 		return nil, err
 	}
+	if targetMd.ShardCount <= 0 {
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("DescribeTargetCluster returned non-positive ShardCount (%d) for target %q", targetMd.ShardCount, params.TargetClusterName),
+			"InvalidTargetShardCount", nil)
+	}
 	if params.BatchSize <= 0 {
 		params.BatchSize = defaultBatchSize
 	}
@@ -960,10 +965,11 @@ func (s *shardedWorkflowState) drainForCAN(ctx workflow.Context) {
 	}
 	s.cancelActivities()
 	releaseCh := workflow.GetSignalChannel(ctx, releaseShardsSignalName)
+	// Wait unconditionally for pendingDispatches to drain — lastErr may
+	// already be set on entry, but drainPayload, batchExecs, and status
+	// recovery fields only finalise once every in-flight goroutine has
+	// returned.
 	_ = workflow.Await(ctx, func() bool {
-		if s.lastErr != nil {
-			return true
-		}
 		return s.pendingDispatches == 0 && releaseCh.Len() == 0
 	})
 }
