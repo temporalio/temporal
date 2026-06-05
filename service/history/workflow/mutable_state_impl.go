@@ -4256,6 +4256,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
 		Priority:                attributes.Priority,
+		PausePolicy:             attributes.GetPausePolicy(),
 	}
 
 	if attributes.UseWorkflowBuildId {
@@ -6790,6 +6791,26 @@ func (ms *MutableStateImpl) RetryActivity(
 		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
 	}
 
+	// Auto-pause via pause policy (one-shot). If the activity declared a pause
+	// policy and its just-failed attempt (ai.Attempt) reached the policy's
+	// max_attempts, pause the activity instead of scheduling another retry. The
+	// pause flows through the existing paused branch below, which increments the
+	// attempt to max_attempts+1 and skips retry-task generation.
+	//
+	// RetryPolicy supersedes the pause policy for backwards compatibility: only
+	// pause if the activity could not have already terminally failed, i.e. retries
+	// are unlimited or the pause threshold is strictly below the retry max. It
+	// pauses exactly once; pause_policy_applied prevents re-pausing after an unpause.
+	pauseByPolicy := false
+	pausePolicyMaxAttempts := ai.PausePolicy.GetMaxAttempts()
+	if !ai.Paused && !ai.PausePolicyApplied &&
+		pausePolicyMaxAttempts > 0 &&
+		ai.Attempt >= pausePolicyMaxAttempts &&
+		(ai.RetryMaximumAttempts == 0 || pausePolicyMaxAttempts < ai.RetryMaximumAttempts) {
+		pauseByPolicy = true
+		ai.Paused = true
+	}
+
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
@@ -6799,6 +6820,18 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.Attempt++
 			if ms.config.EnableActivityRetryStampIncrement() {
 				activityInfo.Stamp++
+			}
+			if pauseByPolicy {
+				activityInfo.Paused = true
+				activityInfo.PausePolicyApplied = true
+				activityInfo.PauseInfo = &persistencespb.ActivityInfo_PauseInfo{
+					PauseTime: timestamppb.New(ms.timeSource.Now()),
+					PausedBy: &persistencespb.ActivityInfo_PauseInfo_PausePolicy_{
+						PausePolicy: &persistencespb.ActivityInfo_PauseInfo_PausePolicy{
+							MaxAttempts: pausePolicyMaxAttempts,
+						},
+					},
+				}
 			}
 			return nil
 		}); err != nil {

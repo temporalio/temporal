@@ -206,6 +206,12 @@ func GetPendingActivityInfo(
 						Reason:   ai.PauseInfo.GetManual().Reason,
 					},
 				}
+			} else if ai.PauseInfo.GetPausePolicy() != nil {
+				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_PausePolicy_{
+					PausePolicy: &workflowpb.PendingActivityInfo_PauseInfo_PausePolicy{
+						MaxPauseDurationAttempts: ai.PauseInfo.GetPausePolicy().GetMaxAttempts(),
+					},
+				}
 			} else {
 				ruleId := ai.PauseInfo.GetRuleId()
 				p.PauseInfo.PausedBy = &workflowpb.PendingActivityInfo_PauseInfo_Rule_{
