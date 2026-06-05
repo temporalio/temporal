@@ -57,7 +57,7 @@ func newReplicationMessageProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
 ) *replicationMessageProcessor {
-	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
+	defaultRetryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
 		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
@@ -66,6 +66,18 @@ func newReplicationMessageProcessor(
 		WithMaximumInterval(namespaceTaskRetryMaximumInterval).
 		WithExpirationInterval(namespaceTaskRetryExpiration).
 		WithMaximumAttempts(namespaceTaskRetryMaximumAttempts)
+
+	// Namespace tasks get a longer budget because they're gated on the
+	// cluster-global namespace metadata CAS; other task types stay on the
+	// shorter default to keep the single-threaded loop responsive.
+	retryPolicyForTask := func(task *replicationspb.ReplicationTask) backoff.RetryPolicy {
+		switch task.TaskType {
+		case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+			return namespaceTaskRetryPolicy
+		default:
+			return defaultRetryPolicy
+		}
+	}
 
 	return &replicationMessageProcessor{
 		hostInfo:                  hostInfo,
@@ -78,8 +90,7 @@ func newReplicationMessageProcessor(
 		namespaceTaskExecutor:     namespaceTaskExecutor,
 		customTaskHandler:         customTaskHandler,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
-		retryPolicy:               retryPolicy,
-		namespaceTaskRetryPolicy:  namespaceTaskRetryPolicy,
+		retryPolicyForTask:        retryPolicyForTask,
 		lastProcessedMessageID:    -1,
 		lastRetrievedMessageID:    -1,
 		done:                      make(chan struct{}),
@@ -101,8 +112,7 @@ type (
 		namespaceTaskExecutor     nsreplication.TaskExecutor
 		customTaskHandler         func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		metricsHandler            metrics.Handler
-		retryPolicy               backoff.RetryPolicy
-		namespaceTaskRetryPolicy  backoff.RetryPolicy
+		retryPolicyForTask        func(*replicationspb.ReplicationTask) backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64
 		done                      chan struct{}
@@ -196,19 +206,6 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 
 	p.lastProcessedMessageID = response.Messages.GetLastRetrievedMessageId()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
-}
-
-// retryPolicyForTask selects the retry policy used for both task application
-// and DLQ publish. Namespace tasks get a longer budget because they're gated on
-// the cluster-global namespace metadata CAS; other task types stay on the
-// shorter default to keep the single-threaded loop responsive.
-func (p *replicationMessageProcessor) retryPolicyForTask(task *replicationspb.ReplicationTask) backoff.RetryPolicy {
-	switch task.TaskType {
-	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
-		return p.namespaceTaskRetryPolicy
-	default:
-		return p.retryPolicy
-	}
 }
 
 func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
