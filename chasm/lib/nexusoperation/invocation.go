@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -38,6 +39,8 @@ type startArgs struct {
 	payload                *commonpb.Payload
 	nexusLinks             []nexus.Link
 	serializedRef          []byte
+	serviceCallerPrincipal *commonspb.AttributedPrincipal
+	endUserCallerPrincipal *commonspb.AttributedPrincipal
 }
 
 // invocationTraceContext captures per-call contextual information needed to set up HTTP tracing.

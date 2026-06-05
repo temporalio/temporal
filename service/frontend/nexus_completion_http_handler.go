@@ -393,10 +393,14 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 
 func (h *nexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Strip principal-bearing HTTP headers at this external ingress
+		// boundary so completion callers cannot spoof identity.
+		headers.StripPrincipalHTTP(r.Header)
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.httpHandler.ServeHTTP(w, r)
 	})
 	r.Path(commonnexus.PathCompletionCallbackNoIdentifier).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers.StripPrincipalHTTP(r.Header)
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.httpHandler.ServeHTTP(w, r)
 	})

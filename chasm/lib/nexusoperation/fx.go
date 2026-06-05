@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -12,11 +13,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/principaltoken"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -28,6 +31,11 @@ const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
+	// Signed caller-identity propagation across the Nexus hop (Signer/Verifier/
+	// KeyProvider). Feature-off by default; the decorator drives it from
+	// config.Global.NexusPrincipalPropagation. Cloud may override the seams.
+	principaltoken.Module,
+	fx.Decorate(principalTokenConfigFromServerConfig),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
@@ -63,6 +71,54 @@ func register(
 	library *Library,
 ) error {
 	return registry.Register(library)
+}
+
+// principalTokenConfigFromServerConfig decorates the principaltoken.Module's
+// default (feature-off) Config with the operator-supplied settings from the
+// official server config. This is what makes the feature configurable via YAML
+// / temporal.WithConfig rather than test-only fx injection. An empty
+// config.Global.NexusPrincipalPropagation yields an empty principaltoken.Config
+// (feature stays off).
+func principalTokenConfigFromServerConfig(_ principaltoken.Config, cfg *config.Config) (principaltoken.Config, error) {
+	src := cfg.Global.NexusPrincipalPropagation
+	out := principaltoken.Config{
+		Issuer:       src.Issuer,
+		SigningKeyID: src.SigningKeyID,
+		TrustMode:    principaltoken.TrustMode(src.TrustMode),
+		TTL:          src.TTL,
+		Leeway:       src.Leeway,
+	}
+	signingKey, err := readPEM(src.SigningKeyData, src.SigningKeyFile)
+	if err != nil {
+		return principaltoken.Config{}, fmt.Errorf("nexus principal signing key: %w", err)
+	}
+	out.SigningKeyPEM = signingKey
+
+	for _, ti := range src.TrustedIssuers {
+		pub, err := readPEM(ti.PublicKeyData, ti.PublicKeyFile)
+		if err != nil {
+			return principaltoken.Config{}, fmt.Errorf("nexus trusted issuer %s/%s: %w", ti.Issuer, ti.KeyID, err)
+		}
+		if out.TrustedIssuers == nil {
+			out.TrustedIssuers = map[string]map[string][]byte{}
+		}
+		if out.TrustedIssuers[ti.Issuer] == nil {
+			out.TrustedIssuers[ti.Issuer] = map[string][]byte{}
+		}
+		out.TrustedIssuers[ti.Issuer][ti.KeyID] = pub
+	}
+	return out, nil
+}
+
+// readPEM returns inline PEM data if present, else reads it from file, else nil.
+func readPEM(data, file string) ([]byte, error) {
+	if data != "" {
+		return []byte(data), nil
+	}
+	if file != "" {
+		return os.ReadFile(file)
+	}
+	return nil, nil
 }
 
 func endpointRegistryProvider(

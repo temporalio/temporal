@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/principaltoken"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -84,6 +86,7 @@ type operationContext struct {
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
+	principalVerifier             principaltoken.Verifier
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -119,13 +122,51 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	}
 }
 
-func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
+func (c *operationContext) matchingRequest(ctx context.Context, req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
 	req.Endpoint = c.endpointName
 	return &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: c.namespace.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: c.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Request:     req,
+		CallerInfo:  nexusCallerInfo(ctx),
 	}
+}
+
+// nexusCallerInfo builds the verified caller identity to attach to the outbound
+// matching task: the immediate (service) caller and end-user (root) come from
+// the context (promoted by promotePrincipalToken, or set by the auth interceptor
+// for direct callers); the namespace caller comes from the verified token
+// (stashed by promotePrincipalToken). Returns nil when nothing is attributed,
+// leaving the field unset.
+func nexusCallerInfo(ctx context.Context) *nexuspb.NexusCallerInfo {
+	service := headers.GetPrincipal(ctx)
+	root := headers.GetEndUserPrincipal(ctx)
+	nsCaller := namespaceCallerFromContext(ctx)
+	if service == nil && root == nil && nsCaller == nil {
+		return nil
+	}
+	return &nexuspb.NexusCallerInfo{Root: root, Service: service, Namespace: nsCaller}
+}
+
+// namespaceCallerContextKey carries the verified namespace caller from
+// promotePrincipalToken to nexusCallerInfo without putting it on gRPC metadata
+// (it is not needed downstream of the poll response, unlike the service/root
+// principals which the authorizer and history seeding read from headers).
+type namespaceCallerContextKey struct{}
+
+func withNamespaceCaller(ctx context.Context, p *commonpb.Principal) context.Context {
+	if p == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, namespaceCallerContextKey{}, p)
+}
+
+func namespaceCallerFromContext(ctx context.Context) *commonpb.Principal {
+	p, ok := ctx.Value(namespaceCallerContextKey{}).(*commonpb.Principal)
+	if !ok {
+		return nil
+	}
+	return p
 }
 
 func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
@@ -153,7 +194,49 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 			}
 		}
 	}
+	ctx = c.promotePrincipalToken(ctx, header)
 	return headers.Propagate(ctx)
+}
+
+// promotePrincipalToken verifies the propagated token and promotes the trusted
+// principals into the incoming metadata, where the authorizer and history
+// stamping read them. The token isn't stripped because its signature (not its
+// position) establishes trust; on any verification failure nothing is promoted.
+func (c *operationContext) promotePrincipalToken(ctx context.Context, header nexus.Header) context.Context {
+	if c.principalVerifier == nil {
+		return ctx
+	}
+	token := header.Get(principaltoken.Header)
+	if token == "" {
+		return ctx
+	}
+	verified, err := c.principalVerifier.Verify(ctx, token)
+	if err != nil {
+		// Don't surface details; an invalid/forged token is simply dropped.
+		c.logger.Warn("rejected nexus principal token", tag.Error(err))
+		return ctx
+	}
+	// Surface the human-readable name (resolved-name snapshot); principalForDisplay
+	// falls back to the principal's own Name when empty (OSS).
+	if verified.ServiceCaller != nil {
+		ctx = headers.SetPrincipal(ctx, principalForDisplay(verified.ServiceCaller, verified.ServiceCallerResolvedName))
+	}
+	if verified.EndUser != nil {
+		ctx = headers.SetEndUserPrincipal(ctx, principalForDisplay(verified.EndUser, verified.EndUserResolvedName))
+	}
+	ctx = withNamespaceCaller(ctx, verified.NamespaceCaller)
+	return ctx
+}
+
+// principalForDisplay returns the principal with its Name replaced by the
+// resolved-name snapshot when one is present (Cloud), so audit surfaces a
+// human-readable name rather than an opaque ID. Empty snapshot (OSS) leaves the
+// principal unchanged.
+func principalForDisplay(p *commonpb.Principal, resolvedName string) *commonpb.Principal {
+	if p == nil || resolvedName == "" {
+		return p
+	}
+	return &commonpb.Principal{Type: p.GetType(), Name: resolvedName}
 }
 
 func (c *operationContext) interceptRequest(
@@ -330,6 +413,7 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	principalVerifier             principaltoken.Verifier
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -351,6 +435,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
 		metricTagConfig:               h.metricTagConfig,
+		principalVerifier:             h.principalVerifier,
 		cleanupFunctions:              make([]func(map[string]string, error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
@@ -414,7 +499,7 @@ func (h *nexusHandler) StartOperation(
 		RequestId:      options.RequestID,
 		Links:          links,
 	}
-	request := oc.matchingRequest(&nexuspb.Request{
+	request := oc.matchingRequest(ctx, &nexuspb.Request{
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Header:        options.Header,
 		Variant: &nexuspb.Request_StartOperation{
@@ -637,7 +722,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
-	request := oc.matchingRequest(&nexuspb.Request{
+	request := oc.matchingRequest(ctx, &nexuspb.Request{
 		Header:        options.Header,
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{
