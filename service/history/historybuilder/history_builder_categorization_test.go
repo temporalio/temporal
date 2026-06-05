@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type StubHandler struct{}
@@ -51,7 +52,7 @@ func (h StubHandler) StartBatch(_ string) metrics.BatchHandler {
 }
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
-	hb := HistoryBuilder{EventStore: EventStore{}}
+	hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 	if hb.IsDirty() {
 		t.Fatal("newly created history is dirty")
 	}
@@ -60,7 +61,7 @@ func TestHistoryBuilder_IsDirty(t *testing.T) {
 func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	ns := "some-namespace"
 	t.Run("When ParentExecutionInfo is nil should not include in attributes", func(t *testing.T) {
-		hb := HistoryBuilder{}
+		hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq}
 		startTime := time.Date(2023, 12, 27, 1, 11, 00, 00, time.UTC)
@@ -88,7 +89,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	})
 
 	t.Run("When ParentExecutionInfo is not nil should copy values to attributes", func(t *testing.T) {
-		hb := HistoryBuilder{}
+		hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 		parentInfo := &workflowspb.ParentExecutionInfo{Namespace: ns}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
@@ -125,7 +126,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
 		hb := HistoryBuilder{
-			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[string]int64)},
+			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[string]int64), maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes},
 			EventFactory{},
 		}
 		hb.scheduledIDToStartedID[71] = 42
@@ -1212,7 +1213,7 @@ type builderConfig struct {
 func newHistoryBuilderFromConfig(config builderConfig) *HistoryBuilder {
 	ts := clock.NewRealTimeSource()
 	tig := func(n int) ([]int64, error) { return []int64{1, 2, 3, 4, 5}, nil }
-	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{})
+	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{}, tests.NewDynamicConfig().MaximumEventBatchSizeInBytes)
 }
 
 func newHistoryBuilder() *HistoryBuilder {
