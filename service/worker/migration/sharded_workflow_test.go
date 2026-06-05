@@ -107,12 +107,18 @@ func metadataResponseFor(shardCount int32) func(context.Context, MetadataRequest
 }
 
 // registerShardedScaffolding registers the GetMetadata + CountWorkflow
-// stubs every sharded test needs before the page loop runs.
+// stubs every sharded test needs before the page loop runs, plus the
+// task-queue-user-data child workflow + its activity so the parent's
+// terminal Await on Done resolves.
 func registerShardedScaffolding(env *testsuite.TestWorkflowEnvironment, shardCount int32) {
 	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: "GetMetadata"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
 		return &countWorkflowResponse{WorkflowCount: 0}, nil
 	}, activity.RegisterOptions{Name: "CountWorkflow"})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ TaskQueueUserDataReplicationParamsWithNamespace) error {
+		return nil
+	}, activity.RegisterOptions{Name: "SeedReplicationQueueWithUserDataEntries"})
 }
 
 // ---- Tests ----
@@ -147,6 +153,7 @@ func TestSharded_HappyPath_SingleCycle(t *testing.T) {
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 4,
 	})
 
@@ -196,6 +203,7 @@ func TestSharded_ResumeShards_Packed(t *testing.T) {
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 8,
 		ResumeShards:            resumeShards,
 	})
@@ -281,6 +289,7 @@ func TestSharded_ReleaseShards_FreesShardForReuse(t *testing.T) {
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 2,
 		ConcurrentBatchCount:    2,
 	})
@@ -310,6 +319,7 @@ func TestSharded_ShardNoProgress_FailsWorkflow(t *testing.T) {
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 2,
 	})
 
@@ -376,6 +386,7 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 10,
 		BatchSize:               100,
 		MaxExecsPerShard:        10,
@@ -444,6 +455,7 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
 		TargetClusterShardCount: 4,
 	})
 
@@ -466,6 +478,48 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 
 	require.Equal(t, len(execs), recovered, "every dispatched exec should land in RecoveredBuckets when its activity is cancelled before it can run")
 	require.Empty(t, nextParams.ResumeShards, "no ResumeShards — activity never ran, never injected, so no resume work")
+}
+
+// TestSharded_DisableVerification_NoVerifiedCount: with verification
+// disabled the workflow runs inject-only batches, completes
+// successfully, and the status query reports ReplicatedWorkflowCount=0
+// because no verification ran.
+func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+
+	execs := makeExecs(4, 5)
+	registerShardedScaffolding(env, 4)
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+
+	var sawDisable atomic.Bool
+	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+		if req.DisableVerification {
+			sawDisable.Store(true)
+		}
+		return replicateBatchResult{
+			CompletedShards: req.Executions.sortedShards(),
+			VerifiedCount:   0,
+		}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
+		TargetClusterShardCount: 4,
+		DisableVerification:     true,
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "workflow should complete")
+	require.NoError(t, env.GetWorkflowError(), "workflow should succeed")
+	require.True(t, sawDisable.Load(), "activity req should carry DisableVerification=true")
+
+	envValue, err := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, err)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+	require.Equal(t, int64(0), status.ReplicatedWorkflowCount, "no verification ran so verified count must stay 0")
 }
 
 // ---- internal helpers ----

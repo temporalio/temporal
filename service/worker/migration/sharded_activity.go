@@ -15,6 +15,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -40,19 +42,35 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 	remoteAdminClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
 		req.TargetClusterEndpoint, admin.DefaultTimeout, admin.DefaultLargeTimeout)
 
+	var hb replicateBatchHeartbeat
+	if activity.HasHeartbeatDetails(ctx) {
+		_ = activity.GetHeartbeatDetails(ctx, &hb)
+	}
+
+	// ---- Inject phase ----
+	if !req.Resume && !hb.InjectDone {
+		startIdx := hb.NextInjectIdx
+		if err := a.runInjectPhase(ctx, req, execs, startIdx); err != nil {
+			return replicateBatchResult{}, err
+		}
+		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
+	}
+
+	// inject-only path: skip verify and let the workflow accounting
+	// release shards on activity return.
+	if req.DisableVerification {
+		return replicateBatchResult{
+			CompletedShards: req.Executions.sortedShards(),
+			VerifiedCount:   0,
+		}, nil
+	}
+
 	// Namespace lookup feeds the verify phase's retention/zombie skip
 	// check (checkSkipWorkflowExecution needs ns.Retention()). Snapshotted
 	// once per activity; we don't track config changes mid-batch.
 	ns, err := a.NamespaceRegistry.GetNamespaceByID(namespace.ID(req.NamespaceID))
 	if err != nil {
 		return replicateBatchResult{}, fmt.Errorf("look up namespace %s: %w", req.NamespaceID, err)
-	}
-
-	// ---- Inject phase ----
-	if !req.Resume {
-		if err := a.runInjectPhase(ctx, req, execs); err != nil {
-			return replicateBatchResult{}, err
-		}
 	}
 
 	// ---- Verify phase ----
@@ -118,7 +136,7 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		}
 		doneCount += passDelta
 
-		activity.RecordHeartbeat(ctx, doneCount)
+		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 
 		// Clean completion — every exec verified.
 		if doneCount >= of {
@@ -167,9 +185,10 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 // RecoveredBuckets re-injection next cycle. Already-injected execs
 // are re-injected harmlessly — replication dedupes per (namespace,
 // wf, run).
-func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo) error {
+func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo, startIdx int) error {
 	rateLimiter := quotas.NewRateLimiter(req.PerBatchGenerateRPS, int(math.Ceil(req.PerBatchGenerateRPS)))
-	for _, ex := range execs {
+	for i := startIdx; i < len(execs); i++ {
+		ex := execs[i]
 		if ctx.Err() != nil {
 			return temporal.NewCanceledError("inject phase cancelled")
 		}
@@ -177,8 +196,17 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 			if ctx.Err() != nil {
 				return temporal.NewCanceledError("inject phase cancelled")
 			}
-			return err
+			if common.IsNotFoundError(err) {
+				a.Logger.Warn("force-replication-sharded ignore replication task due to NotFoundServiceError",
+					tag.WorkflowNamespaceID(req.NamespaceID),
+					tag.WorkflowID(ex.BusinessID),
+					tag.WorkflowRunID(ex.RunID),
+					tag.Error(err))
+			} else {
+				return err
+			}
 		}
+		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{NextInjectIdx: i + 1})
 	}
 	return nil
 }

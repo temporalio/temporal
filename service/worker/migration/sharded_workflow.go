@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -36,18 +37,21 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 	// Register the status query under the same name upstream uses
 	// (forceReplicationStatusQueryType = "force-replication-status")
 	// so tooling that polls force-rep progress works across both
-	// workflow variants. Sharded-irrelevant ForceReplicationStatus
-	// fields (TaskQueueUserDataReplicationStatus) are left zero —
-	// sharded only handles the data-replication phase.
+	// workflow variants.
 	if err := workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		return ForceReplicationStatus{
-			ContinuedAsNewCount:              params.ContinuedAsNewCount,
-			TotalWorkflowCount:               params.TotalForceReplicateWorkflowCount,
-			ReplicatedWorkflowCount:          params.ReplicatedWorkflowCount,
-			ReplicatedWorkflowCountPerSecond: params.ReplicatedWorkflowCountPerSecond,
-			PageTokenForRestart:              startPageToken,
+			ContinuedAsNewCount:                params.ContinuedAsNewCount,
+			TotalWorkflowCount:                 params.TotalForceReplicateWorkflowCount,
+			ReplicatedWorkflowCount:            params.ReplicatedWorkflowCount,
+			ReplicatedWorkflowCountPerSecond:   params.ReplicatedWorkflowCountPerSecond,
+			PageTokenForRestart:                startPageToken,
+			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
 		}, nil
 	}); err != nil {
+		return err
+	}
+
+	if err := validateShardedForceReplicationParams(&params); err != nil {
 		return err
 	}
 
@@ -76,14 +80,71 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 		params.TotalForceReplicateWorkflowCount = wfCount
 	}
 
-	return state.run(ctx)
+	if !params.TaskQueueUserDataReplicationStatus.Done {
+		if err := maybeKickoffShardedTaskQueueUserDataReplication(ctx, &params, func(failureReason string) {
+			params.TaskQueueUserDataReplicationStatus.FailureMessage = failureReason
+			params.TaskQueueUserDataReplicationStatus.Done = true
+		}); err != nil {
+			return err
+		}
+	}
+
+	if err := state.run(ctx); err != nil {
+		return err
+	}
+
+	// state.run returned nil only on the terminal cycle (no more pages,
+	// no errors). On CAN cycles it returns the CAN error, so we never
+	// reach here mid-replication.
+	if err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done }); err != nil {
+		return err
+	}
+	if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+		return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+	}
+	return nil
+}
+
+func validateShardedForceReplicationParams(params *ShardedForceReplicationParams) error {
+	if len(params.Namespace) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
+	}
+	if !params.DisableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
+	}
+	return nil
+}
+
+func maybeKickoffShardedTaskQueueUserDataReplication(ctx workflow.Context, params *ShardedForceReplicationParams, onDone func(failureReason string)) error {
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		ch := workflow.GetSignalChannel(ctx, taskQueueUserDataReplicationDoneSignalType)
+		var errStr string
+		_ = ch.Receive(ctx, &errStr)
+		onDone(errStr)
+	})
+
+	if params.ContinuedAsNewCount > 0 {
+		return nil
+	}
+
+	options := workflow.ChildWorkflowOptions{
+		WorkflowID:        fmt.Sprintf("%s-task-queue-user-data-replicator", workflow.GetInfo(ctx).WorkflowExecution.ID),
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	}
+	childCtx := workflow.WithChildOptions(ctx, options)
+	input := TaskQueueUserDataReplicationParamsWithNamespace{
+		TaskQueueUserDataReplicationParams: params.TaskQueueUserDataReplicationParams,
+		Namespace:                          params.Namespace,
+	}
+	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)
+	var childExecution workflow.Execution
+	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
 }
 
 // shardedCountWorkflowsForReplication asks the frontend how many
 // workflows match the namespace's force-rep query. Used once at
 // workflow start to seed TotalForceReplicateWorkflowCount for the
-// status query's progress reporting. No filter is applied — sharded
-// lists the namespace's entire workflow population.
+// status query's progress reporting.
 func shardedCountWorkflowsForReplication(ctx workflow.Context, params *ShardedForceReplicationParams) (int64, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
@@ -96,6 +157,7 @@ func shardedCountWorkflowsForReplication(ctx workflow.Context, params *ShardedFo
 		a.CountWorkflow,
 		&workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: params.Namespace,
+			Query:     params.Query,
 		}).Get(ctx, &output); err != nil {
 		return 0, err
 	}
@@ -299,6 +361,7 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 		}
 		listReq := &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     s.params.Namespace,
+			Query:         s.params.Query,
 			PageSize:      int32(s.params.ListWorkflowsPageSize),
 			NextPageToken: s.params.NextPageToken,
 		}
@@ -724,6 +787,7 @@ func (s *shardedWorkflowState) spawnBatch(
 		TargetClusterEndpoint: s.params.TargetClusterEndpoint,
 		TargetClusterName:     s.params.TargetClusterName,
 		Resume:                resume,
+		DisableVerification:   s.params.DisableVerification,
 		NoProgressByShard:     noProgressByShard,
 		PerBatchGenerateRPS:   s.params.PerBatchGenerateRPS,
 		ShardNoProgress:       s.params.ShardNoProgress,
@@ -754,12 +818,11 @@ func (s *shardedWorkflowState) spawnBatch(
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 24 * time.Hour,
 			HeartbeatTimeout:    time.Minute,
-			// MaxAttempts=1: per-exec backoff inside the activity
-			// is the retry path; an activity-level retry would
-			// re-run inject and reset all backoff state, wasting
-			// the apply work this attempt already drove.
+			// 3 attempts: per-exec backoff still owns the per-exec
+			// retry, but a transient activity failure can recover
+			// via heartbeat-resume without losing inject progress.
 			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 1,
+				MaximumAttempts: 3,
 			},
 			// WaitForCancellation: the cancelled activity needs to
 			// run its drain logic and return its drain result

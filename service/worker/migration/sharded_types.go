@@ -216,16 +216,20 @@ func (p BatchPayload) merge(src BatchPayload) {
 type ShardedForceReplicationParams struct {
 	// ---- Configuration ----
 	Namespace               string
+	Query                   string
 	BatchSize               int
 	MaxExecsPerShard        int
 	ListWorkflowsPageSize   int
 	TargetClusterEndpoint   string
 	TargetClusterName       string
 	TargetClusterShardCount int32
+	DisableVerification     bool
 
 	ShardNoProgress time.Duration
 	DrainGrace      time.Duration
 	IdleShardCost   time.Duration
+
+	TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
 
 	// PerBatchGenerateRPS is the inject-phase rate-limiter target inside
 	// each ReplicateBatch activity. See defaultPerBatchGenerateRPS for
@@ -270,6 +274,8 @@ type ShardedForceReplicationParams struct {
 	// but never injected, so the new cycle restores them into the
 	// streaming buckets to be dispatched as fresh inject+verify batches.
 	RecoveredBuckets BatchPayload
+
+	TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 }
 
 // ResumeShard carries one shard's worth of unverified execs from a drained
@@ -311,8 +317,9 @@ type shardedBatchReq struct {
 	TargetClusterEndpoint string
 	TargetClusterName     string
 
-	Resume            bool
-	NoProgressByShard map[int32]time.Duration
+	Resume              bool
+	DisableVerification bool
+	NoProgressByShard   map[int32]time.Duration
 
 	PerBatchGenerateRPS float64
 
@@ -340,6 +347,13 @@ type replicateBatchResult struct {
 	// ReplicatedWorkflowCount and emits the per-batch delta as the
 	// replicated_workflow_count counter.
 	VerifiedCount int64
+}
+
+type replicateBatchHeartbeat struct {
+	// NextInjectIdx is the index of the next exec to inject on retry.
+	NextInjectIdx int
+	// InjectDone marks the inject phase as complete; retries skip inject.
+	InjectDone bool
 }
 
 // releaseShardsPayload is the body of the mid-flight ReleaseShards signal
