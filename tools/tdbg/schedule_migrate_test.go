@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/grpc"
@@ -257,6 +258,39 @@ func TestMigrateSchedule_FromVisibility_CustomQuery(t *testing.T) {
 	require.Equal(t, customQuery, wf.requests[0].Query)
 }
 
+func TestMigrateSchedule_FromVisibility_DefaultQueryToChasm(t *testing.T) {
+	admin := &migrateAdminClient{}
+	wf := &migrateWorkflowClient{}
+	factory := migrateClientFactory{admin: admin, workflow: wf}
+
+	// Migrating to chasm (V1 -> V2) defaults to selecting running V1 (workflow-backed) schedules.
+	_, _, err := runMigrate(t, factory,
+		"-n", "my-ns", "schedule", "migrate", "--target", "chasm", "--from-visibility")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, wf.requests)
+	expectedQuery := fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+	require.Equal(t, expectedQuery, wf.requests[0].Query)
+}
+
+func TestMigrateSchedule_RejectsQueryWithoutFromVisibility(t *testing.T) {
+	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
+	_, _, err := runMigrate(t, factory,
+		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--query", "ScheduleId = 'x'")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "query")
+	require.Contains(t, err.Error(), "from-visibility")
+}
+
+func TestMigrateSchedule_RejectsWorkersWithoutFromVisibility(t *testing.T) {
+	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
+	_, _, err := runMigrate(t, factory,
+		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--workers", "4")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "workers")
+	require.Contains(t, err.Error(), "from-visibility")
+}
+
 func TestMigrateSchedule_FromVisibility_RejectsScheduleID(t *testing.T) {
 	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 	_, _, err := runMigrate(t, factory,
@@ -305,9 +339,39 @@ func TestMigrateSchedule_Stdin_DryRun(t *testing.T) {
 	require.Empty(t, admin.requests)
 }
 
+func TestMigrateSchedule_Stdin_OutputLog(t *testing.T) {
+	admin := &migrateAdminClient{}
+	factory := migrateClientFactory{admin: admin, workflow: &migrateWorkflowClient{}}
+
+	logPath := filepath.Join(t.TempDir(), "migrations.jsonl")
+	withStdin(t, `{"namespace":"ns-1","schedule_id":"sched-1"}`, func() {
+		_, _, err := runMigrate(t, factory,
+			"schedule", "migrate", "--target", "workflow", "--execute", "--output-log", logPath)
+		require.NoError(t, err)
+	})
+
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	var rec struct {
+		Namespace  string `json:"namespace"`
+		ScheduleID string `json:"schedule_id"`
+		Target     string `json:"target"`
+		Status     string `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(data))), &rec))
+	require.Equal(t, "ns-1", rec.Namespace)
+	require.Equal(t, "sched-1", rec.ScheduleID)
+	require.Equal(t, "workflow", rec.Target)
+	require.Equal(t, "migrated", rec.Status)
+}
+
 // withStdin redirects os.Stdin to a temp file containing content for the duration of fn.
 // A regular file is not a character device, so the command's piped-stdin detection treats it
 // as piped input.
+//
+// NOTE: os.Stdin is process-global, so tests using withStdin must NOT call t.Parallel().
+// TODO: inject the input reader through tdbg.Params instead of mutating os.Stdin, which would
+// remove this constraint (deferred to a follow-up PR to keep this change small).
 func withStdin(t *testing.T, content string, fn func()) {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "stdin")

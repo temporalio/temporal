@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -880,7 +881,8 @@ func AdminReplicateWorkflow(
 //
 // It supports three mutually-exclusive selection modes, all sharing the required --target flag:
 //   - single:          --schedule-id <id> (performs immediately, as before)
-//   - from visibility: --from-visibility [--query <q>] (defaults to all running V2 schedules in --namespace)
+//   - from visibility: --from-visibility [--query <q>] (default query is chosen from --target: the
+//     running V1 schedules when migrating to chasm, the running V2 schedules when migrating to workflow)
 //   - stdin:           JSON lines piped on stdin, one {"namespace":..., "schedule_id":...} per line
 //
 // The from-visibility and stdin modes default to a dry-run; pass --execute to perform the migration.
@@ -892,6 +894,17 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 
 	fromVisibility := c.Bool(FlagFromVisibility)
 	scheduleID := c.String(FlagScheduleID)
+
+	// --query and --workers only take effect in --from-visibility mode; reject them elsewhere
+	// rather than silently ignoring them.
+	if !fromVisibility {
+		if c.IsSet(FlagVisibilityQuery) {
+			return fmt.Errorf("--%s is only valid with --%s", FlagVisibilityQuery, FlagFromVisibility)
+		}
+		if c.IsSet(FlagWorkers) {
+			return fmt.Errorf("--%s is only valid with --%s", FlagWorkers, FlagFromVisibility)
+		}
+	}
 
 	switch {
 	case fromVisibility:
@@ -949,7 +962,8 @@ func migrateSingleSchedule(
 }
 
 // migrateSchedulesFromVisibility selects schedules via a visibility query and migrates each.
-// By default it targets all running V2 (CHASM) schedules in --namespace; --query overrides the query.
+// When --query is not supplied the default query is chosen from the --target direction (see
+// defaultMigrateQuery).
 func migrateSchedulesFromVisibility(
 	c *cli.Context,
 	clientFactory ClientFactory,
@@ -963,10 +977,7 @@ func migrateSchedulesFromVisibility(
 
 	query := c.String(FlagVisibilityQuery)
 	if query == "" {
-		// Default: all running V2 (CHASM) schedules. The explicit TemporalNamespaceDivision
-		// filter is required, otherwise the visibility query converter appends
-		// "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
-		query = fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+		query = defaultMigrateQuery(target)
 	}
 
 	execute := c.Bool(FlagExecute)
@@ -980,14 +991,11 @@ func migrateSchedulesFromVisibility(
 	// Schedules are listed (paginated) on this goroutine and fed to a pool of workers
 	// that migrate them concurrently.
 	var summary migrateSummary
-	if logPath := c.String(FlagOutputLog); logPath != "" {
-		logFile, err := os.Create(logPath)
-		if err != nil {
-			return fmt.Errorf("unable to open output log %q: %w", logPath, err)
-		}
-		defer func() { _ = logFile.Close() }()
-		summary.logEnc = json.NewEncoder(logFile)
+	closeLog, err := openMigrateLog(c, &summary)
+	if err != nil {
+		return err
 	}
+	defer closeLog()
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
@@ -1029,17 +1037,46 @@ func migrateSchedulesFromVisibility(
 	close(jobs)
 	wg.Wait()
 
-	if listErr != nil {
-		return listErr
-	}
-
+	// Always report what was migrated before surfacing a listing error: if pagination fails
+	// partway through, workers may have already migrated the schedules listed so far, and the
+	// user needs to see that partial progress.
 	summary.print(c, execute)
-	return nil
+	return listErr
 }
 
 type migrateJob struct {
 	namespace  string
 	scheduleID string
+}
+
+// defaultMigrateQuery returns the visibility query selecting which schedules to migrate when
+// --query is not supplied. The direction is inferred from --target: migrating to CHASM (V2)
+// selects the running V1 (workflow-backed) schedules to move forward, while migrating to
+// workflow (V1) selects the running V2 (CHASM) schedules to roll back.
+func defaultMigrateQuery(target adminservice.MigrateScheduleRequest_SchedulerTarget) string {
+	if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
+		// Forward migration V1 -> V2: all running V1 (workflow-backed) schedules.
+		return fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+	}
+	// Rollback V2 -> V1: all running V2 (CHASM) schedules. The explicit TemporalNamespaceDivision
+	// filter is required, otherwise the visibility query converter appends
+	// "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
+	return fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+}
+
+// openMigrateLog wires summary.logEnc to the --output-log file when the flag is set, returning a
+// cleanup func that closes the file (a no-op when the flag is unset).
+func openMigrateLog(c *cli.Context, summary *migrateSummary) (func(), error) {
+	logPath := c.String(FlagOutputLog)
+	if logPath == "" {
+		return func() {}, nil
+	}
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open output log %q: %w", logPath, err)
+	}
+	summary.logEnc = json.NewEncoder(logFile)
+	return func() { _ = logFile.Close() }, nil
 }
 
 // migrateSchedulesFromStdin reads JSON lines from stdin, one {"namespace","schedule_id"} per line.
@@ -1053,6 +1090,12 @@ func migrateSchedulesFromStdin(
 	adminClient := clientFactory.AdminClient(c)
 
 	var summary migrateSummary
+	closeLog, err := openMigrateLog(c, &summary)
+	if err != nil {
+		return err
+	}
+	defer closeLog()
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

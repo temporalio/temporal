@@ -314,12 +314,16 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 					Required: true,
 				},
 				&cli.BoolFlag{
-					Name:  FlagFromVisibility,
-					Usage: "Select schedules from visibility instead of --schedule-id. Defaults to all running V2 (CHASM) schedules in --namespace; override with --query",
+					Name: FlagFromVisibility,
+					Usage: "Select schedules from visibility instead of --schedule-id, scoped to --namespace. " +
+						"The default query is chosen from --target: migrating to chasm selects running V1 schedules, " +
+						"migrating to workflow selects running V2 schedules. Override with --query",
 				},
 				&cli.StringFlag{
-					Name:  FlagVisibilityQuery,
-					Usage: "Visibility query used with --from-visibility (overrides the default V2-schedule query)",
+					Name: FlagVisibilityQuery,
+					Usage: "Visibility query used with --from-visibility, overriding the target-based default. The defaults are:\n" +
+						"\tV1 (workflow-backed): TemporalNamespaceDivision = 'TemporalScheduler' AND ExecutionStatus = 'Running'\n" +
+						"\tV2 (CHASM):           TemporalNamespaceDivision = '<scheduler-archetype-id>' AND ExecutionStatus = 'Running'",
 				},
 				&cli.BoolFlag{
 					Name:  FlagExecute,
