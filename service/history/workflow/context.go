@@ -1078,7 +1078,7 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext historyi.ShardContext
 // Returns true if execution is forced terminated
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardContext historyi.ShardContext) (bool, error) {
-	if c.maxMutableStateSizeExceeded() {
+	if c.maxMutableStateSizeExceeded(shardContext.ChasmRegistry()) {
 		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
 			return false, err
 		}
@@ -1090,12 +1090,16 @@ func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardCon
 
 // Returns true if the workflow is running and mutable state size should trigger a forced termination
 // Prints a log message if mutable state size is over the error or warn limits
-func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
+func (c *ContextImpl) maxMutableStateSizeExceeded(chasmRegistry *chasm.Registry) bool {
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
-	metrics.PersistedMutableStateSize.With(c.metricsHandler).Record(int64(mutableStateSize))
+	metricsHandler := c.metricsHandler
+	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, c.MutableState.ChasmTree().ArchetypeID()); ok {
+		metricsHandler = metricsHandler.WithTags(archetypeTag)
+	}
+	metrics.PersistedMutableStateSize.With(metricsHandler).Record(int64(mutableStateSize))
 
 	if mutableStateSize > mutableStateSizeLimitError {
 		c.logger.Warn("mutable state size exceeds error limit.",

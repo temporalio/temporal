@@ -722,6 +722,8 @@ type (
 
 	// MutableStateStatistics is the size stats for MutableState
 	MutableStateStatistics struct {
+		ArchetypeID chasm.ArchetypeID
+
 		TotalSize         int
 		HistoryStatistics *HistoryStatistics
 
