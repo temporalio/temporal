@@ -127,6 +127,7 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
 		s.captureHandler,
 		s.logger,
 		resolverFactory,
@@ -134,7 +135,7 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 	)
 }
 
-func (s *registryWatchSuite) newNamespaceResponse(
+func newNamespaceResponse(
 	id namespace.ID,
 	name string,
 	activeCluster string,
@@ -408,7 +409,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 // the old name is removed from the cache and the new name works.
 func (s *registryWatchSuite) TestWatchNamespaceRename() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "old-name", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "old-name", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -427,7 +428,7 @@ func (s *registryWatchSuite) TestWatchNamespaceRename() {
 	s.Equal(nsID, ns.ID())
 
 	// Send rename event (same ID, different name)
-	renamedRecord := s.newNamespaceResponse(nsID, "new-name", cluster.TestCurrentClusterName, 2)
+	renamedRecord := newNamespaceResponse(nsID, "new-name", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: renamedRecord,
@@ -465,10 +466,10 @@ func (s *registryWatchSuite) TestWatchNamespaceRename() {
 // multiple pages of namespaces.
 func (s *registryWatchSuite) TestWatchInitialRefreshPaginated() {
 	ns1ID := namespace.NewID()
-	ns1Record := s.newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
+	ns1Record := newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
 
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "namespace-2", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "namespace-2", cluster.TestCurrentClusterName, 2)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 
@@ -532,7 +533,7 @@ func (s *registryWatchSuite) TestWatchInitialRefreshPaginated() {
 // when fetching subsequent pages during initial refresh.
 func (s *registryWatchSuite) TestWatchInitialRefreshPaginationError() {
 	ns1ID := namespace.NewID()
-	ns1Record := s.newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
+	ns1Record := newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
 
 	watchCh1 := make(chan *persistence.NamespaceWatchEvent, 1)
 	watchCh2 := make(chan *persistence.NamespaceWatchEvent, 1)
@@ -602,7 +603,7 @@ func (s *registryWatchSuite) TestWatchInitialRefreshPaginationError() {
 // TestWatchMultipleCallbacks verifies all registered callbacks receive events.
 func (s *registryWatchSuite) TestWatchMultipleCallbacks() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -635,7 +636,7 @@ func (s *registryWatchSuite) TestWatchMultipleCallbacks() {
 
 	// Send create event
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: ns2Record,
@@ -723,7 +724,7 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 // is handled gracefully without triggering callbacks.
 func (s *registryWatchSuite) TestWatchDeleteNonExistentNamespace() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "existing-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "existing-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 2)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -746,7 +747,7 @@ func (s *registryWatchSuite) TestWatchDeleteNonExistentNamespace() {
 
 	// Send a create event to flush the channel and verify processing continued
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: ns2Record,
@@ -784,7 +785,7 @@ func (s *registryWatchSuite) TestWatchDeleteNonExistentNamespace() {
 // when WatchNamespaces returns ErrWatchNotSupported.
 func (s *registryWatchSuite) TestWatchFallbackToPolling() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).Return(nil, persistence.ErrWatchNotSupported)
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), s.defaultListRequest()).Return(
@@ -824,7 +825,7 @@ func (s *registryWatchSuite) TestWatchFallbackToPolling() {
 // from receiving future events.
 func (s *registryWatchSuite) TestWatchUnregisterCallback() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -849,7 +850,7 @@ func (s *registryWatchSuite) TestWatchUnregisterCallback() {
 
 	// Send create event
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: ns2Record,
@@ -874,8 +875,8 @@ func (s *registryWatchSuite) TestWatchUnregisterCallback() {
 // the registry reconnects and performs a full refresh.
 func (s *registryWatchSuite) TestWatchChannelCloses() {
 	nsID := namespace.NewID()
-	nsRecordV1 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
-	nsRecordV2 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
+	nsRecordV1 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecordV2 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
 	// Change IsGlobalNamespace to trigger state change callback after reconnect
 	nsRecordV2.IsGlobalNamespace = true
 
@@ -952,8 +953,8 @@ func (s *registryWatchSuite) TestWatchChannelCloses() {
 // operating.
 func (s *registryWatchSuite) TestWatchEventWithError() {
 	nsID := namespace.NewID()
-	nsRecordV1 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
-	nsRecordV2 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
+	nsRecordV1 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecordV2 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
 	// Change IsGlobalNamespace to trigger state change callback after reconnect
 	nsRecordV2.IsGlobalNamespace = true
 
@@ -1048,7 +1049,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 
 	// Send create event for new namespace
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "new-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "new-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
@@ -1078,7 +1079,7 @@ func (s *registryWatchSuite) TestWatchUpdateForUnknownNamespace() {
 
 	// Send Update event for namespace not in cache
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "unknown-namespace", cluster.TestCurrentClusterName, 5)
+	nsRecord := newNamespaceResponse(nsID, "unknown-namespace", cluster.TestCurrentClusterName, 5)
 
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
@@ -1154,8 +1155,8 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 // initially, it retries and eventually succeeds.
 func (s *registryWatchSuite) TestWatchReconnectSucceedsAfterRetry() {
 	nsID := namespace.NewID()
-	nsRecordV1 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
-	nsRecordV2 := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
+	nsRecordV1 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecordV2 := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
 	// Change IsGlobalNamespace to trigger state change callback after reconnect
 	nsRecordV2.IsGlobalNamespace = true
 
@@ -1231,10 +1232,10 @@ func (s *registryWatchSuite) TestWatchReconnectSucceedsAfterRetry() {
 // callback is fired.
 func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 	ns1ID := namespace.NewID()
-	ns1Record := s.newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
+	ns1Record := newNamespaceResponse(ns1ID, "namespace-1", cluster.TestCurrentClusterName, 1)
 
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "namespace-2", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "namespace-2", cluster.TestCurrentClusterName, 2)
 
 	watchCh1 := make(chan *persistence.NamespaceWatchEvent, 1)
 	watchCh2 := make(chan *persistence.NamespaceWatchEvent, 1)
@@ -1332,7 +1333,7 @@ func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 // TestWatchStop verifies the registry stops gracefully without panics.
 func (s *registryWatchSuite) TestWatchStop() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -1360,7 +1361,7 @@ func (s *registryWatchSuite) TestWatchStop() {
 // gracefully (logged as warning) without causing errors or callbacks.
 func (s *registryWatchSuite) TestWatchUnknownEventType() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 2)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -1384,7 +1385,7 @@ func (s *registryWatchSuite) TestWatchUnknownEventType() {
 
 	// Send a valid event to flush the channel
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: ns2Record,
@@ -1406,7 +1407,7 @@ func (s *registryWatchSuite) TestWatchUnknownEventType() {
 // and then receives events for new namespace changes.
 func (s *registryWatchSuite) TestWatchRegisterCallbackAfterStart() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "existing-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := newNamespaceResponse(nsID, "existing-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -1439,7 +1440,7 @@ func (s *registryWatchSuite) TestWatchRegisterCallbackAfterStart() {
 
 	// Send new namespace event
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
+	ns2Record := newNamespaceResponse(ns2ID, "new-namespace", cluster.TestCurrentClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: ns2Record,
@@ -1462,8 +1463,8 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 
 	// Initial namespace (good)
 	goodNsID := namespace.NewID()
-	goodNsRecordV1 := s.newNamespaceResponse(goodNsID, "good-namespace", cluster.TestCurrentClusterName, 1)
-	goodNsRecordV2 := s.newNamespaceResponse(goodNsID, "good-namespace", cluster.TestCurrentClusterName, 2)
+	goodNsRecordV1 := newNamespaceResponse(goodNsID, "good-namespace", cluster.TestCurrentClusterName, 1)
+	goodNsRecordV2 := newNamespaceResponse(goodNsID, "good-namespace", cluster.TestCurrentClusterName, 2)
 	// Change IsGlobalNamespace to trigger state change callback after reconnect
 	goodNsRecordV2.IsGlobalNamespace = true
 
