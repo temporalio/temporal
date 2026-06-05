@@ -189,6 +189,7 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	env := s.newTestEnv()
 	t := s.T()
+	ctx := s.Context()
 
 	t.Run("Fail", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
@@ -343,6 +344,62 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				require.NoError(t, err)
 				require.Len(t, descResp.Callbacks, 1)
 				require.Equal(t, "http://localhost/existing-activity-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+			})
+
+			t.Run("AttachesCallbacksAndLinksTogether", func(t *testing.T) {
+				bothActivityID := testcore.RandomizeStr(t.Name())
+				bothTaskQueue := testcore.RandomizeStr(t.Name())
+				bothStartResp := env.startAndValidateActivity(ctx, t, bothActivityID, bothTaskQueue)
+
+				attachedLinks := []*commonpb.Link{
+					{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: &commonpb.Link_WorkflowEvent{
+								Namespace:  env.Namespace().String(),
+								WorkflowId: "both-wf",
+								RunId:      "both-run",
+								Reference: &commonpb.Link_WorkflowEvent_EventRef{
+									EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+										EventId:   1,
+										EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+									},
+								},
+							},
+						},
+					},
+				}
+
+				resp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+					Namespace:    env.Namespace().String(),
+					ActivityId:   bothActivityID,
+					ActivityType: env.Tv().ActivityType(),
+					Identity:     env.Tv().WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: bothTaskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(1 * time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           env.Tv().Any().String(),
+					CompletionCallbacks: []*commonpb.Callback{
+						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/both-cb"}}},
+					},
+					Links:             attachedLinks,
+					OnConflictOptions: onConflictOpts,
+				})
+				require.NoError(t, err)
+				require.False(t, resp.GetStarted())
+				require.Equal(t, bothStartResp.RunId, resp.RunId)
+
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: bothActivityID,
+					RunId:      bothStartResp.RunId,
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.Callbacks, 1)
+				require.Equal(t, "http://localhost/both-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+				protorequire.ProtoSliceEqual(t, attachedLinks, descResp.GetInfo().GetLinks())
 			})
 
 			t.Run("IdempotentWithSameRequestId", func(t *testing.T) {
@@ -565,6 +622,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 func (s *standaloneActivityTestSuite) TestStart() {
 	env := s.newTestEnv()
 	t := s.T()
+	ctx := s.Context()
 
 	t.Run("RequestValidations", func(t *testing.T) {
 		t.Run("RequestIDTooLong", func(t *testing.T) {
@@ -688,6 +746,322 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.Equal(t, env.Namespace().String(), link.Namespace)
 		require.Equal(t, activityID, link.ActivityId)
 		require.Equal(t, resp.RunId, link.RunId)
+	})
+
+	t.Run("RequestLinksSurfacedOnDescribe", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		requestLinks := []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: "linked-workflow-id",
+						RunId:      "linked-run-id",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			},
+			{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  env.Namespace().String(),
+						ActivityId: "linked-activity-id",
+						RunId:      "linked-activity-run-id",
+					},
+				},
+			},
+		}
+
+		resp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			Links:               requestLinks,
+		})
+		require.NoError(t, err)
+		require.True(t, resp.Started)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      resp.RunId,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoSliceEqual(t, requestLinks, descResp.GetInfo().GetLinks())
+	})
+
+	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		firstLinks := []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: "first-wf",
+						RunId:      "first-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			},
+		}
+		secondLinks := []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  env.Namespace().String(),
+						ActivityId: "second-act",
+						RunId:      "second-run",
+					},
+				},
+			},
+		}
+
+		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               firstLinks,
+		})
+		require.NoError(t, err)
+		require.True(t, firstResp.Started)
+
+		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               secondLinks,
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachLinks: true,
+			},
+		})
+		require.NoError(t, err)
+		require.False(t, secondResp.Started)
+		require.Equal(t, firstResp.RunId, secondResp.RunId)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      firstResp.RunId,
+		})
+		require.NoError(t, err)
+		expected := append([]*commonpb.Link{}, firstLinks...)
+		expected = append(expected, secondLinks...)
+		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+	})
+
+	t.Run("AttachLinksOnConflictStoresRawInput", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startLinks := []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: "raw-wf",
+						RunId:      "raw-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               startLinks,
+		})
+		require.NoError(t, err)
+		require.True(t, firstResp.Started)
+
+		// Second start re-sends the same link plus an extra duplicate within the same batch.
+		// Activity start does not dedup intra-batch (matching the workflow start path), so the
+		// duplicate is preserved on the activity.
+		_, err = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               append(startLinks, startLinks...),
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachLinks: true,
+			},
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      firstResp.RunId,
+		})
+		require.NoError(t, err)
+		// Activity holds the first call's [link] under reqID-1 and the second call's
+		// raw [link, link] under reqID-2 — no intra-batch dedup is applied.
+		expected := append([]*commonpb.Link{}, startLinks...)
+		expected = append(expected, startLinks...)
+		expected = append(expected, startLinks...)
+		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+	})
+
+	t.Run("PerExecutionCapEnforcedOnCreate", func(t *testing.T) {
+		const maxLinks = 2
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, maxLinks)
+		defer cleanup()
+
+		links := make([]*commonpb.Link, maxLinks+1)
+		for i := range links {
+			links[i] = &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: fmt.Sprintf("cap-wf-%d", i),
+						RunId:      "cap-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			Links:               links,
+		})
+		require.Error(t, err)
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+	})
+
+	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {
+		// Reproduces the SAA Nexus-handler scenario: a benign retry of
+		// StartActivityExecution against an already-running activity, without
+		// OnConflictOptions.attach_links, must not reject the request just because
+		// the Links field would push the activity over the per-execution cap — the
+		// links would be dropped anyway.
+		const maxLinks = 1
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, maxLinks)
+		defer cleanup()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+		})
+		require.NoError(t, err)
+		require.True(t, firstResp.Started)
+
+		overCap := make([]*commonpb.Link, maxLinks+5)
+		for i := range overCap {
+			overCap[i] = &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: fmt.Sprintf("drop-wf-%d", i),
+						RunId:      "drop-run",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventId:   1,
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               overCap,
+			// attach_links intentionally omitted — the Links field should be silently dropped.
+		})
+		require.NoError(t, err, "over-cap Links must be ignored when attach_links is unset")
+		require.False(t, secondResp.Started)
+		require.Equal(t, firstResp.RunId, secondResp.RunId)
 	})
 }
 

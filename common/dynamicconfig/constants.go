@@ -1039,6 +1039,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		10,
 		`Maximum number of links allowed to be attached via a single API request.`,
 	)
+	MaxLinksPerComponent = NewNamespaceIntSetting(
+		"chasm.maxLinksPerComponent",
+		2000,
+		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
@@ -1530,6 +1535,16 @@ default as namespace cardinality can be high and this requires a metrics collect
 			Ratio: 1.5,
 		},
 		`How far off client partition scale values have to be to reject RPCs.`,
+	)
+	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
+		"matching.partitionScaleManager",
+		PartitionScaleManagerSettings{
+			MaxRate:            0.33,
+			BatchSize:          100,
+			BackgroundInterval: 23 * time.Second,
+			DrainBufferTime:    15 * time.Second,
+		},
+		`Settings for partition scale manager.`,
 	)
 
 	// Worker registry settings
@@ -2429,6 +2444,15 @@ archivalQueueProcessor`,
 		2*1024*1024,
 		`MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
 state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.`,
+	)
+	MaximumEventBatchSizeInBytes = NewGlobalIntSetting(
+		"history.maximumEventBatchSizeInBytes",
+		0,
+		`This is EXPERIMENTAL feature that is under development. Things can break if you use it.
+MaximumEventBatchSizeInBytes is the size threshold (in bytes) at which the EventStore rolls the
+current in-memory batch and starts a new one. A single oversized event may cause a batch to
+exceed this size. A value of 0 disables the check. This value should stay below
+system.transactionSizeLimit, since each batch is persisted within a single transaction.`,
 	)
 	MaximumSignalsPerExecution = NewNamespaceIntSetting(
 		"history.maximumSignalsPerExecution",

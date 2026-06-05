@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -408,6 +409,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 		s.metricsHandler,
+		s.config.MaximumEventBatchSizeInBytes,
 	)
 	s.taskGenerator = GetTaskGeneratorProvider().NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
@@ -526,6 +528,7 @@ func NewMutableStateFromDB(
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
+		mutableState.config.MaximumEventBatchSizeInBytes,
 	)
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -1155,6 +1158,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	return nil
@@ -2094,12 +2098,17 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
-	if payloadSize := request.Details.Size(); payloadSize > 0 {
+	payloadSize := request.Details.Size()
+	if payloadSize > 0 {
 		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
 			int64(payloadSize),
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
+	ms.metricsHandler.Counter(metrics.ActivityHeartbeatCount.Name()).Record(1,
+		metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.StringTag("has_details", strconv.FormatBool(payloadSize > 0)))
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -8356,6 +8365,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
@@ -10037,9 +10047,8 @@ func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
 			EventID:             currentEventID,
 		})
 	default:
-		// Non-elapsed bound types (e.g. MaxSkippedDuration) don't emit a
-		// wake-up task and must not leave a stale CurrentElapsedDurationBound
-		// from a previous elapsed-bound config.
+		// Non-elapsed bound types don't emit a wake-up task and must not leave a
+		// stale CurrentElapsedDurationBound from a previous elapsed-bound config.
 		tsi.CurrentElapsedDurationBound = nil
 	}
 }
@@ -10228,29 +10237,12 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		return transition, nil
 	}
 
-	switch b := bound.(type) {
+	switch bound.(type) {
 	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
 		if info.GetCurrentElapsedDurationBound() == nil {
 			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
 		}
 		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-		// MaxSkippedDuration enforces its cap lazily: no wake-up task is emitted, and the
-		// remaining-skip candidate is consulted on every MS mutation. The cap can therefore
-		// only be observed at-or-below the limit on the next transition — accumulated >
-		// maxSkipped never persists past a single transaction.
-		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
-		maxSkipped := b.MaxSkippedDuration.AsDuration()
-		if accumulated > maxSkipped {
-			return timeSkippingTransition{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
-		}
-		if accumulated == maxSkipped {
-			// Cap exactly hit — emit a "disable, no skip" transition. Going through
-			// advance(ms.Now(), true) would set targetTime to now and trigger a no-op
-			// regen pass downstream.
-			return timeSkippingTransition{disabledAfterBound: true}, nil
-		}
-		advance(ms.Now().Add(maxSkipped-accumulated), true)
 	default:
 		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}

@@ -29,10 +29,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -49,7 +49,7 @@ var (
 type batchProcessorConfig struct {
 	namespace         string
 	adjustedQuery     string
-	rps               float64
+	rps               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -60,7 +60,7 @@ type batchWorkerProcessor func(
 	ctx context.Context,
 	taskCh chan task,
 	respCh chan taskResponse,
-	rateLimiter *rate.Limiter,
+	rateLimiter quotas.RateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -163,9 +163,9 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	logger log.Logger,
 	hbd HeartBeatDetails,
 ) (HeartBeatDetails, error) {
-	rateLimit := rate.Limit(config.rps)
-	burstLimit := int(math.Ceil(config.rps)) // should never be zero because everything would be rejected
-	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
+	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+		return float64(config.rps(config.namespace))
+	})
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
 
@@ -353,7 +353,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	config := batchProcessorConfig{
 		namespace:         ns,
 		adjustedQuery:     visibilityQuery,
-		rps:               float64(a.rps(ns)),
+		rps:               a.rps,
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
 		initialExecutions: executions,
@@ -364,7 +364,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		ctx context.Context,
 		taskCh chan task,
 		respCh chan taskResponse,
-		rateLimiter *rate.Limiter,
+		rateLimiter quotas.RateLimiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
@@ -420,7 +420,7 @@ func (a *activities) startTaskProcessor(
 	namespace string,
 	taskCh chan task,
 	respCh chan taskResponse,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -673,7 +673,7 @@ func (a *activities) processAdminTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 ) error {
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
@@ -701,7 +701,7 @@ func (a *activities) processAdminTask(
 
 func processTask(
 	ctx context.Context,
-	limiter *rate.Limiter,
+	limiter quotas.RateLimiter,
 	task task,
 	procFn func(*workflowpb.WorkflowExecutionInfo) error,
 ) error {
