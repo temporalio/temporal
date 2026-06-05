@@ -64,6 +64,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
@@ -2697,10 +2699,19 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	updateErrCh := make(chan error, 1)
+	pollFuture := future.NewFuture[*matchingservice.GetTaskQueueUserDataResponse]()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID.String(),
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0, // must be zero to start
+			WaitNewData:              true,
+		})
+		pollFuture.Set(res, err)
+	}()
 
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
@@ -2716,19 +2727,14 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 				},
 			},
 		})
-		updateErrCh <- err
-	}()
+		require.NoError(t, err)
+	}, 5*time.Second, 50*time.Millisecond)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              namespaceID.String(),
-		TaskQueue:                tq,
-		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: 0, // must be zero to start
-		WaitNewData:              true,
-	})
-	s.NoError(<-updateErrCh)
-	s.NoError(err)
-	s.NotNil(res.UserData.Data.VersioningData)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		res, err := pollFuture.Get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, res.UserData.Data.VersioningData)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3() {
@@ -2753,10 +2759,19 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	updateErrCh := make(chan error, 1)
+	pollFuture := future.NewFuture[*matchingservice.GetTaskQueueUserDataResponse]()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID.String(),
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: userData.Version,
+			WaitNewData:              true,
+		})
+		pollFuture.Set(res, err)
+	}()
 
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
@@ -2772,20 +2787,15 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 				},
 			},
 		})
-		updateErrCh <- err
-	}()
+		require.NoError(t, err)
+	}, 5*time.Second, 50*time.Millisecond)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              namespaceID.String(),
-		TaskQueue:                tq,
-		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: userData.Version,
-		WaitNewData:              true,
-	})
-	s.NoError(<-updateErrCh)
-	s.NoError(err)
-	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
-	s.NotNil(res.UserData.Data.VersioningData)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		res, err := pollFuture.Get(t.Context())
+		require.NoError(t, err)
+		require.True(t, hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
+		require.NotNil(t, res.UserData.Data.VersioningData)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
