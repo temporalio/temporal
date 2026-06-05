@@ -43,6 +43,10 @@ const (
 
 var (
 	errNamespaceMismatch = errors.New("namespace mismatch")
+
+	batchQuotaRequest = quotas.Request{
+		Token: 1,
+	}
 )
 
 // batchProcessorConfig holds the configuration for batch processing
@@ -59,7 +63,7 @@ type batchWorkerProcessor func(
 	ctx context.Context,
 	taskCh chan task,
 	respCh chan taskResponse,
-	rateLimiter quotas.RateLimiter,
+	rateLimiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -157,7 +161,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
 	startWorkerProcessor batchWorkerProcessor,
-	rateLimiter quotas.RateLimiter,
+	rateLimiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -261,11 +265,10 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 type activities struct {
 	activityDeps
-	namespace                   namespace.Name
-	namespaceID                 namespace.ID
-	rps                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	concurrency                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	adminBatcherHostRateLimiter quotas.RateLimiter
+	namespace   namespace.Name
+	namespaceID namespace.ID
+	rps         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 // checkNamespace validates that batchParams targets the worker's own namespace.
@@ -318,7 +321,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	var executions []*commonpb.WorkflowExecution
 
 	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
-	rateLimiter := a.adminBatcherHostRateLimiter
+	rateLimiter := quotas.RequestRateLimiter(a.AdminBatcherRateLimiter)
 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
@@ -328,9 +331,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
-		rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 			return float64(a.rps(ns))
-		})
+		}))
 	}
 
 	if startOver {
@@ -367,7 +370,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		ctx context.Context,
 		taskCh chan task,
 		respCh chan taskResponse,
-		rateLimiter quotas.RateLimiter,
+		rateLimiter quotas.RequestRateLimiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
@@ -423,7 +426,7 @@ func (a *activities) startTaskProcessor(
 	namespace string,
 	taskCh chan task,
 	respCh chan taskResponse,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -676,7 +679,7 @@ func (a *activities) processAdminTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 ) error {
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
@@ -704,11 +707,11 @@ func (a *activities) processAdminTask(
 
 func processTask(
 	ctx context.Context,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 	task task,
 	procFn func(*workflowpb.WorkflowExecutionInfo) error,
 ) error {
-	err := limiter.Wait(ctx)
+	err := limiter.Wait(ctx, batchQuotaRequest)
 	if err != nil {
 		return err
 	}

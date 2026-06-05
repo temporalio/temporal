@@ -28,21 +28,23 @@ const (
 )
 
 type (
+	AdminBatcherRateLimiter quotas.RequestRateLimiter
+
 	workerComponent struct {
-		activityDeps                activityDeps
-		dc                          *dynamicconfig.Collection
-		adminBatcherHostRateLimiter quotas.RateLimiter
-		enabledFeature              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		activityDeps   activityDeps
+		dc             *dynamicconfig.Collection
+		enabledFeature dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		ClientFactory  sdk.ClientFactory
-		FrontendClient workflowservice.WorkflowServiceClient
-		AdminClient    adminservice.AdminServiceClient
-		HistoryClient  resource.HistoryClient
+		MetricsHandler          metrics.Handler
+		Logger                  log.Logger
+		ClientFactory           sdk.ClientFactory
+		FrontendClient          workflowservice.WorkflowServiceClient
+		AdminClient             adminservice.AdminServiceClient
+		HistoryClient           resource.HistoryClient
+		AdminBatcherRateLimiter AdminBatcherRateLimiter
 	}
 
 	fxResult struct {
@@ -52,29 +54,38 @@ type (
 )
 
 var Module = fx.Options(
+	fx.Provide(AdminBatcherRateLimiterProvider),
 	fx.Provide(NewResult),
 )
 
-func NewResult(
+func AdminBatcherRateLimiterProvider(
 	dc *dynamicconfig.Collection,
 	serviceResolver membership.ServiceResolver,
+	logger log.Logger,
+) AdminBatcherRateLimiter {
+	return quotas.NewRequestRateLimiterAdapter(
+		quotas.NewDefaultOutgoingRateLimiter(
+			calculator.NewLoggedCalculator(
+				calculator.ClusterAwareQuotaCalculator{
+					MemberCounter:    serviceResolver,
+					PerInstanceQuota: dynamicconfig.AdminBatcherHostRPS.Get(dc),
+					GlobalQuota:      dynamicconfig.AdminBatcherGlobalRPS.Get(dc),
+				},
+				log.With(logger, tag.ComponentAdminBatcher, tag.ScopeHost),
+			).GetQuota,
+		),
+	)
+}
+
+func NewResult(
+	dc *dynamicconfig.Collection,
 	params activityDeps,
 ) fxResult {
-	adminBatcherHostRateFn := calculator.NewLoggedCalculator(
-		calculator.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: dynamicconfig.AdminBatcherHostRPS.Get(dc),
-			GlobalQuota:      dynamicconfig.AdminBatcherGlobalRPS.Get(dc),
-		},
-		log.With(params.Logger, tag.ComponentAdminBatcher, tag.ScopeHost),
-	).GetQuota
-
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:                params,
-			dc:                          dc,
-			enabledFeature:              dynamicconfig.EnableBatcherNamespace.Get(dc),
-			adminBatcherHostRateLimiter: quotas.NewDefaultOutgoingRateLimiter(adminBatcherHostRateFn),
+			activityDeps:   params,
+			dc:             dc,
+			enabledFeature: dynamicconfig.EnableBatcherNamespace.Get(dc),
 		},
 	}
 }
@@ -99,11 +110,10 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 
 func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {
 	return &activities{
-		activityDeps:                s.activityDeps,
-		namespace:                   name,
-		namespaceID:                 id,
-		rps:                         dynamicconfig.BatcherRPS.Get(s.dc),
-		concurrency:                 dynamicconfig.BatcherConcurrency.Get(s.dc),
-		adminBatcherHostRateLimiter: s.adminBatcherHostRateLimiter,
+		activityDeps: s.activityDeps,
+		namespace:    name,
+		namespaceID:  id,
+		rps:          dynamicconfig.BatcherRPS.Get(s.dc),
+		concurrency:  dynamicconfig.BatcherConcurrency.Get(s.dc),
 	}
 }
