@@ -146,7 +146,7 @@ func (a *activities) runVerifyPhase(
 		}
 
 		passDelta, minNextRetry, ctxAborted, vErr := a.runVerifyPass(
-			callCtx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
+			ctx, callCtx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
 		// Fold partial progress in before the error check — the SDK
 		// discards the activity result on failure, so the only way
 		// the workflow learns about partially-verified execs on the
@@ -265,7 +265,13 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 // Returns a non-nil error only for hard errors from the verify path;
 // ctx-derived errors set ctxAborted instead so the outer loop owns
 // the decision about what to do next.
+//
+// ctx is the activity ctx, used only for heartbeating — a single pass
+// over a large batch can outlast HeartbeatTimeout if we only heartbeat
+// once at the end, so we tick per attempted exec. callCtx is what the
+// DMS call rides on (the detached drain ctx in drain mode).
 func (a *activities) runVerifyPass(
+	ctx context.Context,
 	callCtx context.Context,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
@@ -304,12 +310,13 @@ func (a *activities) runVerifyPass(
 			verified[i] = true
 			verifiedDelta++
 			shards.recordVerified(ex.Shard, time.Now())
-			continue
+		} else {
+			attempts[i]++
+			nextRetryAt[i] = time.Now().Add(backoffDelay(attempts[i]))
+			minNextRetry = earliest(minNextRetry, nextRetryAt[i])
 		}
 
-		attempts[i]++
-		nextRetryAt[i] = time.Now().Add(backoffDelay(attempts[i]))
-		minNextRetry = earliest(minNextRetry, nextRetryAt[i])
+		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 	}
 	return verifiedDelta, minNextRetry, false, nil
 }
