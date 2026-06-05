@@ -90,7 +90,9 @@ type standaloneActivityTestSuite struct {
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
+	t.Logf("PARALLEL_DEBUG: outer test entered, name=%q", t.Name())
 	parallelsuite.Run(t, &standaloneActivityTestSuite{})
+	t.Logf("PARALLEL_DEBUG: outer test returning, name=%q", t.Name())
 }
 
 type standaloneActivityEnv struct {
@@ -620,7 +622,9 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 }
 
 func (s *standaloneActivityTestSuite) TestStart() {
+	s.T().Logf("PARALLEL_DEBUG: TestStart entered, name=%q", s.T().Name())
 	env := s.newTestEnv()
+	s.T().Logf("PARALLEL_DEBUG: TestStart newTestEnv returned, name=%q ns=%q", s.T().Name(), env.Namespace().String())
 	t := s.T()
 	ctx := s.Context()
 
