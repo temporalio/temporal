@@ -1536,6 +1536,16 @@ default as namespace cardinality can be high and this requires a metrics collect
 		},
 		`How far off client partition scale values have to be to reject RPCs.`,
 	)
+	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
+		"matching.partitionScaleManager",
+		PartitionScaleManagerSettings{
+			MaxRate:            0.33,
+			BatchSize:          100,
+			BackgroundInterval: 23 * time.Second,
+			DrainBufferTime:    15 * time.Second,
+		},
+		`Settings for partition scale manager.`,
+	)
 
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(

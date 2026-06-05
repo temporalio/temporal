@@ -1245,6 +1245,9 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
+	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
