@@ -87,11 +87,7 @@ func watchMembershipForClose[C any](
 		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
 		return
 	}
-	defer func() {
-		if err := resolver.RemoveListener(listenerName); err != nil {
-			logger.Warn("Error removing membership listener", tag.Error(err))
-		}
-	}()
+	defer resolver.RemoveListener(listenerName)
 	for {
 		select {
 		case <-ctx.Done():
