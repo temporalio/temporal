@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -433,96 +434,96 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	// Add 5 workers in non-sorted order to verify sorting works
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Add 5 workers across two task queues with varying start times.
+	// Expected sort order: (TaskQueue asc, StartTime asc, WorkerInstanceKey asc)
+	//   queue-a: worker-a2 (t+1), worker-a1 (t+2)
+	//   queue-b: worker-b2 (t+0), worker-b3 (t+0, key tiebreak), worker-b1 (t+3)
 	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
-		{WorkerInstanceKey: "worker-c"},
-		{WorkerInstanceKey: "worker-a"},
-		{WorkerInstanceKey: "worker-e"},
-		{WorkerInstanceKey: "worker-b"},
-		{WorkerInstanceKey: "worker-d"},
+		{WorkerInstanceKey: "worker-a1", TaskQueue: "queue-a", StartTime: timestamppb.New(baseTime.Add(2 * time.Second))},
+		{WorkerInstanceKey: "worker-b1", TaskQueue: "queue-b", StartTime: timestamppb.New(baseTime.Add(3 * time.Second))},
+		{WorkerInstanceKey: "worker-a2", TaskQueue: "queue-a", StartTime: timestamppb.New(baseTime.Add(1 * time.Second))},
+		{WorkerInstanceKey: "worker-b2", TaskQueue: "queue-b", StartTime: timestamppb.New(baseTime)},
+		{WorkerInstanceKey: "worker-b3", TaskQueue: "queue-b", StartTime: timestamppb.New(baseTime)},
 	})
 
-	// Test page size of 2
 	t.Run("first page", func(t *testing.T) {
 		resp, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
 		require.NoError(t, err)
-		assert.Len(t, resp.Workers, 2)
-		assert.Equal(t, "worker-a", resp.Workers[0].WorkerInstanceKey)
-		assert.Equal(t, "worker-b", resp.Workers[1].WorkerInstanceKey)
-		assert.NotNil(t, resp.NextPageToken, "should have next page token")
+		require.Len(t, resp.Workers, 2)
+		require.Equal(t, "worker-a2", resp.Workers[0].WorkerInstanceKey)
+		require.Equal(t, "worker-a1", resp.Workers[1].WorkerInstanceKey)
+		require.NotNil(t, resp.NextPageToken)
 	})
 
-	// Test second page
 	t.Run("second page", func(t *testing.T) {
-		// Get first page to get the token
 		resp1, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
-
 		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
 		require.NoError(t, err)
-		assert.Len(t, resp2.Workers, 2)
-		assert.Equal(t, "worker-c", resp2.Workers[0].WorkerInstanceKey)
-		assert.Equal(t, "worker-d", resp2.Workers[1].WorkerInstanceKey)
-		assert.NotNil(t, resp2.NextPageToken, "should have next page token")
+		require.Len(t, resp2.Workers, 2)
+		require.Equal(t, "worker-b2", resp2.Workers[0].WorkerInstanceKey)
+		require.Equal(t, "worker-b3", resp2.Workers[1].WorkerInstanceKey)
+		require.NotNil(t, resp2.NextPageToken)
 	})
 
-	// Test last page
 	t.Run("last page", func(t *testing.T) {
-		// Get first two pages
 		resp1, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
 		resp2, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
-
 		resp3, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp2.NextPageToken})
 		require.NoError(t, err)
-		assert.Len(t, resp3.Workers, 1)
-		assert.Equal(t, "worker-e", resp3.Workers[0].WorkerInstanceKey)
-		assert.Nil(t, resp3.NextPageToken, "should not have next page token on last page")
+		require.Len(t, resp3.Workers, 1)
+		require.Equal(t, "worker-b1", resp3.Workers[0].WorkerInstanceKey)
+		require.Nil(t, resp3.NextPageToken)
 	})
 }
 
 func TestRegistryImpl_ListWorkersPaginationWithDeletedCursor(t *testing.T) {
-	// Test that pagination continues correctly even if the cursor item is deleted
-	// between pagination requests.
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	t.Run("cursor item deleted", func(t *testing.T) {
-		// Simulate: page 1 returned workers a, b with cursor "b"
-		// Before page 2, worker "b" is evicted
-		// Page 2 should continue from "c" (first key > "b")
+		// Page 1 returned workers a, b with cursor at "worker-b".
+		// Before page 2, worker-b is evicted.
+		// Page 2 should continue from worker-c (first entry after cursor).
 		workers := []*workerpb.WorkerHeartbeat{
-			{WorkerInstanceKey: "worker-a"},
+			{WorkerInstanceKey: "worker-a", TaskQueue: "q", StartTime: timestamppb.New(baseTime)},
 			// worker-b was deleted
-			{WorkerInstanceKey: "worker-c"},
-			{WorkerInstanceKey: "worker-d"},
+			{WorkerInstanceKey: "worker-c", TaskQueue: "q", StartTime: timestamppb.New(baseTime.Add(2 * time.Second))},
+			{WorkerInstanceKey: "worker-d", TaskQueue: "q", StartTime: timestamppb.New(baseTime.Add(3 * time.Second))},
 		}
 
-		// Create a token pointing to the deleted "worker-b"
-		token, _ := json.Marshal(listWorkersPageToken{LastWorkerInstanceKey: "worker-b"})
+		token, _ := json.Marshal(listWorkersPageToken{
+			LastTaskQueue:         "q",
+			LastStartTimestamp:    baseTime.Add(1 * time.Second).UnixNano(),
+			LastWorkerInstanceKey: "worker-b",
+		})
 
 		resp, err := paginateWorkers(workers, 2, token)
 		require.NoError(t, err)
-		assert.Len(t, resp.Workers, 2)
-		// Should start from "worker-c" (first key > "worker-b")
-		assert.Equal(t, "worker-c", resp.Workers[0].WorkerInstanceKey)
-		assert.Equal(t, "worker-d", resp.Workers[1].WorkerInstanceKey)
+		require.Len(t, resp.Workers, 2)
+		require.Equal(t, "worker-c", resp.Workers[0].WorkerInstanceKey)
+		require.Equal(t, "worker-d", resp.Workers[1].WorkerInstanceKey)
 	})
 
 	t.Run("cursor at end deleted", func(t *testing.T) {
-		// Simulate: cursor points to "worker-d" which was the last item
-		// Before next request, "worker-d" is evicted
-		// Should return empty (no more results)
+		// Cursor points to worker-d which was the last item. After eviction,
+		// no workers sort after the cursor, so result should be empty.
 		workers := []*workerpb.WorkerHeartbeat{
-			{WorkerInstanceKey: "worker-a"},
-			{WorkerInstanceKey: "worker-b"},
-			{WorkerInstanceKey: "worker-c"},
-			// worker-d was deleted
+			{WorkerInstanceKey: "worker-a", TaskQueue: "q", StartTime: timestamppb.New(baseTime)},
+			{WorkerInstanceKey: "worker-b", TaskQueue: "q", StartTime: timestamppb.New(baseTime.Add(1 * time.Second))},
+			{WorkerInstanceKey: "worker-c", TaskQueue: "q", StartTime: timestamppb.New(baseTime.Add(2 * time.Second))},
 		}
 
-		// Create a token pointing to the deleted "worker-d"
-		token, _ := json.Marshal(listWorkersPageToken{LastWorkerInstanceKey: "worker-d"})
+		token, _ := json.Marshal(listWorkersPageToken{
+			LastTaskQueue:         "q",
+			LastStartTimestamp:    baseTime.Add(3 * time.Second).UnixNano(),
+			LastWorkerInstanceKey: "worker-d",
+		})
 
 		resp, err := paginateWorkers(workers, 2, token)
 		require.NoError(t, err)
-		assert.Empty(t, resp.Workers, "should return empty when cursor is past all remaining workers")
-		assert.Nil(t, resp.NextPageToken)
+		require.Empty(t, resp.Workers)
+		require.Nil(t, resp.NextPageToken)
 	})
 }
 
