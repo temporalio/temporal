@@ -55,7 +55,7 @@ func ExecutePureTask[C chasm.Component, T any](
 				return err
 			}
 
-			valid, err = handler.Validate(mutableCtx, typedC, attrs, task)
+			valid, err = handler.Validate(mutableCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
 			if err != nil {
 				return err
 			}
