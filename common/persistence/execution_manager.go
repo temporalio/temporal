@@ -122,9 +122,12 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 	m.addXDCCacheKV(newWorkflowXDCKVs)
 	return &CreateWorkflowExecutionResponse{
-		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
-			serializedNewWorkflowSnapshot,
-			newHistoryDiff,
+		NewMutableStateStats: *withArchetypeID(
+			statusOfInternalWorkflowSnapshot(
+				serializedNewWorkflowSnapshot,
+				newHistoryDiff,
+			),
+			archetypeID,
 		),
 	}, nil
 }
@@ -212,13 +215,19 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
-			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
-				&newRequest.UpdateWorkflowMutation,
-				updateWorkflowHistoryDiff,
+			UpdateMutableStateStats: *withArchetypeID(
+				statusOfInternalWorkflowMutation(
+					&newRequest.UpdateWorkflowMutation,
+					updateWorkflowHistoryDiff,
+				),
+				archetypeID,
 			),
-			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
-				newRequest.NewWorkflowSnapshot,
-				newWorkflowHistoryDiff,
+			NewMutableStateStats: withArchetypeID(
+				statusOfInternalWorkflowSnapshot(
+					newRequest.NewWorkflowSnapshot,
+					newWorkflowHistoryDiff,
+				),
+				archetypeID,
 			),
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
@@ -376,17 +385,26 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		m.addXDCCacheKV(currentWorkflowXDCKVs)
 		return &ConflictResolveWorkflowExecutionResponse{
-			ResetMutableStateStats: *statusOfInternalWorkflowSnapshot(
-				&newRequest.ResetWorkflowSnapshot,
-				resetWorkflowHistoryDiff,
+			ResetMutableStateStats: *withArchetypeID(
+				statusOfInternalWorkflowSnapshot(
+					&newRequest.ResetWorkflowSnapshot,
+					resetWorkflowHistoryDiff,
+				),
+				archetypeID,
 			),
-			NewMutableStateStats: statusOfInternalWorkflowSnapshot(
-				newRequest.NewWorkflowSnapshot,
-				newWorkflowHistoryDiff,
+			NewMutableStateStats: withArchetypeID(
+				statusOfInternalWorkflowSnapshot(
+					newRequest.NewWorkflowSnapshot,
+					newWorkflowHistoryDiff,
+				),
+				archetypeID,
 			),
-			CurrentMutableStateStats: statusOfInternalWorkflowMutation(
-				newRequest.CurrentWorkflowMutation,
-				currentWorkflowHistoryDiff,
+			CurrentMutableStateStats: withArchetypeID(
+				statusOfInternalWorkflowMutation(
+					newRequest.CurrentWorkflowMutation,
+					currentWorkflowHistoryDiff,
+				),
+				archetypeID,
 			),
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
@@ -452,9 +470,12 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 
 	newResponse := &GetWorkflowExecutionResponse{
-		State:             state,
-		DBRecordVersion:   response.DBRecordVersion,
-		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
+		State:           state,
+		DBRecordVersion: response.DBRecordVersion,
+		MutableStateStats: *withArchetypeID(
+			statusOfInternalWorkflow(response.State, state, nil),
+			request.ArchetypeID,
+		),
 	}
 	return newResponse, respErr
 }

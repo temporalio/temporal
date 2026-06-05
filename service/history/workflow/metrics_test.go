@@ -6,12 +6,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
@@ -53,6 +56,30 @@ func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotEmpty(t, buckets)
+}
+
+func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	registry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+
+	emitMutableStateStatus(
+		handler,
+		registry,
+		&persistence.MutableStateStatistics{
+			ArchetypeID: chasm.WorkflowArchetypeID,
+			TotalSize:   42,
+		},
+	)
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.MutableStateSize.Name()]
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(42), recordings[0].Value)
+	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
 func TestEmitWorkflowCompletionStats_SkipNonWorkflow(t *testing.T) {
