@@ -451,7 +451,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	// Expect RefreshWorkflowTasks to be called with correct parameters
 	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -497,7 +497,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	expectedErr := errors.New("refresh failed")
 	// Use gomock.Any() for context since it's modified with CallerTypePreemptable header
@@ -617,7 +617,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	taskCh := make(chan task, 1)
 	respCh := make(chan taskResponse, 1)
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	// The signal must be executed with the worker's trusted namespace, not the user-supplied one.
 	s.mockFrontendClient.EXPECT().
@@ -657,7 +657,7 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
