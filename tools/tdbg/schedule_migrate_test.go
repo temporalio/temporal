@@ -12,7 +12,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,7 +90,7 @@ func scheduleExecution(workflowID string) *workflowpb.WorkflowExecutionInfo {
 	}
 }
 
-func runMigrate(t *testing.T, factory tdbg.ClientFactory, args ...string) (string, string, error) {
+func runMigrate(t *testing.T, factory tdbg.ClientFactory, args ...string) (stdoutStr, stderrStr string, err error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
@@ -100,7 +99,7 @@ func runMigrate(t *testing.T, factory tdbg.ClientFactory, args ...string) (strin
 		params.ErrWriter = &stderr
 	})
 	runArgs := append([]string{"tdbg"}, args...)
-	err := app.Run(runArgs)
+	err = app.Run(runArgs)
 	return stdout.String(), stderr.String(), err
 }
 
@@ -124,16 +123,16 @@ func TestMigrateSchedule_FromVisibility_DryRun(t *testing.T) {
 	require.NoError(t, err)
 
 	// Dry-run performs no migrations.
-	assert.Empty(t, admin.requests)
+	require.Empty(t, admin.requests)
 	// Default query is built from the CHASM scheduler archetype ID and scoped to --namespace.
 	require.NotEmpty(t, wf.requests)
 	expectedQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
-	assert.Equal(t, expectedQuery, wf.requests[0].Query)
-	assert.Equal(t, "my-ns", wf.requests[0].Namespace)
+	require.Equal(t, expectedQuery, wf.requests[0].Query)
+	require.Equal(t, "my-ns", wf.requests[0].Namespace)
 	// Both pages are listed and reported.
-	assert.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-a -> workflow")
-	assert.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-b -> workflow")
-	assert.Contains(t, stdout, "Dry-run: 2 schedule(s)")
+	require.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-a -> workflow")
+	require.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-b -> workflow")
+	require.Contains(t, stdout, "Dry-run: 2 schedule(s)")
 }
 
 func TestMigrateSchedule_FromVisibility_Execute(t *testing.T) {
@@ -158,11 +157,11 @@ func TestMigrateSchedule_FromVisibility_Execute(t *testing.T) {
 
 	require.Len(t, admin.requests, 2)
 	ids := []string{admin.requests[0].ScheduleId, admin.requests[1].ScheduleId}
-	assert.ElementsMatch(t, []string{"sched-v2", "sched-v1"}, ids)
+	require.ElementsMatch(t, []string{"sched-v2", "sched-v1"}, ids)
 	for _, req := range admin.requests {
-		assert.Equal(t, "my-ns", req.Namespace)
-		assert.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
-		assert.NotEmpty(t, req.RequestId)
+		require.Equal(t, "my-ns", req.Namespace)
+		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
+		require.NotEmpty(t, req.RequestId)
 	}
 }
 
@@ -191,7 +190,7 @@ func TestMigrateSchedule_FromVisibility_Workers(t *testing.T) {
 	for i, req := range admin.requests {
 		got[i] = req.ScheduleId
 	}
-	assert.ElementsMatch(t, want, got)
+	require.ElementsMatch(t, want, got)
 }
 
 func TestMigrateSchedule_FromVisibility_OutputLog(t *testing.T) {
@@ -232,15 +231,15 @@ func TestMigrateSchedule_FromVisibility_OutputLog(t *testing.T) {
 	require.Len(t, byID, 2)
 
 	ok := byID["sched-ok"]
-	assert.Equal(t, "migrated", ok.Status)
-	assert.Equal(t, "my-ns", ok.Namespace)
-	assert.Equal(t, "workflow", ok.Target)
-	assert.Empty(t, ok.Error)
-	assert.NotEmpty(t, ok.Timestamp)
+	require.Equal(t, "migrated", ok.Status)
+	require.Equal(t, "my-ns", ok.Namespace)
+	require.Equal(t, "workflow", ok.Target)
+	require.Empty(t, ok.Error)
+	require.NotEmpty(t, ok.Timestamp)
 
 	bad := byID["sched-bad"]
-	assert.Equal(t, "failed", bad.Status)
-	assert.Contains(t, bad.Error, "boom")
+	require.Equal(t, "failed", bad.Status)
+	require.Contains(t, bad.Error, "boom")
 }
 
 func TestMigrateSchedule_FromVisibility_CustomQuery(t *testing.T) {
@@ -255,7 +254,7 @@ func TestMigrateSchedule_FromVisibility_CustomQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEmpty(t, wf.requests)
-	assert.Equal(t, customQuery, wf.requests[0].Query)
+	require.Equal(t, customQuery, wf.requests[0].Query)
 }
 
 func TestMigrateSchedule_FromVisibility_RejectsScheduleID(t *testing.T) {
@@ -263,8 +262,8 @@ func TestMigrateSchedule_FromVisibility_RejectsScheduleID(t *testing.T) {
 	_, _, err := runMigrate(t, factory,
 		"schedule", "migrate", "--target", "workflow", "--from-visibility", "--schedule-id", "x")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "from-visibility")
-	assert.Contains(t, err.Error(), "schedule-id")
+	require.Contains(t, err.Error(), "from-visibility")
+	require.Contains(t, err.Error(), "schedule-id")
 }
 
 func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
@@ -284,12 +283,12 @@ func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
 	})
 
 	require.Len(t, admin.requests, 2)
-	assert.Equal(t, "ns-1", admin.requests[0].Namespace)
-	assert.Equal(t, "sched-1", admin.requests[0].ScheduleId)
-	assert.Equal(t, "ns-2", admin.requests[1].Namespace)
-	assert.Equal(t, "sched-2", admin.requests[1].ScheduleId)
+	require.Equal(t, "ns-1", admin.requests[0].Namespace)
+	require.Equal(t, "sched-1", admin.requests[0].ScheduleId)
+	require.Equal(t, "ns-2", admin.requests[1].Namespace)
+	require.Equal(t, "sched-2", admin.requests[1].ScheduleId)
 	for _, req := range admin.requests {
-		assert.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
+		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
 	}
 }
 
@@ -300,10 +299,10 @@ func TestMigrateSchedule_Stdin_DryRun(t *testing.T) {
 	withStdin(t, `{"namespace":"ns-1","schedule_id":"sched-1"}`, func() {
 		stdout, _, err := runMigrate(t, factory, "schedule", "migrate", "--target", "workflow")
 		require.NoError(t, err)
-		assert.Contains(t, stdout, "[dry-run] would migrate ns-1/sched-1 -> workflow")
+		require.Contains(t, stdout, "[dry-run] would migrate ns-1/sched-1 -> workflow")
 	})
 
-	assert.Empty(t, admin.requests)
+	require.Empty(t, admin.requests)
 }
 
 // withStdin redirects os.Stdin to a temp file containing content for the duration of fn.

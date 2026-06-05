@@ -991,13 +991,11 @@ func migrateSchedulesFromVisibility(
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for job := range jobs {
 				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
 			}
-		}()
+		})
 	}
 
 	var listErr error
