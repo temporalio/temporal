@@ -110,7 +110,7 @@ func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
 		threshold := a.timeSource.Now().UTC().Add(-(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier)).Format(time.RFC3339Nano)
 		query := fmt.Sprintf(
-			`%s < "%s" AND TemporalSchedulePaused = false`,
+			`%s < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
 			scheduler.ScheduleIdleCloseTimeName,
 			threshold,
 		)
