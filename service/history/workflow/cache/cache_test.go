@@ -891,3 +891,43 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 	s.Nil(ctx)
 	s.Nil(release)
 }
+
+func (s *workflowCacheSuite) TestMakeReleaseFunc_RefreshesCacheSizeBeforeUnlock() {
+	c := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler).(*cacheImpl)
+	key := Key{WorkflowKey: tests.WorkflowKey}
+
+	// RefreshCacheSize must run before Unlock in every release path: the LRU reads
+	// CacheSize lock-free on release, so refreshing after Unlock would reintroduce
+	// the concurrent-map-write crash. Assert the ordering for all three paths.
+
+	// Clean path: not dirty, no error.
+	cleanCtx := historyi.NewMockWorkflowContext(s.controller)
+	gomock.InOrder(
+		cleanCtx.EXPECT().IsDirty().Return(false),
+		cleanCtx.EXPECT().RefreshCacheSize(),
+		cleanCtx.EXPECT().Unlock(),
+	)
+	c.makeReleaseFunc(key, s.mockShard, cleanCtx, false, metrics.NoopMetricsHandler, time.Now())(nil)
+
+	// Error path: Clear runs first, but the refresh still happens before Unlock.
+	errCtx := historyi.NewMockWorkflowContext(s.controller)
+	gomock.InOrder(
+		errCtx.EXPECT().Clear(),
+		errCtx.EXPECT().RefreshCacheSize(),
+		errCtx.EXPECT().Unlock(),
+	)
+	c.makeReleaseFunc(key, s.mockShard, errCtx, false, metrics.NoopMetricsHandler, time.Now())(errors.New("release error"))
+
+	// Panic path: refresh under the lock before Unlock, then re-raise.
+	panicCtx := historyi.NewMockWorkflowContext(s.controller)
+	gomock.InOrder(
+		panicCtx.EXPECT().Clear(),
+		panicCtx.EXPECT().RefreshCacheSize(),
+		panicCtx.EXPECT().Unlock(),
+	)
+	s.PanicsWithValue("boom", func() {
+		release := c.makeReleaseFunc(key, s.mockShard, panicCtx, false, metrics.NoopMetricsHandler, time.Now())
+		defer release(nil)
+		panic("boom")
+	})
+}

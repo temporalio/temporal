@@ -720,6 +720,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 
 	resetContext := historyi.NewMockWorkflowContext(s.controller)
 	resetContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	resetContext.EXPECT().RefreshCacheSize()
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := historyi.NewMockMutableState(s.controller)

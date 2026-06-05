@@ -206,6 +206,18 @@ func (mr *MockWorkflowContextMockRecorder) ReapplyEvents(ctx, shardContext, even
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockWorkflowContext)(nil).ReapplyEvents), ctx, shardContext, eventBatches)
 }
 
+// RefreshCacheSize mocks base method.
+func (m *MockWorkflowContext) RefreshCacheSize() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RefreshCacheSize")
+}
+
+// RefreshCacheSize indicates an expected call of RefreshCacheSize.
+func (mr *MockWorkflowContextMockRecorder) RefreshCacheSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshCacheSize", reflect.TypeOf((*MockWorkflowContext)(nil).RefreshCacheSize))
+}
+
 // RefreshTasks mocks base method.
 func (m *MockWorkflowContext) RefreshTasks(ctx context.Context, shardContext ShardContext) error {
 	m.ctrl.T.Helper()
