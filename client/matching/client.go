@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 )
 
@@ -32,6 +31,8 @@ const (
 	DefaultTimeout = time.Minute * debug.TimeoutMultiplier
 	// DefaultLongPollTimeout is the max timeout for long poll calls
 	DefaultLongPollTimeout = time.Minute * 5 * debug.TimeoutMultiplier
+	// evictionCheckInterval is how often departed hosts are reaped from the cache.
+	evictionCheckInterval = 30 * time.Second
 )
 
 type clientImpl struct {
@@ -94,39 +95,47 @@ func watchMembershipForEviction(
 		logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
 		return
 	}
-	defer func() {
-		if err := resolver.RemoveListener(listenerName); err != nil {
-			logger.Warn("Error removing membership listener", tag.Error(err))
-		}
-	}()
+	defer resolver.RemoveListener(listenerName)
+
+	// Reap departed hosts from a single ticker keyed by a per-address deadline:
+	// a host that flaps out and back in just rewrites its map entry, with no
+	// goroutine churn, and its deadline resets to the latest removal.
+	evictAt := make(map[string]time.Time)
+	ticker := time.NewTicker(evictionCheckInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
-				go evictAfterDelay(ctx, resolver, clients, h.GetAddress(), connectionCloseDelay())
+				evictAt[h.GetAddress()] = time.Now().Add(connectionCloseDelay())
+			}
+			for _, h := range event.HostsAdded {
+				delete(evictAt, h.GetAddress())
+			}
+		case <-ticker.C:
+			if len(evictAt) == 0 {
+				continue
+			}
+			members := make(map[string]struct{})
+			for _, m := range resolver.Members() {
+				members[m.GetAddress()] = struct{}{}
+			}
+			now := time.Now()
+			for addr, deadline := range evictAt {
+				if _, ok := members[addr]; ok {
+					delete(evictAt, addr) // back in the ring; cancel the eviction
+					continue
+				}
+				if now.Before(deadline) {
+					continue
+				}
+				clients.Evict(addr)
+				delete(evictAt, addr)
 			}
 		}
 	}
-}
-
-func evictAfterDelay(
-	ctx context.Context,
-	resolver membership.ServiceResolver,
-	clients common.ClientCache,
-	addr string,
-	delay time.Duration,
-) {
-	if util.InterruptibleSleep(ctx, delay) != nil {
-		return
-	}
-	for _, m := range resolver.Members() {
-		if m.GetAddress() == addr {
-			return
-		}
-	}
-	clients.Evict(addr)
 }
 
 func (c *clientImpl) AddActivityTask(

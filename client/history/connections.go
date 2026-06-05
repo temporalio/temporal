@@ -7,14 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 )
+
+const evictionCheckInterval = 30 * time.Second
 
 type (
 	clientConnection[C any] struct {
@@ -25,8 +25,7 @@ type (
 	rpcAddress string
 
 	connectionPoolImpl[C any] struct {
-		mu                     *sync.RWMutex
-		conns                  map[rpcAddress]clientConnection[C]
+		conns                  *sync.Map // rpcAddress -> clientConnection[C]
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             RPCFactory
 		clientCtor             func(grpc.ClientConnInterface) C
@@ -52,11 +51,9 @@ func NewConnectionPool[C any](
 	logger log.Logger,
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) *connectionPoolImpl[C] {
-	mu := &sync.RWMutex{}
-	conns := make(map[rpcAddress]clientConnection[C])
+	conns := &sync.Map{}
 
 	c := &connectionPoolImpl[C]{
-		mu:                     mu,
 		conns:                  conns,
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
@@ -65,10 +62,10 @@ func NewConnectionPool[C any](
 	}
 
 	// Close cached conns whose host leaves the membership ring. The goroutine
-	// captures only locals (resolver, logger, mu, conns, delay) — not c — so
+	// captures only locals (resolver, logger, conns, delay) — not c — so
 	// dropping c lets runtime.AddCleanup fire and shut it down.
 	ctx, cancel := context.WithCancel(context.Background())
-	go watchMembershipForClose(ctx, historyServiceResolver, logger, mu, conns, connectionCloseDelay)
+	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
 	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 	return c
 }
@@ -77,81 +74,81 @@ func watchMembershipForClose[C any](
 	ctx context.Context,
 	resolver membership.ServiceResolver,
 	logger log.Logger,
-	mu *sync.RWMutex,
-	conns map[rpcAddress]clientConnection[C],
+	conns *sync.Map,
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) {
-	listenerName := fmt.Sprintf("%p", mu)
+	listenerName := fmt.Sprintf("%p", conns)
 	ch := make(chan *membership.ChangedEvent, 1)
 	if err := resolver.AddListener(listenerName, ch); err != nil {
 		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
 		return
 	}
 	defer resolver.RemoveListener(listenerName)
+
+	// Reap departed hosts from a single ticker keyed by a per-address deadline:
+	// a host that flaps out and back in just rewrites its map entry, with no
+	// goroutine churn, and its deadline resets to the latest removal.
+	evictAt := make(map[rpcAddress]time.Time)
+	ticker := time.NewTicker(evictionCheckInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
-				addr := rpcAddress(h.GetAddress())
-				go closeConnAfterDelay(ctx, resolver, logger, mu, conns, addr, connectionCloseDelay())
+				evictAt[rpcAddress(h.GetAddress())] = time.Now().Add(connectionCloseDelay())
+			}
+			for _, h := range event.HostsAdded {
+				delete(evictAt, rpcAddress(h.GetAddress()))
+			}
+		case <-ticker.C:
+			if len(evictAt) == 0 {
+				continue
+			}
+			members := make(map[rpcAddress]struct{})
+			for _, m := range resolver.Members() {
+				members[rpcAddress(m.GetAddress())] = struct{}{}
+			}
+			now := time.Now()
+			for addr, deadline := range evictAt {
+				if _, ok := members[addr]; ok {
+					delete(evictAt, addr) // back in the ring; cancel the eviction
+					continue
+				}
+				if now.Before(deadline) {
+					continue
+				}
+				if v, ok := conns.LoadAndDelete(addr); ok {
+					if err := v.(clientConnection[C]).grpcConn.Close(); err != nil {
+						logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
+					}
+				}
+				delete(evictAt, addr)
 			}
 		}
 	}
 }
 
-func closeConnAfterDelay[C any](
-	ctx context.Context,
-	resolver membership.ServiceResolver,
-	logger log.Logger,
-	mu *sync.RWMutex,
-	conns map[rpcAddress]clientConnection[C],
-	addr rpcAddress,
-	delay time.Duration,
-) {
-	if util.InterruptibleSleep(ctx, delay) != nil {
-		return
-	}
-	for _, m := range resolver.Members() {
-		if rpcAddress(m.GetAddress()) == addr {
-			return
-		}
-	}
-	mu.Lock()
-	cc, ok := conns[addr]
-	if ok {
-		delete(conns, addr)
-	}
-	mu.Unlock()
-	if ok {
-		if err := cc.grpcConn.Close(); err != nil {
-			logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
-		}
-	}
-}
-
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
-	c.mu.RLock()
-	cc, ok := c.conns[addr]
-	c.mu.RUnlock()
-	if ok {
-		return cc
+	if v, ok := c.conns.Load(addr); ok {
+		return v.(clientConnection[C])
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if cc, ok = c.conns[addr]; ok {
-		return cc
-	}
 	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
-	cc = clientConnection[C]{
+	cc := clientConnection[C]{
 		grpcClient: c.clientCtor(grpcConn),
 		grpcConn:   grpcConn,
 	}
 
-	c.conns[addr] = cc
+	// LoadOrStore needs the value built up front, so a concurrent first-touch
+	// of the same address can lose the race; close the conn we didn't store.
+	// The conn is an idle grpc.NewClient channel (no dial until first use), so
+	// closing the loser is cheap.
+	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
+		_ = grpcConn.Close()
+		return actual.(clientConnection[C])
+	}
 	return cc
 }
 
