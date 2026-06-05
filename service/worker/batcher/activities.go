@@ -49,7 +49,6 @@ var (
 type batchProcessorConfig struct {
 	namespace         string
 	adjustedQuery     string
-	rps               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -158,14 +157,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
 	startWorkerProcessor batchWorkerProcessor,
+	rateLimiter quotas.RateLimiter,
 	sdkClient sdkclient.Client,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	hbd HeartBeatDetails,
 ) (HeartBeatDetails, error) {
-	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-		return float64(config.rps(config.namespace))
-	})
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
 
@@ -264,10 +261,11 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 type activities struct {
 	activityDeps
-	namespace   namespace.Name
-	namespaceID namespace.ID
-	rps         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
+	namespace                   namespace.Name
+	namespaceID                 namespace.ID
+	rps                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	concurrency                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	adminBatcherHostRateLimiter quotas.RateLimiter
 }
 
 // checkNamespace validates that batchParams targets the worker's own namespace.
@@ -319,6 +317,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
 
+	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
+	rateLimiter := a.adminBatcherHostRateLimiter
+
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
@@ -327,6 +328,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
+		rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			return float64(a.rps(ns))
+		})
 	}
 
 	if startOver {
@@ -353,7 +357,6 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	config := batchProcessorConfig{
 		namespace:         ns,
 		adjustedQuery:     visibilityQuery,
-		rps:               a.rps,
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
 		initialExecutions: executions,
@@ -373,7 +376,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
-	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
+	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
 }
 
 func (a *activities) getActivityLogger(ctx context.Context) log.Logger {

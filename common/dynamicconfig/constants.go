@@ -3227,12 +3227,24 @@ When enabled, the scavenger will delete completed workflow execution data that a
 	BatcherRPS = NewNamespaceIntSetting(
 		"worker.batcherRPS",
 		50,
-		`BatcherRPS controls number the rps of batch operations`,
+		`BatcherRPS controls number the rps of one batch operation`,
 	)
 	BatcherConcurrency = NewNamespaceIntSetting(
 		"worker.batcherConcurrency",
 		5,
-		`BatcherConcurrency controls the concurrency of one batch operation`,
+		`BatcherConcurrency controls the concurrency of one batch or admin batch operation`,
+	)
+	AdminBatcherHostRPS = NewGlobalIntSetting(
+		"worker.adminBatcherHostRPS",
+		100,
+		`AdminBatcherHostRPS controls number the rps of all admin batch operations per host`,
+	)
+	AdminBatcherGlobalRPS = NewGlobalIntSetting(
+		"worker.adminBatcherGlobalRPS",
+		0,
+		`AdminBatcherGlobalRPS controls number the rps of all admin batch operations across all worker hosts.
+The configured value will be divided by the number of worker hosts to get the per host rps limit. 
+0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ParentCloseMaxConcurrentActivityExecutionSize",
