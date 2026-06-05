@@ -20,6 +20,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
@@ -159,6 +160,30 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
 		o.dedicatedReason = "fault injection config used"
+	}
+}
+
+// WithArchival enables archival on the test's cluster. This implies a dedicated
+// cluster because archival is configured at the cluster level.
+func WithArchival() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithArchivalEnabled())
+		o.dedicatedReason = "archival enabled"
+	}
+}
+
+// WithCustomArchivers configures custom history and visibility archiver factories
+// on the test's cluster. This implies a dedicated cluster because the factories are
+// configured at the cluster level.
+func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions,
+			WithCustomHistoryArchiverFactory(historyFactory),
+			WithCustomVisibilityArchiverFactory(visibilityFactory),
+		)
+		o.dedicatedReason = "custom archivers used"
 	}
 }
 
