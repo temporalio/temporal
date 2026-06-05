@@ -473,14 +473,18 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		if ctx.Now(invoker).After(deadline) {
 			// Action was buffered in time but expired before execution
 			// (e.g., due to overlap deferral, retries, or system delay).
-			// Determine if a running action contributed: either one is still
-			// running, or the previous action's CloseTime (stored in DesiredTime)
-			// was already past this start's deadline.
-			// Note: if no prior action completed, DesiredTime is zero-valued,
-			// so After(deadline) is false, correctly yielding actionRunning=false.
-			actionRunning := isRunning ||
-				start.GetDesiredTime().AsTime().After(deadline)
-			result.missedCatchupByActionRunning[actionRunning]++
+			// Only emit the metric if the schedule would have run this
+			// start -- skip paused or action-exhausted schedules.
+			if start.Manual || scheduler.useScheduledAction(false) {
+				// Determine if a running action contributed: either one is still
+				// running, or the previous action's CloseTime (stored in DesiredTime)
+				// was already past this start's deadline.
+				// Note: if no prior action completed, DesiredTime is zero-valued,
+				// so After(deadline) is false, correctly yielding actionRunning=false.
+				actionRunning := isRunning ||
+					start.GetDesiredTime().AsTime().After(deadline)
+				result.missedCatchupByActionRunning[actionRunning]++
+			}
 			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}

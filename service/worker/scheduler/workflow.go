@@ -707,9 +707,8 @@ func (s *scheduler) processTimeRange(
 			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
 			// Action's nominal time was already past the catchup window when
 			// the scheduler woke up. It was never buffered for execution.
-			// Note: action_running is not included here because
-			// running action state has not been refreshed yet at this point
-			// (refresh happens later in processBuffer).
+			// action_running is not included: the action was never a candidate
+			// for execution, so whether something is running is irrelevant.
 			s.metrics.WithTags(map[string]string{
 				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
 			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
