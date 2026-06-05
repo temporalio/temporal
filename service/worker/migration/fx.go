@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -113,7 +114,16 @@ func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workerco
 }
 
 func (wc *replicationWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
-	registry.RegisterActivity(wc.activities)
+	// DisableAlreadyRegisteredCheck because the sharded WorkerComponent
+	// shares the *activities method set; whichever component registers
+	// first on the default worker wins (per the worker.go upgrade-hack
+	// pass), and the second component's reflection-based registration
+	// would otherwise panic on every method name. The default worker
+	// isn't dispatched to by either workflow — both have dedicated
+	// activity workers — so winner-takes-all is fine.
+	registry.RegisterActivityWithOptions(wc.activities, activity.RegisterOptions{
+		DisableAlreadyRegisteredCheck: true,
+	})
 }
 
 func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -155,7 +165,12 @@ func (sc *shardedWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon
 }
 
 func (sc *shardedWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
-	registry.RegisterActivity(sc.activities)
+	// See replicationWorkerComponent.RegisterActivities — both components
+	// share the *activities method set, so the second registration on the
+	// default worker would otherwise panic.
+	registry.RegisterActivityWithOptions(sc.activities, activity.RegisterOptions{
+		DisableAlreadyRegisteredCheck: true,
+	})
 }
 
 func (sc *shardedWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
