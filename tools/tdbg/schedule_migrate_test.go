@@ -170,7 +170,7 @@ func TestMigrateSchedule_FromVisibility_Workers(t *testing.T) {
 	const n = 12
 	execs := make([]*workflowpb.WorkflowExecutionInfo, n)
 	want := make([]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := fmt.Sprintf("sched-%d", i)
 		execs[i] = scheduleExecution(id)
 		want[i] = id
