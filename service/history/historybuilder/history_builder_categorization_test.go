@@ -1293,11 +1293,12 @@ func (s *sutTestingAdapter) AddActivityTaskFailedEvent(optionalConfig ...eventCo
 }
 
 func (s *sutTestingAdapter) AddActivityTaskScheduledEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddActivityTaskScheduledEvent(
+	event, _ := s.HistoryBuilder.AddActivityTaskScheduledEvent(
 		64,
 		&commandpb.ScheduleActivityTaskCommandAttributes{},
 		defaultNamespace,
 	)
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskFailedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1340,7 +1341,8 @@ func (s *sutTestingAdapter) AddCompletedWorkflowEvent(_ ...eventConfig) *history
 	attrs := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 		Result: nil,
 	}
-	return s.HistoryBuilder.AddCompletedWorkflowEvent(64, attrs, "new-run-1")
+	event, _ := s.HistoryBuilder.AddCompletedWorkflowEvent(64, attrs, "new-run-1")
+	return event
 }
 
 func (s *sutTestingAdapter) AddFailWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1414,12 +1416,14 @@ func (s *sutTestingAdapter) AddWorkflowExecutionCancelRequestedEvent(_ ...eventC
 
 func (s *sutTestingAdapter) AddWorkflowExecutionCanceledEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.CancelWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddWorkflowExecutionCanceledEvent(64, attrs)
+	event, _ := s.HistoryBuilder.AddWorkflowExecutionCanceledEvent(64, attrs)
+	return event
 }
 
 func (s *sutTestingAdapter) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("some-id"))
+	event, _ := s.HistoryBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("some-id"))
+	return event
 }
 
 func (s *sutTestingAdapter) AddRequestCancelExternalWorkflowExecutionFailedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1448,7 +1452,8 @@ func (s *sutTestingAdapter) AddSignalExternalWorkflowExecutionInitiatedEvent(_ .
 	attrs := &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 		Execution: &commonpb.WorkflowExecution{},
 	}
-	return s.HistoryBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
+	event, _ := s.HistoryBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
+	return event
 }
 
 func (s *sutTestingAdapter) AddUpsertWorkflowSearchAttributesEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1504,7 +1509,8 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 
 func (s *sutTestingAdapter) AddStartChildWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"), nil, nil)
+	event, _ := s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"), nil, nil)
+	return event
 }
 
 func (s *sutTestingAdapter) AddChildWorkflowExecutionStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {

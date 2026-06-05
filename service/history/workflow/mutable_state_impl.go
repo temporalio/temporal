@@ -4212,8 +4212,8 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
-	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
+	event, batchID := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
+	ai, err := ms.ApplyActivityTaskScheduledEvent(batchID, event)
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := ms.taskGenerator.GenerateActivityTasks(
@@ -4227,7 +4227,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ActivityInfo, error) {
 
@@ -4239,7 +4239,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	ai := &persistencespb.ActivityInfo{
 		Version:                 event.GetVersion(),
 		ScheduledEventId:        scheduledEventID,
-		ScheduledEventBatchId:   firstEventID,
+		ScheduledEventBatchId:   batchID,
 		ScheduledTime:           event.GetEventTime(),
 		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
@@ -4841,8 +4841,8 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
-	if err := ms.ApplyWorkflowExecutionCompletedEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
+	if err := ms.ApplyWorkflowExecutionCompletedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -4857,7 +4857,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4866,7 +4866,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -4901,7 +4901,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4910,7 +4910,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5020,8 +5020,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, command)
-	if err := ms.ApplyWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, command)
+	if err := ms.ApplyWorkflowExecutionCanceledEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -5036,7 +5036,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -5045,7 +5045,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5064,8 +5064,8 @@ func (ms *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEv
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	rci, err := ms.ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, cancelRequestID)
+	event, batchID := ms.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
+	rci, err := ms.ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(batchID, event, cancelRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5079,7 +5079,7 @@ func (ms *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEv
 }
 
 func (ms *MutableStateImpl) ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 	cancelRequestID string,
 ) (*persistencespb.RequestCancelInfo, error) {
@@ -5087,7 +5087,7 @@ func (ms *MutableStateImpl) ApplyRequestCancelExternalWorkflowExecutionInitiated
 	initiatedEventID := event.GetEventId()
 	rci := &persistencespb.RequestCancelInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		InitiatedEventId:      initiatedEventID,
 		CancelRequestId:       cancelRequestID,
 	}
@@ -5199,8 +5199,8 @@ func (ms *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	si, err := ms.ApplySignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, signalRequestID)
+	event, batchID := ms.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
+	si, err := ms.ApplySignalExternalWorkflowExecutionInitiatedEvent(batchID, event, signalRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5214,7 +5214,7 @@ func (ms *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplySignalExternalWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 	signalRequestID string,
 ) (*persistencespb.SignalInfo, error) {
@@ -5222,7 +5222,7 @@ func (ms *MutableStateImpl) ApplySignalExternalWorkflowExecutionInitiatedEvent(
 	initiatedEventID := event.GetEventId()
 	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		InitiatedEventId:      initiatedEventID,
 		RequestId:             signalRequestID,
 	}
@@ -6350,14 +6350,14 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	}
 
 	childTSConfig, childInitialSkipped := snapshotTimeSkippingInfo(ms.executionInfo)
-	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
 		childTSConfig,
 		childInitialSkipped,
 	)
-	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
+	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(batchID, event)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -6376,7 +6376,7 @@ func (ms *MutableStateImpl) generateChildWorkflowRequestID(event *historypb.Hist
 }
 
 func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ChildExecutionInfo, error) {
 	initiatedEventID := event.GetEventId()
@@ -6384,7 +6384,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 	ci := &persistencespb.ChildExecutionInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventId:      initiatedEventID,
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
 		CreateRequestId:       ms.generateChildWorkflowRequestID(event),
