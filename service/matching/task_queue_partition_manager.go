@@ -102,6 +102,8 @@ type (
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
 
+		scaleManager *scaleManager
+
 		// loadTime tracks when this partition manager was started, used to prevent
 		// false positives in the no-recent-poller metric for newly loaded queues
 		loadTime time.Time
@@ -144,6 +146,32 @@ func newTaskQueuePartitionManager(
 		}
 	}
 
+	// create partition scaler + manager if root
+	var scaleManager *scaleManager
+	if partition.IsRoot() && e.partitionScalerFactory != nil {
+		partitionScaler := e.partitionScalerFactory.New(
+			ns.Name(),
+			partition.TaskQueue().Name(),
+			partition.TaskQueue().TaskType(),
+		)
+		if partitionScaler != nil {
+			baseCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundLowCallerInfo(ns.Name().String()))
+			scaleManager = newScaleManager(
+				baseCtx,
+				partition,
+				logger,
+				metricsHandler,
+				userDataManager,
+				e.matchingRawClient,
+				partitionScaler,
+				e.timeSource,
+				tqConfig.PartitionScaleManagerSettings,
+				tqConfig.NumWritePartitions,
+				tqConfig.BreakdownMetricsByTaskQueue,
+			)
+		}
+	}
+
 	pm := &taskQueuePartitionManagerImpl{
 		engine:                e,
 		partition:             partition,
@@ -156,6 +184,7 @@ func newTaskQueuePartitionManager(
 		versionedQueues:       make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:       userDataManager,
 		rateLimitManager:      rateLimitManager,
+		scaleManager:          scaleManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
 		taskHooks:             taskHooks,
@@ -290,6 +319,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	if pm.cancelAutoEnableSub != nil {
 		pm.cancelAutoEnableSub()
 	}
+	pm.scaleManager.Stop()
 
 	pm.versionedQueuesLock.Lock()
 	for version, vq := range pm.versionedQueues {
@@ -313,7 +343,13 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.goroGroup.Cancel()
 }
 
-func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite, forwarded bool) error {
+func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
+	// Note that this must be called before defaultQueue is marked initialized!
+	// Otherwise child partitions will see empty scale info in their first ephemeral data update.
+	pm.scaleManager.Start(scaleState, pm.defaultQueue())
+}
+
+func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite bool) error {
 	normal, ok := pm.partition.(*tqid.NormalPartition)
 	if !ok {
 		return nil // only normal partitions do dynamic scaling
@@ -392,6 +428,26 @@ func validatePartitionScaleDrift(
 	return errPartitionCountsStale
 }
 
+// signalPartitionScaler sends a signal to the partition scaler that a new task has arrived
+// (directly from history, not forwarded).
+func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler() {
+	if pm.scaleManager == nil {
+		return // only run on root partition
+	}
+	scaleInfo := pm.userDataManager.PartitionScale()
+	effectiveWrite := int(scaleInfo.GetWrite())
+	// if no target is set yet, get effective count from dynamic config (matches client behavior)
+	if effectiveWrite == 0 {
+		effectiveWrite = max(1, pm.config.NumWritePartitions())
+	}
+	// we assume that tasks are balanced uniformly across partitions, so if the root has
+	// seen 1 task then all have seen ~1 task, so the whole queue has seen 'effective'
+	// tasks in total.
+	// TODO(dp): this will change when we add non-uniform load balancing. we should eventually
+	// aggregate real stats instead of assuming
+	pm.scaleManager.AddedTasks(effectiveWrite)
+}
+
 func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.Context) {
 	// note this sends the trailer even if there is no scale info (i.e. dynamic partition
 	// scaling is not enabled). that will instruct clients to fall back to dynamic config.
@@ -401,7 +457,7 @@ func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.C
 		Write: scaleInfo.GetWrite(),
 	}.SetTrailer(ctx)
 	if err != nil {
-		// TODO: this is very noisy in unit tests, figure out how to log it only in non-test
+		// TODO(dp): this is very noisy in unit tests, figure out how to log it only in non-test
 		pm.throttledLogger.Debug("error setting partition count trailer", tag.Error(err))
 	}
 }
@@ -495,8 +551,11 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
 	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, true, params.forwardInfo != nil); err != nil {
+	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return "", false, err
+	}
+	if params.forwardInfo == nil {
+		pm.signalPartitionScaler()
 	}
 
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
@@ -656,7 +715,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pollMetadata *pollMetadata,
 ) (*internalTask, bool, error) {
 	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, false, pollMetadata.forwardedFrom != ""); err != nil {
+	if err := pm.checkPartitionCounts(ctx, false); err != nil {
 		return nil, false, err
 	}
 
@@ -935,10 +994,14 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	// query counts as "write" for partition load balancing
+	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
 	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, true, request.ForwardInfo != nil); err != nil {
+	// query counts as "write" for partition load balancing
+	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return nil, err
+	}
+	if request.ForwardInfo == nil {
+		pm.signalPartitionScaler()
 	}
 
 	task := newInternalQueryTask(taskID, request)
@@ -983,10 +1046,14 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	// nexus counts as "write" for partition load balancing
+	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
 	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, true, request.ForwardInfo != nil); err != nil {
+	// nexus counts as "write" for partition load balancing
+	if err := pm.checkPartitionCounts(ctx, true); err != nil {
 		return nil, err
+	}
+	if request.ForwardInfo == nil {
+		pm.signalPartitionScaler()
 	}
 
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
@@ -1374,6 +1441,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: versionsInfo,
+		ScaleInfo:            pm.userDataManager.PartitionScale(),
 	}, nil
 }
 
@@ -1775,6 +1843,7 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 }
 
 // ForceLoadAllChildPartitions force-loads known child (read) partitions in new goroutines.
+// TODO(dp): consider moving this into scaleManager.backgroundWork after auto-scaling is enabled everywhere.
 func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 	if !pm.partition.IsRoot() {
 		return

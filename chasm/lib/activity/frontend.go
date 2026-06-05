@@ -39,6 +39,7 @@ var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone ac
 type frontendHandler struct {
 	FrontendHandler
 	callbackValidator callback.Validator
+	linkValidator     *linkValidator
 	client            activitypb.ActivityServiceClient
 	config            *Config
 	logger            log.Logger
@@ -51,6 +52,7 @@ type frontendHandler struct {
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
 	callbackValidator callback.Validator,
+	linkValidator *linkValidator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -61,6 +63,7 @@ func NewFrontendHandler(
 ) FrontendHandler {
 	return &frontendHandler{
 		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
 		client:            client,
 		config:            config,
 		logger:            logger,
@@ -409,6 +412,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
+		return nil, err
 	}
 
 	return req, nil

@@ -30,10 +30,13 @@ func (e *EventLog) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// LogEvent appends an event with the given message. Messages longer than
-// maxMessageLen bytes are truncated at a UTF-8 rune boundary; once the log
-// has more than maxEntries entries, the earliest entries are dropped.
-func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string, maxEntries, maxMessageLen int) {
+// LogEvent appends an event with the given message. Messages longer than the
+// configured maximum length are truncated at a UTF-8 rune boundary; once the
+// log exceeds the configured maximum entries, the earliest entries are dropped.
+func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string) {
+	tw := tweakablesFromContext(ctx)
+	maxEntries, maxMessageLen := tw.EventLogMaxEntries, tw.EventLogMaxMessageLen
+
 	if len(msg) > maxMessageLen {
 		// Back off to the nearest UTF-8 rune boundary so we don't split a
 		// multibyte rune.
