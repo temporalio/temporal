@@ -3305,14 +3305,12 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	if !taskAttributes.IsImmediate() {
-		valid, err = n.validateTask(validationContext, taskAttributes, taskInstance)
-		if err != nil {
-			return true, err
-		}
-		if valid {
-			return true, NewTaskNotInvalidatedError("pure", fmt.Sprintf("task_type=%s", registrableTask.fqType()))
-		}
+	valid, err = n.validateTask(validationContext, taskAttributes, taskInstance)
+	if err != nil {
+		return true, err
+	}
+	if valid {
+		return true, NewTaskNotInvalidatedError("pure", fmt.Sprintf("task_type=%s", registrableTask.fqType()))
 	}
 
 	return true, nil

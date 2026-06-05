@@ -3252,20 +3252,22 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		},
 	)
 
-	// One valid task, one invalid task.
+	// One invalid task, one valid task that invalidates after execution.
 	gomock.InOrder(
 		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1),
 		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Execute(
+				gomock.AssignableToTypeOf(&mutableCtx{}),
+				gomock.Any(),
+				gomock.Eq(taskAttributes),
+				gomock.Any(),
+			).Return(nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1),
 	)
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Execute(
-			gomock.AssignableToTypeOf(&mutableCtx{}),
-			gomock.Any(),
-			gomock.Eq(taskAttributes),
-			gomock.Any(),
-		).Return(nil).Times(1)
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
@@ -3274,6 +3276,44 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+}
+
+func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidation() {
+	root := s.testComponentTree()
+
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	pureTask := &TestPureTask{
+		Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+	}
+	mutableContext.AddTask(testComponent, taskAttributes, pureTask)
+
+	gomock.InOrder(
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).Return(true, nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Execute(
+				gomock.AssignableToTypeOf(&mutableCtx{}),
+				gomock.Any(),
+				gomock.Eq(taskAttributes),
+				gomock.Eq(pureTask),
+			).Return(nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).Return(true, nil).Times(1),
+	)
+
+	_, err = root.CloseTransaction()
+	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
+	var taskNotInvalidatedErr *TaskNotInvalidatedError
+	s.ErrorAs(err, &taskNotInvalidatedErr)
+	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
 }
 
 func (s *nodeSuite) TestEachPureTask() {
