@@ -705,6 +705,7 @@ type heartbeatRecordingInterceptor struct {
 	seedRecordedHeartbeats                []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
 	replicationRecordedHeartbeats         []replicationTasksHeartbeatDetails
 	generateReplicationRecordedHeartbeats []int
+	replicateBatchRecordedHeartbeats      []replicateBatchHeartbeat
 	T                                     *testing.T
 }
 
@@ -725,6 +726,8 @@ func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, det
 		i.replicationRecordedHeartbeats = append(i.replicationRecordedHeartbeats, d)
 	} else if d, ok := details[0].(int); ok {
 		i.generateReplicationRecordedHeartbeats = append(i.generateReplicationRecordedHeartbeats, d)
+	} else if d, ok := details[0].(replicateBatchHeartbeat); ok {
+		i.replicateBatchRecordedHeartbeats = append(i.replicateBatchRecordedHeartbeats, d)
 	} else {
 		assert.Fail(i.T, "invalid heartbeat details")
 	}

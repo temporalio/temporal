@@ -111,14 +111,25 @@ func metadataResponseFor(shardCount int32) func(context.Context, MetadataRequest
 // task-queue-user-data child workflow + its activity so the parent's
 // terminal Await on Done resolves.
 func registerShardedScaffolding(env *testsuite.TestWorkflowEnvironment, shardCount int32) {
+	registerShardedScaffoldingWithSeed(env, shardCount, func(_ context.Context, _ TaskQueueUserDataReplicationParamsWithNamespace) error {
+		return nil
+	})
+}
+
+// registerShardedScaffoldingWithSeed is like registerShardedScaffolding
+// but lets the caller supply the SeedReplicationQueueWithUserDataEntries
+// activity body — needed for tests that exercise the seed-failure path.
+func registerShardedScaffoldingWithSeed(
+	env *testsuite.TestWorkflowEnvironment,
+	shardCount int32,
+	seed func(context.Context, TaskQueueUserDataReplicationParamsWithNamespace) error,
+) {
 	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: "GetMetadata"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
 		return &countWorkflowResponse{WorkflowCount: 0}, nil
 	}, activity.RegisterOptions{Name: "CountWorkflow"})
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	env.RegisterActivityWithOptions(func(_ context.Context, _ TaskQueueUserDataReplicationParamsWithNamespace) error {
-		return nil
-	}, activity.RegisterOptions{Name: "SeedReplicationQueueWithUserDataEntries"})
+	env.RegisterActivityWithOptions(seed, activity.RegisterOptions{Name: "SeedReplicationQueueWithUserDataEntries"})
 }
 
 // ---- Tests ----
@@ -520,6 +531,145 @@ func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
 	var status ForceReplicationStatus
 	require.NoError(t, envValue.Get(&status))
 	require.Equal(t, int64(0), status.ReplicatedWorkflowCount, "no verification ran so verified count must stay 0")
+}
+
+// TestSharded_InvalidInput: validateShardedForceReplicationParams
+// rejects an empty Namespace and a missing TargetClusterEndpoint /
+// TargetClusterName when verification is enabled. Mirrors the existing
+// force-replication TestInvalidInput.
+func TestSharded_InvalidInput(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		params ShardedForceReplicationParams
+	}{
+		{
+			name:   "empty namespace",
+			params: ShardedForceReplicationParams{},
+		},
+		{
+			name: "missing target with verification on",
+			params: ShardedForceReplicationParams{
+				Namespace: "test-ns",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			suite := &testsuite.WorkflowTestSuite{}
+			env := suite.NewTestWorkflowEnvironment()
+			env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+			env.ExecuteWorkflow(ShardedForceReplicationWorkflow, tc.params)
+
+			require.True(t, env.IsWorkflowCompleted())
+			err := env.GetWorkflowError()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "InvalidArgument")
+		})
+	}
+}
+
+// TestSharded_ListWorkflowsError: a hard failure from ListWorkflows
+// propagates out as the workflow error. Mirrors the existing
+// force-replication TestListWorkflowsError.
+func TestSharded_ListWorkflowsError(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 2)
+
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		return nil, temporal.NewNonRetryableApplicationError("mock listWorkflows error", "ListFailed", nil)
+	}, activity.RegisterOptions{Name: "ListWorkflows"})
+
+	// ReplicateBatch should never be invoked because listing fails up
+	// front. Register a fail-loud stub so we notice if the workflow
+	// ever dispatches a batch.
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		t.Fatalf("ReplicateBatch must not be called when listing fails")
+		return replicateBatchResult{}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
+		TargetClusterShardCount: 2,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mock listWorkflows error")
+}
+
+// TestSharded_ReplicateBatchRetryableError: when ReplicateBatch returns
+// a retryable error, the workflow exhausts its 3-attempt retry policy
+// and surfaces the error as lastErr. Mirrors the existing
+// TestGenerateReplicationTaskRetryableError.
+func TestSharded_ReplicateBatchRetryableError(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 2)
+	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+
+	var attempts atomic.Int32
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		attempts.Add(1)
+		return replicateBatchResult{}, temporal.NewApplicationError("transient backend error", "Transient")
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
+		TargetClusterShardCount: 2,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "transient backend error")
+	// MaximumAttempts: 3 in spawnBatch's activity options — assert at
+	// least 2 retries actually happened so a future change that drops
+	// the retry policy fails this test.
+	require.GreaterOrEqual(t, attempts.Load(), int32(2),
+		"expected ReplicateBatch to be retried at least twice before failing")
+}
+
+// TestSharded_TaskQueueReplicationFailure: when the
+// SeedReplicationQueueWithUserDataEntries activity returns a
+// non-retryable error, the child workflow signals the failure back
+// and the parent fails with the seed error message; the status
+// query reports the failure reason. Mirrors the existing
+// TestTaskQueueReplicationFailure.
+func TestSharded_TaskQueueReplicationFailure(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffoldingWithSeed(env, 2,
+		func(_ context.Context, _ TaskQueueUserDataReplicationParamsWithNamespace) error {
+			return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
+		})
+	env.RegisterActivityWithOptions(pageThrough(nil, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		return replicateBatchResult{}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:               "test-ns",
+		TargetClusterName:       "remote_cluster",
+		TargetClusterShardCount: 2,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "namespace is required")
+
+	envValue, qErr := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, qErr)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+	require.True(t, status.TaskQueueUserDataReplicationStatus.Done)
+	require.Contains(t, status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
 }
 
 // ---- internal helpers ----
