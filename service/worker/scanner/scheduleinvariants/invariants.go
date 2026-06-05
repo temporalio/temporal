@@ -105,7 +105,11 @@ func (a *Activities) ScanOverdueNextActionTime(ctx context.Context) error {
 // are excluded since they are intentionally held open and do not idle-close.
 func (a *Activities) ScanStuckOpen(ctx context.Context) error {
 	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
+		// two weeks ago
 		threshold := a.timeSource.Now().UTC().Add(-(scheduler.DefaultTweakables.IdleTime * scheduleIdleTimeBufferMultiplier)).Format(time.RFC3339Nano)
+
+		// select schedules which went idle before two weeks ago
+		// and which are not paused and still appear to be running
 		query := fmt.Sprintf(
 			`%s < "%s" AND TemporalSchedulePaused = false AND ExecutionStatus = "Running"`,
 			scheduler.ScheduleIdleCloseTimeName,
