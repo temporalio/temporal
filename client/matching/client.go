@@ -95,11 +95,10 @@ func watchMembershipForEviction(
 		logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
 		return
 	}
-	defer resolver.RemoveListener(listenerName)
+	defer func() { _ = resolver.RemoveListener(listenerName) }()
 
-	// Reap departed hosts from a single ticker keyed by a per-address deadline:
-	// a host that flaps out and back in just rewrites its map entry, with no
-	// goroutine churn, and its deadline resets to the latest removal.
+	// Reap departed hosts via a per-address deadline checked by a single ticker;
+	// a re-add resets it to the latest removal.
 	evictAt := make(map[string]time.Time)
 	ticker := time.NewTicker(evictionCheckInterval)
 	defer ticker.Stop()
@@ -115,26 +114,34 @@ func watchMembershipForEviction(
 				delete(evictAt, h.GetAddress())
 			}
 		case <-ticker.C:
-			if len(evictAt) == 0 {
-				continue
-			}
-			members := make(map[string]struct{})
-			for _, m := range resolver.Members() {
-				members[m.GetAddress()] = struct{}{}
-			}
-			now := time.Now()
-			for addr, deadline := range evictAt {
-				if _, ok := members[addr]; ok {
-					delete(evictAt, addr) // back in the ring; cancel the eviction
-					continue
-				}
-				if now.Before(deadline) {
-					continue
-				}
-				clients.Evict(addr)
-				delete(evictAt, addr)
-			}
+			reapEvictableClients(resolver, clients, evictAt)
 		}
+	}
+}
+
+func reapEvictableClients(
+	resolver membership.ServiceResolver,
+	clients common.ClientCache,
+	evictAt map[string]time.Time,
+) {
+	if len(evictAt) == 0 {
+		return
+	}
+	members := make(map[string]struct{})
+	for _, m := range resolver.Members() {
+		members[m.GetAddress()] = struct{}{}
+	}
+	now := time.Now()
+	for addr, deadline := range evictAt {
+		if _, ok := members[addr]; ok {
+			delete(evictAt, addr) // back in the ring; cancel the eviction
+			continue
+		}
+		if now.Before(deadline) {
+			continue
+		}
+		clients.Evict(addr)
+		delete(evictAt, addr)
 	}
 }
 
