@@ -444,7 +444,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	attributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 		Result: testPayloads,
 	}
-	event := s.historyBuilder.AddCompletedWorkflowEvent(
+	event, _ := s.historyBuilder.AddCompletedWorkflowEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		"",
@@ -521,7 +521,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelled() {
 	attributes := &commandpb.CancelWorkflowExecutionCommandAttributes{
 		Details: testPayloads,
 	}
-	event := s.historyBuilder.AddWorkflowExecutionCanceledEvent(
+	event, _ := s.historyBuilder.AddWorkflowExecutionCanceledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 	)
@@ -816,7 +816,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 		StartToCloseTimeout:    startToCloseTimeout,
 		HeartbeatTimeout:       heartbeatTimeout,
 	}
-	event := s.historyBuilder.AddActivityTaskScheduledEvent(
+	event, _ := s.historyBuilder.AddActivityTaskScheduledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		defaultNamespace,
@@ -1116,7 +1116,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 		Control:           control,
 		ChildWorkflowOnly: childWorkflowOnly,
 	}
-	event := s.historyBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
@@ -1230,7 +1230,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 		ChildWorkflowOnly: childWorkflowOnly,
 		Header:            testHeader,
 	}
-	event := s.historyBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
@@ -1363,7 +1363,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		SearchAttributes:         testSearchAttributes,
 		Header:                   testHeader,
 	}
-	event := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
@@ -2571,7 +2571,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 		},
 	}
 
-	event := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		rand.Int63(),
 		command,
 		testNamespaceID,

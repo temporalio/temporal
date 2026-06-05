@@ -121,6 +121,7 @@ var (
 	ComponentESVisibilityManager       = component("es-visibility-manager")
 	ComponentArchiver                  = component("archiver")
 	ComponentBatcher                   = component("batcher")
+	ComponentAdminBatcher              = component("admin-batcher")
 	ComponentWorker                    = component("worker")
 	ComponentWorkerManager             = component("worker-manager")
 	ComponentPerNSWorkerManager        = component("perns-worker-manager")

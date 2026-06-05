@@ -17,7 +17,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -35,7 +34,6 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -136,19 +134,13 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
-	// Determine the target namespace, workflow, and run ID from the completion token.
-	targetNamespaceID := completion.GetNamespaceId()
-	targetBusinessID := completion.GetWorkflowId()
-	targetRunID := completion.GetRunId()
-	if len(completion.GetComponentRef()) > 0 {
-		ref := &persistencespb.ChasmComponentRef{}
-		if err := proto.Unmarshal(completion.GetComponentRef(), ref); err != nil {
-			h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-		}
-		targetNamespaceID = ref.GetNamespaceId()
-		targetBusinessID = ref.GetBusinessId()
-		targetRunID = ref.GetRunId()
+	// Determine the target namespace, workflow, and run ID from the completion token. The CHASM
+	// ComponentRef is canonical when present; otherwise the top-level HSM fields are used. Shared
+	// with the system-callback router via commonnexus.CompletionTarget so the two can't drift.
+	targetNamespaceID, targetBusinessID, targetRunID, err := commonnexus.CompletionTarget(completion)
+	if err != nil {
+		h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(targetNamespaceID))
