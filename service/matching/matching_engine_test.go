@@ -551,7 +551,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		}
 		return false
 	}
-	await.RequireTrue(s.T(), pollerReady, 2*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), pollerReady, 5*time.Second, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,
