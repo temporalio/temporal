@@ -33,8 +33,8 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 	// Flatten once so per-exec bookkeeping (verified[], attempts[],
 	// nextRetryAt[]) can stay index-based.
 	execs := req.Executions.flatten()
-	of := len(execs)
-	if of == 0 {
+	execCount := len(execs)
+	if execCount == 0 {
 		return replicateBatchResult{}, nil
 	}
 
@@ -74,7 +74,7 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		return replicateBatchResult{}, fmt.Errorf("look up namespace %s: %w", req.NamespaceID, err)
 	}
 
-	return a.runVerifyPhase(ctx, req, execs, of, remoteAdminClient, ns)
+	return a.runVerifyPhase(ctx, req, execs, execCount, remoteAdminClient, ns)
 }
 
 // runVerifyPhase is the verify-phase loop body of ReplicateBatch. It
@@ -86,13 +86,13 @@ func (a *activities) runVerifyPhase(
 	ctx context.Context,
 	req *shardedBatchReq,
 	execs []*shardedExecutionInfo,
-	of int,
+	execCount int,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 ) (replicateBatchResult, error) {
-	verified := make([]bool, of)
-	attempts := make([]int, of)
-	nextRetryAt := make([]time.Time, of)
+	verified := make([]bool, execCount)
+	attempts := make([]int, execCount)
+	nextRetryAt := make([]time.Time, execCount)
 	doneCount := 0
 
 	shards := newShardVerifyTracker(execs, req.Resume, req.NoProgressByShard)
@@ -123,7 +123,7 @@ func (a *activities) runVerifyPhase(
 		case <-activity.GetWorkerStopChannel(ctx):
 			return replicateBatchResult{
 				CompletedShards: shards.allCompleted(),
-				InFlight:        a.buildInFlight(execs, verified, shards, time.Now()),
+				InFlight:        buildInFlight(execs, verified, shards, time.Now()),
 				VerifiedCount:   int64(doneCount),
 			}, nil
 		default:
@@ -160,7 +160,7 @@ func (a *activities) runVerifyPhase(
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 
 		if done, result, err := a.evaluateVerifyIteration(
-			ctx, req, execs, verified, shards, doneCount, of, draining, drainStartAt); err != nil {
+			ctx, req, execs, verified, shards, doneCount, execCount, draining, drainStartAt); err != nil {
 			return replicateBatchResult{}, wrapBatchVerifyError(err, int64(doneCount))
 		} else if done {
 			return result, nil
@@ -173,7 +173,7 @@ func (a *activities) runVerifyPhase(
 			continue
 		}
 
-		a.waitNextTick(ctx, callCtx, minNextRetry, draining, drainStartAt, req.DrainGrace)
+		waitNextTick(ctx, callCtx, minNextRetry, draining, drainStartAt, req.DrainGrace)
 	}
 }
 
@@ -187,12 +187,12 @@ func (a *activities) evaluateVerifyIteration(
 	execs []*shardedExecutionInfo,
 	verified []bool,
 	shards shardVerifyTracker,
-	doneCount, of int,
+	doneCount, execCount int,
 	draining bool,
 	drainStartAt time.Time,
 ) (bool, replicateBatchResult, error) {
 	// Clean completion — every exec verified.
-	if doneCount >= of {
+	if doneCount >= execCount {
 		return true, replicateBatchResult{
 			CompletedShards: shards.allCompleted(),
 			VerifiedCount:   int64(doneCount),
@@ -200,7 +200,7 @@ func (a *activities) evaluateVerifyIteration(
 	}
 
 	// Per-shard cumulative no-progress backstop.
-	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, of); sErr != nil {
+	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, execCount); sErr != nil {
 		return false, replicateBatchResult{}, sErr
 	}
 
@@ -209,10 +209,10 @@ func (a *activities) evaluateVerifyIteration(
 		// carries everything the workflow needs (completed shards +
 		// unverified execs grouped by shard with their cumulative
 		// no-progress duration).
-		if a.shouldExitDrain(req, shards, drainStartAt) {
+		if shouldExitDrain(req, shards, drainStartAt) {
 			return true, replicateBatchResult{
 				CompletedShards: shards.allCompleted(),
-				InFlight:        a.buildInFlight(execs, verified, shards, time.Now()),
+				InFlight:        buildInFlight(execs, verified, shards, time.Now()),
 				VerifiedCount:   int64(doneCount),
 			}, nil
 		}
@@ -338,7 +338,7 @@ func (a *activities) checkStuckShard(
 		return nil
 	}
 	msg := fmt.Sprintf("shard %d no progress for %v", stuckShard, stuckDur)
-	if stuckIdx, found := a.firstUnverifiedOnShard(execs, verified, stuckShard); found {
+	if stuckIdx, found := firstUnverifiedOnShard(execs, verified, stuckShard); found {
 		stuck := execs[stuckIdx]
 		msg = fmt.Sprintf("shard %d no progress for %v on %s/%s (%d/%d done)",
 			stuckShard, stuckDur, stuck.BusinessID, stuck.RunID, doneCount, total)
@@ -349,7 +349,7 @@ func (a *activities) checkStuckShard(
 // shouldExitDrain reports whether the drain-mode exit conditions are
 // met: either the grace window has expired, or the cumulative idle cost
 // across completed-but-unsignaled shards crossed the threshold.
-func (a *activities) shouldExitDrain(req *shardedBatchReq, shards shardVerifyTracker, drainStartAt time.Time) bool {
+func shouldExitDrain(req *shardedBatchReq, shards shardVerifyTracker, drainStartAt time.Time) bool {
 	if time.Since(drainStartAt) >= req.DrainGrace {
 		return true
 	}
@@ -390,7 +390,7 @@ func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchRe
 // DrainGrace remaining when in drain mode. In drain mode the parent ctx
 // is already dead, so we wake on the detached drain ctx instead — using
 // the parent ctx would tight-loop on its Done channel.
-func (a *activities) waitNextTick(
+func waitNextTick(
 	ctx, callCtx context.Context,
 	minNextRetry time.Time,
 	draining bool,
@@ -677,7 +677,7 @@ func (t shardVerifyTracker) pickStuck(now time.Time, threshold time.Duration) (i
 // attaches the cumulative no-progress duration per shard, for the
 // drain-mode activity return. Shards with zero unverified execs are
 // reported via CompletedShards instead.
-func (a *activities) buildInFlight(
+func buildInFlight(
 	execs []*shardedExecutionInfo,
 	verified []bool,
 	shards shardVerifyTracker,
@@ -720,7 +720,7 @@ func (a *activities) buildInFlight(
 // yet, and a found flag. Callers should only invoke this for shards
 // with at least one pending exec; the found=false return is a defensive
 // fallback so a tracker / verified-slice drift can't crash the activity.
-func (a *activities) firstUnverifiedOnShard(execs []*shardedExecutionInfo, verified []bool, shard int32) (int, bool) {
+func firstUnverifiedOnShard(execs []*shardedExecutionInfo, verified []bool, shard int32) (int, bool) {
 	for i, ex := range execs {
 		if verified[i] {
 			continue
