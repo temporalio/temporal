@@ -911,6 +911,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		ScheduleTime:            a.GetScheduleTime(),
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
+		StartDelay:              a.GetStartDelay(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
 		StateTransitionCount:    executionInfo.StateTransitionCount,
