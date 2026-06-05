@@ -1,14 +1,12 @@
 package tests
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,23 +18,26 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type WorkflowAliasSearchAttributeTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*WorkflowAliasSearchAttributeTestSuite]
 }
 
 func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
-	s := new(WorkflowAliasSearchAttributeTestSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, &WorkflowAliasSearchAttributeTestSuite{})
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	opts = append([]testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment version workflows must run for versioned-poller membership checks"),
+	}, opts...)
 
-	s.SdkWorker().RegisterWorkflow(s.workflowFunc)
+	env := testcore.NewEnv(s.T(), opts...)
+	env.SdkWorker().RegisterWorkflow(s.workflowFunc)
+	return env
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
@@ -44,25 +45,23 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
-	ctx context.Context,
-	taskQueueName string,
-	deploymentName string,
-	buildID string,
+	env *testcore.TestEnv,
 ) {
+	tv := env.Tv()
 	taskQueue := &taskqueuepb.TaskQueue{
-		Name: taskQueueName,
+		Name: tv.TaskQueue().Name,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
 	// Start versioned poller in background
 	go func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+		_, _ = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  "versioned-poller",
 			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-				DeploymentName:       deploymentName,
-				BuildId:              buildID,
+				DeploymentName:       tv.DeploymentSeries(),
+				BuildId:              tv.BuildID(),
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
@@ -70,16 +69,16 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 
 	// Validate version is present via matching RPC
 	version := &deploymentspb.WorkerDeploymentVersion{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
+		DeploymentName: tv.DeploymentSeries(),
+		BuildId:        tv.BuildID(),
 	}
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
-			ctx,
+		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
-				NamespaceId:   s.NamespaceID().String(),
-				TaskQueue:     taskQueueName,
+				NamespaceId:   env.NamespaceID().String(),
+				TaskQueue:     tv.TaskQueue().Name,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				Version:       version,
 			},
@@ -90,75 +89,66 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
-	ctx context.Context,
-	tv *testvars.TestVars,
+	env *testcore.TestEnv,
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	tv := env.Tv()
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().Name, tv.DeploymentSeries(), tv.BuildID())
+	s.startVersionedPollerAndValidate(env)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
-		Namespace:          s.Namespace().String(),
-		WorkflowId:         tv.WorkflowID(),
+		Namespace:          env.Namespace().String(),
+		WorkflowId:         "workflow",
 		WorkflowType:       tv.WorkflowType(),
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
 		VersioningOverride: tv.VersioningOverridePinned(),
 		SearchAttributes:   sa,
 	}
-	return s.FrontendClient().StartWorkflowExecution(ctx, request)
+	return env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
-	ctx context.Context,
-	tv *testvars.TestVars,
+	env *testcore.TestEnv,
 ) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
-	return s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	return env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(),
+			WorkflowId: "workflow",
 		},
 		Reason: "terminate reason",
 	})
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	// Overriding the task queue name, deployment name, and build ID so that we don't hit length limitations
-	// for any of these in any of the databases.
-	tv := testvars.New(s.T()).
-		WithTaskQueue("tq-alias-sa").
-		WithDeploymentSeries("dep-alias-sa").
-		WithBuildID("build-alias-sa")
-
-	_, err := s.createWorkflow(ctx, tv, nil)
-	s.Require().NoError(err)
+	_, err := s.createWorkflow(env, nil)
+	s.NoError(err)
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
-			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
+			resp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     "WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Len(t, resp.GetExecutions(), 1)
 
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
+			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     "WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -168,28 +158,20 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		100*time.Millisecond,
 	)
 
-	_, err = s.terminateWorkflow(ctx, tv)
-	s.Require().NoError(err)
+	_, err = s.terminateWorkflow(env)
+	s.NoError(err)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	// Overriding the task queue name, deployment name, and build ID so that we don't hit length limitations
-	// for any of these in any of the databases.
-	tv := testvars.New(s.T()).
-		WithTaskQueue("tq-alias-sa-custom").
-		WithDeploymentSeries("dep-alias-sa-custom").
-		WithBuildID("build-alias-sa-custom")
-
-	_, err := s.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.SdkClient().OperatorService().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
+		Namespace: env.Namespace().String(),
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"WorkflowVersioningBehavior": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -197,23 +179,23 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		},
 	}
 
-	_, err = s.createWorkflow(ctx, tv, sa)
-	s.Require().NoError(err)
+	_, err = s.createWorkflow(env, sa)
+	s.NoError(err)
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
+			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     "WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = 'workflow'",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
@@ -223,6 +205,6 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		100*time.Millisecond,
 	)
 
-	_, err = s.terminateWorkflow(ctx, tv)
-	s.Require().NoError(err)
+	_, err = s.terminateWorkflow(env)
+	s.NoError(err)
 }

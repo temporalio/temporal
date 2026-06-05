@@ -38,11 +38,16 @@ type (
 		elem           *list.Element
 		isSystemWorker bool
 	}
-	// bucket holds part of the keyspace: a map from namespace → (map of instanceKey → entry),
+	// nsEntries holds all worker entries for a single namespace.
+	nsEntries struct {
+		name    namespace.Name
+		workers map[string]*entry
+	}
+	// bucket holds part of the keyspace: a map from namespace → entries,
 	// plus a recency list for eviction.
 	bucket struct {
 		mu         sync.Mutex
-		namespaces map[namespace.ID]map[string]*entry
+		namespaces map[namespace.ID]*nsEntries
 		order      *list.List // front = oldest, back = newest
 	}
 
@@ -76,7 +81,7 @@ type (
 
 func newBucket() *bucket {
 	return &bucket{
-		namespaces: make(map[namespace.ID]map[string]*entry),
+		namespaces: make(map[namespace.ID]*nsEntries),
 		order:      list.New(),
 	}
 }
@@ -84,26 +89,27 @@ func newBucket() *bucket {
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
 	now := time.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	mp, ok := b.namespaces[nsID]
+	ns, ok := b.namespaces[nsID]
 	if !ok {
-		mp = make(map[string]*entry)
-		b.namespaces[nsID] = mp
+		ns = &nsEntries{name: nsName, workers: make(map[string]*entry)}
+		b.namespaces[nsID] = ns
 	}
+	ns.name = nsName
 
 	for _, hb := range heartbeats {
 		key := hb.WorkerInstanceKey
 
 		// If worker is shutting down, remove it immediately
 		if hb.Status == enumspb.WORKER_STATUS_SHUTDOWN {
-			if e, exists := mp[key]; exists {
+			if e, exists := ns.workers[key]; exists {
 				b.order.Remove(e.elem)
-				delete(mp, key)
+				delete(ns.workers, key)
 				removed++
 			}
 			continue
@@ -112,7 +118,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Princip
 		isSystemWorker := isSystemWorker(principal, hb.GetTaskQueue())
 
 		// Normal upsert
-		if e, exists := mp[key]; exists {
+		if e, exists := ns.workers[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
 			e.isSystemWorker = isSystemWorker
@@ -125,7 +131,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Princip
 				isSystemWorker: isSystemWorker,
 			}
 			e.elem = b.order.PushBack(e)
-			mp[key] = e
+			ns.workers[key] = e
 			added++
 		}
 	}
@@ -144,12 +150,12 @@ func (b *bucket) filterWorkers(
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	mp := b.namespaces[nsID]
-	if mp == nil {
+	ns := b.namespaces[nsID]
+	if ns == nil {
 		return nil
 	}
-	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
-	for _, e := range mp {
+	out := make([]*workerpb.WorkerHeartbeat, 0, len(ns.workers))
+	for _, e := range ns.workers {
 		if !includeSystemWorkers && e.isSystemWorker {
 			continue
 		}
@@ -164,12 +170,12 @@ func (b *bucket) getWorkerHeartbeat(nsID namespace.ID, workerInstanceKey string)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	mp, ok := b.namespaces[nsID]
+	ns, ok := b.namespaces[nsID]
 	if !ok {
 		return nil, serviceerror.NewNamespaceNotFound(nsID.String())
 	}
 
-	e, exists := mp[workerInstanceKey]
+	e, exists := ns.workers[workerInstanceKey]
 	if !exists {
 		return nil, serviceerror.NewNotFoundf("Worker %s not found", workerInstanceKey)
 	}
@@ -194,7 +200,9 @@ func (b *bucket) evictByTTL(expireBefore time.Time) int {
 			break
 		}
 		b.order.Remove(front)
-		delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
+		if ns := b.namespaces[e.nsID]; ns != nil {
+			delete(ns.workers, e.hb.WorkerInstanceKey)
+		}
 		removed++
 	}
 	return removed
@@ -213,7 +221,9 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 		return false
 	}
 	b.order.Remove(front)
-	delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
+	if ns := b.namespaces[e.nsID]; ns != nil {
+		delete(ns.workers, e.hb.WorkerInstanceKey)
+	}
 	return true
 }
 
@@ -259,9 +269,9 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, principal, heartbeats)
+	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -292,6 +302,23 @@ func (m *registryImpl) recordEvictionMetric() {
 	}
 }
 
+// recordWorkerCountMetric emits a gauge per namespace. When a namespace moves to a different
+// matching node, the old node's gauge goes stale until its entries are evicted (up to TTL).
+// Use max by (namespace) when querying to get the correct value.
+func (m *registryImpl) recordWorkerCountMetric() {
+	for _, b := range m.buckets {
+		b.mu.Lock()
+		for _, ns := range b.namespaces {
+			if len(ns.workers) == 0 {
+				continue
+			}
+			metrics.WorkerRegistryWorkerCount.With(m.metricsHandler).
+				Record(float64(len(ns.workers)), metrics.NamespaceTag(string(ns.name)))
+		}
+		b.mu.Unlock()
+	}
+}
+
 // filterWorkers returns all WorkerHeartbeats in a namespace
 // for which predicate(hb) returns true. System workers are excluded
 // unless includeSystemWorkers is true.
@@ -316,6 +343,7 @@ func (m *registryImpl) evictLoop() {
 			m.evictByTTL()
 			m.evictByCapacity()
 			m.recordUtilizationMetric()
+			m.recordWorkerCountMetric()
 		case <-m.quit:
 			return
 		}
@@ -378,7 +406,7 @@ func (m *registryImpl) Stop() {
 }
 
 func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, workerHeartbeat []*workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeats(nsID, principal, workerHeartbeat)
+	m.upsertHeartbeats(nsID, nsName, principal, workerHeartbeat)
 	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 

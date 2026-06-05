@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -687,7 +688,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	for _, cb := range request.GetCompletionCallbacks() {
 		allLinks = append(allLinks, cb.GetLinks()...)
 	}
-	if err := wh.validator.ValidateLinks(namespaceName.String(), allLinks); err != nil {
+	if err := commonlinks.Validate(allLinks, wh.config.MaxLinksPerRequest(namespaceName.String()), wh.config.LinkMaxSize(namespaceName.String())); err != nil {
 		return nil, err
 	}
 
@@ -2222,7 +2223,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2267,7 +2268,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errRequestIDTooLong
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2331,7 +2332,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2425,7 +2426,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -3748,7 +3749,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 
 	namespaceName := namespace.Name(request.Namespace)
 
-	useChasmScheduler := wh.chasmSchedulerCreationEnabled(ctx, namespaceName.String())
+	useChasmScheduler := wh.chasmSchedulerCreationEnabled(ctx, namespaceName.String(), request.ScheduleId)
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
@@ -3778,18 +3779,32 @@ func (wh *WorkflowHandler) CreateSchedule(
 }
 
 // chasmSchedulerCreationEnabled returns true when CreateSchedule should create on
-// the CHASM scheduler.
-func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, namespaceName string) bool {
-	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
-		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
-		wh.config.EnableCHASMSchedulerCreation(namespaceName)
+// the CHASM scheduler. The binary EnableCHASMSchedulerCreation flag is gated by a
+// per-namespace percentage rollout keyed on scheduleID; the experiment header path
+// is unconditional.
+func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, namespaceName, scheduleID string) bool {
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName) {
+		return true
+	}
+	if !wh.config.EnableCHASMSchedulerCreation(namespaceName) {
+		return false
+	}
+	key := fmt.Appendf(nil, "%s\x00%s", namespaceName, scheduleID)
+	return dynamicconfig.RolloutAccepts(key, wh.config.CHASMSchedulerCreationRolloutPercent(namespaceName))
 }
 
 // chasmSchedulerEnabled returns true when schedule RPCs should route to CHASM
 // first. Handlers must be capable of falling back to V1 codepaths for schedules
-// that haven't been migrated to CHASM.
+// that haven't been migrated to CHASM. Routing follows the binary creation flag
+// (without the percentage gate) because schedules already created on CHASM at any
+// rollout percent must be looked up there.
 func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
-	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName) {
+		return true
+	}
+	return wh.config.EnableCHASMSchedulerCreation(namespaceName) ||
 		wh.config.EnableCHASMSchedulerRouting(namespaceName)
 }
 
@@ -6301,55 +6316,6 @@ func dedupLinksFromCallbacks(
 		}
 	}
 	return res
-}
-
-func (wh *WorkflowHandler) validateLinks(
-	ns namespace.Name,
-	links []*commonpb.Link,
-) error {
-	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
-	if len(links) > maxAllowedLinks {
-		return serviceerror.NewInvalidArgumentf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links))
-	}
-
-	maxSize := wh.config.LinkMaxSize(ns.String())
-	for _, l := range links {
-		if l.Size() > maxSize {
-			return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
-		}
-		switch t := l.Variant.(type) {
-		case *commonpb.Link_WorkflowEvent_:
-			if t.WorkflowEvent.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
-			}
-			if t.WorkflowEvent.GetWorkflowId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
-			}
-			if t.WorkflowEvent.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
-			}
-			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
-				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
-			}
-		case *commonpb.Link_BatchJob_:
-			if t.BatchJob.GetJobId() == "" {
-				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
-			}
-		case *commonpb.Link_NexusOperation_:
-			if t.NexusOperation.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty namespace field")
-			}
-			if t.NexusOperation.GetOperationId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty operation ID field")
-			}
-			if t.NexusOperation.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty run ID field")
-			}
-		default:
-			return serviceerror.NewInvalidArgument("unsupported link variant")
-		}
-	}
-	return nil
 }
 
 type buildIdAndFlag interface {

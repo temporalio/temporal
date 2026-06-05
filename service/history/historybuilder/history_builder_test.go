@@ -2,6 +2,7 @@ package historybuilder
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +23,12 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -152,6 +155,7 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 }
 
@@ -309,7 +313,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 		request,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -335,7 +339,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 		signalName, testPayloads, testIdentity, testHeader, nil, "", nil,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -367,7 +371,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMarkerRecord() {
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -395,7 +399,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -420,7 +424,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMemo() {
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -440,13 +444,13 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	attributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 		Result: testPayloads,
 	}
-	event := s.historyBuilder.AddCompletedWorkflowEvent(
+	event, _ := s.historyBuilder.AddCompletedWorkflowEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		"",
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -475,7 +479,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 	)
 	s.Equal(event, s.flush())
 	s.Equal(batchID, event.EventId)
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -498,7 +502,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTimeout() {
 		"",
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -517,12 +521,12 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelled() {
 	attributes := &commandpb.CancelWorkflowExecutionCommandAttributes{
 		Details: testPayloads,
 	}
-	event := s.historyBuilder.AddWorkflowExecutionCanceledEvent(
+	event, _ := s.historyBuilder.AddWorkflowExecutionCanceledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -546,7 +550,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 		nil,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -591,7 +595,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -631,7 +635,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 		s.now,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -662,7 +666,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		true,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -702,7 +706,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -742,7 +746,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 		checksum,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -774,7 +778,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
 		timeoutType,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -812,13 +816,13 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 		StartToCloseTimeout:    startToCloseTimeout,
 		HeartbeatTimeout:       heartbeatTimeout,
 	}
-	event := s.historyBuilder.AddActivityTaskScheduledEvent(
+	event, _ := s.historyBuilder.AddActivityTaskScheduledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -856,7 +860,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 		int64(0),
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -883,7 +887,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelRequested() {
 		scheduledEventID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -909,7 +913,7 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -939,7 +943,7 @@ func (s *historyBuilderSuite) TestActivityTaskFailed() {
 		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -968,7 +972,7 @@ func (s *historyBuilderSuite) TestActivityTaskTimeout() {
 		retryState,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -997,7 +1001,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelled() {
 		testIdentity,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1031,7 +1035,7 @@ func (s *historyBuilderSuite) TestTimerStarted() {
 		attributes,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1055,7 +1059,7 @@ func (s *historyBuilderSuite) TestTimerFired() {
 		timerID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1081,7 +1085,7 @@ func (s *historyBuilderSuite) TestTimerCancelled() {
 		testIdentity,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1112,13 +1116,13 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 		Control:           control,
 		ChildWorkflowOnly: childWorkflowOnly,
 	}
-	event := s.historyBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1150,7 +1154,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess(
 		testRunID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1184,7 +1188,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionFailed()
 		cause,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1226,13 +1230,13 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 		ChildWorkflowOnly: childWorkflowOnly,
 		Header:            testHeader,
 	}
-	event := s.historyBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1269,7 +1273,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
 		control,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1306,7 +1310,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 		cause,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1359,7 +1363,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		SearchAttributes:         testSearchAttributes,
 		Header:                   testHeader,
 	}
-	event := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
@@ -1367,7 +1371,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		nil,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1412,7 +1416,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
 		testHeader,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1450,7 +1454,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 		control,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1488,7 +1492,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
 		testPayloads,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1529,7 +1533,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
 		retryState,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1570,7 +1574,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
 		retryState,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1609,7 +1613,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
 		testPayloads,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -1647,7 +1651,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
 		testWorkflowType,
 	)
 	s.Equal(event, s.flush())
-	s.Equal(&historypb.HistoryEvent{
+	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		EventTime: timestamppb.New(s.now),
@@ -2139,6 +2143,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{startEvent}
 	s.historyBuilder.memEventsBatches = nil
@@ -2186,6 +2191,7 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 		s.nextEventID,
 		nil,
 		metrics.NoopMetricsHandler,
+		tests.NewDynamicConfig().MaximumEventBatchSizeInBytes,
 	)
 	historyBuilder.dbBufferBatch = nil
 	historyBuilder.memEventsBatches = nil
@@ -2565,7 +2571,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 		},
 	}
 
-	event := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		rand.Int63(),
 		command,
 		testNamespaceID,
@@ -2676,4 +2682,122 @@ func (s *historyBuilderSuite) taskIDGenerator(number int) ([]int64, error) {
 		nextTaskID++
 	}
 	return result, nil
+}
+
+// newBuilderWithMaxBatchBytes constructs a fresh HistoryBuilder using the
+// suite's task/time fixtures with MaximumEventBatchSizeInBytes overridden.
+func (s *historyBuilderSuite) newBuilderWithMaxBatchBytes(limit int) *HistoryBuilder {
+	return New(
+		s.mockTimeSource,
+		s.taskIDGenerator,
+		s.version,
+		s.nextEventID,
+		nil,
+		metrics.NoopMetricsHandler,
+		dynamicconfig.GetIntPropertyFn(limit),
+	)
+}
+
+func makeMarkerEvent(markerNameSize int) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
+		Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{
+			MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
+				MarkerName: strings.Repeat("x", markerNameSize),
+			},
+		},
+	}
+}
+
+func makeBufferedEvent(signalNameSize int) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+				SignalName: strings.Repeat("s", signalNameSize),
+			},
+		},
+	}
+}
+
+func (s *historyBuilderSuite) TestEventStore_NoRolloverWhenDisabled() {
+	b := s.newBuilderWithMaxBatchBytes(0)
+
+	for range 5 {
+		_, _ = b.add(makeMarkerEvent(1024))
+	}
+
+	s.Empty(b.memEventsBatches, "no batch should be sealed while feature disabled")
+	s.Len(b.memLatestBatch, 5)
+	// Size is still accumulated while the limit is disabled.
+	s.Positive(b.memLatestBatchSize)
+}
+
+func (s *historyBuilderSuite) TestEventStore_RolloverOnSizeThreshold() {
+	eventSize := proto.Size(makeMarkerEvent(500))
+	// Sized such that two events fit and the third forces a rollover.
+	limit := 2*eventSize + eventSize/2
+	b := s.newBuilderWithMaxBatchBytes(limit)
+
+	var batchIDs []int64
+	for range 5 {
+		_, batchID := b.add(makeMarkerEvent(500))
+		batchIDs = append(batchIDs, batchID)
+	}
+
+	s.Len(b.memEventsBatches, 2)
+	s.Len(b.memEventsBatches[0], 2)
+	s.Len(b.memEventsBatches[1], 2)
+	s.Len(b.memLatestBatch, 1)
+
+	s.Equal(batchIDs[0], batchIDs[1])
+	s.Equal(batchIDs[2], batchIDs[3])
+	s.NotEqual(batchIDs[1], batchIDs[2])
+	s.Equal(b.memEventsBatches[0][0].EventId, batchIDs[0])
+	s.Equal(b.memEventsBatches[1][0].EventId, batchIDs[2])
+	s.Equal(b.memLatestBatch[0].EventId, batchIDs[4])
+}
+
+// A single event larger than the configured threshold must still be appended
+func (s *historyBuilderSuite) TestEventStore_SingleOversizedEventAppended() {
+	b := s.newBuilderWithMaxBatchBytes(10)
+
+	_, batchID := b.add(makeMarkerEvent(1024))
+	s.Empty(b.memEventsBatches)
+	s.Len(b.memLatestBatch, 1)
+	s.Equal(b.memLatestBatch[0].EventId, batchID)
+
+	// Adding a second oversized event triggers a rollover so each lives alone.
+	_, batchID2 := b.add(makeMarkerEvent(1024))
+	s.Len(b.memEventsBatches, 1)
+	s.Len(b.memEventsBatches[0], 1)
+	s.Len(b.memLatestBatch, 1)
+	s.NotEqual(batchID, batchID2)
+}
+
+func (s *historyBuilderSuite) TestEventStore_FlushBufferRolloverProducesMultipleBatches() {
+	eventSize := proto.Size(makeBufferedEvent(500))
+	limit := 2*eventSize + eventSize/2
+	b := s.newBuilderWithMaxBatchBytes(limit)
+
+	// Buffered event type: WorkflowExecutionSignaled lands in memBufferBatch.
+	for range 5 {
+		b.memBufferBatch = append(b.memBufferBatch, makeBufferedEvent(500))
+	}
+
+	_, _ = b.FlushBufferToCurrentBatch()
+
+	s.Len(b.memEventsBatches, 2)
+	s.Len(b.memEventsBatches[0], 2)
+	s.Len(b.memEventsBatches[1], 2)
+	s.Len(b.memLatestBatch, 1)
+	s.Empty(b.memBufferBatch)
+
+	all := append([]*historypb.HistoryEvent{}, b.memEventsBatches[0]...)
+	all = append(all, b.memEventsBatches[1]...)
+	all = append(all, b.memLatestBatch...)
+	for i, ev := range all {
+		s.Equal(s.nextEventID+int64(i), ev.EventId)
+		s.NotEqual(common.BufferedEventID, ev.EventId)
+	}
 }

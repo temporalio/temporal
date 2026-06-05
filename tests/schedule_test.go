@@ -92,6 +92,8 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
+	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
+	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
 	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 }
 
@@ -3381,6 +3383,84 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	require.ErrorAs(t, err, &invalidArgBlob)
 }
 
+// TestScheduleCreationRolloutPercent verifies that
+// CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
+// after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
+// bucket on opposite sides of the rollout land on different stacks.
+func TestScheduleCreationRolloutPercent(t *testing.T) {
+	opts := append(scheduleCommonOpts(t),
+		// V1 worker is needed because at 50% rollout some schedules land on V1.
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerCreationRolloutPercent, 50),
+	)
+	s := testcore.NewEnv(t, opts...)
+	ctx := s.Context()
+	nsName := s.Namespace().String()
+	nsID := s.NamespaceID().String()
+
+	chasmSID, v1SID := testcore.PickRolloutSplit(t, nsName, 50)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: testcore.RandomizeStr("wt")},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	for _, sid := range []string{chasmSID, v1SID} {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Schedule:   mkSchedule(),
+			Identity:   testcore.RandomizeStr("identity"),
+			RequestId:  uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+
+	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
+	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
+	describeOnCHASM := func(sid string) error {
+		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		return err
+	}
+
+	require.Eventually(t, func() bool { return describeOnCHASM(chasmSID) == nil }, 15*time.Second, 250*time.Millisecond,
+		"schedule %q bucketed into CHASM should be describable via the CHASM handler", chasmSID)
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, describeOnCHASM(v1SID), &notFoundErr,
+		"schedule %q bucketed into V1 should not be present on the CHASM handler", v1SID)
+
+	// Both schedules must remain describable through the public frontend
+	// regardless of which stack they live on — the V1 schedule in particular
+	// must round-trip through the frontend's fallback path. The V1 workflow
+	// takes a moment to be queryable after creation, so poll.
+	for _, sid := range []string{chasmSID, v1SID} {
+		require.Eventually(t, func() bool {
+			_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+			})
+			return err == nil
+		}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for %q", sid)
+	}
+}
+
 // testSingleDateScheduleCloses verifies that a CHASM schedule configured with
 // a single calendar date closes after its one workflow completes.
 func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
@@ -3552,6 +3632,171 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		})
 		return err != nil
 	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
+}
+
+// testFutureActionTimesAdvanceWhilePaused verifies that ListSchedules returns
+// up-to-date FutureActionTimes for a paused schedule. CHASM's always-on
+// Generator advances the high water mark and rebuilds FutureActionTimes
+// against the spec even when paused, so listed times stay in the future and
+// never roll into the past. The legacy V1 scheduler workflow does not advance
+// while paused, so its projected times would freeze at pause time and
+// eventually all sit in the past - hence this test is registered CHASM-only.
+func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-future-actions-paused")
+	wid := testcore.RandomizeStr("sched-future-actions-paused-wf")
+	wt := testcore.RandomizeStr("sched-future-actions-paused-wt")
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+			},
+			State: &schedulepb.ScheduleState{Paused: true},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:            wid,
+						WorkflowType:          &commonpb.WorkflowType{Name: wt},
+						TaskQueue:             &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for visibility to surface an initial FutureActionTimes projection.
+	initial := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.FutureActionTimes) > 0
+	})
+	initialFirst := initial.Info.FutureActionTimes[0].AsTime()
+
+	// While still paused, the earliest projected time must advance past the
+	// initial value: the Generator keeps ticking and republishing the
+	// projection, even though no workflows fire.
+	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.FutureActionTimes) > 0 &&
+			ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
+	})
+}
+
+// testPausedDropsCatchup verifies that an action scheduled by the spec during
+// a paused window is NOT replayed when the schedule is unpaused. The test
+// uses a one-shot calendar entry near in the future so the assertion is
+// binary (runs == 0 vs runs == 1) and structural - no fixed-time sleeps and
+// no count-based bound checks.
+//
+// CHASM-only: with the always-on Generator fix, CHASM's HWM advances while
+// paused so unpause doesn't see the past spec time in the [HWM, now] window.
+// V1's scheduler workflow sleeps while paused (HWM is frozen), so V1 would
+// legitimately replay - that's a divergent backend behavior, not what this
+// test verifies.
+func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
+	shortIdleTime := 3 * time.Second
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.IdleTime = shortIdleTime
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables),
+	)...)
+
+	sid := testcore.RandomizeStr("sched-paused-drops-catchup")
+	wid := testcore.RandomizeStr("sched-paused-drops-catchup-wf")
+	wt := testcore.RandomizeStr("sched-paused-drops-catchup-wt")
+
+	var runs atomic.Int32
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		runs.Add(1)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	// Single calendar entry a few seconds in the future. While paused, its
+	// time will pass. Offset must exceed worst-case CreateSchedule latency
+	// under parallel load so the entry is still genuinely in the future when
+	// the server materializes the schedule - otherwise the test passes for
+	// the wrong reason (HWM already past the entry at create time).
+	fireAt := time.Now().Add(10 * time.Second).UTC()
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Calendar: []*schedulepb.CalendarSpec{{
+					Year:       fmt.Sprintf("%d", fireAt.Year()),
+					Month:      fireAt.Month().String(),
+					DayOfMonth: fmt.Sprintf("%d", fireAt.Day()),
+					Hour:       fmt.Sprintf("%d", fireAt.Hour()),
+					Minute:     fmt.Sprintf("%d", fireAt.Minute()),
+					Second:     fmt.Sprintf("%d", fireAt.Second()),
+				}},
+			},
+			State: &schedulepb.ScheduleState{
+				Paused: true,
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:            wid,
+						WorkflowType:          &commonpb.WorkflowType{Name: wt},
+						TaskQueue:             &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && len(desc.Info.FutureActionTimes) == 0
+	}, 15*time.Second, 200*time.Millisecond,
+		"FutureActionTimes should empty out once the only calendar date passes (proves HWM advanced past it while paused)")
+
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      &schedulepb.SchedulePatch{Unpause: "drops-catchup-test"},
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for close - also ensures any post-unpause processing has completed
+	// before the runs assertion below.
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err != nil
+	}, 30*time.Second, 200*time.Millisecond,
+		"schedule should close from idle after unpause (no future actions, no replay)")
+
+	// Quiet window: catches an in-flight SDK worker that started a catch-up
+	// workflow before close, whose runs.Add() may not have landed yet at the
+	// moment DescribeSchedule first errored.
+	s.Never(func() bool { return runs.Load() > 0 },
+		2*time.Second, 100*time.Millisecond,
+		"paused-window calendar entry must not be replayed on unpause")
 }
 
 // testScheduleNextActionTimeVisibility asserts that the

@@ -112,9 +112,12 @@ type (
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
 		// without modifying state).
-		specBuilder          *SpecBuilder
-		cspec                *CompiledSpec
-		enableCHASMMigration bool
+		specBuilder *SpecBuilder
+		cspec       *CompiledSpec
+		// enableCHASMMigration and migrateWithRunningWorkflows are re-evaluated
+		// every iteration inside the "tweakables" MutableSideEffect.
+		enableCHASMMigration        func() bool
+		migrateWithRunningWorkflows func() bool
 
 		tweakables TweakablePolicies
 
@@ -159,7 +162,8 @@ type (
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
-		EnableCHASMMigration bool // Whether to automatically migrate this schedule to CHASM (V2)
+		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
+		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
 
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
@@ -224,10 +228,11 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
+	disabled := func() bool { return false }
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), disabled, disabled)
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -237,8 +242,9 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
 		}),
-		specBuilder:          specBuilder,
-		enableCHASMMigration: enableCHASMMigration,
+		specBuilder:                 specBuilder,
+		enableCHASMMigration:        enableCHASMMigration,
+		migrateWithRunningWorkflows: migrateWithRunningWorkflows,
 	}
 	return scheduler.run()
 }
@@ -322,7 +328,8 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		if s.tweakables.EnableCHASMMigration {
+		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
+			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
 			s.State.PendingMigration = true
 		}
 		if s.State.PendingMigration {
@@ -678,6 +685,7 @@ func (s *scheduler) processTimeRange(
 	}
 
 	lastAction := start
+	recordedGenerateLatency := false
 	var next GetNextTimeResult
 	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
@@ -689,9 +697,21 @@ func (s *scheduler) processTimeRange(
 			// hasMinVersion because this condition couldn't happen in previous versions.
 			continue
 		}
+		// Record generate latency only for the first action in the batch to
+		// avoid inflating the metric when catching up over a large time range.
+		if !manual && !recordedGenerateLatency {
+			s.metrics.Timer(metrics.ScheduleGenerateLatency.Name()).Record(end.Sub(next.Next))
+			recordedGenerateLatency = true
+		}
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", end, "time", next.Next)
-			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
+			// Action's nominal time was already past the catchup window when
+			// the scheduler woke up. It was never buffered for execution.
+			// action_running is not included: the action was never a candidate
+			// for execution, so whether something is running is irrelevant.
+			s.metrics.WithTags(map[string]string{
+				metrics.ScheduleMissedReasonTag: metrics.ScheduleMissedReasonNotBuffered,
+			}).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Inc(1)
 			s.Info.MissedCatchupWindow++
 			continue
 		}
@@ -914,7 +934,11 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		}
 	}
 
-	// Update desired time of next start if it's buffered. This is used for metrics only.
+	// Update desired time of next start if it's buffered. This is used to
+	// compute ScheduleActionDelay (time between completing one action and
+	// starting the next). The legacy path doesn't use deferred starts
+	// (Attempt == -1) like CHASM, so BufferedStarts[0] is always the next
+	// pending start.
 	if long && len(s.State.BufferedStarts) > 0 {
 		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
 	}
@@ -1265,10 +1289,11 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	enableCHASMMigration := s.enableCHASMMigration
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		p.EnableCHASMMigration = enableCHASMMigration
+		// Re-evaluates migration dynamic config each iteration.
+		p.EnableCHASMMigration = s.enableCHASMMigration()
+		p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
@@ -1346,6 +1371,11 @@ func (s *scheduler) processBuffer() bool {
 
 	s.State.BufferedStarts = action.NewBuffer
 	s.Info.OverlapSkipped += action.OverlapSkipped
+	for overlapPolicy, count := range action.OverlapSkippedByPolicy {
+		s.metrics.WithTags(map[string]string{
+			metrics.ScheduleOverlapPolicyTag: overlapPolicy.String(),
+		}).Counter(metrics.ScheduleOverlapSkipped.Name()).Inc(count)
+	}
 
 	// Try starting whatever we're supposed to start now
 	allStarts := action.OverlappingStarts
@@ -1493,6 +1523,8 @@ func (s *scheduler) startWorkflow(
 			// record metric only for _scheduled_ actions, not trigger/backfill, otherwise it's not meaningful
 			desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
+			// Record total delay from original schedule time, including any overlap policy wait.
+			s.metrics.Timer(metrics.ScheduleActionE2EDelay.Name()).Record(res.RealStartTime.AsTime().Sub(start.ActualTime.AsTime()))
 		}
 
 		actionResult := &schedulepb.ScheduleActionResult{
