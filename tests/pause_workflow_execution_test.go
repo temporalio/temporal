@@ -70,7 +70,7 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 	}
 
 	env.workflowFn = func(ctx workflow.Context) (string, error) {
-		env.T().Log("workflow started")
+		env.Logger.Debug("workflow started")
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout:    5 * time.Second,
 			ScheduleToCloseTimeout: 10 * time.Second,
@@ -78,22 +78,22 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
 		var activityResult string
-		env.T().Log("executing activity")
+		env.Logger.Debug("executing activity")
 		if err := workflow.ExecuteActivity(ctx, env.activityFn).Get(ctx, &activityResult); err != nil {
 			return "", err
 		}
 
 		var childResult string
-		env.T().Log("executing child workflow")
+		env.Logger.Debug("executing child workflow")
 		if err := workflow.ExecuteChildWorkflow(ctx, env.childWorkflowFn).Get(ctx, &childResult); err != nil {
 			return "", err
 		}
 
-		env.T().Log("waiting to receive signal to complete the workflow")
+		env.Logger.Debug("waiting to receive signal to complete the workflow")
 		signalCh := workflow.GetSignalChannel(ctx, env.testEndSignal)
 		var signalPayload string
 		signalCh.Receive(ctx, &signalPayload)
-		env.T().Log("signal received to complete the workflow")
+		env.Logger.Debug("signal received to complete the workflow")
 		return signalPayload + activityResult + childResult, nil
 	}
 
@@ -102,12 +102,12 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 	}
 
 	env.activityFn = func(ctx context.Context) (string, error) {
-		env.T().Log("activity started")
+		env.Logger.Debug("activity started")
 		env.activityCompletedOnce.Do(func() {
 			// blocks until the test case unblocks the activity.
 			<-env.activityCompletedCh
 		})
-		env.T().Log("activity completed")
+		env.Logger.Debug("activity completed")
 		return "activity", nil
 	}
 
