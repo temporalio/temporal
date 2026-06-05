@@ -63,8 +63,9 @@ func (b *BackfillerTaskHandler) Execute(
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
-
 	invoker := scheduler.Invoker.Get(ctx)
+
+	backfiller.EventLog.Get(ctx).LogEvent(ctx, "backfillerTask executed")
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
