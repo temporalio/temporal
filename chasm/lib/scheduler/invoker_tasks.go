@@ -390,6 +390,8 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 ) error {
 	scheduler := invoker.Scheduler.Get(ctx)
 
+	invoker.EventLog.Get(ctx).LogEvent(ctx, "processBufferTask executed")
+
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
