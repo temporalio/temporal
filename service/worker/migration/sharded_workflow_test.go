@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -662,6 +663,256 @@ func TestSharded_TaskQueueReplicationFailure(t *testing.T) {
 	require.NoError(t, envValue.Get(&status))
 	require.True(t, status.TaskQueueUserDataReplicationStatus.Done)
 	require.Contains(t, status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
+}
+
+// TestSharded_RecoveryBundle_OnBatchError: a batch returns a
+// non-retryable error mid-cycle; the workflow latches lastErr, drains
+// in-flight via cancellation, returns the error, and the status query
+// reports a non-empty recovery bundle so an operator can start a
+// fresh run with all unverified execs preserved.
+func TestSharded_RecoveryBundle_OnBatchError(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 4)
+
+	// One page of execs across 4 shards.
+	execs := makeExecs(4, 5) // 20 execs total
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+
+	// Every batch fails non-retryably so lastErr latches on the first
+	// return and subsequent in-flight batches are cancelled.
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		return replicateBatchResult{}, temporal.NewNonRetryableApplicationError(
+			"batch failed", "BatchFailed", nil)
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "BatchFailed", appErr.Type())
+
+	envValue, qErr := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, qErr)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+
+	// Recovery bundle: the cancelled in-flight batches go into
+	// RecoveryBuckets (collectRecoveredBuckets on batchExecs). The
+	// failed batch's execs land there too — its activity attempt
+	// errored after running, so batchExecs[id] is still populated.
+	require.NotEmpty(t, status.RecoveryBuckets,
+		"failed run must expose its in-flight execs as RecoveryBuckets")
+	recovered := 0
+	for _, byBID := range status.RecoveryBuckets {
+		for _, runs := range byBID {
+			recovered += len(runs)
+		}
+	}
+	require.Equal(t, len(execs), recovered,
+		"every listed exec should be recoverable via the bundle")
+}
+
+// TestSharded_RecoveryBundle_PreservesUndispatchedResumeShards: when
+// the first resume batch errors and latches lastErr, the remaining
+// undispatched resume entries must be preserved in the recovery
+// bundle rather than silently dropped.
+func TestSharded_RecoveryBundle_PreservesUndispatchedResumeShards(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 8)
+	env.RegisterActivityWithOptions(pageThrough(nil, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+
+	// 8 shards × 60 execs each = 480 unverified. BatchSize=100 →
+	// dispatchResumeBatches plans ~5 batches; the first one fails,
+	// latches lastErr, and the remaining 4 must be preserved.
+	resumeShards := make([]ResumeShard, 8)
+	for s := range 8 {
+		resumeShards[s] = ResumeShard{
+			Shard: int32(s),
+			Execs: makeExecsForShard(int32(s), 60),
+		}
+	}
+
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		return replicateBatchResult{}, temporal.NewNonRetryableApplicationError(
+			"resume batch failed", "ResumeFailed", nil)
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:            "test-ns",
+		TargetClusterName:    "remote_cluster",
+		ConcurrentBatchCount: 1, // serialize so we can observe the early-bail behaviour
+		ResumeShards:         resumeShards,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+
+	envValue, qErr := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, qErr)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+
+	// Every shard must show up exactly once across RecoveryResumeShards
+	// (still-undispatched, batched-but-cancelled, or the failed batch
+	// itself — all paths fold back into the recovery bundle).
+	recoveredRuns := 0
+	for _, rs := range status.RecoveryResumeShards {
+		for _, runs := range rs.Execs {
+			recoveredRuns += len(runs)
+		}
+	}
+	for _, byBID := range status.RecoveryBuckets {
+		for _, runs := range byBID {
+			recoveredRuns += len(runs)
+		}
+	}
+	require.Equal(t, 8*60, recoveredRuns,
+		"all 480 resume execs should be recoverable; got %d", recoveredRuns)
+}
+
+// TestSharded_RecoveryBundle_TracksCurrentPageToken: a List error
+// after the first page should preserve the page token of the next
+// page to read, not the start-of-run token.
+func TestSharded_RecoveryBundle_TracksCurrentPageToken(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 2)
+
+	// First call succeeds; second call errors. Workflow processes page
+	// 1 successfully, then fails listing page 2 with NextPageToken
+	// pointing past page 1.
+	var listCalls atomic.Int32
+	page1 := makeExecs(2, 3)
+	env.RegisterActivityWithOptions(func(_ context.Context, req *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		n := listCalls.Add(1)
+		if n == 1 {
+			return &listWorkflowsResponse{
+				Executions:    page1,
+				NextPageToken: []byte("page-2"),
+			}, nil
+		}
+		return nil, temporal.NewNonRetryableApplicationError(
+			"list page 2 failed", "ListFailed", nil)
+	}, activity.RegisterOptions{Name: "ListWorkflows"})
+
+	// Batches succeed so page 1 doesn't pollute the recovery bundle —
+	// we want the page-token assertion isolated.
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		return replicateBatchResult{}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+
+	envValue, qErr := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, qErr)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+
+	require.Equal(t, []byte("page-2"), status.RecoveryNextPageToken,
+		"RecoveryNextPageToken should reflect where listing was about to resume, not start-of-run")
+}
+
+// TestWrapBatchVerifyError_RoundTrip: the workflow must be able to
+// recover the partial VerifiedCount that the activity encoded on a
+// failed batch return. Covers retryability preservation, the
+// no-progress short-circuit, and inner-error reachability via
+// Unwrap (so consumers that care about the underlying Type can walk
+// past the wrapper).
+func TestWrapBatchVerifyError_RoundTrip(t *testing.T) {
+	t.Run("non-zero count survives wrap; inner reachable via Unwrap", func(t *testing.T) {
+		cause := temporal.NewNonRetryableApplicationError("stuck", "ShardNoProgress", nil)
+		wrapped := wrapBatchVerifyError(cause, 42)
+
+		// Outer wrapper carries the partial-verify tag and the count.
+		var appErr *temporal.ApplicationError
+		require.ErrorAs(t, wrapped, &appErr)
+		require.Equal(t, batchVerifyPartialErrorType, appErr.Type())
+		require.True(t, appErr.NonRetryable())
+		require.Equal(t, int64(42), extractVerifiedCountFromError(wrapped))
+
+		// Inner identity is preserved via Cause / Unwrap — consumers
+		// that key off the underlying type still get there.
+		var inner *temporal.ApplicationError
+		require.ErrorAs(t, appErr.Unwrap(), &inner)
+		require.Equal(t, "ShardNoProgress", inner.Type())
+	})
+
+	t.Run("zero count returns cause unchanged", func(t *testing.T) {
+		cause := temporal.NewApplicationError("trivial", "X")
+		require.Same(t, cause, wrapBatchVerifyError(cause, 0))
+		require.Equal(t, int64(0), extractVerifiedCountFromError(cause))
+	})
+
+	t.Run("non-ApplicationError cause is wrapped and remains reachable", func(t *testing.T) {
+		cause := errors.New("plain failure")
+		wrapped := wrapBatchVerifyError(cause, 7)
+		var appErr *temporal.ApplicationError
+		require.ErrorAs(t, wrapped, &appErr)
+		require.Equal(t, batchVerifyPartialErrorType, appErr.Type())
+		require.Equal(t, int64(7), extractVerifiedCountFromError(wrapped))
+		require.ErrorIs(t, wrapped, cause)
+	})
+
+	t.Run("unrelated ApplicationError returns 0", func(t *testing.T) {
+		// An ApplicationError that wasn't produced by wrapBatchVerifyError
+		// — extractVerifiedCountFromError must not pull garbage out of it.
+		other := temporal.NewApplicationError("plain", "Other")
+		require.Equal(t, int64(0), extractVerifiedCountFromError(other))
+	})
+}
+
+// TestSharded_PartialVerifiedCount_RecordedOnError: when a batch
+// errors out after partial verify, the wrapped error's count must be
+// folded into ReplicatedWorkflowCount so the status query reflects
+// work actually done rather than zeroing out a partially-successful
+// batch.
+func TestSharded_PartialVerifiedCount_RecordedOnError(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 2)
+	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+
+	const partialCount int64 = 6
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
+		return replicateBatchResult{}, wrapBatchVerifyError(
+			temporal.NewNonRetryableApplicationError("simulated mid-verify failure", "Simulated", nil),
+			partialCount,
+		)
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+
+	envValue, qErr := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, qErr)
+	var status ForceReplicationStatus
+	require.NoError(t, envValue.Get(&status))
+
+	require.GreaterOrEqual(t, status.ReplicatedWorkflowCount, partialCount,
+		"failed batch's partial count should still be reflected in ReplicatedWorkflowCount")
 }
 
 // ---- internal helpers ----

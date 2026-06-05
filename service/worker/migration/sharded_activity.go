@@ -147,16 +147,21 @@ func (a *activities) runVerifyPhase(
 
 		passDelta, minNextRetry, ctxAborted, vErr := a.runVerifyPass(
 			callCtx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
-		if vErr != nil {
-			return replicateBatchResult{}, vErr
-		}
+		// Fold partial progress in before the error check — the SDK
+		// discards the activity result on failure, so the only way
+		// the workflow learns about partially-verified execs on the
+		// error path is via wrapBatchVerifyError encoding the count
+		// as ApplicationError details below.
 		doneCount += passDelta
+		if vErr != nil {
+			return replicateBatchResult{}, wrapBatchVerifyError(vErr, int64(doneCount))
+		}
 
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 
 		if done, result, err := a.evaluateVerifyIteration(
 			ctx, req, execs, verified, shards, doneCount, of, draining, drainStartAt); err != nil {
-			return replicateBatchResult{}, err
+			return replicateBatchResult{}, wrapBatchVerifyError(err, int64(doneCount))
 		} else if done {
 			return result, nil
 		}
@@ -355,6 +360,14 @@ func (a *activities) shouldExitDrain(req *shardedBatchReq, shards shardVerifyTra
 // completed-but-unsignaled shards if their cumulative idle cost crossed
 // the threshold. Only fires in normal mode — drain mode rides the
 // activity result instead.
+//
+// Ctx-canceled errors from signalReleaseShards are suppressed: a
+// workflow-initiated cancel arriving mid-signal would otherwise
+// surface as a wrapped ctx-canceled error (not temporal.CanceledError)
+// that the workflow side wouldn't recognise via IsCanceledError —
+// turning a clean CAN into an error exit. Suppressing here lets the
+// outer loop see ctx.Err() at its top and promote to drain mode
+// normally.
 func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchReq, shards shardVerifyTracker) error {
 	if shards.totalIdleCost(time.Now()) < req.IdleShardCost {
 		return nil
@@ -364,6 +377,9 @@ func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchRe
 		return nil
 	}
 	if err := a.signalReleaseShards(ctx, req, releaseList); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return err
 	}
 	shards.markReleased(releaseList)
@@ -714,6 +730,38 @@ func (a *activities) firstUnverifiedOnShard(execs []*shardedExecutionInfo, verif
 		}
 	}
 	return 0, false
+}
+
+// batchVerifyPartialErrorType is the ApplicationError Type stamped on
+// wrappers produced by wrapBatchVerifyError. The workflow keys off
+// this Type via extractVerifiedCountFromError to disambiguate "the
+// wrapper we made" from any other ApplicationError carrying an
+// int64. The original error is reachable via Unwrap on the wrapper.
+const batchVerifyPartialErrorType = "BatchVerifyPartial"
+
+// wrapBatchVerifyError wraps the verify-phase error so the partial
+// VerifiedCount survives the activity boundary — the SDK discards
+// the activity result on failure, so the count would otherwise be
+// lost. The original error is attached as Cause; the workflow side
+// reaches it via errors.As / Unwrap as usual. Returns the cause
+// unchanged when there's no progress to report.
+func wrapBatchVerifyError(cause error, verifiedCount int64) error {
+	if cause == nil || verifiedCount <= 0 {
+		return cause
+	}
+	nonRetryable := false
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](cause); ok {
+		nonRetryable = appErr.NonRetryable()
+	}
+	return temporal.NewApplicationErrorWithOptions(
+		cause.Error(),
+		batchVerifyPartialErrorType,
+		temporal.ApplicationErrorOptions{
+			Cause:        cause,
+			Details:      []any{verifiedCount},
+			NonRetryable: nonRetryable,
+		},
+	)
 }
 
 // backoffDelay returns the per-exec retry delay after `attempt`

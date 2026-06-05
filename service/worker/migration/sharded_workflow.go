@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -30,23 +31,41 @@ import (
 // to finish naturally and returns nil.
 func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceReplicationParams) error {
 	// Page token at workflow entry — returned by the status query as
-	// PageTokenForRestart so an operator can resume from this run's
-	// starting position rather than its current (in-flight) position.
+	// PageTokenForRestart so tooling that already knows the legacy
+	// "restart from the starting position" semantic keeps working.
+	// The richer Recovery* fields below carry the current page token
+	// plus in-flight execs and are what the sharded restart flow
+	// actually uses.
 	startPageToken := params.NextPageToken
+
+	// state is assigned after newShardedWorkflowState below; the
+	// query handler closes over the pointer so it sees the live state
+	// once setup completes. Queries that arrive during setup return
+	// the static fields without the recovery bundle, which matches
+	// the prior behaviour.
+	var state *shardedWorkflowState
 
 	// Register the status query under the same name upstream uses
 	// (forceReplicationStatusQueryType = "force-replication-status")
 	// so tooling that polls force-rep progress works across both
 	// workflow variants.
 	if err := workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
-		return ForceReplicationStatus{
+		status := ForceReplicationStatus{
 			ContinuedAsNewCount:                params.ContinuedAsNewCount,
 			TotalWorkflowCount:                 params.TotalForceReplicateWorkflowCount,
 			ReplicatedWorkflowCount:            params.ReplicatedWorkflowCount,
 			ReplicatedWorkflowCountPerSecond:   params.ReplicatedWorkflowCountPerSecond,
 			PageTokenForRestart:                startPageToken,
 			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
-		}, nil
+			RecoveryNextPageToken:              params.NextPageToken,
+			RecoveryResumeShards:               params.ResumeShards,
+			RecoveryBuckets:                    params.RecoveredBuckets,
+		}
+		if state != nil {
+			status.RecoveryResumeShards = state.collectResumeShardsForCarryover()
+			status.RecoveryBuckets = state.collectRecoveredBucketsForCarryover()
+		}
+		return status, nil
 	}); err != nil {
 		return err
 	}
@@ -55,7 +74,8 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 		return err
 	}
 
-	state, err := newShardedWorkflowState(ctx, &params)
+	var err error
+	state, err = newShardedWorkflowState(ctx, &params)
 	if err != nil {
 		return err
 	}
@@ -364,7 +384,9 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	listCtx := workflow.WithActivityOptions(ctx, ao)
 
 	// Drive ListWorkflows until either we exhaust the namespace or
-	// the SDK signals that history is large enough to CAN.
+	// the SDK signals that history is large enough to CAN. Errors
+	// here latch into lastErr and fall through to the unified exit
+	// funnel — same drain-and-decide path as activity-driven errors.
 	for !workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
 		if s.lastErr != nil {
 			break
@@ -378,7 +400,8 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 		var a *activities
 		var listResp listWorkflowsResponse
 		if err := workflow.ExecuteActivity(listCtx, a.ListWorkflows, listReq).Get(ctx, &listResp); err != nil {
-			return err
+			s.setLastErr(err)
+			break
 		}
 		for _, ex := range listResp.Executions {
 			sh := common.WorkflowIDToHistoryShard(s.namespaceID, ex.BusinessID, s.targetShardCount)
@@ -397,49 +420,118 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 		}
 	}
 
-	// Drain remaining buckets — dispatch every leftover exec. The
-	// dispatched batches may themselves get cancelled by drainForCAN
-	// below if we're going to CAN; that's fine, each cancelled
-	// batch returns its drain payload in its result.
+	// Drain remaining buckets only when no error has latched — on
+	// error we deliberately stop scheduling new work and let the
+	// already-dispatched batches finish via awaitInFlightCompletion.
 	if s.lastErr == nil {
 		s.drainBuckets(ctx)
 	}
 
-	// If there are no more pages we're done: wait for activities to
-	// finish naturally and return. Slow shards hold their claims
-	// until their per-shard no-progress backstop trips.
-	if len(s.params.NextPageToken) == 0 || s.lastErr != nil {
-		_ = workflow.Await(ctx, func() bool {
-			return s.pendingDispatches == 0 || s.lastErr != nil
-		})
-		if s.lastErr != nil {
-			return s.lastErr
-		}
-		return nil
-	}
+	// Wait for in-flight activities. Cancels them when we already
+	// know we're failing or CAN-ing; on the clean success path
+	// (no error, no more pages) waits naturally so a healthy
+	// activity isn't cancelled into a CanceledError that masquerades
+	// as carry-over state.
+	s.awaitInFlightCompletion(ctx)
 
-	// More pages → CAN. Cancel in-flight batches, wait for them to
-	// drain, then harvest any leftover batchExecs entries (batches
-	// whose activity was cancelled before its body ran — no result
-	// returned) into RecoveredBuckets so they get re-dispatched as
-	// fresh inject+verify activities next cycle.
-	s.drainForCAN(ctx)
-
+	// Single exit decision. Recovery state has the same shape on
+	// either path — drainPayload + undispatched ResumeShards +
+	// batchExecs + leftover buckets — so the only difference between
+	// "fail with state" and "CAN with state" is the return value.
 	if s.lastErr != nil {
 		return s.lastErr
+	}
+	if !s.hasCarryover() {
+		return nil
 	}
 
 	next := *s.params
 	next.ContinuedAsNewCount++
-	// Defensive copy so we don't alias s.drainPayload into the
-	// carry-over params. drainForCAN guarantees every spawnBatch
-	// coroutine has finished appending before we get here (the
-	// append happens before the defer that decrements
-	// pendingDispatches), so this is style — but cheap insurance
-	// against future code paths that append post-drain.
-	next.ResumeShards = append([]ResumeShard(nil), s.drainPayload...)
-	next.RecoveredBuckets = collectRecoveredBuckets(s.batchExecs)
+	next.ResumeShards = s.collectResumeShardsForCarryover()
+	next.RecoveredBuckets = s.collectRecoveredBucketsForCarryover()
 	return workflow.NewContinueAsNewError(ctx, ShardedForceReplicationWorkflow, next)
+}
+
+// awaitInFlightCompletion drains in-flight batches before the workflow
+// exits. The strategy depends on what we already know:
+//
+//   - Error latched or more pages remain (we're going to fail or CAN
+//     either way): cancel immediately via drainForCAN, bounded by
+//     DrainGrace + IdleShardCost. No point waiting for activities
+//     that are going to be discarded.
+//   - Clean success path (no error, no more pages): wait for natural
+//     completion so a healthy activity's clean result isn't masked
+//     as a CanceledError. If an activity hits its ShardNoProgress
+//     backstop mid-wait, latch the error then cancel the rest fast
+//     rather than waiting on every shard's backstop too.
+func (s *shardedWorkflowState) awaitInFlightCompletion(ctx workflow.Context) {
+	if s.pendingDispatches == 0 {
+		return
+	}
+	if s.lastErr != nil || len(s.params.NextPageToken) > 0 {
+		s.drainForCAN(ctx)
+		return
+	}
+	_ = workflow.Await(ctx, func() bool {
+		return s.pendingDispatches == 0 || s.lastErr != nil
+	})
+	if s.pendingDispatches > 0 {
+		s.drainForCAN(ctx)
+	}
+}
+
+// hasCarryover reports whether the workflow has any state worth
+// preserving across an exit — either a remaining page token, drained
+// execs from in-flight batches, cancel-before-start batches that
+// never injected, undispatched resume entries, or listed-but-unpacked
+// execs. Drives both the "CAN vs return nil" decision and the
+// recovery bundle exposed in the status query.
+func (s *shardedWorkflowState) hasCarryover() bool {
+	if len(s.params.NextPageToken) > 0 {
+		return true
+	}
+	if len(s.drainPayload) > 0 {
+		return true
+	}
+	if len(s.batchExecs) > 0 {
+		return true
+	}
+	if len(s.params.ResumeShards) > 0 {
+		return true
+	}
+	return !s.bucketsEmpty()
+}
+
+// collectResumeShardsForCarryover concatenates this cycle's drained
+// execs with any prior-cycle ResumeShards that didn't get dispatched
+// (left in params.ResumeShards by dispatchResumeBatches when it bailed
+// out on lastErr). Both groups are already shard-keyed; the next
+// cycle's dispatchResumeBatches sorts and re-packs them.
+func (s *shardedWorkflowState) collectResumeShardsForCarryover() []ResumeShard {
+	if len(s.drainPayload) == 0 && len(s.params.ResumeShards) == 0 {
+		return nil
+	}
+	out := make([]ResumeShard, 0, len(s.drainPayload)+len(s.params.ResumeShards))
+	out = append(out, s.drainPayload...)
+	out = append(out, s.params.ResumeShards...)
+	return out
+}
+
+// collectRecoveredBucketsForCarryover merges the two sources of
+// "execs that never made it through a verify activity this cycle":
+// batches that returned CanceledError without running a body, and
+// listed-but-unpacked execs still sitting in s.buckets when the
+// workflow exited (either lastErr stopped the streaming packer or
+// drainBuckets bailed out on lastErr partway through).
+func (s *shardedWorkflowState) collectRecoveredBucketsForCarryover() BatchPayload {
+	out := collectRecoveredBuckets(s.batchExecs)
+	if !s.bucketsEmpty() {
+		if out == nil {
+			out = BatchPayload{}
+		}
+		out.merge(s.buckets)
+	}
+	return out
 }
 
 // recordVerified accumulates one batch's verified-exec delta into the
@@ -577,6 +669,38 @@ func (s *shardedWorkflowState) handleReleaseSignals(ctx workflow.Context) {
 	}
 }
 
+// extractVerifiedCountFromError pulls the partial VerifiedCount that
+// wrapBatchVerifyError encoded into a BatchVerifyPartial-typed
+// ApplicationError's Details on the activity side. Returns 0 when
+// the error didn't come through the verify-phase wrapper (e.g.
+// inject-phase failures, ctx errors, non-ApplicationError types), so
+// callers can unconditionally fold the result into recordVerified.
+func extractVerifiedCountFromError(err error) int64 {
+	if err == nil {
+		return 0
+	}
+	appErr, ok := errors.AsType[*temporal.ApplicationError](err)
+	if !ok || appErr.Type() != batchVerifyPartialErrorType {
+		return 0
+	}
+	var count int64
+	if appErr.Details(&count) != nil {
+		return 0
+	}
+	return count
+}
+
+// setLastErr latches the first error encountered. Subsequent errors
+// are dropped so the root cause is preserved for the workflow's
+// returned failure — without the latch, a stuck-shard backstop firing
+// on every batch as the workflow tears down would overwrite the
+// genuinely interesting first failure.
+func (s *shardedWorkflowState) setLastErr(err error) {
+	if s.lastErr == nil {
+		s.lastErr = err
+	}
+}
+
 // dispatchSlotAvailable returns true when the workflow is below the
 // in-flight batch ceiling and is free to spawn another batch. Callers
 // that can defer dispatch (the streaming packer) consult this and
@@ -595,6 +719,16 @@ func (s *shardedWorkflowState) waitForDispatchSlot(ctx workflow.Context) {
 	})
 }
 
+// resumeBatch is one packed dispatch plan: the BatchPayload that will
+// become a batch's input, plus the matching per-shard no-progress
+// durations. Built up front by packResumeBatchPlan so the dispatch
+// loop can unpack any remainder back into ResumeShards if lastErr
+// trips mid-dispatch.
+type resumeBatch struct {
+	payload    BatchPayload
+	noProgress map[int32]time.Duration
+}
+
 // dispatchResumeBatches turns the prior cycle's drain payload into a
 // fresh round of resume activities, packed across shards up to
 // BatchSize per batch. Each shard appears at most once across the
@@ -604,6 +738,13 @@ func (s *shardedWorkflowState) waitForDispatchSlot(ctx workflow.Context) {
 // contributions are taken whole and no MaxExecsPerShard cap applies —
 // resume carries no inject load so the per-shard blast-radius the
 // streaming packer guards against doesn't exist here.
+//
+// Plans every batch up front, then dispatches one at a time. If
+// lastErr latches mid-dispatch, the remaining planned batches are
+// unpacked back into s.params.ResumeShards so the recovery bundle
+// (and the next CAN cycle) sees them — without the unpack step, a
+// failing first resume batch would silently strand all subsequent
+// resume entries.
 func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 	if len(s.params.ResumeShards) == 0 {
 		return
@@ -615,15 +756,17 @@ func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 		}
 		entries = append(entries, rs)
 	}
+	// We've taken ownership of these entries — anything not
+	// dispatched gets restored below.
+	s.params.ResumeShards = nil
 	slices.SortFunc(entries, func(a, b ResumeShard) int {
 		return int(a.Shard - b.Shard)
 	})
 
-	payload := BatchPayload{}
-	packed := 0
-	packNoProgress := map[int32]time.Duration{}
-	flush := func() {
-		if packed == 0 {
+	batches := s.packResumeBatchPlan(entries)
+	for i, batch := range batches {
+		if s.lastErr != nil {
+			s.params.ResumeShards = unpackResumeBatches(batches[i:])
 			return
 		}
 		// Block until a dispatch slot is free so resume payloads
@@ -631,38 +774,57 @@ func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 		// carried many shards across CAN.
 		s.waitForDispatchSlot(ctx)
 		if s.lastErr != nil {
+			s.params.ResumeShards = unpackResumeBatches(batches[i:])
 			return
 		}
-		for sh := range payload {
+		for sh := range batch.payload {
 			s.shardInFlight[sh] = true
 		}
-		s.spawnBatch(ctx, payload, true, packNoProgress)
-		payload = BatchPayload{}
-		packed = 0
-		packNoProgress = map[int32]time.Duration{}
+		s.spawnBatch(ctx, batch.payload, true, batch.noProgress)
 	}
+}
 
+// packResumeBatchPlan groups ResumeShard entries into batches sized
+// at or below BatchSize. Entries are taken whole — shardInFlight only
+// admits one batch per shard at a time, so a single shard's payload
+// can't be split.
+func (s *shardedWorkflowState) packResumeBatchPlan(entries []ResumeShard) []resumeBatch {
+	var batches []resumeBatch
+	current := resumeBatch{payload: BatchPayload{}, noProgress: map[int32]time.Duration{}}
+	packed := 0
 	for _, rs := range entries {
-		if s.lastErr != nil {
-			return
-		}
 		rsCount := runCount(rs.Execs)
-		// Flush before this shard if it would push us over the
-		// batch cap, so each batch stays within BatchSize. A
-		// single shard's contribution is taken whole — we don't
-		// split a shard across batches because shardInFlight only
-		// admits one batch per shard at a time.
 		if packed+rsCount > s.params.BatchSize && packed > 0 {
-			flush()
+			batches = append(batches, current)
+			current = resumeBatch{payload: BatchPayload{}, noProgress: map[int32]time.Duration{}}
+			packed = 0
 		}
-		payload[rs.Shard] = rs.Execs
-		packNoProgress[rs.Shard] = rs.NoProgressDuration
+		current.payload[rs.Shard] = rs.Execs
+		current.noProgress[rs.Shard] = rs.NoProgressDuration
 		packed += rsCount
-		if packed >= s.params.BatchSize {
-			flush()
+	}
+	if packed > 0 {
+		batches = append(batches, current)
+	}
+	return batches
+}
+
+// unpackResumeBatches reverses packResumeBatchPlan, turning planned
+// batches back into a flat ResumeShard slice. Used when the dispatch
+// loop aborts on lastErr so the undispatched remainder can be carried
+// into the recovery bundle / next CAN cycle.
+func unpackResumeBatches(batches []resumeBatch) []ResumeShard {
+	var out []ResumeShard
+	for _, b := range batches {
+		for sh, execs := range b.payload {
+			out = append(out, ResumeShard{
+				Shard:              sh,
+				Execs:              execs,
+				NoProgressDuration: b.noProgress[sh],
+			})
 		}
 	}
-	flush()
+	return out
 }
 
 // runCount sums runs across BIDs in a single shard's payload entry.
@@ -707,9 +869,9 @@ func (s *shardedWorkflowState) failDrainBucketsStuck() {
 	for _, n := range s.bucketCounts {
 		remaining += n
 	}
-	s.lastErr = temporal.NewNonRetryableApplicationError(
+	s.setLastErr(temporal.NewNonRetryableApplicationError(
 		fmt.Sprintf("drainBuckets: %d execs in buckets but no batches in flight (shard-claim bookkeeping corrupted)", remaining),
-		"DrainBucketsStuck", nil)
+		"DrainBucketsStuck", nil))
 }
 
 // drainBucketsAwaitPredicate returns true when the drainBuckets loop
@@ -862,7 +1024,13 @@ func (s *shardedWorkflowState) spawnBatch(
 			// execs as fresh inject+verify work next cycle.
 			return
 		}
-		s.lastErr = err
+		// Activity errored after partial verify — the SDK discards
+		// the result on failure, but wrapBatchVerifyError on the
+		// activity side carries the partial doneCount through as
+		// ApplicationError details. Fold it into the running count
+		// so ReplicatedWorkflowCount reflects work actually done.
+		s.recordVerified(coroCtx, extractVerifiedCountFromError(err))
+		s.setLastErr(err)
 	})
 }
 
