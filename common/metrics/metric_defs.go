@@ -619,6 +619,11 @@ const (
 	ScheduleBackendChasm                 = "chasm"
 	ScheduleBackendLegacy                = "legacy"
 	ScheduleBackendWorkflow              = "workflow"
+	ScheduleOverlapPolicyTag             = "schedule_overlap_policy"
+	ScheduleMissedReasonTag              = "reason"
+	ScheduleMissedReasonNotBuffered      = "not_buffered"
+	ScheduleMissedReasonBufferExpired    = "buffer_expired"
+	ScheduleActionRunningTag             = "action_running"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
@@ -1439,6 +1444,10 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleActionE2EDelay = NewTimerDef(
+		"schedule_action_e2e_delay",
+		WithDescription("End-to-end delay between the action's original schedule time and when it was actually started, including overlap policy wait"),
+	)
 	ScheduleGenerateLatency = NewTimerDef(
 		"schedule_generate_latency",
 		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
@@ -1458,6 +1467,14 @@ var (
 	ScheduleMigrationFailed = NewCounterDef(
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
+	)
+	ScheduleOverlapSkipped = NewCounterDef(
+		"schedule_overlap_skipped",
+		WithDescription("The number of schedule actions skipped due to overlap policy"),
+	)
+	ScheduleCallbackLatency = NewTimerDef(
+		"schedule_callback_latency",
+		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
 	)
 
 	// Worker Versioning

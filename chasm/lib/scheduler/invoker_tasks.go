@@ -402,10 +402,25 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	result := h.processBuffer(ctx, invoker, scheduler)
 
 	// Update Scheduler metadata.
+	var totalMissedCatchup int64
+	for _, count := range result.missedCatchupByActionRunning {
+		totalMissedCatchup += count
+	}
 	scheduler.recordActionResult(&schedulerActionResult{
 		overlapSkipped:      result.overlapSkipped,
-		missedCatchupWindow: result.missedCatchupWindow,
+		missedCatchupWindow: totalMissedCatchup,
 	})
+	for overlapPolicy, count := range result.overlapSkippedByPolicy {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleOverlapPolicyTag, overlapPolicy.String()),
+		).Counter(metrics.ScheduleOverlapSkipped.Name()).Record(count)
+	}
+	for actionRunning, count := range result.missedCatchupByActionRunning {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
+			metrics.StringTag(metrics.ScheduleActionRunningTag, fmt.Sprintf("%t", actionRunning)),
+		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(count)
+	}
 
 	// Update internal state and create new tasks.
 	invoker.recordProcessBufferResult(ctx, &result)
@@ -423,6 +438,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
 	isRunning := len(runningWorkflows) > 0
+	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
@@ -447,13 +463,28 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 
 	// Update result metrics.
 	result.overlapSkipped = action.OverlapSkipped
+	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others. Catchup-window expiry is
 	// checked before useScheduledAction so that a start past its catchup
 	// window doesn't consume a LimitedActions slot.
 	for _, start := range readyStarts {
-		if ctx.Now(invoker).After(h.startWorkflowDeadline(ctx, scheduler, start)) {
-			result.missedCatchupWindow++
+		deadline := h.startWorkflowDeadline(ctx, scheduler, start)
+		if ctx.Now(invoker).After(deadline) {
+			// Action was buffered in time but expired before execution
+			// (e.g., due to overlap deferral, retries, or system delay).
+			// Only emit the metric if the schedule would have run this
+			// start -- skip paused or action-exhausted schedules.
+			if start.Manual || scheduler.useScheduledAction(false) {
+				// Determine if a running action contributed: either one is still
+				// running, or the previous action's CloseTime (stored in DesiredTime)
+				// was already past this start's deadline.
+				// Note: if no prior action completed, DesiredTime is zero-valued,
+				// so After(deadline) is false, correctly yielding actionRunning=false.
+				actionRunning := isRunning ||
+					start.GetDesiredTime().AsTime().After(deadline)
+				result.missedCatchupByActionRunning[actionRunning]++
+			}
 			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}
@@ -608,6 +639,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(desiredTime.AsTime()))
+		// Record total delay from original schedule time, including any overlap policy wait.
+		metricsHandler.
+			Timer(metrics.ScheduleActionE2EDelay.Name()).
+			Record(actualStartTime.Sub(start.ActualTime.AsTime()))
 	}
 	return nil
 }
