@@ -24,12 +24,10 @@ import (
 )
 
 // listWorkersPageToken is the cursor for paginating ListWorkers results.
-// The cursor contains all sort-key fields of the last returned worker so that
-// the next page can resume from the correct position.
 type listWorkersPageToken struct {
-	LastTaskQueue         string `json:"t"`
-	LastStartTimestamp    int64  `json:"s"` // UnixNano
-	LastWorkerInstanceKey string `json:"k"`
+	LastTaskQueue         string `json:"t,omitempty"`
+	LastStartTimestamp    int64  `json:"s,omitempty"` // UnixNano
+	LastWorkerInstanceKey string `json:"k,omitempty"`
 }
 
 type (
@@ -481,28 +479,30 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 
 	slices.SortFunc(workers, compareWorkers)
 
-	// Decode page token to find the cursor
+	// Decode page token and find the starting index using binary search (O(log n)).
+	// Stale tokens from a previous sort order will have zero-value fields, causing
+	// the cursor to sort before all workers — the client gets page 1 again, which
+	// is acceptable during the narrow rolling-deploy window.
 	startIdx := 0
 	if len(nextPageToken) > 0 {
 		var token listWorkersPageToken
 		if err := json.Unmarshal(nextPageToken, &token); err != nil {
 			return ListWorkersResponse{}, serviceerror.NewInvalidArgument("invalid next_page_token")
 		}
-		// Linear scan to find first worker after the cursor. Binary search is not
-		// worth the complexity for a 3-field composite key on an in-memory list.
-		for i, w := range workers {
-			if compareWorkers(w, &workerpb.WorkerHeartbeat{
-				TaskQueue:         token.LastTaskQueue,
-				StartTime:         timestamppb.New(time.Unix(0, token.LastStartTimestamp)),
-				WorkerInstanceKey: token.LastWorkerInstanceKey,
-			}) > 0 {
-				startIdx = i
-				break
-			}
-			if i == len(workers)-1 {
-				// Cursor is past all workers
-				return ListWorkersResponse{}, nil
-			}
+		cursor := &workerpb.WorkerHeartbeat{
+			TaskQueue:         token.LastTaskQueue,
+			StartTime:         timestamppb.New(time.Unix(0, token.LastStartTimestamp)),
+			WorkerInstanceKey: token.LastWorkerInstanceKey,
+		}
+		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(w, c *workerpb.WorkerHeartbeat) int {
+			return compareWorkers(w, c)
+		})
+		// Move past the cursor itself to get the first entry after it
+		if startIdx < len(workers) && compareWorkers(workers[startIdx], cursor) == 0 {
+			startIdx++
+		}
+		if startIdx >= len(workers) {
+			return ListWorkersResponse{}, nil
 		}
 	}
 
