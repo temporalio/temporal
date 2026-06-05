@@ -186,12 +186,12 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	valid, err := validateChasmSideEffectTask(ctx, ms, task)
-	if err != nil || !valid {
+	_, err = validateChasmSideEffectTask(ctx, ms, task)
+	if err != nil {
 		return err
 	}
 
-	// Task is still valid — check discard delay.
+	// Retry even if locally invalid; wait for replication from active to remove the task.
 	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
 	if !e.Now().After(discardTime) {

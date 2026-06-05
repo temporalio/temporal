@@ -355,11 +355,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
+	// Validation says locally invalid — task should still retry so the active cluster can be consulted.
 	expectValidate(false, nil)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
-	s.NoError(resp.ExecutionErr)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// Validation fails, processing should fail.
 	expectedErr := errors.New("validation error")

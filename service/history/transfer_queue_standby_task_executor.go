@@ -129,10 +129,12 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		valid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil || !valid {
+		_, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil {
 			return nil, err
 		}
+		
+		// Retry even if locally invalid; wait for replication from active to remove the task.
 		return ms.ChasmTree(), nil
 	}
 

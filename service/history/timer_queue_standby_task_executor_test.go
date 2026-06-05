@@ -2358,11 +2358,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
+	// Validation says locally invalid — task should still retry so the active cluster can be consulted.
 	expectValidate(false, nil)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
-	s.NoError(resp.ExecutionErr)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// Validation fails, processing should fail.
 	expectedErr := errors.New("validation error")
@@ -2433,7 +2433,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
-	// All tasks were invalid.
+	// No tasks found — EachPureTask completed without invoking the callback.
 	expectEachPureTask(nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)

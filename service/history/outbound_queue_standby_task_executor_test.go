@@ -151,10 +151,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 		expectedError       string
 	}{
 		{
-			name: "success",
+			name: "locally valid - retries until discard delay",
 			setupMocks: func(task *tasks.ChasmTask) {
-				// Setup successful workflow context loading and CHASM execution
-
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
 					Return(s.mockWorkflowContext, func(error) {}, nil)
@@ -168,12 +166,33 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(
-						gomock.Any(),
-						gomock.Any(),
-					)
+					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					Return(true, nil)
 			},
 			expectHandlerCalled: true,
+			expectedError:       consts.ErrTaskRetry.Error(),
+		},
+		{
+			name: "locally invalid - retries for active cluster check",
+			setupMocks: func(task *tasks.ChasmTask) {
+				s.mockWorkflowCache.EXPECT().
+					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
+					Return(s.mockWorkflowContext, func(error) {}, nil)
+
+				s.mockWorkflowContext.EXPECT().
+					LoadMutableState(gomock.Any(), gomock.Any()).
+					Return(s.mockMutableState, nil)
+
+				s.mockMutableState.EXPECT().
+					ChasmTree().
+					Return(s.mockChasmTree)
+
+				s.mockChasmTree.EXPECT().
+					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					Return(false, nil)
+			},
+			expectHandlerCalled: true,
+			expectedError:       consts.ErrTaskRetry.Error(),
 		},
 		{
 			name: "mutable state failure",
