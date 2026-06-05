@@ -1144,6 +1144,7 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(persistence.UnixMilliseconds(req.CloseTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
 	s.Equal(req.Status, resp.GetStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
+	s.Equal(req.ExecutionDuration, resp.GetExecutionDuration().AsDuration())
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
