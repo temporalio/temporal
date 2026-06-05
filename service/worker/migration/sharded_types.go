@@ -14,10 +14,6 @@ const (
 	// time by setting the start request's workflow type.
 	shardedForceReplicationWorkflowName = "force-replication-sharded"
 
-	// shardedBatchActivityName is the registered activity name used by
-	// name-based dispatch.
-	shardedBatchActivityName = "ReplicateBatch"
-
 	// releaseShardsSignalName carries mid-flight ReleaseShards signals
 	// from active replicate-batch activities back to their parent
 	// workflow. Drain-mode shard completions ride the activity return

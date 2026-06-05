@@ -373,16 +373,6 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	// from racing to dispatch against them with fresh execs.
 	s.dispatchResumeBatches(ctx)
 
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: time.Hour,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumAttempts:    3,
-		},
-	}
-	listCtx := workflow.WithActivityOptions(ctx, ao)
-
 	// Drive ListWorkflows until either we exhaust the namespace or
 	// the SDK signals that history is large enough to CAN. Errors
 	// here latch into lastErr and fall through to the unified exit
@@ -391,31 +381,24 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 		if s.lastErr != nil {
 			break
 		}
-		listReq := &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace:     s.params.Namespace,
-			Query:         s.params.Query,
-			PageSize:      int32(s.params.ListWorkflowsPageSize),
-			NextPageToken: s.params.NextPageToken,
-		}
-		var a *activities
-		var listResp listWorkflowsResponse
-		if err := workflow.ExecuteActivity(listCtx, a.ListWorkflows, listReq).Get(ctx, &listResp); err != nil {
+		executions, nextPageToken, err := s.listWorkflowPage(ctx)
+		if err != nil {
 			s.setLastErr(err)
 			break
 		}
-		for _, ex := range listResp.Executions {
+		for _, ex := range executions {
 			sh := common.WorkflowIDToHistoryShard(s.namespaceID, ex.BusinessID, s.targetShardCount)
 			s.addToBucket(sh, ex.BusinessID, RunEntry{
 				RunID:       ex.RunID,
 				ArchetypeID: ex.ArchetypeID,
 			})
 		}
-		s.params.NextPageToken = listResp.NextPageToken
+		s.params.NextPageToken = nextPageToken
 
 		for s.tryPackStreaming(ctx, false) { //nolint:revive // intentional empty body
 		}
 
-		if len(listResp.NextPageToken) == 0 {
+		if len(nextPageToken) == 0 {
 			break
 		}
 	}
@@ -450,6 +433,58 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	next.ResumeShards = s.collectResumeShardsForCarryover()
 	next.RecoveredBuckets = s.collectRecoveredBucketsForCarryover()
 	return workflow.NewContinueAsNewError(ctx, ShardedForceReplicationWorkflow, next)
+}
+
+var (
+	shardedListWorkflowsRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumAttempts:    3,
+	}
+	shardedListWorkflowsActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout: time.Hour,
+		RetryPolicy:         shardedListWorkflowsRetryPolicy,
+	}
+
+	// Per-exec backoff still owns the per-exec retry; MaximumAttempts
+	// lets a transient activity failure recover via heartbeat-resume
+	// without losing inject progress. WaitForCancellation lets a
+	// cancelled activity run drain logic and return its drain result.
+	shardedReplicateBatchRetryPolicy = &temporal.RetryPolicy{
+		MaximumAttempts: 3,
+	}
+	shardedReplicateBatchActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout: 24 * time.Hour,
+		HeartbeatTimeout:    time.Minute,
+		RetryPolicy:         shardedReplicateBatchRetryPolicy,
+		WaitForCancellation: true,
+	}
+)
+
+func (s *shardedWorkflowState) listWorkflowPage(ctx workflow.Context) ([]*ExecutionInfo, []byte, error) {
+	listCtx := workflow.WithActivityOptions(ctx, shardedListWorkflowsActivityOptions)
+	listReq := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     s.params.Namespace,
+		Query:         s.params.Query,
+		PageSize:      int32(s.params.ListWorkflowsPageSize),
+		NextPageToken: s.params.NextPageToken,
+	}
+	var a *activities
+	var listResp listWorkflowsResponse
+	if err := workflow.ExecuteActivity(listCtx, a.ListWorkflows, listReq).Get(ctx, &listResp); err != nil {
+		return nil, nil, err
+	}
+	return listResp.Executions, listResp.NextPageToken, nil
+}
+
+func (s *shardedWorkflowState) replicateBatch(ctx, activityParentCtx workflow.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+	actx := workflow.WithActivityOptions(activityParentCtx, shardedReplicateBatchActivityOptions)
+	var a *activities
+	var result replicateBatchResult
+	if err := workflow.ExecuteActivity(actx, a.ReplicateBatch, req).Get(ctx, &result); err != nil {
+		return replicateBatchResult{}, err
+	}
+	return result, nil
 }
 
 // awaitInFlightCompletion drains in-flight batches before the workflow
@@ -986,51 +1021,35 @@ func (s *shardedWorkflowState) spawnBatch(
 			}
 			delete(s.heldByBatch, batchID)
 		}()
-		ao := workflow.ActivityOptions{
-			StartToCloseTimeout: 24 * time.Hour,
-			HeartbeatTimeout:    time.Minute,
-			// 3 attempts: per-exec backoff still owns the per-exec
-			// retry, but a transient activity failure can recover
-			// via heartbeat-resume without losing inject progress.
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 3,
-			},
-			// WaitForCancellation: the cancelled activity needs to
-			// run its drain logic and return its drain result
-			// before the dispatch coroutine's defer fires.
-			WaitForCancellation: true,
-		}
-		actx := workflow.WithActivityOptions(s.activityCtx, ao)
-		var result replicateBatchResult
-		err := workflow.ExecuteActivity(actx, shardedBatchActivityName, req).Get(coroCtx, &result)
-		if err == nil {
-			// Activity body ran and returned cleanly — either a
-			// clean completion (empty InFlight) or a drained
-			// CAN-cancel (InFlight carries the still-unverified
-			// execs). CompletedShards is informational; the
-			// defer above clears heldByBatch + shardInFlight
-			// either way.
-			if len(result.InFlight) > 0 {
-				s.drainPayload = append(s.drainPayload, result.InFlight...)
+		result, err := s.replicateBatch(coroCtx, s.activityCtx, req)
+		if err != nil {
+			if temporal.IsCanceledError(err) {
+				// Cancel-before-start: the activity body never ran,
+				// so no result is available. Leaving batchExecs[batchID]
+				// intact lets the CAN-end recovery path re-bucket the
+				// execs as fresh inject+verify work next cycle.
+				return
 			}
-			s.recordVerified(coroCtx, result.VerifiedCount)
-			delete(s.batchExecs, batchID)
+			// Activity errored after partial verify — the SDK discards
+			// the result on failure, but wrapBatchVerifyError on the
+			// activity side carries the partial doneCount through as
+			// ApplicationError details. Fold it into the running count
+			// so ReplicatedWorkflowCount reflects work actually done.
+			s.recordVerified(coroCtx, extractVerifiedCountFromError(err))
+			s.setLastErr(err)
 			return
 		}
-		if temporal.IsCanceledError(err) {
-			// Cancel-before-start: the activity body never ran,
-			// so no result is available. Leaving batchExecs[batchID]
-			// intact lets the CAN-end recovery path re-bucket the
-			// execs as fresh inject+verify work next cycle.
-			return
+		// Activity body ran and returned cleanly — either a
+		// clean completion (empty InFlight) or a drained
+		// CAN-cancel (InFlight carries the still-unverified
+		// execs). CompletedShards is informational; the
+		// defer above clears heldByBatch + shardInFlight
+		// either way.
+		if len(result.InFlight) > 0 {
+			s.drainPayload = append(s.drainPayload, result.InFlight...)
 		}
-		// Activity errored after partial verify — the SDK discards
-		// the result on failure, but wrapBatchVerifyError on the
-		// activity side carries the partial doneCount through as
-		// ApplicationError details. Fold it into the running count
-		// so ReplicatedWorkflowCount reflects work actually done.
-		s.recordVerified(coroCtx, extractVerifiedCountFromError(err))
-		s.setLastErr(err)
+		s.recordVerified(coroCtx, result.VerifiedCount)
+		delete(s.batchExecs, batchID)
 	})
 }
 
