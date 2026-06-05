@@ -3231,16 +3231,12 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	mutableContext.AddTask(
 		component,
 		taskAttributes,
-		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("task-1")},
-		},
+		&TestPureTask{},
 	)
 	mutableContext.AddTask(
 		component,
 		taskAttributes,
-		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("task-2")},
-		},
+		&TestPureTask{},
 	)
 
 	s.testLibrary.mockPureTaskHandler.EXPECT().
