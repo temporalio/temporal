@@ -605,6 +605,28 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	})
 }
 
+func TestRegistryImpl_CountWorkersExcludesSystemWorkers(t *testing.T) {
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+
+	r.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},
+	})
+
+	t.Run("excludes system workers by default", func(t *testing.T) {
+		count, err := r.CountWorkers("ns1", "", false)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
+	})
+
+	t.Run("includes system workers when requested", func(t *testing.T) {
+		count, err := r.CountWorkers("ns1", "", true)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), count)
+	})
+}
+
 func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {
 	t.Run("disabled when ExternalPayloadsEnabled is false", func(t *testing.T) {
 		captureHandler := metricstest.NewCaptureHandler()

@@ -259,6 +259,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 
 	worker1Key := s.tv.WorkerIdentity()
 	worker2Key := s.tv.WorkerIdentity() + "_2"
+	sysWorkerKey := s.tv.WorkerIdentity() + "_sys"
 	sharedTaskQueue := s.tv.TaskQueue().Name
 	otherTaskQueue := s.tv.WithTaskQueueNumber(2).TaskQueue().Name
 
@@ -273,18 +274,32 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 				WorkerInstanceKey: worker2Key,
 				TaskQueue:         otherTaskQueue,
 			},
+			{
+				WorkerInstanceKey: sysWorkerKey,
+				TaskQueue:         "temporal-sys-per-ns-tq",
+			},
 		},
 	})
 	s.Require().NoError(err)
 	s.Require().NotNil(hbResp)
 
-	// Count all workers (no query)
+	// Count all user workers (excludes system workers by default)
 	{
 		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
 			Namespace: s.Namespace().String(),
 		})
 		s.Require().NoError(err)
 		s.Require().Equal(int64(2), resp.GetCount())
+	}
+
+	// Count all workers including system workers
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace:            s.Namespace().String(),
+			IncludeSystemWorkers: true,
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(3), resp.GetCount())
 	}
 
 	// Count with query filter
