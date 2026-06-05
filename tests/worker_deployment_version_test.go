@@ -385,16 +385,16 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 // tv returns test variables seeded from a shortened test name so that physical task queue IDs
 // do not grow larger than DB column limit (currently as low as 272 chars).
 func (s *DeploymentVersionSuite) tv() *testvars.TestVars {
-	return testvars.New(shortNamer{s.T()})
+	return testvars.New(versionShortNamer{s.T()})
 }
 
-// shortNamer is used by testvars. We use a shortened test name in variables so that physical task
+// versionShortNamer is used by testvars. We use a shortened test name in variables so that physical task
 // queue IDs do not grow larger than DB column limit (currently as low as 272 chars).
-type shortNamer struct {
+type versionShortNamer struct {
 	t *testing.T
 }
 
-func (n shortNamer) Name() string {
+func (n versionShortNamer) Name() string {
 	fullName := n.t.Name()
 	if len(fullName) <= 30 {
 		return fullName
