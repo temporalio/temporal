@@ -2,6 +2,7 @@ package recordactivitytaskstarted
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 
@@ -14,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/priorities"
@@ -259,6 +261,31 @@ func recordActivityTaskStarted(
 	}
 	ai.StartedClock = clock
 
+	// Capture the server-derived Principal of the polling worker (set by the auth
+	// interceptor; non-spoofable, unlike PollRequest.Identity). Stored so that a
+	// later Nexus operation started by this activity can be bound to the worker
+	// that holds the relayed end-user identity — the start path re-derives the
+	// end-user from CHASM and requires the presenting worker's Principal to match
+	// this one. Nil-safe: stays nil in OSS / when no principal is derived.
+	// Prefer the explicit immediate_caller the matching service attributed from
+	// the worker's authenticated poll (Option A); fall back to the propagated
+	// principal header. When a worker identity is present, mint a per-attempt
+	// secret (started_nonce) and store it on the activity — matching returns it
+	// to the worker (temporal-activity-nonce) and a later StartNexusOperation
+	// from this activity must echo it back to prove it holds the live task.
+	if p := request.GetImmediateCaller(); p != nil {
+		ai.ImmediateCaller = p
+	} else if p := headers.GetPrincipal(ctx); p != nil {
+		ai.ImmediateCaller = p
+	}
+	if ai.ImmediateCaller != nil {
+		nonce, err := mintStartedNonce()
+		if err != nil {
+			return nil, rejectCodeUndefined, err
+		}
+		ai.StartedNonce = nonce
+	}
+
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions) //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
@@ -299,8 +326,24 @@ func recordActivityTaskStarted(
 		MaximumAttempts:        ai.RetryMaximumAttempts,
 		NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
 	}
+	// Option A: hand the per-attempt secret back to matching, which encodes it
+	// into the activity task's gRPC metadata for the worker.
+	response.StartedNonce = ai.StartedNonce
 
 	return response, rejectCodeAccepted, nil
+}
+
+// startedNonceLen is the byte length of the per-attempt activity nonce (Option
+// A). 32 bytes of CSPRNG output — unguessable, so a worker cannot forge it.
+const startedNonceLen = 32
+
+// mintStartedNonce returns a fresh random per-attempt activity nonce.
+func mintStartedNonce() ([]byte, error) {
+	b := make([]byte, startedNonceLen)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // TODO (Shahab): move this method to a better place

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -197,4 +198,116 @@ func TestIsExperimentRequested(t *testing.T) {
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestSetGetPrincipal_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	principal := &commonpb.Principal{Type: "users", Name: "alice@example.com"}
+	ctx := SetPrincipal(context.Background(), principal)
+
+	got := GetPrincipal(ctx)
+	require.NotNil(t, got)
+	require.Equal(t, "users", got.GetType())
+	require.Equal(t, "alice@example.com", got.GetName())
+}
+
+func TestSetGetEndUserPrincipal_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	principal := &commonpb.Principal{Type: "service-accounts", Name: "sa-prod-payments"}
+	ctx := SetEndUserPrincipal(context.Background(), principal)
+
+	got := GetEndUserPrincipal(ctx)
+	require.NotNil(t, got)
+	require.Equal(t, "service-accounts", got.GetType())
+	require.Equal(t, "sa-prod-payments", got.GetName())
+}
+
+func TestSetPrincipal_DoesNotCollideWithEndUserPrincipal(t *testing.T) {
+	t.Parallel()
+
+	caller := &commonpb.Principal{Type: "service-accounts", Name: "sa-worker"}
+	endUser := &commonpb.Principal{Type: "users", Name: "alice"}
+
+	ctx := SetPrincipal(context.Background(), caller)
+	ctx = SetEndUserPrincipal(ctx, endUser)
+
+	gotCaller := GetPrincipal(ctx)
+	require.Equal(t, "sa-worker", gotCaller.GetName())
+
+	gotEndUser := GetEndUserPrincipal(ctx)
+	require.Equal(t, "alice", gotEndUser.GetName())
+}
+
+func TestGetPrincipal_ReturnsNilWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, GetPrincipal(context.Background()))
+	require.Nil(t, GetEndUserPrincipal(context.Background()))
+}
+
+func TestStripPrincipal_RemovesBothPrincipalPairs(t *testing.T) {
+	t.Parallel()
+
+	// Simulate an external caller attempting to inject identity headers.
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		PrincipalTypeHeaderName:        "attacker",
+		PrincipalNameHeaderName:        "spoof",
+		EndUserPrincipalTypeHeaderName: "attacker",
+		EndUserPrincipalNameHeaderName: "spoof",
+		// A non-principal header should survive stripping.
+		ClientNameHeaderName: "legitimate-client",
+	}))
+
+	ctx = StripPrincipal(ctx)
+
+	require.Nil(t, GetPrincipal(ctx))
+	require.Nil(t, GetEndUserPrincipal(ctx))
+
+	// Sanity check: non-principal metadata is unaffected.
+	md, ok := metadata.FromIncomingContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "legitimate-client", md.Get(ClientNameHeaderName)[0])
+}
+
+func TestPropagate_CarriesImmediateCallerPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		PrincipalTypeHeaderName: "service-accounts",
+		PrincipalNameHeaderName: "sa-worker",
+	}))
+
+	ctx = Propagate(ctx)
+
+	md, ok := metadata.FromOutgoingContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "service-accounts", md.Get(PrincipalTypeHeaderName)[0])
+	require.Equal(t, "sa-worker", md.Get(PrincipalNameHeaderName)[0])
+}
+
+// The end-user principal pair is propagated frontend->history so the
+// chain-originating identity reaches NewWorkflow's RootCallerPrincipal seeding.
+func TestPropagate_CarriesEndUserPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		PrincipalTypeHeaderName:        "service-accounts",
+		PrincipalNameHeaderName:        "sa-worker",
+		EndUserPrincipalTypeHeaderName: "users",
+		EndUserPrincipalNameHeaderName: "alice",
+	}))
+
+	ctx = Propagate(ctx)
+
+	md, ok := metadata.FromOutgoingContext(ctx)
+	require.True(t, ok)
+
+	require.Equal(t, "service-accounts", md.Get(PrincipalTypeHeaderName)[0])
+	require.Equal(t, "sa-worker", md.Get(PrincipalNameHeaderName)[0])
+	require.Equal(t, "users", md.Get(EndUserPrincipalTypeHeaderName)[0])
+	require.Equal(t, "alice", md.Get(EndUserPrincipalNameHeaderName)[0])
 }

@@ -52,6 +52,19 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, 
 		Attempt:                0,
 	})
 
+	// Bridge the caller identity onto the operation so the outbound dispatch can
+	// propagate it. The service caller is the worker that issued this
+	// ScheduleNexusOperation command (present on the chasm context's incoming
+	// metadata); the end-user is the workflow chain's originating identity,
+	// inherited from the workflow's RootCallerPrincipal. This is the
+	// workflow-initiated analogue of newStandaloneOperation's principal capture.
+	nexusoperation.SetCallerPrincipals(
+		ctx,
+		op,
+		nexusoperation.PrincipalFromContext(ctx),
+		wf.GetRootCallerPrincipal(ctx),
+	)
+
 	if err := nexusoperation.TransitionScheduled.Apply(op, ctx, nexusoperation.EventScheduled{}); err != nil {
 		return err
 	}

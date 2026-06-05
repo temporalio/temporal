@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package temporal.server.api.common.v1;
+
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/api/common/v1;commonspb";
+
+// AttributedPrincipal is the at-rest representation of a captured caller
+// identity used by Nexus storage. It embeds the stable identity
+// (temporal.api.common.v1.Principal) verbatim and adds a write-time snapshot of
+// the human-readable name, for audit fidelity when the identity is an opaque ID
+// that may later be renamed or deleted.
+message AttributedPrincipal {
+  // The stable identity, copied verbatim from the authenticated Principal.
+  // In OSS, principal.name is already human-readable (e.g. jwt/<sub>,
+  // mtls/<CN>). In Cloud, principal.name is an opaque ID (never surfaced to
+  // users) and principal.type marks it as a cloud identity.
+  temporal.api.common.v1.Principal principal = 1;
+
+  // resolved_name is a snapshot of the human-readable identity name at write
+  // time. Populated only where principal.name is an opaque ID (Cloud); EMPTY in
+  // OSS, where principal.name is already human-readable. Readers MUST fall back
+  // to principal.name when this is empty.
+  string resolved_name = 2;
+}

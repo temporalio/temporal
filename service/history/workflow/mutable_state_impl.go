@@ -710,14 +710,28 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 
 func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
 	// Initialize chasm tree once for new workflows.
-	// Using context.Background() because this is done outside an actual request context and the
-	// chasmworkflow.NewWorkflow does not actually use it currently.
 	root, ok := ms.chasmTree.(*chasm.Node)
 	softassert.That(ms.logger, ok, "chasmTree cast failed")
 
 	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
 		mutableContext := chasm.NewMutableContext(ctx, root)
-		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
+		// Source the chain-originating principal from the inbound RPC, in
+		// priority order:
+		//   1. The propagated end-user principal, if a verified Nexus principal
+		//      token was promoted onto the context (headers.GetEndUserPrincipal):
+		//      a workflow started in response to a Nexus dispatch inherits the
+		//      ORIGINAL end-user identity rather than the worker/service identity
+		//      that issued the start RPC.
+		//   2. The inbound RPC's immediate-caller principal (top-level starts
+		//      where the workflow chain originates with this RPC).
+		//
+		// Both may be nil; the chasm Workflow tolerates an empty
+		// RootCallerPrincipal as the graceful-degradation state.
+		rootCallerPrincipal := headers.GetEndUserPrincipal(ctx)
+		if rootCallerPrincipal == nil {
+			rootCallerPrincipal = headers.GetPrincipal(ctx)
+		}
+		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms), rootCallerPrincipal)); err != nil {
 			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
 		}
 	}
@@ -7697,6 +7711,13 @@ func (ms *MutableStateImpl) closeTransaction(
 				if event.Principal == nil {
 					event.Principal = principal
 				}
+				// The chain-originating principal (RootCallerPrincipal) is
+				// now stored on the chasm Workflow component rather than
+				// on WorkflowExecutionInfo. See
+				// chasm/lib/workflow.NewWorkflow — it captures the inbound
+				// RPC's principal at component creation time, and child /
+				// continue-as-new paths inherit from their predecessor.
+				// No additional stamping work is needed here.
 			}
 		}
 		for _, event := range bufferEvents {

@@ -76,9 +76,13 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		EnableArchival                  bool
-		IsMasterCluster                 bool
-		ClusterMetadata                 cluster.Config
+		EnableArchival  bool
+		IsMasterCluster bool
+		ClusterMetadata cluster.Config
+		// GlobalConfig populates config.Global for every service in the cluster,
+		// letting tests configure process-wide settings via the official server
+		// config.
+		GlobalConfig                    config.Global
 		Persistence                     persistencetests.TestBaseOptions
 		FrontendConfig                  FrontendConfig
 		HistoryConfig                   HistoryConfig
@@ -348,6 +352,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		MockAdminClient:                  clusterConfig.MockAdminClient,
 		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
 		DCRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
+		GlobalConfig:                     clusterConfig.GlobalConfig,
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,

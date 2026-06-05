@@ -38,6 +38,10 @@ type startArgs struct {
 	payload                *commonpb.Payload
 	nexusLinks             []nexus.Link
 	serializedRef          []byte
+	// caller is the stored Nexus caller (root + service actor) captured at
+	// schedule time; the namespace is filled onto the actor when the token is
+	// minted.
+	caller *commonpb.Caller
 }
 
 // invocationTraceContext captures per-call contextual information needed to set up HTTP tracing.

@@ -716,6 +716,24 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // The server-derived Principal of the worker that this attempt was dispatched
+  // to, captured at RecordActivityTaskStarted from the authenticated poll. This
+  // is the non-spoofable identity (unlike started_identity, a client-supplied
+  // string). Used to bind a relay of the originating end-user identity to the
+  // worker that holds it: when this activity later starts a Nexus operation, the
+  // server re-derives the end-user from this execution's CHASM and requires the
+  // presenting worker's authenticated Principal to match this one — so a relay
+  // captured by a different principal cannot be replayed. Nil in OSS / when no
+  // principal is derived. (Option A immediate caller.)
+  temporal.api.common.v1.Principal immediate_caller = 53;
+
+  // Option A per-attempt secret minted at RecordActivityTaskStarted and returned
+  // to matching to encode into the activity task's gRPC metadata
+  // (temporal-activity-nonce). A later StartNexusOperationExecution from the
+  // worker must echo it back to prove it holds the live activity task. Refreshed
+  // on heartbeat to bound the replay window. Must never be logged or exported.
+  bytes started_nonce = 54;
 }
 
 // timer_map column

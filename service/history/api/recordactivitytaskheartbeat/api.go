@@ -2,6 +2,7 @@ package recordactivitytaskheartbeat
 
 import (
 	"context"
+	"crypto/rand"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -82,6 +83,17 @@ func Invoke(
 			cancelRequested = ai.CancelRequested
 			activityPaused = ai.Paused
 			activityReset = ai.ActivityReset
+
+			// Option A: refresh the per-attempt nonce on each heartbeat to bound
+			// the replay window (matching returns the new value to the worker).
+			// Only when one was minted at start (feature on).
+			if len(ai.StartedNonce) > 0 {
+				nonce := make([]byte, len(ai.StartedNonce))
+				if _, err := rand.Read(nonce); err != nil {
+					return nil, err
+				}
+				ai.StartedNonce = nonce
+			}
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)

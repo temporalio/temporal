@@ -91,6 +91,7 @@ type (
 		testHooks                        testhooks.TestHooks
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
+		globalConfig                     config.Global
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
 		clusterMetadataMgr               persistence.ClusterMetadataManager
@@ -175,9 +176,13 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DCRedirectionPolicy              config.DCRedirectionPolicy
-		DynamicConfigOverrides           map[dynamicconfig.Key]any
-		TLSConfigProvider                *encryption.FixedTLSConfigProvider
-		CaptureMetricsHandler            *metricstest.CaptureHandler
+		// GlobalConfig is merged into each service's config.Global, so tests can
+		// drive process-wide settings through the official server config rather
+		// than fx injection.
+		GlobalConfig           config.Global
+		DynamicConfigOverrides map[dynamicconfig.Key]any
+		TLSConfigProvider      *encryption.FixedTLSConfigProvider
+		CaptureMetricsHandler  *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
 		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
@@ -197,6 +202,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	impl := &TemporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
+		globalConfig:                     params.GlobalConfig,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		clusterMetadataMgr:               params.ClusterMetadataManager,
@@ -763,6 +769,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 
 func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *config.Config {
 	return &config.Config{
+		Global: c.globalConfig,
 		Services: map[string]config.Service{
 			string(serviceName): {
 				RPC: config.RPC{},

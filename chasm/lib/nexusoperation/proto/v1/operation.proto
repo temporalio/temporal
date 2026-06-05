@@ -146,4 +146,19 @@ message OperationRequestData {
   map<string, string> nexus_header = 2;
   temporal.api.sdk.v1.UserMetadata user_metadata = 3;
   string identity = 4;
+
+  reserved 5, 6;
+
+  // Caller attributed to this Nexus operation, captured server-side at schedule
+  // time and propagated on the outbound HTTP dispatch so the handler can audit
+  // and authorize on it. Holds:
+  //   - root: the chain-originating end-user caller, copied from the workflow's
+  //     stored root caller at schedule time (or the SDK client for standalone).
+  //     Absent when no end-user caller is available (e.g. started before the
+  //     feature).
+  //   - actors: the immediate (service) caller that scheduled the operation —
+  //     the worker's principal (workflow-initiated) or the SDK client's
+  //     (standalone). The caller's namespace is filled in at dispatch time.
+  // Server-set, immutable from user code.
+  temporal.api.common.v1.Caller caller = 7;
 }

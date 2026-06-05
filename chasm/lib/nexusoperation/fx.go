@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/callerprop"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
@@ -28,6 +29,10 @@ const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
+	// Caller-identity propagation across the Nexus HTTP hop. OSS default is a
+	// no-op (cross-namespace propagation is a Cloud concern); saas-temporal
+	// fx.Decorate's in a token-minting OutboundDecorator.
+	callerprop.Module,
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),

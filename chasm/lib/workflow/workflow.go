@@ -39,15 +39,51 @@ type Workflow struct {
 
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
+
+	// RootCallerPrincipal is the identity that originated this workflow chain
+	// at the edge — the principal that started the root workflow. Set once
+	// at workflow creation and inherited unchanged through child workflow
+	// starts and continue-as-new so the chain's originating identity is
+	// preserved end-to-end without per-event walks.
+	//
+	// Read at Nexus operation schedule time to populate the outbound
+	// dispatch's end-user principal headers. Nil for workflows started
+	// before the feature shipped or when the authorizer didn't derive a
+	// principal (OSS without a configured Authorizer).
+	RootCallerPrincipal chasm.Field[*commonpb.Principal]
 }
 
+// NewWorkflow constructs the chasm Workflow root component for a new
+// workflow execution. If rootCallerPrincipal is non-nil it is stored on
+// the component as a Data field, capturing the originator of this
+// workflow chain. For top-level starts, callers should pass the principal
+// derived by the inbound RPC's authorizer; for child workflows and
+// continue-as-new, callers should pass the parent / previous run's
+// RootCallerPrincipal so the chain's identity is preserved.
 func NewWorkflow(
-	_ chasm.MutableContext,
+	ctx chasm.MutableContext,
 	msPointer chasm.MSPointer,
+	rootCallerPrincipal *commonpb.Principal,
 ) *Workflow {
-	return &Workflow{
+	wf := &Workflow{
 		MSPointer: msPointer,
 	}
+	if rootCallerPrincipal != nil {
+		wf.RootCallerPrincipal = chasm.NewDataField(ctx, rootCallerPrincipal)
+	}
+	return wf
+}
+
+// GetRootCallerPrincipal returns the originating end-user identity for
+// this workflow chain, or nil if no principal was captured (workflow
+// predates the feature; OSS without a configured Authorizer; chain
+// broke at an activity boundary upstream).
+func (w *Workflow) GetRootCallerPrincipal(ctx chasm.Context) *commonpb.Principal {
+	principal, ok := w.RootCallerPrincipal.TryGet(ctx)
+	if !ok {
+		return nil
+	}
+	return principal
 }
 
 func (w *Workflow) LifecycleState(

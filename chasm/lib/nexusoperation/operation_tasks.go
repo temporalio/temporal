@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/callerprop"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -51,6 +52,10 @@ type operationInvocationTaskHandlerOptions struct {
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
+	// OutboundDecorator carries the verified caller chain across the outbound
+	// Nexus HTTP hop. The OSS default is a no-op (cross-namespace propagation is
+	// a Cloud concern); saas-temporal injects a token-minting implementation.
+	OutboundDecorator callerprop.OutboundDecorator
 }
 
 type operationInvocationTaskHandler struct {
@@ -66,6 +71,7 @@ type operationInvocationTaskHandler struct {
 	httpTraceProvider      commonnexus.HTTPClientTraceProvider
 	historyClient          resource.HistoryClient
 	chasmRegistry          *chasm.Registry
+	outboundDecorator      callerprop.OutboundDecorator
 }
 
 func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOptions) *operationInvocationTaskHandler {
@@ -80,6 +86,7 @@ func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOption
 		httpTraceProvider:      opts.HTTPTraceProvider,
 		historyClient:          opts.HistoryClient,
 		chasmRegistry:          opts.ChasmRegistry,
+		outboundDecorator:      opts.OutboundDecorator,
 	}
 }
 
@@ -167,6 +174,25 @@ func (h *operationInvocationTaskHandler) Execute(
 	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
 	if h.config.UseNewFailureWireFormat(ns.Name().String()) {
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+	}
+	// Propagate the captured caller principals to the handler (no signer ⇒ no
+	// token ⇒ nothing propagated). The namespace caller is this cluster's own
+	// namespace, self-asserted in the token. A minting failure must not fail the
+	// dispatch: log and proceed (equivalent to the feature being off).
+	// Assemble the caller chain (stored service + root, plus this cluster's
+	// namespace caller) and hand it to the outbound decorator. In OSS this is a
+	// no-op (cross-namespace propagation is Cloud-only); saas-temporal mints a
+	// signed token into the header.
+	namespaceCaller := &commonpb.Principal{Type: namespacePrincipalType, Name: ns.Name().String()}
+	if h.outboundDecorator != nil {
+		caller := buildCaller(
+			serviceCallerOf(args.caller),
+			namespaceCaller,
+			args.caller.GetRoot(),
+		)
+		if err := h.outboundDecorator.Decorate(ctx, header, caller); err != nil {
+			h.logger.Warn("failed to decorate nexus dispatch with caller identity", tag.Error(err))
+		}
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)

@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -21,14 +22,30 @@ const (
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
 
+	// Principal of the immediate caller (the worker / SDK client that issued
+	// this RPC). Set server-side by the auth interceptor; stripped on ingress
+	// to prevent spoofing by external callers. Name is the human-readable
+	// display name; Id is the stable, globally unique identifier (empty when the
+	// auth material has no stable identity, e.g. mTLS or self-hosted).
 	PrincipalTypeHeaderName = "temporal-principal-type"
 	PrincipalNameHeaderName = "temporal-principal-name"
+	PrincipalIdHeaderName   = "temporal-principal-id"
+
+	// End-user principal: the identity that originated the request at the edge
+	// (e.g. who started the root workflow). Propagated frontend->history (see
+	// propagateHeaders) so it reaches NewWorkflow's RootCallerPrincipal seeding.
+	EndUserPrincipalTypeHeaderName = "temporal-end-user-principal-type"
+	EndUserPrincipalNameHeaderName = "temporal-end-user-principal-name"
+	EndUserPrincipalIdHeaderName   = "temporal-end-user-principal-id"
 
 	ExperimentHeaderName = "temporal-experiment"
 )
 
 var (
-	// propagateHeaders are the headers to propagate from the frontend to other services.
+	// propagateHeaders are the headers to propagate from the frontend to
+	// other services via gRPC metadata. The end-user principal pair is
+	// included so the chain-originating identity reaches history's
+	// RootCallerPrincipal seeding (see EndUserPrincipalTypeHeaderName).
 	propagateHeaders = []string{
 		ClientNameHeaderName,
 		ClientVersionHeaderName,
@@ -39,6 +56,25 @@ var (
 		CallOriginHeaderName,
 		PrincipalTypeHeaderName,
 		PrincipalNameHeaderName,
+		PrincipalIdHeaderName,
+		EndUserPrincipalTypeHeaderName,
+		EndUserPrincipalNameHeaderName,
+		EndUserPrincipalIdHeaderName,
+	}
+
+	// principalHeaderNames is the set of headers that must be stripped from
+	// inbound metadata / HTTP requests to prevent external callers from
+	// spoofing identity. Includes both immediate-caller and end-user pairs
+	// even though the end-user pair is not in propagateHeaders: it can
+	// arrive on the Nexus dispatch HTTP boundary, and any external attempt
+	// to inject it at a gRPC ingress must still be removed.
+	principalHeaderNames = []string{
+		PrincipalTypeHeaderName,
+		PrincipalNameHeaderName,
+		PrincipalIdHeaderName,
+		EndUserPrincipalTypeHeaderName,
+		EndUserPrincipalNameHeaderName,
+		EndUserPrincipalIdHeaderName,
 	}
 )
 
@@ -122,33 +158,77 @@ func IsExperimentRequested(ctx context.Context, experiment string) bool {
 	return false
 }
 
-// StripPrincipal removes principal headers from incoming metadata to prevent
-// external callers from spoofing principal identity.
+// StripPrincipalHTTP removes both the immediate-caller and end-user principal
+// HTTP headers from an inbound request. This complements StripPrincipal at
+// HTTP ingress boundaries (e.g. the Nexus dispatch and completion HTTP
+// handlers) where the request never passes through the gRPC interceptor
+// chain, so principal-bearing HTTP headers would otherwise survive into the
+// authorized context.
+func StripPrincipalHTTP(h http.Header) {
+	for _, name := range principalHeaderNames {
+		h.Del(name)
+	}
+}
+
+// StripPrincipal removes both the immediate-caller and end-user principal
+// headers from incoming metadata to prevent external callers from spoofing
+// identity. Callers must invoke this on every external ingress boundary
+// (gRPC frontend interceptor, Nexus dispatch HTTP handler, Nexus completion
+// HTTP handler) before authorizing the request.
 func StripPrincipal(ctx context.Context) context.Context {
 	mdIncoming, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ctx
 	}
-	mdIncoming.Delete(PrincipalTypeHeaderName)
-	mdIncoming.Delete(PrincipalNameHeaderName)
+	for _, h := range principalHeaderNames {
+		mdIncoming.Delete(h)
+	}
 	return metadata.NewIncomingContext(ctx, mdIncoming)
 }
 
-// SetPrincipal sets the principal type and name headers in the incoming metadata.
+// SetPrincipal sets the immediate-caller principal headers (type, name, id) in
+// the incoming metadata.
 func SetPrincipal(ctx context.Context, principal *commonpb.Principal) context.Context {
 	return setIncomingMD(ctx, map[string]string{
 		PrincipalTypeHeaderName: principal.GetType(),
 		PrincipalNameHeaderName: principal.GetName(),
+		PrincipalIdHeaderName:   principal.GetId(),
 	})
 }
 
-// GetPrincipal retrieves the principal from the context headers. Returns nil if principal is not set.
+// GetPrincipal retrieves the immediate-caller principal from the context
+// headers. Returns nil if no principal-carrying header is present (e.g. the
+// caller-side did not opt into propagation, or the request crossed a worker
+// boundary so the chain broke).
 func GetPrincipal(ctx context.Context) *commonpb.Principal {
-	values := GetValues(ctx, PrincipalTypeHeaderName, PrincipalNameHeaderName)
-	if values[0] == "" && values[1] == "" {
+	values := GetValues(ctx, PrincipalTypeHeaderName, PrincipalNameHeaderName, PrincipalIdHeaderName)
+	if values[0] == "" && values[1] == "" && values[2] == "" {
 		return nil
 	}
-	return &commonpb.Principal{Type: values[0], Name: values[1]}
+	return &commonpb.Principal{Type: values[0], Name: values[1], Id: values[2]}
+}
+
+// SetEndUserPrincipal sets the end-user principal headers (type, name, id) in
+// the incoming metadata. The end-user principal identifies the original
+// initiator of the request chain (e.g. the API-key holder who started the root
+// workflow), distinct from the immediate caller whose RPC is currently being
+// processed.
+func SetEndUserPrincipal(ctx context.Context, principal *commonpb.Principal) context.Context {
+	return setIncomingMD(ctx, map[string]string{
+		EndUserPrincipalTypeHeaderName: principal.GetType(),
+		EndUserPrincipalNameHeaderName: principal.GetName(),
+		EndUserPrincipalIdHeaderName:   principal.GetId(),
+	})
+}
+
+// GetEndUserPrincipal retrieves the end-user principal from the context
+// headers. Returns nil if no end-user principal-carrying header is present.
+func GetEndUserPrincipal(ctx context.Context) *commonpb.Principal {
+	values := GetValues(ctx, EndUserPrincipalTypeHeaderName, EndUserPrincipalNameHeaderName, EndUserPrincipalIdHeaderName)
+	if values[0] == "" && values[1] == "" && values[2] == "" {
+		return nil
+	}
+	return &commonpb.Principal{Type: values[0], Name: values[1], Id: values[2]}
 }
 
 // setIncomingMD sets the key-value pairs in the incoming metadata.

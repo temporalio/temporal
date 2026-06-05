@@ -2619,6 +2619,9 @@ pollLoop:
 				TaskToken:             serializedToken,
 				Request:               nexusReq,
 				PollerScalingDecision: task.pollerScalingDecision,
+				// Verified caller carried with the task; surfaced to the handler
+				// worker so it can authorize/audit the caller chain.
+				Caller: task.nexus.request.GetCaller(),
 			},
 		}, nil
 	}
@@ -3381,6 +3384,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 		ComponentRef:               task.event.Data.GetComponentRef(),
+		// Option A: attribute the authenticated identity of the polling worker so
+		// history can store it as the activity's immediate caller (and bind the
+		// per-attempt nonce to it). Nil-safe; falls back to header propagation.
+		ImmediateCaller: headers.GetPrincipal(ctx),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

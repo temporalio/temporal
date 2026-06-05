@@ -42,6 +42,8 @@ type (
 		// Reason may contain a message explaining the value of the Decision field.
 		Reason string
 		// Principal is the server-computed identity of the caller. Can be nil when not computed.
+		// Its Name is the human-readable display name; its Id is the stable, globally
+		// unique identifier (empty when the auth material has no stable identity).
 		Principal *commonpb.Principal
 	}
 

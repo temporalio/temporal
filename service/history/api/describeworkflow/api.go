@@ -343,6 +343,15 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
+		// Surface the chain-originating identity from the CHASM workflow
+		// component as a read-only caller. It is stored only on CHASM (not on
+		// WorkflowExecutionInfo at rest), so describe projects it here.
+		// Empty/nil when caller attribution is not configured or the workflow
+		// predates the feature.
+		if root := wf.GetRootCallerPrincipal(chasmCtx); root != nil {
+			result.WorkflowExecutionInfo.Caller = &commonpb.Caller{Root: root}
+		}
+
 		outboundCB := func(endpoint string) bool {
 			cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 				TaskGroup:   nexusoperation.TaskGroupName,

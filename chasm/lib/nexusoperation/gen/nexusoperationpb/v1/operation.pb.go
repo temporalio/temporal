@@ -689,11 +689,24 @@ func (x *CancellationState) GetReason() string {
 }
 
 type OperationRequestData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Input         *v11.Payload           `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
-	NexusHeader   map[string]string      `protobuf:"bytes,2,rep,name=nexus_header,json=nexusHeader,proto3" json:"nexus_header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UserMetadata  *v12.UserMetadata      `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
-	Identity      string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Input        *v11.Payload           `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+	NexusHeader  map[string]string      `protobuf:"bytes,2,rep,name=nexus_header,json=nexusHeader,proto3" json:"nexus_header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	UserMetadata *v12.UserMetadata      `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	Identity     string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+	// Caller attributed to this Nexus operation, captured server-side at schedule
+	// time and propagated on the outbound HTTP dispatch so the handler can audit
+	// and authorize on it. Holds:
+	//   - root: the chain-originating end-user caller, copied from the workflow's
+	//     stored root caller at schedule time (or the SDK client for standalone).
+	//     Absent when no end-user caller is available (e.g. started before the
+	//     feature).
+	//   - actors: the immediate (service) caller that scheduled the operation —
+	//     the worker's principal (workflow-initiated) or the SDK client's
+	//     (standalone). The caller's namespace is filled in at dispatch time.
+	//
+	// Server-set, immutable from user code.
+	Caller        *v11.Caller `protobuf:"bytes,7,opt,name=caller,proto3" json:"caller,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -754,6 +767,13 @@ func (x *OperationRequestData) GetIdentity() string {
 		return x.Identity
 	}
 	return ""
+}
+
+func (x *OperationRequestData) GetCaller() *v11.Caller {
+	if x != nil {
+		return x.Caller
+	}
+	return nil
 }
 
 type OperationOutcome_Successful struct {
@@ -902,15 +922,16 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"request_id\x18\b \x01(\tR\trequestId\x12\x1a\n" +
 	"\bidentity\x18\t \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\n" +
-	" \x01(\tR\x06reason\"\xee\x02\n" +
+	" \x01(\tR\x06reason\"\xb2\x03\n" +
 	"\x14OperationRequestData\x125\n" +
 	"\x05input\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05input\x12{\n" +
 	"\fnexus_header\x18\x02 \x03(\v2X.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntryR\vnexusHeader\x12F\n" +
 	"\ruser_metadata\x18\x03 \x01(\v2!.temporal.api.sdk.v1.UserMetadataR\fuserMetadata\x12\x1a\n" +
-	"\bidentity\x18\x04 \x01(\tR\bidentity\x1a>\n" +
+	"\bidentity\x18\x04 \x01(\tR\bidentity\x126\n" +
+	"\x06caller\x18\a \x01(\v2\x1e.temporal.api.common.v1.CallerR\x06caller\x1a>\n" +
 	"\x10NexusHeaderEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xb0\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x05\x10\x06J\x04\b\x06\x10\a*\xb0\x02\n" +
 	"\x0fOperationStatus\x12 \n" +
 	"\x1cOPERATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aOPERATION_STATUS_SCHEDULED\x10\x01\x12 \n" +
@@ -962,6 +983,7 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTyp
 	(*v11.Link)(nil),                     // 14: temporal.api.common.v1.Link
 	(*v11.Payload)(nil),                  // 15: temporal.api.common.v1.Payload
 	(*v12.UserMetadata)(nil),             // 16: temporal.api.sdk.v1.UserMetadata
+	(*v11.Caller)(nil),                   // 17: temporal.api.common.v1.Caller
 }
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
@@ -988,13 +1010,14 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depId
 	15, // 21: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.input:type_name -> temporal.api.common.v1.Payload
 	9,  // 22: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.nexus_header:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntry
 	16, // 23: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	15, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
-	13, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	17, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.caller:type_name -> temporal.api.common.v1.Caller
+	15, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
+	13, // 26: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() }

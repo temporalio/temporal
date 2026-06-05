@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/callerprop"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
@@ -84,6 +86,7 @@ type operationContext struct {
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
+	callerInbound                 callerprop.InboundExtractor
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -119,13 +122,57 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	}
 }
 
-func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
+func (c *operationContext) matchingRequest(ctx context.Context, req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
 	req.Endpoint = c.endpointName
 	return &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: c.namespace.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: c.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Request:     req,
+		Caller:      nexusCaller(ctx),
 	}
+}
+
+// nexusCaller builds the verified caller to attach to the outbound matching
+// task: the root (end-user) and the immediate (service) caller come from the
+// context (promoted by promotePrincipalToken, or set by the auth interceptor
+// for direct callers); the namespace comes from the verified token (stashed by
+// promotePrincipalToken) and rides on the service actor. Returns nil when
+// nothing is attributed, leaving the field empty.
+func nexusCaller(ctx context.Context) *commonpb.Caller {
+	caller := &commonpb.Caller{}
+	if root := headers.GetEndUserPrincipal(ctx); root != nil {
+		caller.Root = root
+	}
+	service := headers.GetPrincipal(ctx)
+	nsCaller := namespaceCallerFromContext(ctx)
+	if service != nil || nsCaller != nil {
+		caller.Actors = []*commonpb.Actor{{Principal: service, Namespace: nsCaller}}
+	}
+	if caller.Root == nil && len(caller.Actors) == 0 {
+		return nil
+	}
+	return caller
+}
+
+// namespaceCallerContextKey carries the verified namespace caller from
+// promotePrincipalToken to nexusCallerInfo without putting it on gRPC metadata
+// (it is not needed downstream of the poll response, unlike the service/root
+// principals which the authorizer and history seeding read from headers).
+type namespaceCallerContextKey struct{}
+
+func withNamespaceCaller(ctx context.Context, p *commonpb.Principal) context.Context {
+	if p == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, namespaceCallerContextKey{}, p)
+}
+
+func namespaceCallerFromContext(ctx context.Context) *commonpb.Principal {
+	p, ok := ctx.Value(namespaceCallerContextKey{}).(*commonpb.Principal)
+	if !ok {
+		return nil
+	}
+	return p
 }
 
 func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
@@ -153,7 +200,50 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 			}
 		}
 	}
+	ctx = c.promoteInboundCallers(ctx, header)
 	return headers.Propagate(ctx)
+}
+
+// promoteInboundCallers extracts the verified caller carried on the inbound
+// Nexus HTTP request and promotes it into the incoming metadata, where the
+// authorizer and history stamping read it. In OSS the extractor is a no-op
+// (cross-namespace propagation is Cloud-only); saas-temporal verifies a signed
+// token (or trusted peer) and returns the trusted caller.
+func (c *operationContext) promoteInboundCallers(ctx context.Context, header nexus.Header) context.Context {
+	caller := c.callerInbound.Extract(ctx, header)
+	if caller == nil {
+		return ctx
+	}
+	// Promote the trusted caller (carrying name + stable id) into metadata. The
+	// service caller and its namespace come from the most recent actor hop; the
+	// originator is the root.
+	if service := serviceCallerOf(caller); service != nil {
+		ctx = headers.SetPrincipal(ctx, service)
+	}
+	if root := caller.GetRoot(); root != nil {
+		ctx = headers.SetEndUserPrincipal(ctx, root)
+	}
+	ctx = withNamespaceCaller(ctx, namespaceCallerOf(caller))
+	return ctx
+}
+
+// serviceCallerOf returns the immediate (service) caller: the principal of the
+// most recent actor hop.
+func serviceCallerOf(caller *commonpb.Caller) *commonpb.Principal {
+	actors := caller.GetActors()
+	if len(actors) == 0 {
+		return nil
+	}
+	return actors[len(actors)-1].GetPrincipal()
+}
+
+// namespaceCallerOf returns the namespace of the most recent actor hop.
+func namespaceCallerOf(caller *commonpb.Caller) *commonpb.Principal {
+	actors := caller.GetActors()
+	if len(actors) == 0 {
+		return nil
+	}
+	return actors[len(actors)-1].GetNamespace()
 }
 
 func (c *operationContext) interceptRequest(
@@ -330,6 +420,7 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	callerInbound                 callerprop.InboundExtractor
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -351,6 +442,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
 		metricTagConfig:               h.metricTagConfig,
+		callerInbound:                 h.callerInbound,
 		cleanupFunctions:              make([]func(map[string]string, error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
@@ -414,7 +506,7 @@ func (h *nexusHandler) StartOperation(
 		RequestId:      options.RequestID,
 		Links:          links,
 	}
-	request := oc.matchingRequest(&nexuspb.Request{
+	request := oc.matchingRequest(ctx, &nexuspb.Request{
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Header:        options.Header,
 		Variant: &nexuspb.Request_StartOperation{
@@ -637,7 +729,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
-	request := oc.matchingRequest(&nexuspb.Request{
+	request := oc.matchingRequest(ctx, &nexuspb.Request{
 		Header:        options.Header,
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{

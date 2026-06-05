@@ -374,6 +374,12 @@ message RecordActivityTaskStartedRequest {
   // start information is carried within this component, obviating the need to use the fields that apply to embedded
   // activities with the exception of version_directive.
   bytes component_ref = 14;
+  // Option A (Nexus identity propagation): the authenticated identity of the
+  // activity task worker, attributed by the frontend from the poll request's
+  // auth context. History stores it on the activity's CHASM component as the
+  // immediate caller so a later StartNexusOperationExecution can verify the
+  // worker before resolving the chain's root caller. Server-set and trusted.
+  temporal.api.common.v1.Principal immediate_caller = 15;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -391,6 +397,12 @@ message RecordActivityTaskStartedResponse {
   int64 start_version = 12;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 13;
+  // Option A (Nexus identity propagation): per-attempt secret minted and stored
+  // on the activity's CHASM component at start. Matching encodes it into the
+  // activity task's gRPC metadata (temporal-activity-nonce); a later
+  // StartNexusOperationExecution from the worker must echo it back to prove it
+  // holds the live activity task. Must never be logged or exported.
+  bytes started_nonce = 14;
 }
 
 message RespondWorkflowTaskCompletedRequest {

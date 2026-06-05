@@ -121,11 +121,22 @@ func newStandaloneOperation(
 		ScheduledTime:          timestamppb.New(ctx.Now(nil)),
 		RequestId:              uuid.NewString(),
 	})
+	// Capture the inbound RPC's principal as both the service caller and
+	// the end-user principal: for standalone Nexus operations the SDK
+	// client that invoked us is both the immediate caller and the
+	// originator. The auth interceptor wrote the principal headers onto
+	// the gRPC incoming metadata (and stripped any spoofed inbound
+	// values), so reading them via the chasm context's RequestHeader is
+	// safe.
+	callerPrincipal := PrincipalFromContext(ctx)
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{
 		Input:        frontendReq.GetInput(),
 		NexusHeader:  frontendReq.GetNexusHeader(),
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
+		// For a standalone Nexus operation the SDK client that invoked us is
+		// both the immediate (service) caller and the chain's root.
+		Caller: buildCaller(callerPrincipal, nil, callerPrincipal),
 	})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
@@ -289,6 +300,9 @@ func (o *Operation) loadStartArgs(
 	var (
 		invocationData InvocationData
 		err            error
+		// Caller captured at schedule time (root + service actor). Read from
+		// RequestData below, independently of the input source.
+		caller *commonpb.Caller
 	)
 	if store, ok := o.Store.TryGet(ctx); ok {
 		invocationData, err = store.NexusOperationInvocationData(ctx, o)
@@ -301,6 +315,15 @@ func (o *Operation) loadStartArgs(
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
 		}
+	}
+	// The caller lives on RequestData for both standalone operations and
+	// workflow-initiated operations. For the latter, SetCallerPrincipals writes
+	// a RequestData carrying only the caller alongside the parent Store that
+	// supplies the input — so read it here via TryGet regardless of the branch
+	// taken above. Nil is the graceful-degradation case (feature off, or no
+	// authenticated identity).
+	if requestData, ok := o.RequestData.TryGet(ctx); ok {
+		caller = requestData.GetCaller()
 	}
 	invocationData.NexusLinks = append(invocationData.NexusLinks,
 		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
@@ -329,6 +352,7 @@ func (o *Operation) loadStartArgs(
 		header:                 invocationData.Header,
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
+		caller:                 caller,
 	}, nil
 }
 
