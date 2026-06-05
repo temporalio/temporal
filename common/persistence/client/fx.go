@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	otel "go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -217,9 +218,18 @@ func DataStoreFactoryLifetimeHooks(lc fx.Lifecycle, f persistence.DataStoreFacto
 	lc.Append(fx.StopHook(f.Close))
 }
 
-func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(Factory, fx.Lifecycle) (T, error) {
-	return func(f Factory, lc fx.Lifecycle) (T, error) {
-		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
+type managerProviderParams struct {
+	fx.In
+
+	Factory   Factory
+	Lifecycle fx.Lifecycle
+	TestHooks testhooks.TestHooks `optional:"true"`
+	Logger    log.Logger
+}
+
+func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(managerProviderParams) (T, error) {
+	return func(params managerProviderParams) (T, error) {
+		manager, err := newManagerFn(params.Factory) // passing receiver (Factory) as first argument.
 		if err != nil {
 			var unimpl *serviceerror.Unimplemented
 			if errors.As(err, &unimpl) {
@@ -229,7 +239,12 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 			var nilT T
 			return nilT, err
 		}
-		lc.Append(fx.StopHook(manager.Close))
+		if executionManager, ok := any(manager).(persistence.ExecutionManager); ok {
+			if hook, ok := testhooks.Get(params.TestHooks, testhooks.PersistenceExecutionManagerWrapper, testhooks.GlobalScope); ok {
+				manager = any(hook(executionManager, params.Logger)).(T) //nolint:revive
+			}
+		}
+		params.Lifecycle.Append(fx.StopHook(manager.Close))
 		return manager, nil
 	}
 }
