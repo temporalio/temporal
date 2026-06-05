@@ -895,15 +895,15 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 	fromVisibility := c.Bool(FlagFromVisibility)
 	scheduleID := c.String(FlagScheduleID)
 
-	// --query and --workers only take effect in --from-visibility mode; reject them elsewhere
-	// rather than silently ignoring them.
-	if !fromVisibility {
-		if c.IsSet(FlagVisibilityQuery) {
-			return fmt.Errorf("--%s is only valid with --%s", FlagVisibilityQuery, FlagFromVisibility)
-		}
-		if c.IsSet(FlagWorkers) {
-			return fmt.Errorf("--%s is only valid with --%s", FlagWorkers, FlagFromVisibility)
-		}
+	// --query only takes effect in --from-visibility mode; reject it elsewhere rather than
+	// silently ignoring it.
+	if !fromVisibility && c.IsSet(FlagVisibilityQuery) {
+		return fmt.Errorf("--%s is only valid with --%s", FlagVisibilityQuery, FlagFromVisibility)
+	}
+	// --workers applies to the bulk modes (--from-visibility and stdin); it has no effect when
+	// migrating a single --schedule-id, so reject it there rather than silently ignoring it.
+	if scheduleID != "" && c.IsSet(FlagWorkers) {
+		return fmt.Errorf("--%s is only valid with --%s or when piping JSON lines on stdin", FlagWorkers, FlagFromVisibility)
 	}
 
 	switch {
@@ -1079,7 +1079,9 @@ func openMigrateLog(c *cli.Context, summary *migrateSummary) (func(), error) {
 	return func() { _ = logFile.Close() }, nil
 }
 
-// migrateSchedulesFromStdin reads JSON lines from stdin, one {"namespace","schedule_id"} per line.
+// migrateSchedulesFromStdin reads JSON lines from stdin, one {"namespace","schedule_id"} per line,
+// feeding them to a pool of --workers goroutines that migrate them concurrently (mirroring
+// --from-visibility mode). With the default of one worker, lines are processed in order.
 func migrateSchedulesFromStdin(
 	c *cli.Context,
 	clientFactory ClientFactory,
@@ -1087,6 +1089,10 @@ func migrateSchedulesFromStdin(
 	targetStr string,
 ) error {
 	execute := c.Bool(FlagExecute)
+	workers := c.Int(FlagWorkers)
+	if workers < 1 {
+		workers = 1
+	}
 	adminClient := clientFactory.AdminClient(c)
 
 	var summary migrateSummary
@@ -1096,6 +1102,17 @@ func migrateSchedulesFromStdin(
 	}
 	defer closeLog()
 
+	jobs := make(chan migrateJob)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Go(func() {
+			for job := range jobs {
+				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
+			}
+		})
+	}
+
+	var readErr error
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -1107,19 +1124,27 @@ func migrateSchedulesFromStdin(
 			ScheduleID string `json:"schedule_id"`
 		}
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return fmt.Errorf("invalid JSON line %q: %w", line, err)
+			readErr = fmt.Errorf("invalid JSON line %q: %w", line, err)
+			break
 		}
 		if record.Namespace == "" || record.ScheduleID == "" {
-			return fmt.Errorf("each line must include non-empty \"namespace\" and \"schedule_id\": %q", line)
+			readErr = fmt.Errorf("each line must include non-empty \"namespace\" and \"schedule_id\": %q", line)
+			break
 		}
-		migrateOne(c, adminClient, record.Namespace, record.ScheduleID, target, targetStr, execute, &summary)
+		jobs <- migrateJob{namespace: record.Namespace, scheduleID: record.ScheduleID}
 	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading stdin: %w", err)
+	if readErr == nil {
+		if err := scanner.Err(); err != nil {
+			readErr = fmt.Errorf("error reading stdin: %w", err)
+		}
 	}
+	close(jobs)
+	wg.Wait()
 
+	// Always report what was migrated before surfacing a read error: workers may have already
+	// migrated the lines read so far, and the user needs to see that partial progress.
 	summary.print(c, execute)
-	return nil
+	return readErr
 }
 
 // migrateOne migrates a single schedule (or prints the planned action in dry-run), updating

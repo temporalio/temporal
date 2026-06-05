@@ -332,11 +332,11 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.IntFlag{
 					Name:  FlagWorkers,
 					Value: defaultMigrateWorkers,
-					Usage: "Number of concurrent workers migrating schedules in --from-visibility mode",
+					Usage: "Number of concurrent workers migrating schedules in --from-visibility and stdin modes",
 				},
 				&cli.StringFlag{
 					Name:  FlagOutputLog,
-					Usage: "Path to write a structured (JSON lines) log of each migration result in --from-visibility mode",
+					Usage: "Path to write a structured (JSON lines) log of each migration result in --from-visibility and stdin modes",
 				},
 			},
 			Action: func(c *cli.Context) error {

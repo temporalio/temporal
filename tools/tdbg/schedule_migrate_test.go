@@ -282,13 +282,14 @@ func TestMigrateSchedule_RejectsQueryWithoutFromVisibility(t *testing.T) {
 	require.Contains(t, err.Error(), "from-visibility")
 }
 
-func TestMigrateSchedule_RejectsWorkersWithoutFromVisibility(t *testing.T) {
+func TestMigrateSchedule_RejectsWorkersWithScheduleID(t *testing.T) {
+	// --workers applies to the bulk modes (--from-visibility and stdin) but is meaningless when
+	// migrating a single --schedule-id, so it is rejected rather than silently ignored.
 	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 	_, _, err := runMigrate(t, factory,
 		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--workers", "4")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "workers")
-	require.Contains(t, err.Error(), "from-visibility")
 }
 
 func TestMigrateSchedule_FromVisibility_RejectsScheduleID(t *testing.T) {
@@ -324,6 +325,34 @@ func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
 	for _, req := range admin.requests {
 		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
 	}
+}
+
+func TestMigrateSchedule_Stdin_Workers(t *testing.T) {
+	admin := &migrateAdminClient{}
+	factory := migrateClientFactory{admin: admin, workflow: &migrateWorkflowClient{}}
+
+	const n = 12
+	lines := make([]string, n)
+	want := make([]string, n)
+	for i := range n {
+		id := fmt.Sprintf("sched-%d", i)
+		lines[i] = fmt.Sprintf(`{"namespace":"my-ns","schedule_id":%q}`, id)
+		want[i] = id
+	}
+
+	withStdin(t, strings.Join(lines, "\n"), func() {
+		_, _, err := runMigrate(t, factory,
+			"schedule", "migrate", "--target", "workflow", "--execute", "--workers", "4")
+		require.NoError(t, err)
+	})
+
+	require.Len(t, admin.requests, n)
+	got := make([]string, len(admin.requests))
+	for i, req := range admin.requests {
+		got[i] = req.ScheduleId
+	}
+	// Order is not guaranteed with multiple workers.
+	require.ElementsMatch(t, want, got)
 }
 
 func TestMigrateSchedule_Stdin_DryRun(t *testing.T) {
