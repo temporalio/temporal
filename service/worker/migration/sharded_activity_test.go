@@ -241,8 +241,8 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 		}).AnyTimes()
 
 	req := newShardedReq(payloadFor(0, execution1))
-	req.Resume = true                               // skip inject
-	req.ShardNoProgress = 10 * time.Millisecond     // trip almost immediately
+	req.Resume = true                                // skip inject
+	req.ShardNoProgress = 10 * time.Millisecond      // trip almost immediately
 	req.NoProgressByShard = map[int32]time.Duration{ // seed past threshold
 		0: time.Second,
 	}

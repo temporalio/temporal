@@ -2775,7 +2775,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow_Sharded(
 	// Verify all wf in ns is now available in cluster2
 	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	verify := func(wfID string, expectedRunID string) {
-		s.Eventually(func() bool {
+		await.RequireTruef(s.T(), func() bool {
 			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
 			if err != nil {
 				return false
@@ -2809,7 +2809,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow_Sharded(
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
 		if err != nil {
 			return false

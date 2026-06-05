@@ -521,7 +521,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
-	lastMessageId := replicationResponse.GetMessages().GetLastRetrievedMessageId()
+	lastMessageID := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
 	namespace := s.createNamespaceInCluster0(true)
 	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
@@ -572,11 +572,11 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_
 	// we should see one new namespace task in the replication queue
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: lastMessageId,
+		LastRetrievedMessageId: lastMessageID,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
-	lastMessageId = replicationResponse.GetMessages().GetLastRetrievedMessageId()
+	lastMessageID = replicationResponse.GetMessages().GetLastRetrievedMessageId()
 	s.Len(replicationResponse.GetMessages().ReplicationTasks, 1)
 	task := replicationResponse.GetMessages().ReplicationTasks[0]
 	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
@@ -601,7 +601,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_
 
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: lastMessageId,
+		LastRetrievedMessageId: lastMessageID,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)

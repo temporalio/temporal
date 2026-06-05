@@ -73,7 +73,22 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		return replicateBatchResult{}, fmt.Errorf("look up namespace %s: %w", req.NamespaceID, err)
 	}
 
-	// ---- Verify phase ----
+	return a.runVerifyPhase(ctx, req, execs, of, remoteAdminClient, ns)
+}
+
+// runVerifyPhase is the verify-phase loop body of ReplicateBatch. It
+// owns per-exec bookkeeping, the drain-transition handoff, and the
+// per-iteration completion / stuck-shard / signal-release decisions
+// — extracted from ReplicateBatch to keep its cognitive complexity
+// under the linter cap.
+func (a *activities) runVerifyPhase(
+	ctx context.Context,
+	req *shardedBatchReq,
+	execs []*shardedExecutionInfo,
+	of int,
+	remoteAdminClient adminservice.AdminServiceClient,
+	ns *namespace.Namespace,
+) (replicateBatchResult, error) {
 	verified := make([]bool, of)
 	attempts := make([]int, of)
 	nextRetryAt := make([]time.Time, of)
@@ -138,33 +153,11 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 
-		// Clean completion — every exec verified.
-		if doneCount >= of {
-			return replicateBatchResult{
-				CompletedShards: shards.allCompleted(),
-				VerifiedCount:   int64(doneCount),
-			}, nil
-		}
-
-		// Per-shard cumulative no-progress backstop.
-		if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, of); sErr != nil {
-			return replicateBatchResult{}, sErr
-		}
-
-		if draining {
-			// Drain-mode exit checks. No signals here — the return value
-			// carries everything the workflow needs (completed shards +
-			// unverified execs grouped by shard with their cumulative
-			// no-progress duration).
-			if a.shouldExitDrain(req, shards, drainStartAt) {
-				return replicateBatchResult{
-					CompletedShards: shards.allCompleted(),
-					InFlight:        a.buildInFlight(execs, verified, shards, time.Now()),
-					VerifiedCount:   int64(doneCount),
-				}, nil
-			}
-		} else if err := a.maybeSignalRelease(ctx, req, shards); err != nil {
+		if done, result, err := a.evaluateVerifyIteration(
+			ctx, req, execs, verified, shards, doneCount, of, draining, drainStartAt); err != nil {
 			return replicateBatchResult{}, err
+		} else if done {
+			return result, nil
 		}
 
 		// If the inner loop aborted because callCtx died, skip the sleep
@@ -176,6 +169,54 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 
 		a.waitNextTick(ctx, callCtx, minNextRetry, draining, drainStartAt, req.DrainGrace)
 	}
+}
+
+// evaluateVerifyIteration runs the post-pass checks (clean completion,
+// stuck-shard backstop, drain-exit decision, mid-flight signal release)
+// for a single verify-loop iteration. Returns done=true with the result
+// when the loop should exit; otherwise (false, _, nil) means continue.
+func (a *activities) evaluateVerifyIteration(
+	ctx context.Context,
+	req *shardedBatchReq,
+	execs []*shardedExecutionInfo,
+	verified []bool,
+	shards shardVerifyTracker,
+	doneCount, of int,
+	draining bool,
+	drainStartAt time.Time,
+) (bool, replicateBatchResult, error) {
+	// Clean completion — every exec verified.
+	if doneCount >= of {
+		return true, replicateBatchResult{
+			CompletedShards: shards.allCompleted(),
+			VerifiedCount:   int64(doneCount),
+		}, nil
+	}
+
+	// Per-shard cumulative no-progress backstop.
+	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, of); sErr != nil {
+		return false, replicateBatchResult{}, sErr
+	}
+
+	if draining {
+		// Drain-mode exit checks. No signals here — the return value
+		// carries everything the workflow needs (completed shards +
+		// unverified execs grouped by shard with their cumulative
+		// no-progress duration).
+		if a.shouldExitDrain(req, shards, drainStartAt) {
+			return true, replicateBatchResult{
+				CompletedShards: shards.allCompleted(),
+				InFlight:        a.buildInFlight(execs, verified, shards, time.Now()),
+				VerifiedCount:   int64(doneCount),
+			}, nil
+		}
+		return false, replicateBatchResult{}, nil
+	}
+
+	if err := a.maybeSignalRelease(ctx, req, shards); err != nil {
+		return false, replicateBatchResult{}, err
+	}
+	return false, replicateBatchResult{}, nil
 }
 
 // runInjectPhase walks execs in flattened order, generating one
@@ -196,15 +237,14 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 			if ctx.Err() != nil {
 				return temporal.NewCanceledError("inject phase cancelled")
 			}
-			if common.IsNotFoundError(err) {
-				a.Logger.Warn("force-replication-sharded ignore replication task due to NotFoundServiceError",
-					tag.WorkflowNamespaceID(req.NamespaceID),
-					tag.WorkflowID(ex.BusinessID),
-					tag.WorkflowRunID(ex.RunID),
-					tag.Error(err))
-			} else {
+			if !common.IsNotFoundError(err) {
 				return err
 			}
+			a.Logger.Warn("force-replication-sharded ignore replication task due to NotFoundServiceError",
+				tag.WorkflowNamespaceID(req.NamespaceID),
+				tag.WorkflowID(ex.BusinessID),
+				tag.WorkflowRunID(ex.RunID),
+				tag.Error(err))
 		}
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{NextInjectIdx: i + 1})
 	}

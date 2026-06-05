@@ -584,7 +584,7 @@ func TestSharded_ListWorkflowsError(t *testing.T) {
 	// front. Register a fail-loud stub so we notice if the workflow
 	// ever dispatches a batch.
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
-		t.Fatalf("ReplicateBatch must not be called when listing fails")
+		t.Fatal("ReplicateBatch must not be called when listing fails")
 		return replicateBatchResult{}, nil
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
