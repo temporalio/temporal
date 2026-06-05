@@ -14,9 +14,8 @@ const (
 	// time by setting the start request's workflow type.
 	shardedForceReplicationWorkflowName = "force-replication-sharded"
 
-	// shardedBatchActivityName is the registered activity name; the
-	// workflow dispatches by name so the same activity body can be
-	// referenced across CAN cycles without re-registering.
+	// shardedBatchActivityName is the registered activity name used by
+	// name-based dispatch.
 	shardedBatchActivityName = "ReplicateBatch"
 
 	// releaseShardsSignalName carries mid-flight ReleaseShards signals
@@ -28,9 +27,6 @@ const (
 
 	// defaultShardedListPageSize is the ListWorkflows page size when
 	// the sharded workflow's params.ListWorkflowsPageSize is unset.
-	// Named to avoid clashing with the legacy
-	// defaultListWorkflowsPageSize already declared in
-	// force_replication_workflow.go.
 	defaultShardedListPageSize = 1000
 
 	// defaultBatchSize bounds the total executions in any single
@@ -48,8 +44,8 @@ const (
 	// defaultShardNoProgress is the per-shard cumulative no-progress
 	// backstop. While a shard's pending exec count is non-zero and
 	// no exec on that shard has produced a verified outcome for this
-	// many seconds (carried across CAN via the resume payload), the
-	// activity fails non-retryably naming the stuck shard.
+	// long (carried across CAN via the resume payload), the activity
+	// fails non-retryably naming the stuck shard.
 	defaultShardNoProgress = 5 * time.Minute
 
 	// defaultDrainGrace is the wall-budget the activity gets after
@@ -65,21 +61,17 @@ const (
 	defaultIdleShardCost = 30 * time.Second
 
 	// defaultPerBatchGenerateRPS is the per-batch inject-phase target.
-	// Sharded dispatches many concurrent batches and each builds its own
-	// limiter, so this caps the per-batch generate-replication-task rate;
-	// the workflow does not normalise against a global cap the way the
-	// existing migration's OverallRps does. Sits near the mid-range of
-	// what existing force-replication deployments configure per-activity
-	// (OverallRps 10–100 divided across ConcurrentActivityCount 2–10).
+	// Sharded dispatches many concurrent batches and each builds its
+	// own limiter, so this caps the per-batch generate-replication-task
+	// rate; the workflow does not normalise against a global cap the
+	// way the existing migration's OverallRps does.
 	defaultPerBatchGenerateRPS = 30.0
 
 	// defaultConcurrentBatchCap is the ceiling applied to the derived
 	// default of TargetClusterShardCount/4. Keeps the in-flight batch
-	// count safely inside per-worker concurrent-activity suggestions
-	// even on the largest cells (4k+ shards), and absolutely bounds the
-	// cluster blast radius of a single force-rep run.
+	// count safely inside per-worker concurrent-activity budgets and
+	// bounds the cluster blast radius of a single force-rep run.
 	defaultConcurrentBatchCap = 500
-
 )
 
 // RunEntry is the per-run leaf in the nested batch payload. Carries the
@@ -97,10 +89,11 @@ type RunEntry struct {
 	ArchetypeID uint32
 }
 
-// MarshalJSON / UnmarshalJSON: custom because Go's default JSON has no
-// way to express a heterogeneous tuple, and we want the archetype-omission
-// to happen by changing the tuple length rather than emitting an explicit
-// zero.
+// MarshalJSON serialises RunEntry as a heterogeneous JSON tuple. Custom
+// because Go's default JSON can't express a heterogeneous tuple, and
+// archetype-omission needs to happen by changing the tuple length
+// rather than emitting an explicit zero. UnmarshalJSON below is the
+// inverse.
 func (r RunEntry) MarshalJSON() ([]byte, error) {
 	if r.ArchetypeID == 0 {
 		return fmt.Appendf(nil, `[%q]`, r.RunID), nil
@@ -205,8 +198,7 @@ func (p BatchPayload) flatten() []*shardedExecutionInfo {
 	return out
 }
 
-// merge folds src into p. Used by collectRecoveredBuckets to combine
-// per-batch payloads back into a single carry-over map.
+// merge folds src into p.
 func (p BatchPayload) merge(src BatchPayload) {
 	for sh, byBID := range src {
 		if p[sh] == nil {
@@ -236,20 +228,16 @@ type ShardedForceReplicationParams struct {
 	IdleShardCost   time.Duration
 
 	// PerBatchGenerateRPS is the inject-phase rate-limiter target inside
-	// each ReplicateBatch activity. Each batch builds its own
-	// quotas.RateLimiter at this rate, so N concurrent batches inject at
-	// N× this rate in aggregate — unlike the existing migration package's
-	// OverallRps, sharded does not normalise against a workflow-global
-	// budget. Defaults to defaultPerBatchGenerateRPS.
+	// each ReplicateBatch activity. See defaultPerBatchGenerateRPS for
+	// the rationale; defaults to that value.
 	PerBatchGenerateRPS float64
 
 	// ConcurrentBatchCount is the absolute ceiling on in-flight
 	// ReplicateBatch activities. Per-shard exclusivity already bounds
-	// concurrency to TargetClusterShardCount, but at production cell
-	// sizes (1k–4k shards) that's well past the worker's
-	// concurrent-activity budget. This cap keeps the workflow inside
-	// that budget and limits the cluster blast radius of a single
-	// force-rep run. Defaults to
+	// concurrency to TargetClusterShardCount, but at large cluster
+	// sizes that's well past the worker's concurrent-activity budget.
+	// This cap keeps the workflow inside that budget and limits the
+	// cluster blast radius of a single force-rep run. Defaults to
 	// min(TargetClusterShardCount/4, defaultConcurrentBatchCap).
 	ConcurrentBatchCount int
 
@@ -314,11 +302,6 @@ type ResumeShard struct {
 // unverified execs in its result. NoProgressByShard carries the cumulative
 // pre-resume no-progress duration so the per-shard backstop stays
 // meaningful across resume cycles.
-//
-// PerBatchGenerateRPS is the inject-phase rate-limiter target. Mirrors
-// generateReplicationTasksRequest.RPS in the existing migration package —
-// each batch builds its own quotas.RateLimiter at that rate, so two
-// concurrent batches inject at 2× this rate in aggregate.
 type shardedBatchReq struct {
 	BatchID     int64
 	Namespace   string
@@ -346,8 +329,7 @@ type shardedBatchReq struct {
 //
 // CompletedShards is informational (the dispatch coroutine's defer clears
 // heldByBatch + shardInFlight regardless), but keeping it in the result
-// gives metrics and future bookkeeping a clean handle on "which shards
-// this batch finished".
+// gives metrics a clean handle on "which shards this batch finished".
 type replicateBatchResult struct {
 	CompletedShards []int32
 	InFlight        []ResumeShard

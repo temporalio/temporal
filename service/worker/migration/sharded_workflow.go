@@ -83,7 +83,7 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 // workflows match the namespace's force-rep query. Used once at
 // workflow start to seed TotalForceReplicateWorkflowCount for the
 // status query's progress reporting. No filter is applied — sharded
-// currently lists the namespace's entire workflow population.
+// lists the namespace's entire workflow population.
 func shardedCountWorkflowsForReplication(ctx workflow.Context, params *ShardedForceReplicationParams) (int64, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
@@ -141,10 +141,14 @@ type shardedWorkflowState struct {
 	// claims, not stomp on the new claimant.
 	heldByBatch map[int64]map[int32]bool
 
-	// batchCancels carries each batch's cancel func keyed by batch
-	// ID, so the workflow's drain-for-CAN phase can cancel
-	// in-flight activities individually.
-	batchCancels map[int64]workflow.CancelFunc
+	// activityCtx is a cancellable child of run()'s ctx; every
+	// dispatched batch activity is derived from it. cancelActivities
+	// is the matching cancel func — drainForCAN calls it once to
+	// cancel every in-flight batch at once. Cancelling activityCtx
+	// leaves the workflow's main ctx alive so the drain loop's
+	// Await keeps running.
+	activityCtx      workflow.Context
+	cancelActivities workflow.CancelFunc
 
 	// batchExecs tracks the input payload of each in-flight batch.
 	// Cleared on any nil-error return (drained execs are folded
@@ -237,7 +241,6 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 		bucketCounts:  map[int32]int{},
 		shardInFlight: map[int32]bool{},
 		heldByBatch:   map[int64]map[int32]bool{},
-		batchCancels:  map[int64]workflow.CancelFunc{},
 		batchExecs:    map[int64]BatchPayload{},
 		metricsHandler: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 			metrics.OperationTagName: metrics.MigrationWorkflowScope,
@@ -258,6 +261,15 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 }
 
 func (s *shardedWorkflowState) run(ctx workflow.Context) error {
+	// Cancellable child ctx for all dispatched batch activities.
+	// drainForCAN cancels it once to drain in-flight batches without
+	// touching the workflow's main ctx (which the drain loop's
+	// Await still rides on).
+	actCtx, cancelAll := workflow.WithCancel(ctx)
+	defer cancelAll()
+	s.activityCtx = actCtx
+	s.cancelActivities = cancelAll
+
 	// Start the signal handler coroutine first so any signal
 	// arriving during resume dispatch or page-loop drains is
 	// processed promptly.
@@ -377,11 +389,9 @@ func (s *shardedWorkflowState) recordVerified(ctx workflow.Context, verified int
 
 // defaultConcurrentBatchCount derives the in-flight-batch ceiling
 // from the target cluster's shard count: a quarter of the shards,
-// capped at defaultConcurrentBatchCap. The 1/4 fraction keeps the
-// workflow inside Temporal Cloud's concurrent-activity suggestions
-// (a 4k-shard cell with cap 500 still has spare worker slots for
-// unrelated activities); the absolute cap bounds the cluster blast
-// radius regardless of cluster size. Returns at least 1.
+// capped at defaultConcurrentBatchCap. The 1/4 fraction leaves worker
+// slots free for unrelated activities; the absolute cap bounds the
+// cluster blast radius regardless of cluster size. Returns at least 1.
 func defaultConcurrentBatchCount(shards int32) int {
 	return max(min(int(shards)/4, defaultConcurrentBatchCap), 1)
 }
@@ -405,8 +415,7 @@ func collectRecoveredBuckets(batchExecs map[int64]BatchPayload) BatchPayload {
 }
 
 // addToBucket appends one run to the (shard, BID) bucket and bumps
-// the per-shard count. The count is a sidecar so the streaming
-// packer's eligibility check stays O(1) per shard.
+// the sidecar count.
 func (s *shardedWorkflowState) addToBucket(shard int32, businessID string, run RunEntry) {
 	if s.buckets[shard] == nil {
 		s.buckets[shard] = map[string][]RunEntry{}
@@ -608,44 +617,51 @@ func (s *shardedWorkflowState) drainBuckets(ctx workflow.Context) {
 		}
 		currentPending := s.pendingDispatches
 		if currentPending == 0 {
-			// Non-empty buckets but nothing in flight means the
-			// shard-claim bookkeeping is corrupted: tryPackStreaming
-			// declined to pack anything yet no batch is running to
-			// eventually free a shard. Returning silently would
-			// proceed to CAN (or completion) with execs still in
-			// buckets that were never dispatched — silent data loss.
-			// Fail the workflow instead so lastErr propagates out
-			// through run().
-			remaining := 0
-			for _, n := range s.bucketCounts {
-				remaining += n
-			}
-			s.lastErr = temporal.NewNonRetryableApplicationError(
-				fmt.Sprintf("drainBuckets: %d execs in buckets but no batches in flight (shard-claim bookkeeping corrupted)", remaining),
-				"DrainBucketsStuck", nil)
+			s.failDrainBucketsStuck()
 			return
 		}
-		// A "free shard" wake-up only counts when there's also a
-		// dispatch slot to use it, otherwise the outer loop would
-		// busy-spin on tryPackStreaming returning false against
-		// the in-flight cap.
-		_ = workflow.Await(ctx, func() bool {
-			if s.lastErr != nil {
-				return true
-			}
-			if s.pendingDispatches < currentPending {
-				return true
-			}
-			if !s.dispatchSlotAvailable() {
-				return false
-			}
-			for sh, n := range s.bucketCounts {
-				if n > 0 && !s.shardInFlight[sh] {
-					return true
-				}
-			}
+		_ = workflow.Await(ctx, s.drainBucketsAwaitPredicate(currentPending))
+	}
+}
+
+// failDrainBucketsStuck sets lastErr when buckets are non-empty but no
+// batches are in flight — the shard-claim bookkeeping is corrupted, and
+// returning silently would proceed to CAN with execs that were never
+// dispatched (silent data loss). Failing forces lastErr to propagate
+// through run().
+func (s *shardedWorkflowState) failDrainBucketsStuck() {
+	remaining := 0
+	for _, n := range s.bucketCounts {
+		remaining += n
+	}
+	s.lastErr = temporal.NewNonRetryableApplicationError(
+		fmt.Sprintf("drainBuckets: %d execs in buckets but no batches in flight (shard-claim bookkeeping corrupted)", remaining),
+		"DrainBucketsStuck", nil)
+}
+
+// drainBucketsAwaitPredicate returns true when the drainBuckets loop
+// should wake up: lastErr tripped, a dispatch slot just freed, or a
+// new free shard is ready to pack. A "free shard" wake-up only counts
+// when there's also a dispatch slot to use it, otherwise the outer
+// loop would busy-spin on tryPackStreaming returning false against the
+// in-flight cap.
+func (s *shardedWorkflowState) drainBucketsAwaitPredicate(currentPending int) func() bool {
+	return func() bool {
+		if s.lastErr != nil {
+			return true
+		}
+		if s.pendingDispatches < currentPending {
+			return true
+		}
+		if !s.dispatchSlotAvailable() {
 			return false
-		})
+		}
+		for sh, n := range s.bucketCounts {
+			if n > 0 && !s.shardInFlight[sh] {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -672,9 +688,7 @@ func (s *shardedWorkflowState) drainForCAN(ctx workflow.Context) {
 	if s.pendingDispatches == 0 {
 		return
 	}
-	for _, cancel := range s.batchCancels {
-		cancel()
-	}
+	s.cancelActivities()
 	releaseCh := workflow.GetSignalChannel(ctx, releaseShardsSignalName)
 	_ = workflow.Await(ctx, func() bool {
 		if s.lastErr != nil {
@@ -688,9 +702,8 @@ func (s *shardedWorkflowState) drainForCAN(ctx workflow.Context) {
 // Callers must have already marked every shard appearing as a
 // top-level key in payload as shardInFlight (the "claim") so the
 // packer can see them as busy while picking subsequent batches. The
-// coroutine receives a per-batch cancellable ctx; the cancel func is
-// stored in batchCancels so drainForCAN can cancel individual
-// batches without tearing down the whole workflow.
+// activity is run on s.activityCtx so drainForCAN can cancel every
+// in-flight batch with a single call.
 func (s *shardedWorkflowState) spawnBatch(
 	ctx workflow.Context,
 	payload BatchPayload,
@@ -718,8 +731,6 @@ func (s *shardedWorkflowState) spawnBatch(
 		IdleShardCost:         s.params.IdleShardCost,
 	}
 
-	batchCtx, cancel := workflow.WithCancel(ctx)
-	s.batchCancels[batchID] = cancel
 	held := make(map[int32]bool, len(payload))
 	for sh := range payload {
 		held[sh] = true
@@ -739,8 +750,6 @@ func (s *shardedWorkflowState) spawnBatch(
 				delete(s.shardInFlight, sh)
 			}
 			delete(s.heldByBatch, batchID)
-			delete(s.batchCancels, batchID)
-			cancel()
 		}()
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 24 * time.Hour,
@@ -757,7 +766,7 @@ func (s *shardedWorkflowState) spawnBatch(
 			// before the dispatch coroutine's defer fires.
 			WaitForCancellation: true,
 		}
-		actx := workflow.WithActivityOptions(batchCtx, ao)
+		actx := workflow.WithActivityOptions(s.activityCtx, ao)
 		var result replicateBatchResult
 		err := workflow.ExecuteActivity(actx, shardedBatchActivityName, req).Get(coroCtx, &result)
 		if err == nil {
@@ -796,21 +805,7 @@ func (s *shardedWorkflowState) spawnBatch(
 // caps the per-batch source RPS. Within those bounds the packer's
 // sole job is to make progress every chance it gets.
 //
-// relax=false (streaming, during ListWorkflows pages): pack fullest
-// free shards first. When work is plentiful, batches land at
-// BatchSize across few shards (small in-flight shard set per batch,
-// nice and predictable); when it's sparse, the same loop ships a
-// smaller batch rather than waiting and burning wall-clock on idle.
-//
-// relax=true (drain, after listing finishes — no more execs coming):
-// hot shards (count > MaxExecsPerShard, i.e. those needing more than
-// one round trip) first, fullest within hot. Total drain wall-clock
-// is bounded by the heaviest shard's round-trip count × activity
-// duration, so getting each hot shard's pipeline started ASAP is the
-// dominant lever. Once they're all claimed, remaining batch capacity
-// fills from smallest cold buckets so light shards finish and free
-// their slots quickly — no point waiting on them to grow, nothing
-// will arrive.
+// See shardIDsByPackPriority for the relax-mode ordering rationale.
 func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool) bool {
 	if s.lastErr != nil || s.params.BatchSize <= 0 || s.params.MaxExecsPerShard <= 0 {
 		return false
@@ -891,12 +886,10 @@ func (s *shardedWorkflowState) shardIDsByPackPriority(relax bool) []int32 {
 			case !aHot && bHot:
 				return 1
 			case aHot && bHot:
-				// Both hot: fullest first.
 				if d := s.bucketCounts[b] - s.bucketCounts[a]; d != 0 {
 					return d
 				}
 			default:
-				// Both cold: smallest first.
 				if d := s.bucketCounts[a] - s.bucketCounts[b]; d != 0 {
 					return d
 				}

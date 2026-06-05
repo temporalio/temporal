@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -56,8 +55,8 @@ func bidsForShards(namespaceID string, totalShards int32, perShard int) map[int3
 
 // makeExecs builds a slice of ExecutionInfos engineered to hash across
 // `shards` distinct shards (`perShard` execs per shard) under the test
-// namespace ID + shard count. Shard is left zero — the workflow's page
-// loop populates it via common.WorkflowIDToHistoryShard.
+// namespace ID + shard count. The workflow's page loop computes the
+// destination shard itself via common.WorkflowIDToHistoryShard.
 func makeExecs(shards int32, perShard int) []*ExecutionInfo {
 	bids := bidsForShards(testNamespaceID, shards, perShard)
 	var execs []*ExecutionInfo
@@ -75,9 +74,9 @@ func makeExecs(shards int32, perShard int) []*ExecutionInfo {
 }
 
 // pageThrough returns a function suitable for OnActivity("ListWorkflows")
-// that paginates `all` into pages of `pageSize` execs each. The
-// workflow populates ex.Shard after this returns, so callers can hand
-// over ExecutionInfos with Shard left zero.
+// that paginates `all` into pages of `pageSize` execs each. The workflow
+// computes each exec's destination shard itself, so callers don't need
+// to set anything shard-related on the ExecutionInfos.
 func pageThrough(all []*ExecutionInfo, pageSize int) func(context.Context, *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 	return func(_ context.Context, req *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		start := 0
@@ -107,10 +106,8 @@ func metadataResponseFor(shardCount int32) func(context.Context, MetadataRequest
 	}
 }
 
-// registerShardedScaffolding registers GetMetadata + CountWorkflow stubs.
-// Every sharded workflow test exercises a different scenario (paging,
-// resume, drain, ...) but they all need these two before the page loop
-// runs, so factoring them out keeps each test focused on its scenario.
+// registerShardedScaffolding registers the GetMetadata + CountWorkflow
+// stubs every sharded test needs before the page loop runs.
 func registerShardedScaffolding(env *testsuite.TestWorkflowEnvironment, shardCount int32) {
 	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: "GetMetadata"})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
@@ -277,6 +274,7 @@ func TestSharded_ReleaseShards_FreesShardForReuse(t *testing.T) {
 			}
 		case 2:
 			secondOnce.Do(func() { close(secondStarted) })
+		default:
 		}
 		return replicateBatchResult{}, nil
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
@@ -319,7 +317,7 @@ func TestSharded_ShardNoProgress_FailsWorkflow(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
-	require.True(t, errors.As(err, &appErr))
+	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, "ShardNoProgress", appErr.Type())
 }
 
@@ -329,11 +327,11 @@ func TestSharded_ShardNoProgress_FailsWorkflow(t *testing.T) {
 // carry-over.
 //
 // Tests the workflow plumbing only. In production, an activity
-// returns InFlight after entering drain mode and grace-expiring;
-// the testsuite has a known bug where activity-cancellation result
-// handling loses payload fidelity, so we exercise the same code
-// path by returning InFlight from a non-cancelled run instead. The
-// dispatch coroutine's err == nil branch is what we're testing —
+// returns InFlight after entering drain mode and grace-expiring; here
+// we exercise the same code path by returning InFlight from a
+// non-cancelled run, because the testsuite delivers cancellation as
+// a CanceledError without preserving the activity's returned result.
+// The dispatch coroutine's err == nil branch is what we're testing —
 // it doesn't care whether the activity was cancelled or not, only
 // whether the returned result has InFlight to fold into drainPayload.
 func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) {
@@ -342,16 +340,14 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
 	registerShardedScaffolding(env, 10)
 
-	// Page 1 returns a multi-shard population large enough to trip
-	// the streaming packer's mid-cycle dispatch under the pinned
-	// BatchSize/MaxExecsPerShard the test sets below
-	// (trigger=MaxExecsPerShard/2=5, minShards=BatchSize/MaxExecsPerShard=10).
-	// The activity
-	// flips CAN-suggested from inside its body before returning, so
-	// by the time it has handed back its InFlight the workflow is
-	// committed to CAN — but without going through cancel, which
-	// the testsuite delivers as a CanceledError regardless of any
-	// result the activity returned.
+	// Page 1 returns a multi-shard population so the streaming packer
+	// has something to dispatch under the pinned BatchSize /
+	// MaxExecsPerShard the test sets below. The activity flips
+	// CAN-suggested from inside its body before returning, so by the
+	// time it has handed back its InFlight the workflow is committed
+	// to CAN — but without going through cancel, which the testsuite
+	// delivers as a CanceledError regardless of any result the
+	// activity returned.
 	pageExecs := makeExecs(10, 10)
 	// Drained exec mirrors a real input row so the simulated drain
 	// payload would be a valid response from a real activity. drainedBID
@@ -390,7 +386,7 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	require.Error(t, err, "workflow should CAN, not return success")
 
 	var canErr *workflow.ContinueAsNewError
-	require.True(t, errors.As(err, &canErr), "error should be ContinueAsNewError")
+	require.ErrorAs(t, err, &canErr, "error should be ContinueAsNewError")
 
 	var nextParams ShardedForceReplicationParams
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &nextParams))
@@ -402,13 +398,11 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	require.Equal(t, 42*time.Second, nextParams.ResumeShards[0].NoProgressDuration)
 }
 
-// TestSharded_CancelBeforeStart_NoLostExecs: this is the reproducer
-// for the sim bug — when an activity is dispatched and the workflow
-// CANs before the activity body runs (testsuite-scheduler race), the
-// activity returns CanceledError with no result. The recovery path
-// re-buckets the input execs into RecoveredBuckets so the next cycle
-// dispatches them as fresh inject+verify batches. This test pins
-// down that behaviour.
+// TestSharded_CancelBeforeStart_NoLostExecs pins down recovery when
+// an activity is dispatched and the workflow CANs before the activity
+// body runs: the activity returns CanceledError with no result, and
+// the recovery path re-buckets the input execs into RecoveredBuckets
+// so the next cycle dispatches them as fresh inject+verify batches.
 func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
@@ -457,7 +451,7 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var canErr *workflow.ContinueAsNewError
-	require.True(t, errors.As(err, &canErr), "expected CAN, got %v", err)
+	require.ErrorAs(t, err, &canErr, "expected CAN, got %v", err)
 
 	var nextParams ShardedForceReplicationParams
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &nextParams))
