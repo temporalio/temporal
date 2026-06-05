@@ -542,7 +542,8 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
 	var nsState string
-	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) { //nolint:forbidigo // metric tag for namespace state, not per-workflow
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
+	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
 		nsState = metrics.ActiveNamespaceStateTagValue
 	} else {
 		nsState = metrics.PassiveNamespaceStateTagValue
