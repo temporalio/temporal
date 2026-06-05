@@ -98,13 +98,13 @@ func (s *DLQSuite) SetupSuite() {
 
 	var err error
 	s.dlq, err = s.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 
 	s.systemSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	s.T().Cleanup(func() {
 		s.systemSDKClient.Close()
 	})
