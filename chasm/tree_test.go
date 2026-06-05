@@ -3904,6 +3904,39 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
 }
 
+func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidation() {
+	root := s.testComponentTree()
+
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	pureTask := &TestPureTask{
+		Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+	}
+	mutableContext.AddTask(testComponent, taskAttributes, pureTask)
+
+	gomock.InOrder(
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).Return(true, nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Execute(
+				gomock.AssignableToTypeOf(&mutableCtx{}),
+				gomock.Any(),
+				gomock.Eq(taskAttributes),
+				gomock.Eq(pureTask),
+			).Return(nil).Times(1),
+	)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+}
+
 func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
