@@ -65,11 +65,15 @@ func (s *ChasmTestSuite) SetupSuite() {
 		}),
 	)
 
-	chasmSupport, err := s.FunctionalTestBase.GetTestCluster().Host().ChasmTestSupport()
+	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := s.FunctionalTestBase.GetTestCluster().Host().ChasmRuntime()
 	s.Require().NoError(err)
-	s.Require().NotNil(chasmSupport.Context)
+	s.Require().NotNil(chasmEngine)
+	s.Require().NotNil(chasmVisibilityMgr)
+	s.Require().NotNil(chasmRegistry)
+	s.Require().NoError(chasmRegistry.Register(tests.Library))
 
-	s.chasmContext = chasmSupport.Context(context.Background())
+	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
+	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
 }
 
 func (s *ChasmTestSuite) TestNewPayloadStore() {
