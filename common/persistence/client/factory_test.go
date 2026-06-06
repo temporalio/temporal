@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -50,6 +51,7 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 				nil,
 				func() bool { return false },
 				func() bool { return false },
+				testhooks.TestHooks{},
 			)
 			historyTaskQueueManager, err := factory.NewHistoryTaskQueueManager()
 			if tc.err != nil {

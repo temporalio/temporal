@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -34,6 +35,7 @@ type (
 		pagingTokenSerializer                       *jsonHistoryTokenSerializer
 		transactionSizeLimit                        dynamicconfig.IntPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+		testHooks                                   testhooks.TestHooks
 	}
 )
 
@@ -47,6 +49,7 @@ func NewExecutionManager(
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
+	testHooks testhooks.TestHooks,
 ) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:            serializer,
@@ -56,6 +59,7 @@ func NewExecutionManager(
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
+		testHooks: testHooks,
 	}
 }
 
@@ -121,6 +125,13 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 	m.addXDCCacheKV(newWorkflowXDCKVs)
+	m.recordHistoryTasksWritten(
+		request.ShardID,
+		request.RangeID,
+		request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+		request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+		request.NewWorkflowSnapshot.Tasks,
+	)
 	return &CreateWorkflowExecutionResponse{
 		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
 			serializedNewWorkflowSnapshot,
@@ -211,6 +222,22 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
+		m.recordHistoryTasksWritten(
+			request.ShardID,
+			request.RangeID,
+			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+			request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+			request.UpdateWorkflowMutation.Tasks,
+		)
+		if request.NewWorkflowSnapshot != nil {
+			m.recordHistoryTasksWritten(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
 		return &UpdateWorkflowExecutionResponse{
 			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
 				&newRequest.UpdateWorkflowMutation,
@@ -902,7 +929,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	}
 
 	archetypeID, _ := m.assertAndConvertArchetypeID(input.ArchetypeID, "AddHistoryTasks")
-	return m.persistence.AddHistoryTasks(ctx, &InternalAddHistoryTasksRequest{
+	err = m.persistence.AddHistoryTasks(ctx, &InternalAddHistoryTasksRequest{
 		ShardID: input.ShardID,
 		RangeID: input.RangeID,
 
@@ -912,6 +939,29 @@ func (m *executionManagerImpl) AddHistoryTasks(
 
 		Tasks: serializedTasks,
 	})
+	if err != nil {
+		return err
+	}
+	m.recordHistoryTasksWritten(input.ShardID, input.RangeID, input.NamespaceID, input.WorkflowID, input.Tasks)
+	return nil
+}
+
+func (m *executionManagerImpl) recordHistoryTasksWritten(
+	shardID int32,
+	rangeID int64,
+	namespaceID string,
+	workflowID string,
+	tasksMap map[tasks.Category][]tasks.Task,
+) {
+	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+		hook(testhooks.HistoryTaskWrite{
+			ShardID:     shardID,
+			RangeID:     rangeID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			Tasks:       tasksMap,
+		})
+	}
 }
 
 func (m *executionManagerImpl) GetHistoryTasks(
