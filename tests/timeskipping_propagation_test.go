@@ -532,7 +532,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 // workflow that "should" run for 2h of virtual wall time still runs for 2h of real
 // wall time, not less.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsShifted() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithTaskQueueRecorder())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()

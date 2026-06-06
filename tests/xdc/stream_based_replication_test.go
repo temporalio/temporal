@@ -97,6 +97,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 
 	s.setupSuite(
 		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
+		testcore.WithClusterTaskQueueRecorder(),
 	)
 }
 

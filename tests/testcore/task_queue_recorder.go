@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -44,8 +43,14 @@ func NewTaskQueueRecorder(logger log.Logger) *TaskQueueRecorder {
 	}
 }
 
-func (r *TaskQueueRecorder) Record(write testhooks.HistoryTaskWrite) {
-	r.recordTasks(write.ShardID, write.RangeID, write.NamespaceID, write.WorkflowID, write.Tasks)
+func (r *TaskQueueRecorder) Record(
+	shardID int32,
+	rangeID int64,
+	namespaceID string,
+	workflowID string,
+	tasksMap map[tasks.Category][]tasks.Task,
+) {
+	r.recordTasks(shardID, rangeID, namespaceID, workflowID, tasksMap)
 }
 
 // recordTasks appends tasks to the flattened list by category, wrapping each with metadata

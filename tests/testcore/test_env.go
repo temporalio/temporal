@@ -224,6 +224,14 @@ func WithHistoryShardCount(n int32) TestOption {
 	}
 }
 
+func WithTaskQueueRecorder() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterTaskQueueRecorder())
+		o.dedicatedReason = "task queue recorder used"
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
