@@ -332,7 +332,7 @@ func (s *suiteRegistry) register(t *testing.T, rootName string, reason string) {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
 	if reason == "" {
-		t.Fatalf("UseSuiteScopedCluster requires a reason")
+		t.Fatal("UseSuiteScopedCluster requires a reason")
 	}
 	stateAny, loaded := s.suites.LoadOrStore(rootName, &suiteState{reason: reason})
 	if !loaded {
