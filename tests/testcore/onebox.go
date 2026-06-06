@@ -633,10 +633,6 @@ func (c *TemporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
-	return c.executionManager
-}
-
 func (c *TemporalImpl) GetTaskQueueRecorder() *TaskQueueRecorder {
 	return c.taskQueueRecorder
 }

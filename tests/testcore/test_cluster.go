@@ -603,7 +603,7 @@ func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 
 // ExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
-	return tc.host.GetExecutionManager()
+	return tc.host.executionManager
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.
