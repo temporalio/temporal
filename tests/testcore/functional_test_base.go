@@ -99,7 +99,6 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
-		EnableWorkerService             bool
 		FaultInjectionConfig            *config.FaultInjection
 		NumHistoryShards                int32
 		Logger                          log.Logger
@@ -161,12 +160,6 @@ func WithArchivalEnabled() TestClusterOption {
 func WithMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
-	}
-}
-
-func withWorkerService(enabled bool) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.EnableWorkerService = enabled
 	}
 }
 
@@ -324,7 +317,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMTLS:                      params.EnableMTLS,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 
 	// Apply configuration for shared clusters.
@@ -402,8 +394,7 @@ func (s *FunctionalTestBase) checkTestShard() {
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
-		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
-		EnableWorkerService: true,
+		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
 	}
 	for _, opt := range options {
 		opt(&params)

@@ -93,16 +93,13 @@ type clusterScope int
 
 const (
 	clusterScopeShared clusterScope = iota
-	clusterScopeSuiteShareable
 	clusterScopeDedicated
 )
 
 type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
-	workerServiceReason      string
 	clusterScope             clusterScope
-	clusterScopeReason       string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
@@ -116,7 +113,6 @@ type dynamicConfigOverride struct {
 func (o *testOptions) requireClusterScope(scope clusterScope, reason string) {
 	if scope > o.clusterScope {
 		o.clusterScope = scope
-		o.clusterScopeReason = reason
 	}
 	if scope == clusterScopeDedicated {
 		o.dedicatedCluster = true
@@ -161,14 +157,11 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 	}
 }
 
-// WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster unless
-// the test belongs to a suite-scoped cluster.
-func WithWorkerService(reason string) TestOption {
-	return func(o *testOptions) {
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
-		o.workerServiceReason = reason
-		o.requireClusterScope(clusterScopeSuiteShareable, "worker service required: "+reason)
+// WithWorkerService is no longer required because test clusters start the
+// system worker service by default.
+// Deprecated: remove this option from callers.
+func WithWorkerService(string) TestOption {
+	return func(*testOptions) {
 	}
 }
 
@@ -225,14 +218,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
-	suiteScopedCandidate := testClusterPool.canUseSuiteScopedCluster(t, options.dedicatedCluster)
-	suiteShareableDedicated := options.clusterScope == clusterScopeSuiteShareable && !suiteScopedCandidate
-	if suiteShareableDedicated {
-		options.dedicatedCluster = true
-		if options.dedicatedReason == "" {
-			options.dedicatedReason = options.clusterScopeReason
-		}
-	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
@@ -246,7 +231,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			startupConfig[override.setting.Key()] = override.value
 		}
 	}
-	testClusterPool.recordEnvUsage(t, options.workerServiceReason, suiteShareableDedicated)
 
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {

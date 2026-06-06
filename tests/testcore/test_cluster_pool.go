@@ -13,8 +13,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-const suiteDedicatedWorkerClusterMinEnvCount = 8
-
 var testClusterPool *clusterPool
 
 func init() {
@@ -241,8 +239,7 @@ func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfi
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// Keep the worker service off unless explicitly enabled via WithWorkerService.
-	opts := []TestClusterOption{withWorkerService(false)}
+	opts := []TestClusterOption{}
 	if shared {
 		opts = append(opts, WithSharedCluster())
 	}
@@ -270,19 +267,6 @@ func (p *clusterPool) useSuiteScopedCluster(t *testing.T, reason string) {
 	})
 }
 
-func (p *clusterPool) recordEnvUsage(t *testing.T, workerServiceReason string, suiteShareableDedicated bool) {
-	t.Helper()
-	rootName := rootTestName(t)
-	p.suites.recordUsage(t, rootName, workerServiceReason, suiteShareableDedicated)
-}
-
-type suiteClusterUsage struct {
-	mu                     sync.Mutex
-	envCount               int
-	workerDedicatedCount   int
-	workerDedicatedReasons []string
-}
-
 type suiteScopedClusterConfig struct {
 	clusterOpts []TestClusterOption
 	params      TestClusterParams
@@ -300,7 +284,7 @@ type suiteState struct {
 }
 
 func newSuiteScopedClusterConfig(clusterOpts []TestClusterOption) suiteScopedClusterConfig {
-	opts := []TestClusterOption{withWorkerService(false), WithSharedCluster()}
+	opts := []TestClusterOption{WithSharedCluster()}
 	opts = append(opts, clusterOpts...)
 
 	return suiteScopedClusterConfig{
@@ -323,7 +307,6 @@ func UseSuiteScopedCluster(t *testing.T, reason string) {
 
 type suiteRegistry struct {
 	suites sync.Map
-	usage  sync.Map
 }
 
 func (s *suiteRegistry) register(t *testing.T, rootName string, reason string) {
@@ -382,7 +365,6 @@ func (s *suiteRegistry) cleanup(t *testing.T, rootName string) {
 		}
 	}
 	s.suites.Delete(rootName)
-	s.usage.Delete(rootName)
 }
 
 func (s *suiteState) getCluster(clusterOpts []TestClusterOption) *suiteScopedCluster {
@@ -400,36 +382,6 @@ func (s *suiteState) getCluster(clusterOpts []TestClusterOption) *suiteScopedClu
 	}
 	s.clusters = append(s.clusters, cluster)
 	return cluster
-}
-
-func (s *suiteRegistry) recordUsage(t *testing.T, rootName string, workerServiceReason string, suiteShareableDedicated bool) {
-	t.Helper()
-	usageAny, _ := s.usage.LoadOrStore(rootName, &suiteClusterUsage{})
-	usage := usageAny.(*suiteClusterUsage)
-	usage.mu.Lock()
-	defer usage.mu.Unlock()
-
-	usage.envCount++
-	if workerServiceReason != "" && suiteShareableDedicated {
-		usage.workerDedicatedCount++
-		usage.workerDedicatedReasons = append(usage.workerDedicatedReasons, workerServiceReason)
-	}
-
-	// Check for too many dedicated worker clusters.
-	if tooManyDedicatedWorkerClusters(usage.envCount, usage.workerDedicatedCount) {
-		t.Fatalf(
-			"suite %s created %d worker-service dedicated clusters across %d test envs (reasons: %s); if those clusters can be suite-owned, use testcore.UseSuiteScopedCluster(t, \"reason\")",
-			rootName,
-			usage.workerDedicatedCount,
-			usage.envCount,
-			strings.Join(usage.workerDedicatedReasons, "; "),
-		)
-	}
-}
-
-func tooManyDedicatedWorkerClusters(envCount int, workerDedicatedCount int) bool {
-	return envCount >= suiteDedicatedWorkerClusterMinEnvCount &&
-		workerDedicatedCount*2 > envCount
 }
 
 func rootTestName(t *testing.T) string {

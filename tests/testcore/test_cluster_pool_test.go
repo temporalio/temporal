@@ -26,19 +26,12 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 	}
 }
 
-func TestSuiteScopedClusterConfigMatchesWorkerService(t *testing.T) {
+func TestSuiteScopedClusterConfigMatchesClusterOptions(t *testing.T) {
 	shared := newSuiteScopedClusterConfig(nil)
-	worker := newSuiteScopedClusterConfig([]TestClusterOption{withWorkerService(true)})
+	customShards := newSuiteScopedClusterConfig([]TestClusterOption{WithNumHistoryShards(8)})
 
-	require.True(t, worker.matches(newSuiteScopedClusterConfig([]TestClusterOption{withWorkerService(true)})))
-	require.False(t, shared.matches(worker))
-}
-
-func TestTooManyDedicatedWorkerClusters(t *testing.T) {
-	require.False(t, tooManyDedicatedWorkerClusters(1, 1))
-	require.False(t, tooManyDedicatedWorkerClusters(7, 7))
-	require.False(t, tooManyDedicatedWorkerClusters(8, 4))
-	require.True(t, tooManyDedicatedWorkerClusters(8, 5))
+	require.True(t, customShards.matches(newSuiteScopedClusterConfig([]TestClusterOption{WithNumHistoryShards(8)})))
+	require.False(t, shared.matches(customShards))
 }
 
 func TestPoolMaxUsageRecyclesAfterActiveTest(t *testing.T) {
@@ -96,14 +89,14 @@ func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
 	require.Equal(t, 0, slot.usage)
 }
 
-func TestSuiteScopedWorkerServiceSharesClusterAndNamespaces(t *testing.T) {
-	UseSuiteScopedCluster(t, "reuse worker-service cluster")
+func TestSuiteScopedClusterSharesClusterAndNamespaces(t *testing.T) {
+	UseSuiteScopedCluster(t, "reuse suite cluster")
 
 	var firstCluster *TestCluster
 	var firstNamespace string
 
 	t.Run("first", func(t *testing.T) {
-		env := NewEnv(t, WithWorkerService("test"))
+		env := NewEnv(t)
 
 		firstCluster = env.GetTestCluster()
 		firstNamespace = env.Namespace().String()
@@ -112,7 +105,7 @@ func TestSuiteScopedWorkerServiceSharesClusterAndNamespaces(t *testing.T) {
 	})
 
 	t.Run("second", func(t *testing.T) {
-		env := NewEnv(t, WithWorkerService("test"))
+		env := NewEnv(t)
 
 		require.Same(t, firstCluster, env.GetTestCluster())
 		require.NotEqual(t, firstNamespace, env.Namespace().String())
