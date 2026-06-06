@@ -82,12 +82,13 @@ type Versioning3Suite struct {
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                         //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseSuiteScopedCluster(t, "reuse worker-service clusters")
 	parallelsuite.RunLegacySequential(t, &Versioning3Suite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment version workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
 
 		// Make sure we don't hit the rate limiter in tests
@@ -6058,7 +6059,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 // made current again, then reset-by-build-ID resets the workflow before v2 usage
 // so the reset run resumes on v1.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
-	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
+	env := s.setupEnv()
 
 	tv1 := env.Tv().WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
@@ -6702,7 +6703,6 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 //     - targetWorkerDeploymentVersionChanged == false (the bug being fixed)
 func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	env := s.setupEnv()
-	ctx := s.Context()
 	tv1 := env.Tv().WithBuildIDNumber(1)
 
 	// Async poller for first WFT, declares pinned behavior
@@ -6722,7 +6722,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Trigger a regular WFT via a first signal.
-	_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
 		SignalName:        "first-signal",
@@ -6736,7 +6736,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	poller, resp := s.pollWftAndHandle(env, tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			_, err := env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         env.Namespace().String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
 				SignalName:        "buffered-signal",
