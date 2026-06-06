@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -89,7 +90,24 @@ type standaloneActivityTestSuite struct {
 	parallelsuite.Suite[*standaloneActivityTestSuite]
 }
 
+// init writes one line to the shared debug.log when TEMPORAL_TEST_LOG_FILE is
+// set, so we can confirm whether this test file is compiled into the CI test
+// binary at all. Best-effort — failures here must not affect anything else.
+func init() {
+	path := os.Getenv("TEMPORAL_TEST_LOG_FILE")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(f, "{\"level\":\"info\",\"ts\":\"%s\",\"msg\":\"CI_DEBUG_INIT_SENTINEL: activity_standalone_test.go init\"}\n", time.Now().UTC().Format(time.RFC3339Nano))
+	_ = f.Close()
+}
+
 func TestStandaloneActivityTestSuite(t *testing.T) {
+	t.Fatalf("CI_DEBUG_OUTER_SENTINEL: TestStandaloneActivityTestSuite invoked at %s", time.Now().UTC().Format(time.RFC3339Nano))
 	parallelsuite.Run(t, &standaloneActivityTestSuite{})
 }
 
