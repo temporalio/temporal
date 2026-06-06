@@ -809,14 +809,14 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_HistorySizeNotDoubleCount
 	// increment into the retry, so the reused-ID run double-counted its first event batch in
 	// ExecutionStats.HistorySize. A reused-ID run has byte-identical history to a fresh run, so
 	// its reported HistorySizeBytes must match a fresh control run.
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 
 	tv := testvars.New(s.T())
 
 	startRun := func(wfID string) string {
-		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:             uuid.NewString(),
-			Namespace:             s.Namespace().String(),
+			Namespace:             env.Namespace().String(),
 			WorkflowId:            wfID,
 			WorkflowType:          tv.WorkflowType(),
 			TaskQueue:             tv.TaskQueue(),
@@ -828,16 +828,16 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_HistorySizeNotDoubleCount
 		return we.RunId
 	}
 	historySize := func(wfID, runID string) int64 {
-		descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
 		})
 		s.NoError(err)
 		return descResp.WorkflowExecutionInfo.GetHistorySizeBytes()
 	}
 	terminate := func(wfID, runID string) {
-		_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+		_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
 			Reason:            "test cleanup",
 		})
