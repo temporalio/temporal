@@ -26,6 +26,21 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 	}
 }
 
+func TestSuiteScopedClusterConfigMatchesWorkerService(t *testing.T) {
+	shared := newSuiteScopedClusterConfig(nil)
+	worker := newSuiteScopedClusterConfig([]TestClusterOption{withWorkerService(true)})
+
+	require.True(t, worker.matches(newSuiteScopedClusterConfig([]TestClusterOption{withWorkerService(true)})))
+	require.False(t, shared.matches(worker))
+}
+
+func TestTooManyDedicatedWorkerClusters(t *testing.T) {
+	require.False(t, tooManyDedicatedWorkerClusters(1, 1))
+	require.False(t, tooManyDedicatedWorkerClusters(7, 7))
+	require.False(t, tooManyDedicatedWorkerClusters(8, 4))
+	require.True(t, tooManyDedicatedWorkerClusters(8, 5))
+}
+
 func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	// maxLeases 1 makes the first completed lease immediately eligible for recycling.
 	p := newClusterPool(1, false, 1)
@@ -103,4 +118,29 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// The old poisoned lease remains active, while leaseCount restarts on the replacement.
 	require.Equal(t, 2, slot.activeLeases)
 	require.Equal(t, 1, slot.leaseCount)
+}
+
+func TestSuiteScopedWorkerServiceSharesClusterAndNamespaces(t *testing.T) {
+	UseSuiteScopedCluster(t, "reuse worker-service cluster")
+
+	var firstCluster *TestCluster
+	var firstNamespace string
+
+	t.Run("first", func(t *testing.T) {
+		env := NewEnv(t, WithWorkerService("test"))
+
+		firstCluster = env.GetTestCluster()
+		firstNamespace = env.Namespace().String()
+		require.True(t, env.isShared)
+		require.False(t, env.GetTestClusterConfig().WorkerConfig.DisableWorker)
+	})
+
+	t.Run("second", func(t *testing.T) {
+		env := NewEnv(t, WithWorkerService("test"))
+
+		require.Same(t, firstCluster, env.GetTestCluster())
+		require.NotEqual(t, firstNamespace, env.Namespace().String())
+		require.True(t, env.isShared)
+		require.False(t, env.GetTestClusterConfig().WorkerConfig.DisableWorker)
+	})
 }

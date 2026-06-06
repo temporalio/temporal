@@ -94,6 +94,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
+	workerServiceReason      string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
@@ -152,12 +153,12 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
+// default to avoid the worker overhead. This implies a dedicated cluster unless
+// the test belongs to a suite-scoped cluster.
 func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
-		o.dedicatedReason = "worker service required: " + reason
+		o.workerServiceReason = reason
 	}
 }
 
@@ -217,21 +218,32 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
-	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
-	if options.dedicatedReason != "" {
-		dedicatedGuard.record(options.dedicatedReason)
-	}
+	suiteScopedCandidate := testClusterRouter.canUseSuiteScopedCluster(t, options.dedicatedCluster)
+	workerServiceDedicated := options.workerServiceReason != "" && !suiteScopedCandidate
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+	var globalDynamicConfigUsed bool
+	if (options.dedicatedCluster || workerServiceDedicated) && len(options.dynamicConfigSettings) > 0 {
 		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
 		for _, override := range options.dynamicConfigSettings {
 			if !canBeNamespaceScoped(override.setting.Precedence()) {
-				dedicatedGuard.record("global dynamic config used")
+				globalDynamicConfigUsed = true
 			}
 			startupConfig[override.setting.Key()] = override.value
 		}
+	}
+	testClusterRouter.recordEnvUsage(t, options.workerServiceReason, workerServiceDedicated)
+
+	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster || workerServiceDedicated)
+	if options.dedicatedReason != "" {
+		dedicatedGuard.record(options.dedicatedReason)
+	}
+	if globalDynamicConfigUsed {
+		dedicatedGuard.record("global dynamic config used")
+	}
+	if workerServiceDedicated {
+		dedicatedGuard.record("worker service required: " + options.workerServiceReason)
 	}
 
 	// Obtain the test cluster from the router.
