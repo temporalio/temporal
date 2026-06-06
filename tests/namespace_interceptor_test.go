@@ -21,7 +21,15 @@ type NamespaceInterceptorTestSuite struct {
 	parallelsuite.Suite[*NamespaceInterceptorTestSuite]
 }
 
+// Phase 3 cross-check: instrument a second parallelsuite-based suite to
+// confirm the failure mode is not specific to activity_standalone_test.go.
+func init() {
+	phase3DebugLog("CI_PHASE3_INIT_NSI", "namespace_interceptor_test.go init")
+}
+
 func TestNamespaceInterceptorTestSuite(t *testing.T) {
+	phase3DebugLog("CI_PHASE3_OUTER_NSI_ENTER", t.Name())
+	t.Fatalf("CI_DEBUG_OUTER_SENTINEL_NSI: TestNamespaceInterceptorTestSuite invoked at %s", time.Now().UTC().Format(time.RFC3339Nano))
 	parallelsuite.Run(t, &NamespaceInterceptorTestSuite{})
 }
 

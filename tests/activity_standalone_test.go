@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,10 +91,9 @@ type standaloneActivityTestSuite struct {
 	parallelsuite.Suite[*standaloneActivityTestSuite]
 }
 
-// init writes one line to the shared debug.log when TEMPORAL_TEST_LOG_FILE is
-// set, so we can confirm whether this test file is compiled into the CI test
-// binary at all. Best-effort — failures here must not affect anything else.
-func init() {
+// phase3DebugLog appends one JSON line to TEMPORAL_TEST_LOG_FILE (debug.log).
+// Best-effort — never affects test outcome.
+func phase3DebugLog(marker, detail string) {
 	path := os.Getenv("TEMPORAL_TEST_LOG_FILE")
 	if path == "" {
 		return
@@ -102,11 +102,44 @@ func init() {
 	if err != nil {
 		return
 	}
-	fmt.Fprintf(f, "{\"level\":\"info\",\"ts\":\"%s\",\"msg\":\"CI_DEBUG_INIT_SENTINEL: activity_standalone_test.go init\"}\n", time.Now().UTC().Format(time.RFC3339Nano))
-	_ = f.Close()
+	defer f.Close()
+	safe := strings.ReplaceAll(strings.ReplaceAll(detail, "\\", "\\\\"), "\"", "\\\"")
+	fmt.Fprintf(f, "{\"level\":\"info\",\"ts\":\"%s\",\"msg\":\"%s: %s\"}\n",
+		time.Now().UTC().Format(time.RFC3339Nano), marker, safe)
+}
+
+// init: signal A — file is compiled into the test binary.
+func init() {
+	phase3DebugLog("CI_PHASE3_INIT", "activity_standalone_test.go init")
+}
+
+// TestMain: signals B & C — confirms gotestsum invokes the test binary's
+// testing.Main and that m.Run() returns.
+func TestMain(m *testing.M) {
+	phase3DebugLog("CI_PHASE3_TESTMAIN_ENTER", fmt.Sprintf("argv_len=%d", len(os.Args)))
+	code := m.Run()
+	phase3DebugLog("CI_PHASE3_TESTMAIN_EXIT", fmt.Sprintf("code=%d", code))
+	os.Exit(code)
+}
+
+// TestPhase3PlainPass: signal D — a plain top-level test (no suite) that
+// passes. If absent from junit, the gotestsum/junit pipeline drops events
+// for this file.
+func TestPhase3PlainPass(t *testing.T) {
+	phase3DebugLog("CI_PHASE3_PLAIN_PASS_ENTER", t.Name())
+}
+
+// TestPhase3PlainFail: signal E — a plain top-level test (no suite) that
+// fails. If its failure is absent from junit, failures from this file are
+// being dropped by the pipeline.
+func TestPhase3PlainFail(t *testing.T) {
+	phase3DebugLog("CI_PHASE3_PLAIN_FAIL_ENTER", t.Name())
+	t.Fatalf("CI_PHASE3_PLAIN_FAIL: deliberate failure at %s", time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
+	// Signal F: write to debug.log BEFORE t.Fatal in case junit pipeline is broken.
+	phase3DebugLog("CI_PHASE3_OUTER_ENTER", t.Name())
 	t.Fatalf("CI_DEBUG_OUTER_SENTINEL: TestStandaloneActivityTestSuite invoked at %s", time.Now().UTC().Format(time.RFC3339Nano))
 	parallelsuite.Run(t, &standaloneActivityTestSuite{})
 }
@@ -638,6 +671,8 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 }
 
 func (s *standaloneActivityTestSuite) TestStart() {
+	// Signal G: write to debug.log BEFORE t.Fatal so we have evidence even if junit is broken.
+	phase3DebugLog("CI_PHASE3_INNER_ENTER", s.T().Name())
 	s.T().Fatalf("CI_DEBUG_SENTINEL: TestStart body executed at %s", time.Now().UTC().Format(time.RFC3339Nano))
 	env := s.newTestEnv()
 	t := s.T()
