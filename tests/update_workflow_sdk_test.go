@@ -394,8 +394,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
 	)
 
-	taskQueue := env.WorkerTaskQueue()
-	updateID := env.Tv().UpdateID()
 	requestID1 := env.Tv().RequestID()
 	requestID2 := env.Tv().Sub("request-2").RequestID()
 
@@ -413,14 +411,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 		return "done: " + input, nil
 	}
 
-	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w := worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
 	w.RegisterWorkflow(wf)
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 		ID:        env.Tv().WorkflowID(),
-		TaskQueue: taskQueue,
+		TaskQueue: env.WorkerTaskQueue(),
 	}, wf, "input")
 	s.NoError(err)
 
@@ -430,7 +428,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
 			Request: &updatepb.Request{
-				Meta:      &updatepb.Meta{UpdateId: updateID},
+				Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
 				Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
 				RequestId: reqID,
 				CompletionCallbacks: []*commonpb.Callback{{
