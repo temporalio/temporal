@@ -24,18 +24,10 @@ var (
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
-	HistoryTasksWritten                      = newKey[func(HistoryTaskWrite), global]()
+	HistoryTasksWritten                      = newKey[func(int32, int64, string, string, map[historytasks.Category][]historytasks.Task), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )
-
-type HistoryTaskWrite struct {
-	ShardID     int32
-	RangeID     int64
-	NamespaceID string
-	WorkflowID  string
-	Tasks       map[historytasks.Category][]historytasks.Task
-}
 
 // keyID is a unique identifier for a key, used as a map key.
 type keyID = int64

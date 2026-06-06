@@ -125,13 +125,15 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 	m.addXDCCacheKV(newWorkflowXDCKVs)
-	m.recordHistoryTasksWritten(
-		request.ShardID,
-		request.RangeID,
-		request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-		request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
-		request.NewWorkflowSnapshot.Tasks,
-	)
+	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+		hook(
+			request.ShardID,
+			request.RangeID,
+			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+			request.NewWorkflowSnapshot.Tasks,
+		)
+	}
 	return &CreateWorkflowExecutionResponse{
 		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
 			serializedNewWorkflowSnapshot,
@@ -222,21 +224,23 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
-		m.recordHistoryTasksWritten(
-			request.ShardID,
-			request.RangeID,
-			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-			request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
-			request.UpdateWorkflowMutation.Tasks,
-		)
-		if request.NewWorkflowSnapshot != nil {
-			m.recordHistoryTasksWritten(
+		if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+			hook(
 				request.ShardID,
 				request.RangeID,
-				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
-				request.NewWorkflowSnapshot.Tasks,
+				request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+				request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+				request.UpdateWorkflowMutation.Tasks,
 			)
+			if request.NewWorkflowSnapshot != nil {
+				hook(
+					request.ShardID,
+					request.RangeID,
+					request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+					request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+					request.NewWorkflowSnapshot.Tasks,
+				)
+			}
 		}
 		return &UpdateWorkflowExecutionResponse{
 			UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
@@ -942,26 +946,10 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	if err != nil {
 		return err
 	}
-	m.recordHistoryTasksWritten(input.ShardID, input.RangeID, input.NamespaceID, input.WorkflowID, input.Tasks)
-	return nil
-}
-
-func (m *executionManagerImpl) recordHistoryTasksWritten(
-	shardID int32,
-	rangeID int64,
-	namespaceID string,
-	workflowID string,
-	tasksMap map[tasks.Category][]tasks.Task,
-) {
 	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
-		hook(testhooks.HistoryTaskWrite{
-			ShardID:     shardID,
-			RangeID:     rangeID,
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			Tasks:       tasksMap,
-		})
+		hook(input.ShardID, input.RangeID, input.NamespaceID, input.WorkflowID, input.Tasks)
 	}
+	return nil
 }
 
 func (m *executionManagerImpl) GetHistoryTasks(

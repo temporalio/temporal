@@ -126,6 +126,7 @@ type (
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		tokenProvider             auth.TokenProvider
+		enableTaskQueueRecorder   bool
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -184,6 +185,7 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
+		EnableTaskQueueRecorder  bool
 	}
 
 	listenHostPort string
@@ -228,6 +230,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
+		enableTaskQueueRecorder:          params.EnableTaskQueueRecorder,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -465,8 +468,10 @@ func (c *TemporalImpl) startFrontend() {
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
-	c.taskQueueRecorder = NewTaskQueueRecorder(c.logger)
-	testhooks.NewHook(testhooks.HistoryTasksWritten, c.taskQueueRecorder.Record).Apply(c.testHooks, testhooks.GlobalScope)
+	if c.enableTaskQueueRecorder {
+		c.taskQueueRecorder = NewTaskQueueRecorder(c.logger)
+		testhooks.NewHook(testhooks.HistoryTasksWritten, c.taskQueueRecorder.Record).Apply(c.testHooks, testhooks.GlobalScope)
+	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry

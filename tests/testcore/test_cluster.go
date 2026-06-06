@@ -91,6 +91,7 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
+		EnableTaskQueueRecorder         bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -355,6 +356,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		EnableTaskQueueRecorder:          clusterConfig.EnableTaskQueueRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
