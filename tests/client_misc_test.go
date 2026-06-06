@@ -153,7 +153,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	env.SdkWorker().RegisterWorkflow(myWorkflow)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                  "workflow",
+		ID:                  env.Tv().WorkflowID(),
 		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: time.Second, // Use shorter timeout so test completes faster.
 	}, myWorkflow)
@@ -362,7 +362,7 @@ func (s *ClientMiscTestSuite) TestContinueAsNewTightLoop() {
 	env.SdkWorker().RegisterWorkflow(continueAsNewTightLoop)
 
 	options := sdkclient.StartWorkflowOptions{
-		ID:                 "workflow",
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Second * 10,
 	}
@@ -396,7 +396,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	env.SdkWorker().RegisterWorkflow(wfFn)
 
 	options := sdkclient.StartWorkflowOptions{
-		ID:                 "workflow",
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
@@ -603,7 +603,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 "workflow",
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 5 * time.Second,
 	}
@@ -647,7 +647,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 "workflow",
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 10 * time.Second,
 	}
@@ -727,7 +727,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        "workflow",
+		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 		// With 3s TaskTimeout and 5s RunTimeout, we expect to see total of 3 attempts.
 		// First attempt follow by immediate retry follow by timeout and 3rd attempt after WorkflowTaskTimeout.
@@ -796,7 +796,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 "workflow",
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
@@ -901,7 +901,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        "workflow",
+		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
 		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
@@ -1078,7 +1078,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                       "workflow",
+		ID:                       env.Tv().WorkflowID(),
 		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
@@ -1142,7 +1142,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                       "workflow",
+		ID:                       env.Tv().WorkflowID(),
 		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
