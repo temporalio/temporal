@@ -17,11 +17,13 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -1402,15 +1404,50 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
-	wtHandlerCalls := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		wtHandlerCalls++
-		switch wtHandlerCalls {
-		case 1:
-			// Completes first WT with empty command list.
-			return nil, nil
-		case 2:
-			// Worker gets full history because update was issued after sticky worker is gone.
+	// Drain existing WT from regular task queue, respond with sticky attributes to enable sticky task queue.
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				StickyAttributes: env.Tv().StickyExecutionAttributes(10 * time.Second),
+			}, nil
+		})
+	s.NoError(err)
+
+	// Poll the sticky queue directly via matching to register a poller in the partition manager.
+	// This creates the PM and records a poller, so that without the fault injection below,
+	// matching would accept the task (and the test would hang waiting on the normal queue).
+	pollCtx, cancel := context.WithTimeout(testcore.NewContext(), 200*time.Millisecond)
+	defer cancel()
+	_, _ = env.GetTestCluster().MatchingClient().PollWorkflowTaskQueue(pollCtx,
+		&matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: env.NamespaceID().String(),
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: env.Tv().StickyTaskQueue(),
+				Identity:  "sticky-poller",
+			},
+		})
+
+	// Inject StickyWorkerUnavailable for AddWorkflowTask on the sticky queue.
+	// This causes history to fall back to the normal queue.
+	env.InjectRPCFault(
+		func(req, resp any, _ error) error {
+			r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
+			if ok && resp == nil && r.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+				return serviceerrors.NewStickyWorkerUnavailable().(*serviceerrors.StickyWorkerUnavailable).Status().Err()
+			}
+			return nil
+		})
+
+	// Send an update. History tries sticky queue first, gets StickyWorkerUnavailable,
+	// and falls back to the normal queue.
+	updateResultCh := sendUpdateNoError(env, env.Tv())
+
+	// Process update in workflow task from non-sticky task queue.
+	res, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			// Full history from event 1 confirms the task came from the normal queue
+			// (sticky queue would send partial history starting after the last completed WT).
 			s.EqualHistory(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
@@ -1419,20 +1456,7 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 	  5 WorkflowTaskScheduled // Speculative WT.
 	  6 WorkflowTaskStarted
 	`, task.History)
-			return env.UpdateAcceptCompleteCommands(env.Tv()), nil
-		default:
-			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-			return nil, nil
-		}
-	}
 
-	msgHandlerCalls := 0
-	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-		msgHandlerCalls++
-		switch msgHandlerCalls {
-		case 1:
-			return nil, nil
-		case 2:
 			updRequestMsg := task.Messages[0]
 			updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
@@ -1440,52 +1464,16 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 			s.Equal(env.Tv().HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return env.UpdateAcceptCompleteMessages(env.Tv(), updRequestMsg), nil
-		default:
-			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
-			return nil, nil
-		}
-	}
-
-	//nolint:staticcheck // SA1019 TaskPoller replacement needed
-	poller := &testcore.TaskPoller{
-		Client:                       env.FrontendClient(),
-		Namespace:                    env.Namespace().String(),
-		TaskQueue:                    env.Tv().TaskQueue(),
-		StickyTaskQueue:              env.Tv().StickyTaskQueue(),
-		StickyScheduleToStartTimeout: 3 * time.Second,
-		Identity:                     env.Tv().WorkerIdentity(),
-		WorkflowTaskHandler:          wtHandler,
-		MessageHandler:               msgHandler,
-		Logger:                       env.Logger,
-		T:                            s.T(),
-	}
-
-	// Drain existing WT from regular task queue, but respond with sticky enabled response to enable stick task queue.
-	_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky, testcore.WithoutRetries)
-	s.NoError(err)
-
-	env.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
-	time.Sleep(10*time.Second + 100*time.Millisecond) //nolint:forbidigo
-	env.Logger.Info("Sleep 10+ seconds is done.")
-
-	// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
-	// and resend it to normal.
-	// This can be observed in wtHandler: if history is partial => sticky task queue is used.
-	updateResultCh := sendUpdateNoError(env, env.Tv())
-
-	// Process update in workflow task from non-sticky task queue.
-	res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: env.UpdateAcceptCompleteCommands(env.Tv()),
+				Messages: env.UpdateAcceptCompleteMessages(env.Tv(), updRequestMsg),
+			}, nil
+		})
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult := <-updateResultCh
 	s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
-	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
-
-	s.Equal(2, wtHandlerCalls)
-	s.Equal(2, msgHandlerCalls)
-
-	events := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
+	s.EqualValues(0, res.ResetHistoryEventId)
 
 	s.EqualHistoryEvents(`
 	  1 WorkflowExecutionStarted
@@ -1497,7 +1485,7 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 	  7 WorkflowTaskCompleted
 	  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 	  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-	`, events)
+	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
 func (s *WorkflowUpdateSuite) TestFirstNormalScheduledWorkflowTask_Reject() {
