@@ -50,17 +50,6 @@ func (r *TaskQueueRecorder) Record(
 	workflowID string,
 	tasksMap map[tasks.Category][]tasks.Task,
 ) {
-	r.recordTasks(shardID, rangeID, namespaceID, workflowID, tasksMap)
-}
-
-// recordTasks appends tasks to the flattened list by category, wrapping each with metadata
-func (r *TaskQueueRecorder) recordTasks(
-	shardID int32,
-	rangeID int64,
-	namespaceID string,
-	workflowID string,
-	tasksMap map[tasks.Category][]tasks.Task,
-) {
 	if len(tasksMap) == 0 {
 		return
 	}
