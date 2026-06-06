@@ -71,8 +71,7 @@ type (
 		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
-		chasmEngine               chasm.Engine
-		chasmVisibilityMgr        chasm.VisibilityManager
+		chasmTestSupport          testhooks.HistoryChasmTestSupport
 
 		dcClient                         *dynamicconfig.MemoryClient
 		testHooks                        testhooks.TestHooks
@@ -303,15 +302,11 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 	return c.namespaceRegistries
 }
 
-func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
+func (c *TemporalImpl) ChasmTestSupport() (testhooks.HistoryChasmTestSupport, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
-		return nil, fmt.Errorf("expected exactly one host for chasm engine, got %d", numHistoryHosts)
+		return testhooks.HistoryChasmTestSupport{}, fmt.Errorf("expected exactly one history host, got %d", numHistoryHosts)
 	}
-	return c.chasmEngine, nil
-}
-
-func (c *TemporalImpl) ChasmVisibilityManager() chasm.VisibilityManager {
-	return c.chasmVisibilityMgr
+	return c.chasmTestSupport, nil
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
@@ -419,6 +414,10 @@ func (c *TemporalImpl) startFrontend() {
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
+	testhooks.NewHook(testhooks.HistoryChasmTestSupportCreated, func(support testhooks.HistoryChasmTestSupport) {
+		c.chasmTestSupport = support
+	}).Apply(c.testHooks, testhooks.GlobalScope)
+
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
@@ -485,9 +484,6 @@ func (c *TemporalImpl) startHistory() {
 			chasm.Module,
 			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
-			fx.Populate(&c.chasmEngine),
-			fx.Populate(&c.chasmVisibilityMgr),
-			fx.Populate(&c.chasmRegistry),
 		)
 		err := app.Err()
 		if err != nil {
@@ -664,10 +660,6 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
-}
-
-func (c *TemporalImpl) GetCHASMRegistry() *chasm.Registry {
-	return c.chasmRegistry
 }
 
 func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {

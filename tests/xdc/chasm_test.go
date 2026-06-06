@@ -34,7 +34,8 @@ const (
 type ChasmSuite struct {
 	xdcBaseSuite
 
-	chasmContext context.Context
+	chasmContext       context.Context
+	chasmArchetypeName func(any) (string, bool)
 }
 
 func TestChasmSuite(t *testing.T) {
@@ -59,15 +60,13 @@ func (s *ChasmSuite) SetupSuite() {
 func (s *ChasmSuite) SetupTest() {
 	s.setupTest()
 
-	chasmEngine, err := s.clusters[0].Host().ChasmEngine()
+	chasmSupport, err := s.clusters[0].Host().ChasmTestSupport()
 	s.Require().NoError(err)
-	s.Require().NotNil(chasmEngine)
+	s.Require().NotNil(chasmSupport.Context)
+	s.Require().NotNil(chasmSupport.ArchetypeName)
 
-	chasmVisibilityMgr := s.clusters[0].Host().ChasmVisibilityManager()
-	s.Require().NotNil(chasmVisibilityMgr)
-
-	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
-	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
+	s.chasmContext = chasmSupport.Context(context.Background())
+	s.chasmArchetypeName = chasmSupport.ArchetypeName
 }
 
 func (s *ChasmSuite) TearDownSuite() {
@@ -100,10 +99,7 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	archetype, ok := s.chasmArchetypeName(&tests.PayloadStore{})
 	s.True(ok)
 
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
@@ -177,10 +173,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	archetype, ok := s.chasmArchetypeName(&tests.PayloadStore{})
 	s.True(ok)
 
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
@@ -406,10 +399,7 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	archetype, ok := s.chasmArchetypeName(&tests.PayloadStore{})
 	s.True(ok)
 
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
