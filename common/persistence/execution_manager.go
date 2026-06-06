@@ -69,10 +69,47 @@ func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
 
 // The below three APIs are related to serialization/deserialization
 
+// historySizeRollback records HistorySize increments applied to caller-owned ExecutionStats
+// during a write so they can be reverted if the write fails. The persistence layer mutates
+// the caller's (shared) in-memory mutable state in place; without reverting on failure, a
+// failed write that is later retried with the same mutable state double-counts HistorySize
+// (e.g. workflow-id reuse, where createBrandNew fails and createAsCurrent retries the same
+// snapshot). HistorySize is the only stat accumulated in this layer, so it is the only one
+// that needs this treatment.
+type historySizeRollback struct {
+	applied []appliedHistorySize
+}
+
+type appliedHistorySize struct {
+	stats *persistencespb.ExecutionStats
+	delta int64
+}
+
+// add applies sizeDiff to stats.HistorySize and remembers it so it can be reverted.
+func (r *historySizeRollback) add(stats *persistencespb.ExecutionStats, sizeDiff int) {
+	delta := int64(sizeDiff)
+	stats.HistorySize += delta
+	r.applied = append(r.applied, appliedHistorySize{stats: stats, delta: delta})
+}
+
+// revertOnError undoes every applied increment if *err is non-nil. Intended to be deferred
+// against a function's named return error.
+func (r *historySizeRollback) revertOnError(err *error) {
+	if *err == nil {
+		return
+	}
+	for _, a := range r.applied {
+		a.stats.HistorySize -= a.delta
+	}
+}
+
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
-) (*CreateWorkflowExecutionResponse, error) {
+) (_ *CreateWorkflowExecutionResponse, retErr error) {
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	newSnapshot := request.NewWorkflowSnapshot
 	newWorkflowXDCKVs, newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(
@@ -85,7 +122,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
+	rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newHistoryDiff.SizeDiff)
 
 	if err := ValidateCreateWorkflowModeState(
 		request.Mode,
@@ -132,7 +169,10 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 func (m *executionManagerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
-) (*UpdateWorkflowExecutionResponse, error) {
+) (_ *UpdateWorkflowExecutionResponse, retErr error) {
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	updateMutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
@@ -146,7 +186,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	updateMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(updateWorkflowHistoryDiff.SizeDiff)
+	rollback.add(updateMutation.ExecutionInfo.ExecutionStats, updateWorkflowHistoryDiff.SizeDiff)
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
@@ -161,7 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
 
 	if err := ValidateUpdateWorkflowModeState(
@@ -273,7 +313,10 @@ func (m *executionManagerImpl) deleteHistoryTasks(
 func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *ConflictResolveWorkflowExecutionRequest,
-) (*ConflictResolveWorkflowExecutionResponse, error) {
+) (_ *ConflictResolveWorkflowExecutionResponse, retErr error) {
+
+	var rollback historySizeRollback
+	defer rollback.revertOnError(&retErr)
 
 	resetSnapshot := request.ResetWorkflowSnapshot
 	newSnapshot := request.NewWorkflowSnapshot
@@ -288,7 +331,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	resetSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(resetWorkflowHistoryDiff.SizeDiff)
+	rollback.add(resetSnapshot.ExecutionInfo.ExecutionStats, resetWorkflowHistoryDiff.SizeDiff)
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowEvents []*InternalAppendHistoryNodesRequest
@@ -303,7 +346,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		rollback.add(newSnapshot.ExecutionInfo.ExecutionStats, newWorkflowHistoryDiff.SizeDiff)
 	}
 
 	var currentWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
@@ -319,7 +362,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		currentMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(currentWorkflowHistoryDiff.SizeDiff)
+		rollback.add(currentMutation.ExecutionInfo.ExecutionStats, currentWorkflowHistoryDiff.SizeDiff)
 	}
 
 	if err := ValidateConflictResolveWorkflowModeState(
