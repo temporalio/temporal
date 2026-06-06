@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -382,28 +381,8 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	}, time.Second*10, time.Millisecond*1000)
 }
 
-// tv returns test variables seeded from a shortened test name so that physical task queue IDs
-// do not grow larger than DB column limit (currently as low as 272 chars).
 func (s *DeploymentVersionSuite) tv() *testvars.TestVars {
-	return testvars.New(versionShortNamer{s.T()})
-}
-
-// versionShortNamer is used by testvars. We use a shortened test name in variables so that physical task
-// queue IDs do not grow larger than DB column limit (currently as low as 272 chars).
-type versionShortNamer struct {
-	t *testing.T
-}
-
-func (n versionShortNamer) Name() string {
-	fullName := n.t.Name()
-	if len(fullName) <= 30 {
-		return fullName
-	}
-	short := fmt.Sprintf("%s-%08x",
-		fullName[len(fullName)-21:],
-		farm.Fingerprint32([]byte(fullName)),
-	)
-	return strings.Replace(short, ".", "|", -1)
+	return testvars.New(s.T())
 }
 
 //nolint:forbidigo
