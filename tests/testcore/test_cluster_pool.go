@@ -270,10 +270,10 @@ func (p *clusterPool) useSuiteScopedCluster(t *testing.T, reason string) {
 	})
 }
 
-func (p *clusterPool) recordEnvUsage(t *testing.T, workerServiceReason string, workerServiceDedicated bool) {
+func (p *clusterPool) recordEnvUsage(t *testing.T, workerServiceReason string, suiteShareableDedicated bool) {
 	t.Helper()
 	rootName := rootTestName(t)
-	p.suites.recordUsage(t, rootName, workerServiceReason, workerServiceDedicated)
+	p.suites.recordUsage(t, rootName, workerServiceReason, suiteShareableDedicated)
 }
 
 type suiteClusterUsage struct {
@@ -402,7 +402,7 @@ func (s *suiteState) getCluster(clusterOpts []TestClusterOption) *suiteScopedClu
 	return cluster
 }
 
-func (s *suiteRegistry) recordUsage(t *testing.T, rootName string, workerServiceReason string, workerServiceDedicated bool) {
+func (s *suiteRegistry) recordUsage(t *testing.T, rootName string, workerServiceReason string, suiteShareableDedicated bool) {
 	t.Helper()
 	usageAny, _ := s.usage.LoadOrStore(rootName, &suiteClusterUsage{})
 	usage := usageAny.(*suiteClusterUsage)
@@ -410,7 +410,7 @@ func (s *suiteRegistry) recordUsage(t *testing.T, rootName string, workerService
 	defer usage.mu.Unlock()
 
 	usage.envCount++
-	if workerServiceDedicated {
+	if workerServiceReason != "" && suiteShareableDedicated {
 		usage.workerDedicatedCount++
 		usage.workerDedicatedReasons = append(usage.workerDedicatedReasons, workerServiceReason)
 	}

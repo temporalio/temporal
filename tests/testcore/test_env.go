@@ -89,10 +89,20 @@ type TestEnv struct {
 
 type TestOption func(*testOptions)
 
+type clusterScope int
+
+const (
+	clusterScopeShared clusterScope = iota
+	clusterScopeSuiteShareable
+	clusterScopeDedicated
+)
+
 type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
 	workerServiceReason      string
+	clusterScope             clusterScope
+	clusterScopeReason       string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
@@ -103,11 +113,22 @@ type dynamicConfigOverride struct {
 	value   any
 }
 
+func (o *testOptions) requireClusterScope(scope clusterScope, reason string) {
+	if scope > o.clusterScope {
+		o.clusterScope = scope
+		o.clusterScopeReason = reason
+	}
+	if scope == clusterScopeDedicated {
+		o.dedicatedCluster = true
+		o.dedicatedReason = reason
+	}
+}
+
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "dedicated cluster requested")
 	}
 }
 
@@ -119,9 +140,8 @@ func WithDedicatedCluster() TestOption {
 // hide failures in concurrent tests.
 func WithDisableTestloggerFailure() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "testlogger failures disabled")
 		o.disableTestloggerFailure = true
-		o.dedicatedReason = "testlogger failures disabled"
 	}
 }
 
@@ -136,9 +156,8 @@ func WithSdkWorker() TestOption {
 // across tests.
 func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "custom fx options used")
 		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
-		o.dedicatedReason = "custom fx options used"
 	}
 }
 
@@ -149,15 +168,15 @@ func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
 		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
 		o.workerServiceReason = reason
+		o.requireClusterScope(clusterScopeSuiteShareable, "worker service required: "+reason)
 	}
 }
 
 // WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
 func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "fault injection config used")
 		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
-		o.dedicatedReason = "fault injection config used"
 	}
 }
 
@@ -166,9 +185,8 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 // be shared across tests.
 func WithLogger(logger log.Logger) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "custom logger used")
 		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
-		o.dedicatedReason = "custom logger used"
 	}
 }
 
@@ -176,9 +194,8 @@ func WithLogger(logger log.Logger) TestOption {
 // This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
 func WithHistoryShardCount(n int32) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
+		o.requireClusterScope(clusterScopeDedicated, "custom history shard count used")
 		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
-		o.dedicatedReason = "custom history shard count used"
 	}
 }
 
@@ -191,7 +208,7 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 			panic(fmt.Sprintf("invalid value for setting %s: %v", setting.Key(), err))
 		}
 		if !canBeNamespaceScoped(setting.Precedence()) {
-			o.dedicatedCluster = true
+			o.requireClusterScope(clusterScopeDedicated, "global dynamic config used")
 		}
 		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
 	}
@@ -208,12 +225,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
-	workerServiceDedicated := options.workerServiceReason != "" &&
-		!testClusterPool.canUseSuiteScopedCluster(t, options.dedicatedCluster)
-	if workerServiceDedicated {
+	suiteScopedCandidate := testClusterPool.canUseSuiteScopedCluster(t, options.dedicatedCluster)
+	suiteShareableDedicated := options.clusterScope == clusterScopeSuiteShareable && !suiteScopedCandidate
+	if suiteShareableDedicated {
 		options.dedicatedCluster = true
 		if options.dedicatedReason == "" {
-			options.dedicatedReason = "worker service required: " + options.workerServiceReason
+			options.dedicatedReason = options.clusterScopeReason
 		}
 	}
 
@@ -229,7 +246,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			startupConfig[override.setting.Key()] = override.value
 		}
 	}
-	testClusterPool.recordEnvUsage(t, options.workerServiceReason, workerServiceDedicated)
+	testClusterPool.recordEnvUsage(t, options.workerServiceReason, suiteShareableDedicated)
 
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
