@@ -14,7 +14,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -25,7 +24,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
@@ -41,7 +39,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeoutDerivedFromGoTestTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--",
 			"-timeout=35m",
@@ -50,15 +47,14 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.NoError(t, err)
 		// The testrunner should derive its total deadline from the go test -timeout flag.
 		require.Equal(t, 35*time.Minute, r.totalTimeout)
-		// The flag must still be present in the passthrough args so gotestsum/go test
-		// also honour it.
+		// The flag must still be present in the passthrough args so go test also
+		// honours it.
 		require.Contains(t, args, "-timeout=35m")
 	})
 
 	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--",
 			"-coverprofile=test.cover.out",
@@ -67,25 +63,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Zero(t, r.totalTimeout)
 	})
 
-	t.Run("GoTestSumPathMissing", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--junitfile=test.xml",
-			"-foo",
-			"bar",
-			// missing:
-			// "--max-attempts=0",
-			"--",
-			"-coverprofile=test.cover.out",
-			"baz",
-		})
-		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
-	})
-
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -100,7 +80,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -130,7 +109,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("CoverprofileMissing", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -156,6 +134,29 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.ErrorContains(t, err, `missing required argument "--junitfile="`)
 	})
+}
+
+func TestAttemptGoTestArgs(t *testing.T) {
+	a := &attempt{coverProfilePath: "attempt.cover.out"}
+
+	args := a.goTestArgs([]string{
+		"--",
+		"-timeout=35m",
+		"-coverprofile=base.cover.out",
+		"./tests",
+		"-args",
+		"-persistenceType=sql",
+	})
+
+	require.Equal(t, []string{
+		"test",
+		"-json",
+		"-timeout=35m",
+		"-coverprofile=attempt.cover.out",
+		"./tests",
+		"-args",
+		"-persistenceType=sql",
+	}, args)
 }
 
 func TestStripRunFromArgs(t *testing.T) {

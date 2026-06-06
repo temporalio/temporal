@@ -17,6 +17,8 @@ import (
 // races, panics, fatal errors).
 const alertsSuiteName = "ALERTS"
 
+const testrunnerSuiteName = "testrunner"
+
 const junitAlertDetailsMaxBytes = 64 * 1024
 
 type failureType string
@@ -97,6 +99,33 @@ func (j *junitReport) write() error {
 	}
 	log.Printf("wrote junit report to %s", j.path)
 	return nil
+}
+
+// appendSyntheticFailure adds a synthetic JUnit failure entry for failures that
+// come from the runner itself rather than from a completed Go test case.
+func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
+	tc := junit.Testcase{
+		Name:    name,
+		Failure: generateFailure(kind, detail),
+	}
+	for i := range j.Suites {
+		if j.Suites[i].Name == testrunnerSuiteName {
+			j.Suites[i].Testcases = append(j.Suites[i].Testcases, tc)
+			j.Suites[i].Failures++
+			j.Suites[i].Tests++
+			j.Failures++
+			j.Tests++
+			return
+		}
+	}
+	j.Suites = append(j.Suites, junit.Testsuite{
+		Name:      testrunnerSuiteName,
+		Failures:  1,
+		Tests:     1,
+		Testcases: []junit.Testcase{tc},
+	})
+	j.Failures++
+	j.Tests++
 }
 
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
@@ -209,21 +238,23 @@ func (j *junitReport) collectTestCaseFailures() []string {
 		}
 	}
 
-	// Sort lexicographically
-	slices.Sort(failures)
+	return filterParentNames(failures)
+}
 
-	// Find leaf failures using the simplified algorithm
-	var leafFailures []string
-	for i := 0; i < len(failures)-1; i++ {
-		if !strings.HasPrefix(failures[i+1], failures[i]+"/") {
-			leafFailures = append(leafFailures, failures[i])
+// filterParentNames removes parent names from a list.
+// Given [A, A/B, C], returns [A/B, C] because A is a parent of A/B.
+func filterParentNames(names []string) []string {
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+
+	var leaves []string
+	for i, name := range sorted {
+		if i+1 < len(sorted) && strings.HasPrefix(sorted[i+1], name+"/") {
+			continue
 		}
+		leaves = append(leaves, name)
 	}
-	if len(failures) > 0 {
-		leafFailures = append(leafFailures, failures[len(failures)-1])
-	}
-
-	return leafFailures
+	return leaves
 }
 
 func mergeReports(reports []*junitReport) (*junitReport, error) {
@@ -299,7 +330,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 				// Failure.Type carries the canonical kind in merged JUnit.
 				if testCase.Failure != nil {
-					if suite.Name == alertsSuiteName {
+					if suite.Name == alertsSuiteName || suite.Name == testrunnerSuiteName {
 						if testCase.Failure.Type == "" {
 							testCase.Failure.Type = testCase.Failure.Message
 						}

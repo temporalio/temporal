@@ -99,6 +99,18 @@ func TestAppendAlertsSuite_TruncatesLargeDetails(t *testing.T) {
 	require.LessOrEqual(t, len(got), junitAlertDetailsMaxBytes+len("\nDetected in tests:\n\tTestLargePanic"))
 }
 
+func TestMergeReports_PreservesSyntheticFailureType(t *testing.T) {
+	j := &junitReport{}
+	j.appendSyntheticFailure("testrunner.TotalTimeout", failureTypeTimeout, "total timeout")
+
+	report, err := mergeReports([]*junitReport{j})
+	require.NoError(t, err)
+	require.Len(t, report.Suites, 1)
+	require.Len(t, report.Suites[0].Testcases, 1)
+	require.NotNil(t, report.Suites[0].Testcases[0].Failure)
+	require.Equal(t, string(failureTypeTimeout), report.Suites[0].Testcases[0].Failure.Type)
+}
+
 func TestMergeReports_SingleReport(t *testing.T) {
 	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 

@@ -25,7 +25,7 @@ env:
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
-  SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
+  SHARD_COUNT: 4 # NOTE: must match shard count in optimize-test-sharding.yml
 
 jobs:
   test-setup:
@@ -152,8 +152,8 @@ jobs:
           JOB_TYPES: |
             functest:
               cmd: make functional-test-coverage
-              test_timeout: 35m
-              github_timeout: 40
+              test_timeout: 60m
+              github_timeout: 65
               sharded: true
             smoke:
               cmd: make functional-test-coverage
