@@ -421,7 +421,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	})
 
 	pendingNamespaceID := []string{uuid.NewString(), uuid.NewString()}
-	s.True(len(pendingNamespaceID) <= defaultMaxPendingKeys())
+	s.LessOrEqual(len(pendingNamespaceID), defaultMaxPendingKeys())
 	for _, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
 

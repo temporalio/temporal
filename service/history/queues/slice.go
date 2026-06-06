@@ -347,6 +347,7 @@ func (s *SliceImpl) shrinkPredicate() {
 	// TODO: this should be generic enough to shrink any predicate type, probably doesn't belong here.
 	pendingPerKey := s.executableTracker.pendingPerKey
 	if len(pendingPerKey) > s.maxPendingKeysFn() {
+		// only shrink predicate if there're few keys left
 		metrics.QueuePredicateResolutionLoss.With(s.metricsHandler).Record(
 			1,
 			metrics.ReasonTag(predicateResolutionLossMaxPendingKeys),
