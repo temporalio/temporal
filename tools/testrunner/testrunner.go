@@ -324,6 +324,7 @@ func (r *runner) writeCurrentReport() {
 
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
+	var totalTimeoutFired bool
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
 
@@ -339,6 +340,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// flush the XML before the external kill arrives.
 		if ctx.Err() != nil {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
+			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
 			if readErr := currentAttempt.junitReport.read(); readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
@@ -349,6 +351,15 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			}
+			// Surface the timeout as a synthetic failure so it appears in the
+			// merged JUnit (and therefore in the test summary). Without this, a
+			// timeout that killed gotestsum mid-run produced an empty JUnit and
+			// hid every test that hadn't been reported yet — silent green CI.
+			currentAttempt.junitReport.appendSyntheticFailure(
+				"testrunner.TotalTimeout",
+				failureTypeTimeout,
+				fmt.Sprintf("test-runner total timeout (%s) reached before all tests completed", r.totalTimeout),
+			)
 			break
 		}
 
@@ -434,6 +445,14 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if currentAttempt.exitErr != nil {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
 		os.Exit(currentAttempt.exitErr.ExitCode())
+	}
+	// Surface the total-timeout as a non-zero exit. Previously this fell through
+	// to an implicit zero exit, which let CI report green even though gotestsum
+	// was killed before all tests could run (and any failures in the unreported
+	// tail were silently dropped).
+	if totalTimeoutFired {
+		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
+		os.Exit(1)
 	}
 }
 

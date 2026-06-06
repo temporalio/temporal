@@ -99,6 +99,37 @@ func (j *junitReport) write() error {
 	return nil
 }
 
+// appendSyntheticFailure adds a synthetic JUnit failure entry — useful when the
+// runner needs to surface a failure that the underlying test framework didn't
+// produce a testcase for (e.g. total-timeout that killed gotestsum before it
+// wrote its JUnit). The entry lands in a "testrunner" suite so it's grouped
+// separately from real test failures.
+func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
+	tc := junit.Testcase{
+		Name:    name,
+		Failure: generateFailure(kind, detail),
+	}
+	// Reuse an existing testrunner suite if one is already present.
+	for i := range j.Suites {
+		if j.Suites[i].Name == "testrunner" {
+			j.Suites[i].Testcases = append(j.Suites[i].Testcases, tc)
+			j.Suites[i].Failures++
+			j.Suites[i].Tests++
+			j.Tests++
+			j.Failures++
+			return
+		}
+	}
+	j.Suites = append(j.Suites, junit.Testsuite{
+		Name:      "testrunner",
+		Failures:  1,
+		Tests:     1,
+		Testcases: []junit.Testcase{tc},
+	})
+	j.Tests++
+	j.Failures++
+}
+
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
 // (data races, panics, fatals) so that CI surfaces them prominently.
 func (j *junitReport) appendAlertsSuite(alerts []alert) {
