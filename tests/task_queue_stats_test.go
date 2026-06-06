@@ -737,6 +737,7 @@ func newTaskQueueStatsContext(
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
 	opts := []testcore.TestOption{
+		testcore.WithDedicatedCluster(),
 		testcore.WithWorkerService("worker-deployment versioning"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
