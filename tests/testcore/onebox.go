@@ -420,6 +420,9 @@ func (c *TemporalImpl) startHistory() {
 		c.chasmVisibilityMgr = chasmVisibilityManager
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
+	c.taskQueueRecorder = NewTaskQueueRecorder(c.logger)
+	testhooks.NewHook(testhooks.HistoryTasksWritten, c.taskQueueRecorder.Record).Apply(c.testHooks, testhooks.GlobalScope)
+
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
@@ -437,12 +440,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
-				// Wrap ExecutionManager with recorder to capture task writes
-				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
-				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
-				return c.taskQueueRecorder
-			}),
+			fx.Provide(c.GetGrpcClientInterceptor),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
 				if c.replicationStreamRecorder != nil {
 					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
@@ -631,18 +629,11 @@ func (c *TemporalImpl) createSystemNamespace() error {
 }
 
 func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
-	if c.taskQueueRecorder != nil {
-		return c.taskQueueRecorder
-	}
 	return c.executionManager
 }
 
 func (c *TemporalImpl) GetTaskQueueRecorder() *TaskQueueRecorder {
 	return c.taskQueueRecorder
-}
-
-func (c *TemporalImpl) SetTaskQueueRecorder(recorder *TaskQueueRecorder) {
-	c.taskQueueRecorder = recorder
 }
 
 func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {

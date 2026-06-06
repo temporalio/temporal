@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	otel "go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -58,6 +59,7 @@ type (
 		EnableDataLossMetrics                       EnableDataLossMetrics
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 		Serializer                                  serialization.Serializer
+		TestHooks                                   testhooks.TestHooks
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -157,6 +159,7 @@ func FactoryProvider(
 		params.HealthSignals,
 		params.EnableDataLossMetrics,
 		params.EnableBestEffortDeleteTasksOnWorkflowUpdate,
+		params.TestHooks,
 	)
 }
 
