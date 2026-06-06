@@ -1384,6 +1384,9 @@ message UpdateWorkflowExecutionOptionsRequest {
 message UpdateWorkflowExecutionOptionsResponse {
   // Workflow Execution options after update.
   temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
+  // Time of the workflow execution at the moment the options were applied.
+  // If time skipping happened in this execution, it will return virtual time.
+  google.protobuf.Timestamp update_time = 2;
 }
 
 message PauseWorkflowExecutionRequest {

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
@@ -98,6 +99,8 @@ func Invoke(
 					CreateWorkflowTask: false,
 				}, nil
 			}
+
+			ret.UpdateTime = timestamppb.New(mutableState.Now())
 
 			// Store versioning override to send reactivation signal after successful persistence
 			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
