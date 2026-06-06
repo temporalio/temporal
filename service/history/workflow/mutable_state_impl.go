@@ -10024,39 +10024,27 @@ func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
 		return
 	}
 	tsi := ms.executionInfo.TimeSkippingInfo
-	bound := config.GetBound()
-	if bound == nil {
+	ff := config.GetMaxElapsedDuration()
+	// A zero (or non-positive) max_elapsed_duration is treated as no bound: clear any
+	// stale bound and emit no wake-up task.
+	if ff == nil || ff.AsDuration() <= 0 {
 		tsi.CurrentElapsedDurationBound = nil
 		return
 	}
-	switch b := bound.(type) {
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if b.MaxElapsedDuration == nil {
-			return
-		}
-		target := ms.Now().Add(b.MaxElapsedDuration.AsDuration())
-		// Skip task emission when the existing bound already targets the same
-		// virtual time — avoids leaving a stale wake-up task with a superseded
-		// SourceEventId that the executor would then drop.
-		if existing := tsi.GetCurrentElapsedDurationBound(); existing != nil &&
-			existing.GetTargetTime().AsTime().Equal(target) {
-			return
-		}
-		tsi.CurrentElapsedDurationBound = &persistencespb.TimeSkippingBoundInfo{
-			TargetTime:    timestamppb.New(target),
-			SourceEventId: currentEventID,
-			HasReached:    false,
-		}
-		ms.AddTasks(&tasks.TimeSkippingTimerTask{
-			WorkflowKey:         ms.GetWorkflowKey(),
-			VisibilityTimestamp: target,
-			EventID:             currentEventID,
-		})
-	default:
-		// Non-elapsed bound types don't emit a wake-up task and must not leave a
-		// stale CurrentElapsedDurationBound from a previous elapsed-bound config.
-		tsi.CurrentElapsedDurationBound = nil
+	target := ms.Now().Add(ff.AsDuration())
+	// Always install a fresh bound and emit its wake-up task. A superseded bound's
+	// still-queued task is harmless: the executor's liveness check drops any task whose
+	// EventID no longer matches the current bound's SourceEventId.
+	tsi.CurrentElapsedDurationBound = &persistencespb.TimeSkippingBoundInfo{
+		TargetTime:    timestamppb.New(target),
+		SourceEventId: currentEventID,
+		HasReached:    false,
 	}
+	ms.AddTasks(&tasks.TimeSkippingTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: target,
+		EventID:             currentEventID,
+	})
 }
 
 // wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
@@ -10087,7 +10075,7 @@ func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*wo
 	if srcTSC := tsInfo.GetConfig(); srcTSC != nil {
 		if cloned, ok := proto.Clone(srcTSC).(*workflowpb.TimeSkippingConfig); ok {
 			tsc = cloned
-		}
+			}
 	}
 	if skipped := tsInfo.GetAccumulatedSkippedDuration(); skipped != nil {
 		initialSkipped = durationpb.New(skipped.AsDuration())
@@ -10237,22 +10225,20 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	}
 
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	if bound := info.GetConfig().GetBound(); bound != nil {
-		switch bound.(type) {
-		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-			if info.GetCurrentElapsedDurationBound() == nil {
-				return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
-			}
-			advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-		default:
-			return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+	// A zero (or non-positive) max_elapsed_duration is treated as no bound — applyTimeSkippingBound
+	// leaves CurrentElapsedDurationBound nil in that case, so gate on a positive duration to keep
+	// the "configured ⟺ bound set" corruption check below meaningful.
+	if ff := info.GetConfig().GetMaxElapsedDuration(); ff != nil && ff.AsDuration() > 0 {
+		if info.GetCurrentElapsedDurationBound() == nil {
+			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for max-elapsed-duration bound")
 		}
+		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
 	}
 
 	// Cap any skip target at the run/execution timeout: never advance virtual time past
 	// them. Timeouts alone do not create a skip target — only existing candidates
-	// (timers, backoffs, bound) do. This also handles the case where a user timer fires
-	// past the workflow timeout: we cap the skip so the timeout fires on schedule.
+	// (timers, backoffs, fast-forward bound) do. This also handles the case where a user
+	// timer fires past the workflow timeout: we cap the skip so the timeout fires on schedule.
 	if !transition.targetTime.IsZero() {
 		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
 			advance(t.AsTime(), false)

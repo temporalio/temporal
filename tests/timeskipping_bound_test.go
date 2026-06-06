@@ -90,9 +90,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
-	}
+		Enabled:     true,
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -225,9 +224,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
-	}
+		Enabled:     true,
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -353,9 +351,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
-	}
+		Enabled:     true,
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId

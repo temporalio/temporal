@@ -2415,9 +2415,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wor
 	pms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-		},
+			Enabled:     true,
+			Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}},
 		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
@@ -2571,9 +2570,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Hap
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-		},
+			Enabled:     true,
+			Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}},
 		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
