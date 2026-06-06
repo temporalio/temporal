@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
@@ -99,6 +100,7 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(ChasmTestSupportHooks),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,
@@ -429,6 +431,40 @@ func ChasmVisibilityManagerProvider(
 		nsRegistry,
 		visibilityManager,
 	)
+}
+
+type ChasmTestSupportHooksParams struct {
+	fx.In
+
+	ChasmEngine            chasm.Engine
+	ChasmVisibilityManager chasm.VisibilityManager
+	ChasmRegistry          *chasm.Registry
+	TestHooks              testhooks.TestHooks
+}
+
+func ChasmTestSupportHooks(params ChasmTestSupportHooksParams) {
+	hook, ok := testhooks.Get(
+		params.TestHooks,
+		testhooks.HistoryChasmTestSupportCreated,
+		testhooks.GlobalScope,
+	)
+	if !ok {
+		return
+	}
+
+	hook(testhooks.HistoryChasmTestSupport{
+		Context: func(ctx context.Context) context.Context {
+			ctx = chasm.NewEngineContext(ctx, params.ChasmEngine)
+			return chasm.NewVisibilityManagerContext(ctx, params.ChasmVisibilityManager)
+		},
+		ArchetypeName: func(component any) (string, bool) {
+			archetypeID, ok := params.ChasmRegistry.ComponentIDFor(component)
+			if !ok {
+				return "", false
+			}
+			return params.ChasmRegistry.ComponentFqnByID(archetypeID)
+		},
+	})
 }
 
 func EventNotifierProvider(
