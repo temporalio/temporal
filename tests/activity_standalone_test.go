@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -91,9 +90,7 @@ type standaloneActivityTestSuite struct {
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
-	fmt.Fprintf(os.Stderr, "PARALLEL_DEBUG: outer test entered, name=%q\n", t.Name())
 	parallelsuite.Run(t, &standaloneActivityTestSuite{})
-	fmt.Fprintf(os.Stderr, "PARALLEL_DEBUG: outer test returning, name=%q\n", t.Name())
 }
 
 type standaloneActivityEnv struct {
@@ -623,9 +620,8 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 }
 
 func (s *standaloneActivityTestSuite) TestStart() {
-	fmt.Fprintf(os.Stderr, "PARALLEL_DEBUG: TestStart entered, name=%q\n", s.T().Name())
+	s.T().Fatalf("CI_DEBUG_SENTINEL: TestStart body executed at %s", time.Now().UTC().Format(time.RFC3339Nano))
 	env := s.newTestEnv()
-	fmt.Fprintf(os.Stderr, "PARALLEL_DEBUG: TestStart newTestEnv returned, name=%q ns=%q\n", s.T().Name(), env.Namespace().String())
 	t := s.T()
 	ctx := s.Context()
 
