@@ -69,11 +69,17 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
 	)
 
-	chasmSupport, err := env.GetTestCluster().Host().ChasmTestSupport()
+	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := env.GetTestCluster().Host().ChasmRuntime()
 	require.NoError(t, err)
-	require.NotNil(t, chasmSupport.Context)
+	require.NotNil(t, chasmEngine)
+	require.NotNil(t, chasmVisibilityMgr)
+	require.NotNil(t, chasmRegistry)
+	require.NoError(t, chasmRegistry.Register(tests.Library))
 
-	return chasmTestEnv{TestEnv: env, chasmCtx: chasmSupport.Context(env.Context())}
+	chasmCtx := chasm.NewEngineContext(env.Context(), chasmEngine)
+	chasmCtx = chasm.NewVisibilityManagerContext(chasmCtx, chasmVisibilityMgr)
+
+	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}
 }
 
 // forBothConverters runs fn as two parallel subtests, one with the legacy visibility

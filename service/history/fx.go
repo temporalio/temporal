@@ -100,7 +100,25 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(ChasmTestSupportHooks),
+	fx.Invoke(func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		chasmRegistry *chasm.Registry,
+		testHooks testhooks.TestHooks,
+	) {
+		hook, ok := testhooks.Get(
+			testHooks,
+			testhooks.HistoryChasmRuntimeProvider,
+			testhooks.GlobalScope,
+		)
+		if !ok {
+			return
+		}
+
+		hook(func() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry) {
+			return chasmEngine, chasmVisibilityManager, chasmRegistry
+		})
+	}),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,
@@ -432,40 +450,6 @@ func ChasmVisibilityManagerProvider(
 		nsRegistry,
 		visibilityManager,
 	)
-}
-
-type ChasmTestSupportHooksParams struct {
-	fx.In
-
-	ChasmEngine            chasm.Engine
-	ChasmVisibilityManager chasm.VisibilityManager
-	ChasmRegistry          *chasm.Registry
-	TestHooks              testhooks.TestHooks
-}
-
-func ChasmTestSupportHooks(params ChasmTestSupportHooksParams) {
-	hook, ok := testhooks.Get(
-		params.TestHooks,
-		testhooks.HistoryChasmTestSupportCreated,
-		testhooks.GlobalScope,
-	)
-	if !ok {
-		return
-	}
-
-	hook(testhooks.HistoryChasmTestSupport{
-		Context: func(ctx context.Context) context.Context {
-			ctx = chasm.NewEngineContext(ctx, params.ChasmEngine)
-			return chasm.NewVisibilityManagerContext(ctx, params.ChasmVisibilityManager)
-		},
-		ArchetypeName: func(component any) (string, bool) {
-			archetypeID, ok := params.ChasmRegistry.ComponentIDFor(component)
-			if !ok {
-				return "", false
-			}
-			return params.ChasmRegistry.ComponentFqnByID(archetypeID)
-		},
-	})
 }
 
 func EventNotifierProvider(
