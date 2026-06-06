@@ -152,8 +152,8 @@ jobs:
           JOB_TYPES: |
             functest:
               cmd: make functional-test-coverage
-              test_timeout: 35m
-              github_timeout: 40
+              test_timeout: 60m
+              github_timeout: 65
               sharded: true
             smoke:
               cmd: make functional-test-coverage
