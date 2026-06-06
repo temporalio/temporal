@@ -218,13 +218,19 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
-	suiteScopedCandidate := testClusterRouter.canUseSuiteScopedCluster(t, options.dedicatedCluster)
-	workerServiceDedicated := options.workerServiceReason != "" && !suiteScopedCandidate
+	workerServiceDedicated := options.workerServiceReason != "" &&
+		!testClusterRouter.canUseSuiteScopedCluster(t, options.dedicatedCluster)
+	if workerServiceDedicated {
+		options.dedicatedCluster = true
+		if options.dedicatedReason == "" {
+			options.dedicatedReason = "worker service required: " + options.workerServiceReason
+		}
+	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
 	var globalDynamicConfigUsed bool
-	if (options.dedicatedCluster || workerServiceDedicated) && len(options.dynamicConfigSettings) > 0 {
+	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
 		for _, override := range options.dynamicConfigSettings {
 			if !canBeNamespaceScoped(override.setting.Precedence()) {
@@ -235,15 +241,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 	testClusterRouter.recordEnvUsage(t, options.workerServiceReason, workerServiceDedicated)
 
-	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster || workerServiceDedicated)
+	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
 	if globalDynamicConfigUsed {
 		dedicatedGuard.record("global dynamic config used")
-	}
-	if workerServiceDedicated {
-		dedicatedGuard.record("worker service required: " + options.workerServiceReason)
 	}
 
 	// Obtain the test cluster from the router.
