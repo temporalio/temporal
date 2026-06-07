@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/await"
 )
 
 func TestIntegration(t *testing.T) {
@@ -412,23 +412,23 @@ func TestIntegration(t *testing.T) {
 
 		// Race detector is probabilistic; retry until it catches the race
 		// and produces a complete result (passed + failed entries in junit).
-		require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		await.Require(t.Context(), t, func(at *await.T) {
 			res := runIntegTest(t, []string{"./testpkg/datarace"}, "--group-by=test", "-race")
 			if res.err == nil {
-				ct.Errorf("expected error")
+				at.Errorf("expected error")
 				return
 			}
-			assertJUnit(ct, res,
+			assertJUnit(at, res,
 				passed("TestRace"),
 				failed("TestRace", "race"),
 			)
-			assertConsole(ct, res,
+			assertConsole(at, res,
 				printed("$", ".test", "-test.run ^TestRace$"),
 				printed("❌️", "attempt=1", "failure=crash"),
 				printed("RACE:", "Data race detected", "TestRace"),
 				notPrinted("test run completed"),
 			)
-			assertLogFiles(ct, res, // TestRace crashes, no retry (max-attempts=1)
+			assertLogFiles(at, res, // TestRace crashes, no retry (max-attempts=1)
 				file("TestRace",
 					"TESTRUNNER LOG",
 					"Attempt: 1",
