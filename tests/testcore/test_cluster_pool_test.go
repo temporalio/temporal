@@ -26,7 +26,8 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 	}
 }
 
-func TestPoolMaxUsageRecyclesOnNextAcquire(t *testing.T) {
+func TestPool_MaxUsageRecyclesOnNextAcquire(t *testing.T) {
+	// maxUsage 1 makes the first completed lease immediately eligible for recycling.
 	p := newPool(1, false, 1)
 	var created int
 	createCluster := func() *FunctionalTestBase {
@@ -55,7 +56,8 @@ func TestPoolMaxUsageRecyclesOnNextAcquire(t *testing.T) {
 	})
 }
 
-func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
+func TestClusterSlot_MaxUsageWaitsForActiveLeases(t *testing.T) {
+	// maxUsage is already reached after the first acquire, but the slot is still active.
 	slot := &clusterSlot{maxUsage: 1}
 	var created int
 	createCluster := func() *FunctionalTestBase {
@@ -66,6 +68,7 @@ func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
 	first := slot.acquire(t, createCluster)
 	second := slot.acquire(t, createCluster)
 
+	// Concurrent leases share the current cluster even after usage crosses maxUsage.
 	require.Same(t, first, second)
 	require.Equal(t, 1, created)
 	require.Equal(t, 2, slot.active)
@@ -81,12 +84,14 @@ func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
 	require.Equal(t, 0, slot.active)
 	require.Equal(t, 2, slot.usage)
 
+	// Once all leases are gone, the next acquire can recycle the overused cluster.
 	third := slot.acquire(t, createCluster)
 	require.NotSame(t, first, third)
 	require.Equal(t, 2, created)
 }
 
-func TestClusterSlotPoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
+func TestClusterSlot_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
+	// Use maxUsage 1 to prove poison replacement wins over max-usage recycling.
 	slot := &clusterSlot{maxUsage: 1}
 	var created int
 	createCluster := func() *FunctionalTestBase {
@@ -105,6 +110,7 @@ func TestClusterSlotPoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	require.NotSame(t, first, second)
 	require.Same(t, second, slot.cluster)
 	require.Equal(t, 2, created)
+	// The old poisoned lease remains active, while usage restarts on the replacement.
 	require.Equal(t, 2, slot.active)
 	require.Equal(t, 1, slot.usage)
 
