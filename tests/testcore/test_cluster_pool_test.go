@@ -39,15 +39,15 @@ func TestClusterPool_MaxUsageRecyclesOnNextAcquire(t *testing.T) {
 	t.Run("uses cluster", func(t *testing.T) {
 		cluster := p.get(t, createCluster)
 		require.Same(t, cluster, slot.cluster)
-		require.Equal(t, 1, slot.active)
-		require.Equal(t, 1, slot.usage)
+		require.Equal(t, 1, slot.activeLeases)
+		require.Equal(t, 1, slot.useCount)
 	})
 
 	// The subtest cleanup has released the only active lease.
 	firstCluster := slot.cluster
 	require.NotNil(t, firstCluster)
-	require.Equal(t, 0, slot.active)
-	require.Equal(t, 1, slot.usage)
+	require.Equal(t, 0, slot.activeLeases)
+	require.Equal(t, 1, slot.useCount)
 
 	// Max-usage recycling happens on the next acquire after the prior lease releases.
 	t.Run("recreates cluster", func(t *testing.T) {
@@ -74,8 +74,8 @@ func TestClusterPool_MaxUsageWaitsForActiveLeases(t *testing.T) {
 	// Concurrent leases share the current cluster even after usage crosses maxUsage.
 	require.Same(t, activeCluster, concurrentCluster)
 	require.Equal(t, 1, created)
-	require.Equal(t, 2, slot.active)
-	require.Equal(t, 2, slot.usage)
+	require.Equal(t, 2, slot.activeLeases)
+	require.Equal(t, 2, slot.useCount)
 	require.NotNil(t, slot.cluster)
 }
 
@@ -100,7 +100,7 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	require.NotSame(t, poisonedCluster, replacementCluster)
 	require.Same(t, replacementCluster, slot.cluster)
 	require.Equal(t, 2, created)
-	// The old poisoned lease remains active, while usage restarts on the replacement.
-	require.Equal(t, 2, slot.active)
-	require.Equal(t, 1, slot.usage)
+	// The old poisoned lease remains active, while useCount restarts on the replacement.
+	require.Equal(t, 2, slot.activeLeases)
+	require.Equal(t, 1, slot.useCount)
 }

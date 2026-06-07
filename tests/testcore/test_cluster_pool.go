@@ -49,22 +49,22 @@ func init() {
 type clusterPool struct {
 	slots []*clusterPoolSlot
 	next  int
-	mu    sync.Mutex
+	lock  sync.Mutex
 
 	available chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
 }
 
 // clusterPoolSlot owns one pooled cluster and its lease state.
 type clusterPoolSlot struct {
-	idx int
-	mu  sync.Mutex
+	idx  int
+	lock sync.Mutex
 
 	cluster *FunctionalTestBase
 
 	// Track leases and max-usage recycling under the slot lock.
-	usage    int
-	active   int
-	maxUsage int // max tests per cluster before recreate (0 = unlimited)
+	useCount     int
+	activeLeases int
+	maxUsage     int // max tests per cluster before recreate (0 = unlimited)
 }
 
 func newClusterPool(size int, exclusive bool, maxUsage int) *clusterPool {
@@ -106,16 +106,16 @@ func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
 }
 
 func (p *clusterPool) nextSlot() *clusterPoolSlot {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	slot := p.slots[p.next]
 	p.next = (p.next + 1) % len(p.slots)
 	return slot
 }
 
 func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	// Lazy initialization for first use
 	if s.cluster == nil {
@@ -126,34 +126,34 @@ func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *Functional
 	// Swap out poisoned clusters. An active poisoned cluster will tear itself down during its
 	// last test run's cleanup; an idle poisoned cluster can be torn down here.
 	if cluster.Poisoned() {
-		if s.active == 0 {
+		if s.activeLeases == 0 {
 			s.tearDownLocked(t)
 		}
 		s.cluster = createCluster()
-		s.usage = 0
+		s.useCount = 0
 		cluster = s.cluster
 	}
 
 	// Recreate idle clusters after maxUsage tests.
-	if s.maxUsage > 0 && s.usage >= s.maxUsage && s.active == 0 {
+	if s.maxUsage > 0 && s.useCount >= s.maxUsage && s.activeLeases == 0 {
 		s.tearDownLocked(t)
 		s.cluster = createCluster()
 		cluster = s.cluster
 	}
 
-	s.usage++
-	s.active++
+	s.useCount++
+	s.activeLeases++
 	cluster.SetT(t)
 	return cluster
 }
 
 func (s *clusterPoolSlot) release() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.active == 0 {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.activeLeases == 0 {
 		panic("release called without matching acquire")
 	}
-	s.active--
+	s.activeLeases--
 }
 
 func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
@@ -164,10 +164,10 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 		t.Logf("Failed to tear down cluster %d: %v", s.idx, err)
 	}
 	s.cluster = nil
-	s.usage = 0
+	s.useCount = 0
 }
 
-// clusterRouter routes tests to shared, dedicated, or [suiteScopedCluster]s.
+// clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
 	shared      *clusterPool
 	dedicated   *clusterPool
