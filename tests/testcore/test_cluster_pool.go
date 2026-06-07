@@ -45,7 +45,7 @@ func init() {
 	}
 }
 
-// pool manages a fixed number of test cluster slots.
+// pool manages a fixed number of test [clusterSlot]s.
 type pool struct {
 	slots []*clusterSlot
 	next  int
@@ -168,7 +168,7 @@ func (s *clusterSlot) tearDownLocked(t *testing.T) {
 	s.usage = 0
 }
 
-// clusterPool routes tests to shared, dedicated, or suite-scoped clusters.
+// clusterPool routes tests to shared, dedicated, or [suiteScopedCluster]s.
 type clusterPool struct {
 	shared      *pool
 	dedicated   *pool
