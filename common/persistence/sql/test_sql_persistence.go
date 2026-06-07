@@ -197,8 +197,8 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}()
 
-	if rewriter, ok := db.(sqlplugin.TestSchemaStatementRewriter); ok {
-		statements = rewriter.RewriteTestSchemaStatements(statements)
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
 	}
 
 	for _, stmt := range statements {

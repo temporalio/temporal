@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func TestRewriteTestSchemaStatements_EnforcesVarcharLengthChecks(t *testing.T) {
+func TestRewriteSchemaStatements_EnforcesVarcharLengthChecks(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -69,7 +69,7 @@ func TestRewriteTestSchemaStatements_EnforcesVarcharLengthChecks(t *testing.T) {
 			t.Cleanup(func() { _ = sqlDB.Close() })
 
 			db := newDB(sqlplugin.DbKindUnknown, "test", sqlDB, nil, log.NewNoopLogger())
-			statements = db.RewriteTestSchemaStatements(statements)
+			statements = db.RewriteSchemaStatements(statements)
 			for _, stmt := range statements {
 				err = db.Exec(stmt)
 				require.NoError(t, err)

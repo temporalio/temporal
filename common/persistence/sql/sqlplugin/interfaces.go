@@ -113,9 +113,9 @@ type (
 		VerifyVersion() error
 	}
 
-	// TestSchemaStatementRewriter lets SQL plugins adjust schema statements used by test clusters.
-	TestSchemaStatementRewriter interface {
-		RewriteTestSchemaStatements(statements []string) []string
+	// SchemaStatementRewriter lets SQL plugins adjust schema statements before execution.
+	SchemaStatementRewriter interface {
+		RewriteSchemaStatements(statements []string) []string
 	}
 
 	GenericDB interface {

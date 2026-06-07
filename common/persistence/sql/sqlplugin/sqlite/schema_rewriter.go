@@ -11,17 +11,17 @@ var (
 	testSchemaVarcharColumnPattern = regexp.MustCompile(`(?im)(?:^|,)\s*("?[a-z_][a-z0-9_]*"?)\s+varchar\s*\(\s*(\d+)\s*\)`)
 )
 
-// RewriteTestSchemaStatements makes SQLite test schemas catch values that would
+// RewriteSchemaStatements makes SQLite schemas catch values that would
 // fail against SQL databases that enforce VARCHAR(n), such as Postgres and MySQL.
-func (mdb *db) RewriteTestSchemaStatements(statements []string) []string {
+func (mdb *db) RewriteSchemaStatements(statements []string) []string {
 	rewritten := make([]string, len(statements))
 	for i, stmt := range statements {
-		rewritten[i] = addTestSchemaVarcharLengthChecks(stmt)
+		rewritten[i] = addSchemaVarcharLengthChecks(stmt)
 	}
 	return rewritten
 }
 
-func addTestSchemaVarcharLengthChecks(stmt string) string {
+func addSchemaVarcharLengthChecks(stmt string) string {
 	// Only CREATE TABLE statements can accept generated table constraints.
 	if !testSchemaCreateTablePattern.MatchString(stmt) {
 		return stmt

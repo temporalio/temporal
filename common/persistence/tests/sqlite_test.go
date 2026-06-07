@@ -80,8 +80,8 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 		t.Fatalf("Unable to load schema: %s", err)
 	}
 
-	if rewriter, ok := db.(sqlplugin.TestSchemaStatementRewriter); ok {
-		statements = rewriter.RewriteTestSchemaStatements(statements)
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
 	}
 
 	for _, stmt := range statements {
