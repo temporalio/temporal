@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -30,14 +31,16 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &WorkflowAliasSearchAttributeTestSuite{})
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker-deployment version workflows must run for versioned-poller membership checks"),
 	}, opts...)
 
 	env := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowFunc)
-	return env
+	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
+	tv := env.Tv().WithDeploymentSeries("alias-sa").WithBuildID("v1")
+	return env, tv
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
@@ -46,8 +49,8 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 
 func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 ) {
-	tv := env.Tv()
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tv.TaskQueue().Name,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -90,11 +93,11 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
-	tv := env.Tv()
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	s.startVersionedPollerAndValidate(env)
+	s.startVersionedPollerAndValidate(env, tv)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
@@ -122,9 +125,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	_, err := s.createWorkflow(env, nil)
+	_, err := s.createWorkflow(env, tv, nil)
 	s.NoError(err)
 
 	s.EventuallyWithT(
@@ -163,7 +166,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	_, err := env.SdkClient().OperatorService().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
 		Namespace: env.Namespace().String(),
@@ -179,7 +182,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		},
 	}
 
-	_, err = s.createWorkflow(env, sa)
+	_, err = s.createWorkflow(env, tv, sa)
 	s.NoError(err)
 
 	s.EventuallyWithT(
