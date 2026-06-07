@@ -47,17 +47,16 @@ func init() {
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
 type clusterPool struct {
-	slots     []*clusterPoolSlot
-	available chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
+	allSlots       []*clusterPoolSlot
+	availableSlots chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
 
-	lock sync.Mutex // protects next
-	next int
+	lock        sync.Mutex // protects nextSlotIdx
+	nextSlotIdx int
 }
 
 // clusterPoolSlot owns one pooled cluster and its lease state.
 type clusterPoolSlot struct {
-	idx int
-
+	idx          int
 	lock         sync.Mutex
 	cluster      *FunctionalTestBase
 	activeLeases int // how many tests are currently using this cluster
@@ -67,18 +66,18 @@ type clusterPoolSlot struct {
 
 func newClusterPool(size int, exclusive bool, maxLeases int) *clusterPool {
 	p := &clusterPool{
-		slots: make([]*clusterPoolSlot, size),
+		allSlots: make([]*clusterPoolSlot, size),
 	}
 	for i := range size {
-		p.slots[i] = &clusterPoolSlot{
+		p.allSlots[i] = &clusterPoolSlot{
 			idx:       i,
 			maxLeases: maxLeases,
 		}
 	}
 	if exclusive {
-		p.available = make(chan *clusterPoolSlot, size)
-		for _, slot := range p.slots {
-			p.available <- slot
+		p.availableSlots = make(chan *clusterPoolSlot, size)
+		for _, slot := range p.allSlots {
+			p.availableSlots <- slot
 		}
 	}
 	return p
@@ -95,9 +94,9 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 }
 
 func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
-	if p.available != nil {
-		slot := <-p.available
-		t.Cleanup(func() { p.available <- slot })
+	if p.availableSlots != nil {
+		slot := <-p.availableSlots
+		t.Cleanup(func() { p.availableSlots <- slot })
 		return slot
 	}
 	return p.nextSlot()
@@ -106,8 +105,8 @@ func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
 func (p *clusterPool) nextSlot() *clusterPoolSlot {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	slot := p.slots[p.next]
-	p.next = (p.next + 1) % len(p.slots)
+	slot := p.allSlots[p.nextSlotIdx]
+	p.nextSlotIdx = (p.nextSlotIdx + 1) % len(p.allSlots)
 	return slot
 }
 

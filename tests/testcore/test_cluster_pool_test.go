@@ -29,7 +29,7 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	// maxLeases 1 makes the first completed lease immediately eligible for recycling.
 	p := newClusterPool(1, false, 1)
-	slot := p.slots[0]
+	slot := p.allSlots[0]
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++
@@ -61,7 +61,7 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {
 	// maxLeases is already reached after the first acquire, but the slot is still active.
 	p := newClusterPool(1, false, 1)
-	slot := p.slots[0]
+	slot := p.allSlots[0]
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++
@@ -82,7 +82,7 @@ func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {
 func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// Use maxLeases 1 to prove poison replacement wins over lease-limit recycling.
 	p := newClusterPool(1, false, 1)
-	slot := p.slots[0]
+	slot := p.allSlots[0]
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++
