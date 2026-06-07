@@ -6,8 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/membership/static"
-	"go.temporal.io/server/common/primitives"
 )
 
 func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
@@ -16,13 +14,6 @@ func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		impl := newTemporal(t, &TemporalParams{
 			ClusterMetadataConfig: &cluster.Config{},
-			HostsByProtocolByService: map[transferProtocol]map[primitives.ServiceName]static.Hosts{
-				httpProtocol: {
-					primitives.FrontendService: {
-						All: []string{"127.0.0.1:0"},
-					},
-				},
-			},
 		})
 		dcClient = impl.dcClient
 	})

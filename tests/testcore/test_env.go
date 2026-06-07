@@ -92,7 +92,6 @@ type testOptions struct {
 	dedicatedCluster         bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
-	workerService            bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
@@ -153,10 +152,12 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead.
-func WithWorkerService(_ string) TestOption {
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
-		o.workerService = true
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.dedicatedReason = "worker service required: " + reason
 	}
 }
 
@@ -276,8 +277,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		}
 	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, options.workerService, startupConfig, options.clusterOptions)
+	// Obtain the test cluster from the router.
+	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -366,7 +367,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !testClusterPool.hasSuiteScoped(e.t) {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")

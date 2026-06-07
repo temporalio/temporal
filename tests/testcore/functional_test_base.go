@@ -269,9 +269,8 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Acquire a slot from the dedicated test cluster pool.
-	params := ApplyTestClusterOptions(options)
-	testClusterPool.acquireDedicatedSlot(s.T(), params.EnableWorkerService)
+	// Reserve a slot from the dedicated test cluster pool.
+	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 }
 
@@ -315,8 +314,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
+		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
 		s.isShared = true
 	}
 
@@ -347,11 +345,20 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 }
 
+func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
+	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		return *persistencetests.GetSQLiteFileTestClusterOption()
+	}
+	return defaults
+}
+
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
 // call this testcore FunctionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *FunctionalTestBase) SetupTest() {
+	s.checkTestShard()
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
@@ -373,6 +380,11 @@ func (s *FunctionalTestBase) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
+}
+
+// checkTestShard supports test sharding based on environment variables.
+func (s *FunctionalTestBase) checkTestShard() {
+	checkTestShard(s.T())
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
@@ -724,7 +736,7 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
 // fails t if the cluster was poisoned during t's window. This fails all active tests
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
-// The pool's slot reference is replaced as soon as poison is observed.
+// The cluster pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	if s.t != nil {
 		s.t.addTest(t)
