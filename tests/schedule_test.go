@@ -3865,21 +3865,20 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 		s.NoError(err)
 	}
 
-	pausedWithNextActionTime := func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetPaused() &&
-			e.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName] != nil
+	paused := func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetPaused()
 	}
 
 	// V2: TemporalScheduleNextActionTime must be present and decode to a
 	// timestamp at or after the create time.
-	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, pausedWithNextActionTime)
+	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
 	s.NotNil(v2Entry)
 	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
-	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
 
 	var v2Next time.Time
 	s.NoError(payload.Decode(v2Pl, &v2Next))
 	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
+	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
 	s.True(v2Next.After(createTime.Add(-time.Second)),
 		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
 }
