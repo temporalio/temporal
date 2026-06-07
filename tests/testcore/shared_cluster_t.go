@@ -46,42 +46,25 @@ func (s *sharedClusterT) removeTest(t testlogger.CleanupCapableT) (wasLast bool)
 	return len(s.activeTests) == 0
 }
 
-// currentT returns the sole registered test, or nil if zero or many.
-func (s *sharedClusterT) currentT() testlogger.CleanupCapableT {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.activeTests) == 1 {
-		return s.activeTests[0]
-	}
-	return nil
-}
-
-// activeTestsSnapshot copies activeTests so callers can iterate without
-// holding the lock while forwarding.
-func (s *sharedClusterT) activeTestsSnapshot() []testlogger.CleanupCapableT {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	snap := make([]testlogger.CleanupCapableT, len(s.activeTests))
-	copy(snap, s.activeTests)
-	return snap
-}
-
 // logTargets returns the tests that should receive Log/Logf, or nil when no
-// test target applies and the caller should write to stderr.
+// test target applies and the caller should write to stderr. The caller must
+// hold s.mu while using the returned slice.
 func (s *sharedClusterT) logTargets() []testlogger.CleanupCapableT {
 	if s.logFanout {
-		if snap := s.activeTestsSnapshot(); len(snap) > 0 {
-			return snap
+		if len(s.activeTests) > 0 {
+			return s.activeTests
 		}
 		return nil
 	}
-	if t := s.currentT(); t != nil {
-		return []testlogger.CleanupCapableT{t}
+	if len(s.activeTests) == 1 {
+		return s.activeTests[:1]
 	}
 	return nil
 }
 
 func (s *sharedClusterT) Logf(format string, args ...any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	targets := s.logTargets()
 	if targets == nil {
 		fmt.Fprintf(os.Stderr, format+"\n", args...)
@@ -93,6 +76,8 @@ func (s *sharedClusterT) Logf(format string, args ...any) {
 }
 
 func (s *sharedClusterT) Log(args ...any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	targets := s.logTargets()
 	if targets == nil {
 		fmt.Fprintln(os.Stderr, args...)
@@ -104,13 +89,17 @@ func (s *sharedClusterT) Log(args ...any) {
 }
 
 func (s *sharedClusterT) Errorf(format string, args ...any) {
-	for _, t := range s.activeTestsSnapshot() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.activeTests {
 		t.Errorf(format, args...)
 	}
 }
 
 func (s *sharedClusterT) Fail() {
-	for _, t := range s.activeTestsSnapshot() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.activeTests {
 		t.Fail()
 	}
 }

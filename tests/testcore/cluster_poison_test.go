@@ -37,6 +37,17 @@ func (f *mockSubtestT) Errorf(format string, args ...any) {
 func (f *mockSubtestT) Fail()    {}
 func (f *mockSubtestT) FailNow() {}
 
+type blockingLogT struct {
+	mockSubtestT
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (f *blockingLogT) Logf(string, ...any) {
+	close(f.entered)
+	<-f.release
+}
+
 // finish runs registered cleanups in LIFO order, mirroring *testing.T.
 func (f *mockSubtestT) finish() {
 	f.mu.Lock()
@@ -46,6 +57,33 @@ func (f *mockSubtestT) finish() {
 	for i := len(cleanups) - 1; i >= 0; i-- {
 		cleanups[i]()
 	}
+}
+
+func TestSharedClusterT_LogfForwardsWhileLocked(t *testing.T) {
+	s := &sharedClusterT{name: t.Name(), logFanout: true}
+	sub := &blockingLogT{
+		mockSubtestT: mockSubtestT{T: t},
+		entered:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	s.addTest(sub)
+
+	done := make(chan struct{})
+	go func() {
+		s.Logf("test log")
+		close(done)
+	}()
+
+	<-sub.entered
+	if s.mu.TryLock() {
+		s.mu.Unlock()
+		close(sub.release)
+		<-done
+		t.Fatal("Logf released sharedClusterT lock while forwarding to an active test")
+	}
+
+	close(sub.release)
+	<-done
 }
 
 func TestSharedClusterPoison(t *testing.T) {
