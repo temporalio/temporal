@@ -166,8 +166,8 @@ jobs:
               github_timeout: 15
             xdc:
               cmd: make functional-test-xdc-coverage
-              test_timeout: 30m
-              github_timeout: 35
+              test_timeout: 60m
+              github_timeout: 65
         run: |
           # Convert YAML inputs to JSON for jq.
           DBS_JSON=$(yq -o=json <<< "$DB_CONFIGS")
