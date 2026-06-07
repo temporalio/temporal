@@ -111,6 +111,7 @@ type (
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		dcRedirectionPolicy              config.DCRedirectionPolicy
+		dcRedirectionPolicyAllServices   bool
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -175,6 +176,7 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DCRedirectionPolicy              config.DCRedirectionPolicy
+		DCRedirectionPolicyAllServices   bool
 		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -217,6 +219,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		dcRedirectionPolicy:              params.DCRedirectionPolicy,
+		dcRedirectionPolicyAllServices:   params.DCRedirectionPolicyAllServices,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -478,7 +481,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
+			fx.Provide(c.internalServiceDCRedirectionPolicy),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -631,7 +634,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
+			fx.Provide(c.internalServiceDCRedirectionPolicy),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -677,6 +680,13 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
+}
+
+func (c *TemporalImpl) internalServiceDCRedirectionPolicy() config.DCRedirectionPolicy {
+	if c.dcRedirectionPolicyAllServices {
+		return c.dcRedirectionPolicy
+	}
+	return config.DCRedirectionPolicy{}
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {
@@ -768,7 +778,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 				RPC: config.RPC{},
 			},
 		},
-		DCRedirectionPolicy: c.dcRedirectionPolicy,
+		DCRedirectionPolicy: c.internalServiceDCRedirectionPolicy(),
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},

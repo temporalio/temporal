@@ -88,6 +88,7 @@ type (
 		MockAdminClient                 map[string]adminservice.AdminServiceClient
 		FaultInjection                  *config.FaultInjection
 		DCRedirectionPolicy             config.DCRedirectionPolicy
+		DCRedirectionPolicyAllServices  bool
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
@@ -348,6 +349,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		MockAdminClient:                  clusterConfig.MockAdminClient,
 		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
 		DCRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
+		DCRedirectionPolicyAllServices:   clusterConfig.DCRedirectionPolicyAllServices,
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
