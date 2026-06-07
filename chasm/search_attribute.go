@@ -425,6 +425,19 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
+// ToPayloads encodes search attribute values keyed by their aliases.
+func (m SearchAttributesMap) ToPayloads() map[string]*commonpb.Payload {
+	if len(m.values) == 0 {
+		return nil
+	}
+
+	result := make(map[string]*commonpb.Payload, len(m.values))
+	for name, value := range m.values {
+		result[name] = value.MustEncode()
+	}
+	return result
+}
+
 // newSearchAttributesMapFromProto creates a new SearchAttributesMap from commonpb.SearchAttributes.
 func newSearchAttributesMapFromProto(
 	searchAttributes *commonpb.SearchAttributes,

@@ -5109,14 +5109,21 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 
 		workflowID := ex.BusinessID
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
+		searchAttributes := &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+		for key, value := range ex.CustomSearchAttributes {
+			searchAttributes.IndexedFields[key] = value
+		}
+		for key, value := range ex.ChasmSearchAttributes.ToPayloads() {
+			searchAttributes.IndexedFields[key] = value
+		}
 
 		schedules[i] = &schedulepb.ScheduleListEntry{
 			ScheduleId: scheduleID,
 			Memo:       customMemo,
 			// cleanScheduleSearchAttributes is only needed for V1 schedules
-			SearchAttributes: wh.cleanScheduleSearchAttributes(&commonpb.SearchAttributes{
-				IndexedFields: ex.CustomSearchAttributes,
-			}),
+			SearchAttributes: wh.cleanScheduleSearchAttributes(searchAttributes),
 			Info: listInfo,
 		}
 	}
