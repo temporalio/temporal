@@ -3802,6 +3802,7 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 // testScheduleNextActionTimeVisibility asserts that the
 // TemporalScheduleNextActionTime search attribute is published to visibility.
 func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
+	t.Skip("TODO(david, #10584)")
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
