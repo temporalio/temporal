@@ -6060,7 +6060,9 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
+	tv := env.Tv().WithDeploymentSeries("rollback-reset").WithBuildID("v")
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	revision := int64(1)
