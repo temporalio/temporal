@@ -5124,7 +5124,7 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 			Memo:       customMemo,
 			// cleanScheduleSearchAttributes is only needed for V1 schedules
 			SearchAttributes: wh.cleanScheduleSearchAttributes(searchAttributes),
-			Info: listInfo,
+			Info:             listInfo,
 		}
 	}
 
