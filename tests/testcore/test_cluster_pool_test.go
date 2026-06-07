@@ -25,3 +25,61 @@ func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
 		require.Equal(t, v, got[0].Value, "key %s wrong after cleanup", k)
 	}
 }
+
+func TestPoolMaxUsageRecyclesOnNextAcquire(t *testing.T) {
+	p := newPool(1, false, 1)
+	var created int
+	createCluster := func() *FunctionalTestBase {
+		created++
+		return &FunctionalTestBase{}
+	}
+
+	t.Run("uses cluster", func(t *testing.T) {
+		cluster := p.get(t, createCluster)
+		require.Same(t, cluster, p.slots[0].cluster)
+		require.Equal(t, 1, p.slots[0].active)
+		require.Equal(t, 1, p.slots[0].usage)
+	})
+
+	firstCluster := p.slots[0].cluster
+	require.NotNil(t, firstCluster)
+	require.Equal(t, 0, p.slots[0].active)
+	require.Equal(t, 1, p.slots[0].usage)
+
+	t.Run("recreates cluster", func(t *testing.T) {
+		cluster := p.get(t, createCluster)
+		require.Same(t, cluster, p.slots[0].cluster)
+		require.NotSame(t, firstCluster, cluster)
+		require.Equal(t, 2, created)
+	})
+}
+
+func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
+	slot := &clusterSlot{maxUsage: 1}
+	var created int
+	createCluster := func() *FunctionalTestBase {
+		created++
+		return &FunctionalTestBase{}
+	}
+
+	first := slot.acquire(t, createCluster)
+	second := slot.acquire(t, createCluster)
+
+	require.Same(t, first, second)
+	require.Equal(t, 1, created)
+	require.Equal(t, 2, slot.active)
+	require.Equal(t, 2, slot.usage)
+
+	slot.release()
+	require.NotNil(t, slot.cluster)
+	require.Equal(t, 1, slot.active)
+
+	slot.release()
+	require.NotNil(t, slot.cluster)
+	require.Equal(t, 0, slot.active)
+	require.Equal(t, 2, slot.usage)
+
+	third := slot.acquire(t, createCluster)
+	require.NotSame(t, first, third)
+	require.Equal(t, 2, created)
+}

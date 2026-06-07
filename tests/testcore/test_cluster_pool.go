@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -40,43 +39,47 @@ func init() {
 		maxUsage = 50
 	}
 
-	sharedPool := newPool(sharedSize, false)
-	sharedPool.maxUsage = maxUsage
-
-	dedicatedPool := newPool(dedicatedSize, true)
-	dedicatedPool.maxUsage = maxUsage
-
 	testClusterPool = &clusterPool{
-		shared:    sharedPool,
-		dedicated: dedicatedPool,
+		shared:    newPool(sharedSize, false, maxUsage),
+		dedicated: newPool(dedicatedSize, true, maxUsage),
 	}
 }
 
 // pool manages a fixed number of test clusters with lazy initialization.
 type pool struct {
-	clusters []*FunctionalTestBase
-	inits    []sync.Once
-	counter  atomic.Int64 // for round-robin (when slots is nil)
-	slots    chan int     // for exclusive access (nil means shared/concurrent access)
+	slots []*clusterSlot
+	next  int
+	mu    sync.Mutex
 
-	// For shared pools: track usage and support teardown/recreate after maxUsage tests
-	usageCounts []atomic.Int64
-	clusterMu   []sync.Mutex // protects cluster teardown/recreate
-	maxUsage    int          // max tests per cluster before recreate (0 = unlimited)
-	createFn    func() *FunctionalTestBase
+	available chan *clusterSlot // for exclusive access (nil means shared/concurrent access)
 }
 
-func newPool(size int, exclusive bool) *pool {
+type clusterSlot struct {
+	idx int
+	mu  sync.Mutex
+
+	cluster *FunctionalTestBase
+
+	// For shared pools: track usage and support teardown/recreate after maxUsage tests
+	usage    int
+	active   int
+	maxUsage int // max tests per cluster before recreate (0 = unlimited)
+}
+
+func newPool(size int, exclusive bool, maxUsage int) *pool {
 	p := &pool{
-		clusters:    make([]*FunctionalTestBase, size),
-		inits:       make([]sync.Once, size),
-		usageCounts: make([]atomic.Int64, size),
-		clusterMu:   make([]sync.Mutex, size),
+		slots: make([]*clusterSlot, size),
+	}
+	for i := range size {
+		p.slots[i] = &clusterSlot{
+			idx:      i,
+			maxUsage: maxUsage,
+		}
 	}
 	if exclusive {
-		p.slots = make(chan int, size)
-		for i := range size {
-			p.slots <- i
+		p.available = make(chan *clusterSlot, size)
+		for _, slot := range p.slots {
+			p.available <- slot
 		}
 	}
 	return p
@@ -87,64 +90,80 @@ func newPool(size int, exclusive bool) *pool {
 // For shared pools, uses round-robin.
 // Both pool types may recreate clusters after maxUsage tests (in CI).
 func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	var idx int
-	if p.slots != nil {
-		idx = <-p.slots
-		t.Cleanup(func() { p.slots <- idx })
-	} else {
-		idx = int(p.counter.Add(1)-1) % len(p.clusters)
-	}
-
-	// Check if we need to recreate the cluster after maxUsage tests
-	if p.maxUsage > 0 {
-		usage := p.usageCounts[idx].Add(1)
-		if usage > int64(p.maxUsage) {
-			p.clusterMu[idx].Lock()
-			// Double-check after acquiring lock
-			if p.usageCounts[idx].Load() > int64(p.maxUsage) && p.clusters[idx] != nil {
-				if err := p.clusters[idx].tearDownTestCluster(); err != nil {
-					t.Logf("Failed to tear down cluster %d: %v", idx, err)
-				}
-				p.clusters[idx] = createCluster()
-				p.usageCounts[idx].Store(1) // Reset to 1 (this test counts)
-			}
-			p.clusterMu[idx].Unlock()
-		}
-	}
-
-	// Lazy initialization for first use
-	p.inits[idx].Do(func() {
-		p.clusters[idx] = createCluster()
-	})
-
-	cluster := p.clusters[idx]
-
-	// Swap out poisoned clusters. The poisoned cluster will tear itself down during its last
-	// test run's cleanup.
-	if cluster.Poisoned() {
-		p.clusterMu[idx].Lock()
-		if p.clusters[idx].Poisoned() {
-			p.clusters[idx] = createCluster()
-			if p.maxUsage > 0 {
-				p.usageCounts[idx].Store(1)
-			}
-		}
-		cluster = p.clusters[idx]
-		p.clusterMu[idx].Unlock()
-	}
-
-	cluster.SetT(t)
+	slot := p.acquireSlot(t)
+	cluster := slot.acquire(t, createCluster)
+	t.Cleanup(slot.release)
 	return cluster
 }
 
 // acquireSlot gets exclusive access to a slot without using a pooled cluster.
 // Used when a fresh cluster is needed (e.g., custom dynamic config).
-func (p *pool) acquireSlot(t *testing.T) {
-	if p.slots == nil {
+func (p *pool) acquireSlot(t *testing.T) *clusterSlot {
+	if p.available != nil {
+		slot := <-p.available
+		t.Cleanup(func() { p.available <- slot })
+		return slot
+	}
+
+	p.mu.Lock()
+	slot := p.slots[p.next]
+	p.next = (p.next + 1) % len(p.slots)
+	p.mu.Unlock()
+	return slot
+}
+
+func (s *clusterSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Lazy initialization for first use
+	if s.cluster == nil {
+		s.cluster = createCluster()
+	}
+	cluster := s.cluster
+
+	// Swap out poisoned clusters. The poisoned cluster will tear itself down during its last
+	// test run's cleanup.
+	if cluster.Poisoned() {
+		if s.active == 0 {
+			s.tearDownLocked(t)
+		}
+		s.cluster = createCluster()
+		s.usage = 0
+		cluster = s.cluster
+	}
+
+	// Check if we need to recreate the cluster after maxUsage tests
+	if s.maxUsage > 0 && s.usage >= s.maxUsage && s.active == 0 {
+		s.tearDownLocked(t)
+		s.cluster = createCluster()
+		cluster = s.cluster
+	}
+
+	s.usage++
+	s.active++
+	cluster.SetT(t)
+	return cluster
+}
+
+func (s *clusterSlot) release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active == 0 {
+		panic("release called without matching acquire")
+	}
+	s.active--
+}
+
+func (s *clusterSlot) tearDownLocked(t *testing.T) {
+	if s.cluster == nil {
 		return
 	}
-	idx := <-p.slots
-	t.Cleanup(func() { p.slots <- idx })
+	if err := s.cluster.tearDownTestCluster(); err != nil {
+		t.Logf("Failed to tear down cluster %d: %v", s.idx, err)
+	}
+	s.cluster = nil
+	s.usage = 0
 }
 
 type clusterPool struct {
