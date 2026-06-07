@@ -83,3 +83,29 @@ func TestClusterSlotMaxUsageWaitsForActiveLeases(t *testing.T) {
 	require.NotSame(t, first, third)
 	require.Equal(t, 2, created)
 }
+
+func TestClusterSlotPoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
+	slot := &clusterSlot{maxUsage: 1}
+	var created int
+	createCluster := func() *FunctionalTestBase {
+		created++
+		return &FunctionalTestBase{
+			t: &sharedClusterT{name: t.Name()},
+		}
+	}
+
+	first := slot.acquire(t, createCluster)
+	first.t.failed.Store(true)
+
+	second := slot.acquire(t, createCluster)
+
+	require.NotSame(t, first, second)
+	require.Same(t, second, slot.cluster)
+	require.Equal(t, 2, created)
+	require.Equal(t, 2, slot.active)
+	require.Equal(t, 1, slot.usage)
+
+	slot.release()
+	slot.release()
+	require.Equal(t, 0, slot.active)
+}
