@@ -54,6 +54,7 @@ type pool struct {
 	available chan *clusterSlot // for exclusive access (nil means shared/concurrent access)
 }
 
+// clusterSlot owns one pooled cluster and its lease state.
 type clusterSlot struct {
 	idx int
 	mu  sync.Mutex
@@ -167,12 +168,14 @@ func (s *clusterSlot) tearDownLocked(t *testing.T) {
 	s.usage = 0
 }
 
+// clusterPool routes tests to shared, dedicated, or suite-scoped clusters.
 type clusterPool struct {
 	shared      *pool
 	dedicated   *pool
 	suiteScoped sync.Map
 }
 
+// suiteScopedCluster owns one lazily created legacy suite cluster.
 type suiteScopedCluster struct {
 	once    sync.Once
 	cluster *FunctionalTestBase
