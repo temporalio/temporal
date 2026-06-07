@@ -4,21 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
-
-const (
-	maxPollInterval          = time.Second
-	pollBackoffMultiplierNum = 3
-	pollBackoffMultiplierDen = 2
-	pollJitterDivisor        = 10
-)
-
-var pollJitterCounter atomic.Uint64
 
 // softDeadlockTimeoutEnvVar overrides the default soft-deadlock timeout.
 // Parsed as a Go duration, e.g. "10s".
@@ -117,7 +107,6 @@ func run(
 	defer awaitCancel()
 
 	report := timeoutReport{effectiveTimeout: effectiveTimeout}
-	pollBackoff := newPollBackoff(cfg.pollInterval)
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
@@ -135,11 +124,8 @@ func run(
 		t := &T{tb: tb, ctx: attemptCtx}
 
 		// Run attempt.
-		attemptStart := time.Now()
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
-		attemptDuration := time.Since(attemptStart)
 		attemptCancel()
-		report.stats.recordAttempt(report.attempts, attemptDuration, len(t.errors) > 0, res.stopped, res.deadlocked)
 		if res.panicVal != nil {
 			panic(res.panicVal) // propagate to caller
 		}
@@ -179,7 +165,7 @@ func run(
 
 		// Our deadline expired.
 		if deadlineReached(deadline) {
-			report.reportTimeout(tb, parentCtx.Err(), awaitCtx.Err(), time.Until(deadline), funcName, cfg.timeoutMsg)
+			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
 			return
 		}
 
@@ -188,8 +174,8 @@ func run(
 			return
 		}
 
-		// Wait using backoff, or until context is canceled or deadline is reached.
-		report.stats.recordSleep(sleep(awaitCtx, deadline, pollBackoff.next()))
+		// Wait for pollInterval, or context is canceled or deadline is reached.
+		sleep(awaitCtx, deadline, cfg.pollInterval)
 	}
 }
 
@@ -279,54 +265,12 @@ func runAttempt(
 	}
 }
 
-type pollBackoff struct {
-	current time.Duration
-	max     time.Duration
-}
-
-func newPollBackoff(initial time.Duration) pollBackoff {
-	maxInterval := maxPollInterval
-	if initial > maxInterval {
-		maxInterval = initial
-	}
-	return pollBackoff{
-		current: initial,
-		max:     maxInterval,
-	}
-}
-
-func (b *pollBackoff) next() time.Duration {
-	delay := addJitter(b.current, b.max)
-	if b.current < b.max {
-		b.current = min(b.current*pollBackoffMultiplierNum/pollBackoffMultiplierDen, b.max)
-	}
-	return delay
-}
-
-func addJitter(base, maxDelay time.Duration) time.Duration {
-	if base <= 0 {
-		return base
-	}
-	jitterRange := base / pollJitterDivisor
-	if jitterRange <= 0 {
-		return base
-	}
-	seed := uint64(time.Now().UnixNano()) ^ pollJitterCounter.Add(0x9e3779b97f4a7c15)
-	jitter := time.Duration(seed%uint64(2*jitterRange+1)) - jitterRange
-	delay := base + jitter
-	if delay <= 0 {
-		return base
-	}
-	return min(delay, maxDelay)
-}
-
-func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) time.Duration {
+func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {
 	remaining := time.Until(deadline)
 	if remaining < pollInterval {
 		pollInterval = remaining
 	}
 
-	start := time.Now()
 	timer := time.NewTimer(pollInterval)
 	defer timer.Stop()
 
@@ -334,7 +278,6 @@ func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) 
 	case <-ctx.Done():
 	case <-timer.C:
 	}
-	return time.Since(start)
 }
 
 func deadlineReached(deadline time.Time) bool {
