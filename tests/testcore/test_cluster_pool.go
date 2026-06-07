@@ -47,17 +47,16 @@ func init() {
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
 type clusterPool struct {
+	sync.Mutex
 	allSlots       []*clusterPoolSlot
 	availableSlots chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
-
-	lock        sync.Mutex // protects nextSlotIdx
-	nextSlotIdx int
+	nextSlotIdx    int
 }
 
 // clusterPoolSlot owns one pooled cluster and its lease state.
 type clusterPoolSlot struct {
+	sync.Mutex
 	idx          int
-	lock         sync.Mutex
 	cluster      *FunctionalTestBase
 	activeLeases int // how many tests are currently using this cluster
 	leaseCount   int // how often it has been leased
@@ -103,16 +102,16 @@ func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
 }
 
 func (p *clusterPool) nextSlot() *clusterPoolSlot {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 	slot := p.allSlots[p.nextSlotIdx]
 	p.nextSlotIdx = (p.nextSlotIdx + 1) % len(p.allSlots)
 	return slot
 }
 
 func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	// Lazy initialization for first use
 	if s.cluster == nil {
@@ -145,8 +144,8 @@ func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *Functional
 }
 
 func (s *clusterPoolSlot) release() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	if s.activeLeases == 0 {
 		panic("release called without matching acquire")
 	}
