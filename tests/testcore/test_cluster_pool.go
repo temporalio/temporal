@@ -40,22 +40,22 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:    newPool(sharedSize, false, maxUsage),
-		dedicated: newPool(dedicatedSize, true, maxUsage),
+		shared:    newClusterPool(sharedSize, false, maxUsage),
+		dedicated: newClusterPool(dedicatedSize, true, maxUsage),
 	}
 }
 
-// pool manages a fixed number of test [poolSlot]s.
-type pool struct {
-	slots []*poolSlot
+// clusterPool manages a fixed number of test [clusterPoolSlot]s.
+type clusterPool struct {
+	slots []*clusterPoolSlot
 	next  int
 	mu    sync.Mutex
 
-	available chan *poolSlot // for exclusive access (nil means shared/concurrent access)
+	available chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
 }
 
-// poolSlot owns one pooled cluster and its lease state.
-type poolSlot struct {
+// clusterPoolSlot owns one pooled cluster and its lease state.
+type clusterPoolSlot struct {
 	idx int
 	mu  sync.Mutex
 
@@ -67,18 +67,18 @@ type poolSlot struct {
 	maxUsage int // max tests per cluster before recreate (0 = unlimited)
 }
 
-func newPool(size int, exclusive bool, maxUsage int) *pool {
-	p := &pool{
-		slots: make([]*poolSlot, size),
+func newClusterPool(size int, exclusive bool, maxUsage int) *clusterPool {
+	p := &clusterPool{
+		slots: make([]*clusterPoolSlot, size),
 	}
 	for i := range size {
-		p.slots[i] = &poolSlot{
+		p.slots[i] = &clusterPoolSlot{
 			idx:      i,
 			maxUsage: maxUsage,
 		}
 	}
 	if exclusive {
-		p.available = make(chan *poolSlot, size)
+		p.available = make(chan *clusterPoolSlot, size)
 		for _, slot := range p.slots {
 			p.available <- slot
 		}
@@ -86,18 +86,18 @@ func newPool(size int, exclusive bool, maxUsage int) *pool {
 	return p
 }
 
-// get returns a cluster from the pool, creating it lazily if needed.
+// get returns a cluster from the [clusterPool], creating it lazily if needed.
 // For exclusive pools, blocks until a slot is available and registers cleanup.
 // For shared pools, uses round-robin.
-// Both pool types may recreate idle clusters after maxUsage tests (in CI).
-func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+// Both [clusterPool] variants may recreate idle clusters after maxUsage tests (in CI).
+func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
 	t.Cleanup(slot.release)
 	return cluster
 }
 
-func (p *pool) reserveSlot(t *testing.T) *poolSlot {
+func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
 	if p.available != nil {
 		slot := <-p.available
 		t.Cleanup(func() { p.available <- slot })
@@ -106,7 +106,7 @@ func (p *pool) reserveSlot(t *testing.T) *poolSlot {
 	return p.nextSlot()
 }
 
-func (p *pool) nextSlot() *poolSlot {
+func (p *clusterPool) nextSlot() *clusterPoolSlot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	slot := p.slots[p.next]
@@ -114,7 +114,7 @@ func (p *pool) nextSlot() *poolSlot {
 	return slot
 }
 
-func (s *poolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -148,7 +148,7 @@ func (s *poolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBas
 	return cluster
 }
 
-func (s *poolSlot) release() {
+func (s *clusterPoolSlot) release() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.active == 0 {
@@ -157,7 +157,7 @@ func (s *poolSlot) release() {
 	s.active--
 }
 
-func (s *poolSlot) tearDownLocked(t *testing.T) {
+func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	if s.cluster == nil {
 		return
 	}
@@ -170,8 +170,8 @@ func (s *poolSlot) tearDownLocked(t *testing.T) {
 
 // clusterRouter routes tests to shared, dedicated, or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared      *pool
-	dedicated   *pool
+	shared      *clusterPool
+	dedicated   *clusterPool
 	suiteScoped sync.Map
 }
 
