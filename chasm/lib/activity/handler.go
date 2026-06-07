@@ -3,7 +3,6 @@ package activity
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -73,102 +72,43 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 
-	startFn := func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
-		// Only enforce the per-component cap when we'll actually persist the links —
-		// i.e., when creating a new activity. On returning an existing activity
-		// without attach_links the request.Links field is dropped, so the cap check
-		// is skipped to avoid false rejects. Per-request shape/size/count is already
-		// validated by the frontend (the only caller of this handler).
-		if err := h.linkValidator.ValidateComponentTotal(request.GetNamespace(), 0, len(request.GetLinks())); err != nil {
-			return nil, err
-		}
-		newActivity, err := NewStandaloneActivity(mutableContext, request)
-		if err != nil {
-			return nil, err
-		}
-
-		if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-			if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+	result, err := chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  frontendReq.GetActivityId(),
+		},
+		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
+			// Only enforce the per-component cap when we'll actually persist the links —
+			// i.e., when creating a new activity. On returning an existing activity
+			// without attach_links the request.Links field is dropped, so the cap check
+			// is skipped to avoid false rejects. Per-request shape/size/count is already
+			// validated by the frontend (the only caller of this handler).
+			if err := h.linkValidator.ValidateComponentTotal(request.GetNamespace(), 0, len(request.GetLinks())); err != nil {
 				return nil, err
 			}
-		}
-
-		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		return newActivity, nil
-	}
-
-	cbs := frontendReq.GetCompletionCallbacks()
-	links := frontendReq.GetLinks()
-	onConflict := frontendReq.GetOnConflictOptions()
-	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
-	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
-	requestID := frontendReq.GetRequestId()
-	callbacksAlreadyAttached := func(a *Activity) bool {
-		if len(cbs) == 0 {
-			return false
-		}
-		for idx := range cbs {
-			if _, ok := a.Callbacks[fmt.Sprintf("%s-%d", requestID, idx)]; !ok {
-				return false
+			newActivity, err := NewStandaloneActivity(mutableContext, request)
+			if err != nil {
+				return nil, err
 			}
-		}
-		return true
-	}
-	applyOnConflictOptions := func(a *Activity, ctx chasm.MutableContext) error {
-		if attachCallbacks && !callbacksAlreadyAttached(a) {
-			if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
-				return err
-			}
-		}
-		if attachLinks {
-			if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 
-	executionKey := chasm.ExecutionKey{
-		NamespaceID: req.GetNamespaceId(),
-		BusinessID:  frontendReq.GetActivityId(),
-	}
-	transitionOptions := []chasm.TransitionOption{
+			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+					return nil, err
+				}
+			}
+
+			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			return newActivity, nil
+		},
+		frontendReq,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
-	}
-
-	var result chasm.StartExecutionResult
-	var err error
-	if conflictPolicy == chasm.BusinessIDConflictPolicyUseExisting {
-		updateResult, updateErr := chasm.UpdateWithStartExecution(
-			ctx,
-			executionKey,
-			startFn,
-			func(a *Activity, ctx chasm.MutableContext, _ *workflowservice.StartActivityExecutionRequest) (any, error) {
-				return nil, applyOnConflictOptions(a, ctx)
-			},
-			frontendReq,
-			transitionOptions...,
-		)
-		err = updateErr
-		result = chasm.StartExecutionResult{
-			ExecutionKey: updateResult.ExecutionKey,
-			ExecutionRef: updateResult.ExecutionRef,
-			Created:      updateResult.Created,
-		}
-	} else {
-		result, err = chasm.StartExecution(
-			ctx,
-			executionKey,
-			startFn,
-			frontendReq,
-			transitionOptions...,
-		)
-	}
+	)
 
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
@@ -181,13 +121,29 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
-	if conflictPolicy != chasm.BusinessIDConflictPolicyUseExisting && !result.Created && (attachCallbacks || attachLinks) {
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
+		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				return nil, applyOnConflictOptions(a, ctx)
+				if attachCallbacks {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
 			},
 			nil,
 		)
