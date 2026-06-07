@@ -60,7 +60,7 @@ type clusterSlot struct {
 
 	cluster *FunctionalTestBase
 
-	// For shared pools: track usage and support teardown/recreate after maxUsage tests
+	// Track leases and max-usage recycling under the slot lock.
 	usage    int
 	active   int
 	maxUsage int // max tests per cluster before recreate (0 = unlimited)
@@ -88,7 +88,7 @@ func newPool(size int, exclusive bool, maxUsage int) *pool {
 // get returns a cluster from the pool, creating it lazily if needed.
 // For exclusive pools, blocks until a slot is available and registers cleanup.
 // For shared pools, uses round-robin.
-// Both pool types may recreate clusters after maxUsage tests (in CI).
+// Both pool types may recreate idle clusters after maxUsage tests (in CI).
 func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
@@ -123,8 +123,8 @@ func (s *clusterSlot) acquire(t *testing.T, createCluster func() *FunctionalTest
 	}
 	cluster := s.cluster
 
-	// Swap out poisoned clusters. The poisoned cluster will tear itself down during its last
-	// test run's cleanup.
+	// Swap out poisoned clusters. An active poisoned cluster will tear itself down during its
+	// last test run's cleanup; an idle poisoned cluster can be torn down here.
 	if cluster.Poisoned() {
 		if s.active == 0 {
 			s.tearDownLocked(t)
@@ -134,7 +134,7 @@ func (s *clusterSlot) acquire(t *testing.T, createCluster func() *FunctionalTest
 		cluster = s.cluster
 	}
 
-	// Check if we need to recreate the cluster after maxUsage tests
+	// Recreate idle clusters after maxUsage tests.
 	if s.maxUsage > 0 && s.usage >= s.maxUsage && s.active == 0 {
 		s.tearDownLocked(t)
 		s.cluster = createCluster()
