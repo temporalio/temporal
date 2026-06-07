@@ -6054,10 +6054,53 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 		"outstanding notification should re-fire even when matching is rolled back to v1")
 }
 
-// Scenario: a pinned v1 workflow auto-upgrades to v2 via Continue-As-New, v1 is
-// made current again, then reset-by-build-ID resets the workflow before v2 usage
-// so the reset run resumes on v1.
+// resetByBuildIDMode selects which scenario resetByBuildIDAfterRollbackHelper
+// exercises. The shared setup (v1 → CaN to v2 → rollback to v1) leaves v2's
+// reset point in the current run (canRunID) and v1's reset point in the
+// previous run (runID); each mode picks a different combination of reset
+// target and CurrentRunOnly.
+type resetByBuildIDMode int
+
+const (
+	// Target v2's BuildID. v2's reset point lives in canRunID (current run),
+	// so the batcher resets canRunID directly — no walk-back is needed and
+	// CurrentRunOnly is moot. Same scenario as the original
+	// TestPinnedCaN_ResetByBuildIDAfterRollback.
+	modeResetCurrentRunBuild resetByBuildIDMode = iota
+	// Target v1's BuildID with CurrentRunOnly=false. v1's reset point lives
+	// in runID (previous run), so the batcher walks back and resets runID.
+	modeResetPreviousRunBuild
+	// Target v1's BuildID with CurrentRunOnly=true. The batcher refuses to
+	// walk back, so no run is modified.
+	modeResetBlockedByCurrentRunOnly
+)
+
+// TestPinnedCaN_ResetByBuildIDAfterRollback covers the "reset target is in the
+// current run" path: targeting v2's BuildID resets canRunID directly. See
+// resetByBuildIDAfterRollbackHelper for the shared setup.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
+	s.resetByBuildIDAfterRollbackHelper(modeResetCurrentRunBuild)
+}
+
+// TestPinnedCaN_ResetByPreviousRunBuildID_AllRuns covers the CurrentRunOnly: false
+// path: when the reset point for the targeted build ID lives in a previous run,
+// the batcher walks back and resets that prior run.
+func (s *Versioning3Suite) TestPinnedCaN_ResetByPreviousRunBuildID_AllRuns() {
+	s.resetByBuildIDAfterRollbackHelper(modeResetPreviousRunBuild)
+}
+
+// TestPinnedCaN_ResetByPreviousRunBuildID_CurrentRunOnly covers the
+// CurrentRunOnly: true path: when the reset point for the targeted build ID
+// lives in a previous run, the batcher must refuse to walk back into that run.
+func (s *Versioning3Suite) TestPinnedCaN_ResetByPreviousRunBuildID_CurrentRunOnly() {
+	s.resetByBuildIDAfterRollbackHelper(modeResetBlockedByCurrentRunOnly)
+}
+
+// resetByBuildIDAfterRollbackHelper sets up a pinned workflow that runs on v1,
+// continues as new onto v2, then rolls back to v1 as current — and then issues
+// a batch reset by build ID whose target and CurrentRunOnly flag are chosen by
+// mode. See resetByBuildIDMode for the three scenarios covered.
+func (s *Versioning3Suite) resetByBuildIDAfterRollbackHelper(mode resetByBuildIDMode) {
 	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
 
 	tv1 := env.Tv().WithBuildIDNumber(1)
@@ -6145,6 +6188,18 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 
 	setCurrentVersion(tv1, tv2)
 
+	var targetBuildID string
+	var currentRunOnly bool
+	switch mode {
+	case modeResetCurrentRunBuild:
+		targetBuildID = tv2.BuildID()
+	case modeResetPreviousRunBuild:
+		targetBuildID = tv1.BuildID()
+	case modeResetBlockedByCurrentRunOnly:
+		targetBuildID = tv1.BuildID()
+		currentRunOnly = true
+	}
+
 	jobID := tv1.Any().String()
 	_, err := env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       env.Namespace().String(),
@@ -6154,14 +6209,25 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				Options: &commonpb.ResetOptions{
+					CurrentRunOnly: currentRunOnly,
 					Target: &commonpb.ResetOptions_BuildId{
-						BuildId: tv2.BuildID(),
+						BuildId: targetBuildID,
 					},
 				},
 			},
 		},
 	})
 	s.NoError(err)
+
+	var expectedFailures, expectedCompletes int64
+	switch mode {
+	case modeResetCurrentRunBuild, modeResetPreviousRunBuild:
+		expectedFailures, expectedCompletes = 0, 1
+	case modeResetBlockedByCurrentRunOnly:
+		expectedFailures, expectedCompletes = 1, 0
+	default:
+		s.Fail("unrecognized mode")
+	}
 
 	s.Await(func(s *Versioning3Suite) {
 		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
@@ -6170,8 +6236,35 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 		})
 		s.NoError(err)
 		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
-	}, 20*time.Second, 500*time.Millisecond)
+		s.Equal(expectedFailures, resp.GetFailureOperationCount())
+		s.Equal(expectedCompletes, resp.GetCompleteOperationCount())
+	}, 60*time.Second, 500*time.Millisecond)
 
+	if mode == modeResetBlockedByCurrentRunOnly {
+		// Nothing was reset: the current run is still RUNNING (a successful
+		// walk-back-and-reset would have terminated it), and no new run was
+		// created — the latest run for the workflow ID is still canRunID.
+		canDesc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tv1.WorkflowID(),
+				RunId:      canRunID,
+			},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, canDesc.GetWorkflowExecutionInfo().GetStatus())
+
+		latestDesc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
+		})
+		s.NoError(err)
+		s.Equal(canRunID, latestDesc.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+		return
+	}
+
+	// A reset run was produced. Poll its first WFT on tv1 (current after
+	// rollback) and confirm it is a fresh run.
 	var resetRunID string
 	s.pollWftAndHandle(env, tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -6182,16 +6275,37 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 			return respondCompleteWorkflow(tv1, vbPinned), nil
 		})
 
-	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: tv1.WorkflowID(),
-			RunId:      canRunID,
-		},
-	})
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
+	switch mode {
+	case modeResetCurrentRunBuild:
+		// Reset hit canRunID directly, so canRunID is now TERMINATED.
+		s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tv1.WorkflowID(),
+				RunId:      canRunID,
+			},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
+	case modeResetPreviousRunBuild:
+		// Reset walked back to runID. The new run's WorkflowExecutionStarted
+		// event preserves the reset target's OriginalExecutionRunId, which
+		// equals runID — proof that the reset hit the previous run rather
+		// than canRunID.
+		history, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       env.Namespace().String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID(), RunId: resetRunID},
+			MaximumPageSize: 1,
+		})
+		s.NoError(err)
+		s.NotEmpty(history.GetHistory().GetEvents())
+		startedAttrs := history.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes()
+		s.NotNil(startedAttrs)
+		s.Equal(runID, startedAttrs.GetOriginalExecutionRunId())
+	default:
+		s.Fail("unrecognized mode")
+	}
 }
 
 // TestOverride_SuppressesTargetVersionChangedSignal tests that a versioning override
