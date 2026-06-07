@@ -58,9 +58,9 @@ func TestPool_MaxUsageRecyclesOnNextAcquire(t *testing.T) {
 	})
 }
 
-func TestClusterSlot_MaxUsageWaitsForActiveLeases(t *testing.T) {
+func TestPoolSlot_MaxUsageWaitsForActiveLeases(t *testing.T) {
 	// maxUsage is already reached after the first acquire, but the slot is still active.
-	slot := &clusterSlot{maxUsage: 1}
+	slot := &poolSlot{maxUsage: 1}
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++
@@ -92,9 +92,9 @@ func TestClusterSlot_MaxUsageWaitsForActiveLeases(t *testing.T) {
 	require.Equal(t, 2, created)
 }
 
-func TestClusterSlot_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
+func TestPoolSlot_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// Use maxUsage 1 to prove poison replacement wins over max-usage recycling.
-	slot := &clusterSlot{maxUsage: 1}
+	slot := &poolSlot{maxUsage: 1}
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++

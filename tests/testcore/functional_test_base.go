@@ -285,7 +285,7 @@ func (s *FunctionalTestBase) TearDownSuite() {
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	// Reserve a slot from the dedicated test cluster pool.
-	testClusterPool.dedicated.reserveSlot(s.T())
+	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 }
 

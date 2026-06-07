@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var testClusterPool *clusterPool
+var testClusterRouter *clusterRouter
 
 func init() {
 	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
@@ -39,23 +39,23 @@ func init() {
 		maxUsage = 50
 	}
 
-	testClusterPool = &clusterPool{
+	testClusterRouter = &clusterRouter{
 		shared:    newPool(sharedSize, false, maxUsage),
 		dedicated: newPool(dedicatedSize, true, maxUsage),
 	}
 }
 
-// pool manages a fixed number of test [clusterSlot]s.
+// pool manages a fixed number of test [poolSlot]s.
 type pool struct {
-	slots []*clusterSlot
+	slots []*poolSlot
 	next  int
 	mu    sync.Mutex
 
-	available chan *clusterSlot // for exclusive access (nil means shared/concurrent access)
+	available chan *poolSlot // for exclusive access (nil means shared/concurrent access)
 }
 
-// clusterSlot owns one pooled cluster and its lease state.
-type clusterSlot struct {
+// poolSlot owns one pooled cluster and its lease state.
+type poolSlot struct {
 	idx int
 	mu  sync.Mutex
 
@@ -69,16 +69,16 @@ type clusterSlot struct {
 
 func newPool(size int, exclusive bool, maxUsage int) *pool {
 	p := &pool{
-		slots: make([]*clusterSlot, size),
+		slots: make([]*poolSlot, size),
 	}
 	for i := range size {
-		p.slots[i] = &clusterSlot{
+		p.slots[i] = &poolSlot{
 			idx:      i,
 			maxUsage: maxUsage,
 		}
 	}
 	if exclusive {
-		p.available = make(chan *clusterSlot, size)
+		p.available = make(chan *poolSlot, size)
 		for _, slot := range p.slots {
 			p.available <- slot
 		}
@@ -97,7 +97,7 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	return cluster
 }
 
-func (p *pool) reserveSlot(t *testing.T) *clusterSlot {
+func (p *pool) reserveSlot(t *testing.T) *poolSlot {
 	if p.available != nil {
 		slot := <-p.available
 		t.Cleanup(func() { p.available <- slot })
@@ -106,7 +106,7 @@ func (p *pool) reserveSlot(t *testing.T) *clusterSlot {
 	return p.nextSlot()
 }
 
-func (p *pool) nextSlot() *clusterSlot {
+func (p *pool) nextSlot() *poolSlot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	slot := p.slots[p.next]
@@ -114,7 +114,7 @@ func (p *pool) nextSlot() *clusterSlot {
 	return slot
 }
 
-func (s *clusterSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+func (s *poolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -148,7 +148,7 @@ func (s *clusterSlot) acquire(t *testing.T, createCluster func() *FunctionalTest
 	return cluster
 }
 
-func (s *clusterSlot) release() {
+func (s *poolSlot) release() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.active == 0 {
@@ -157,7 +157,7 @@ func (s *clusterSlot) release() {
 	s.active--
 }
 
-func (s *clusterSlot) tearDownLocked(t *testing.T) {
+func (s *poolSlot) tearDownLocked(t *testing.T) {
 	if s.cluster == nil {
 		return
 	}
@@ -168,8 +168,8 @@ func (s *clusterSlot) tearDownLocked(t *testing.T) {
 	s.usage = 0
 }
 
-// clusterPool routes tests to shared, dedicated, or [suiteScopedCluster]s.
-type clusterPool struct {
+// clusterRouter routes tests to shared, dedicated, or [suiteScopedCluster]s.
+type clusterRouter struct {
 	shared      *pool
 	dedicated   *pool
 	suiteScoped sync.Map
@@ -192,10 +192,10 @@ func UseSuiteScopedCluster(t *testing.T) {
 	if t.Name() != rootName {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterPool.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 
 	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterPool.suiteScoped.Load(rootName)
+		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
 		if ok {
 			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 			if suiteCluster.cluster != nil {
@@ -204,11 +204,11 @@ func UseSuiteScopedCluster(t *testing.T) {
 				}
 			}
 		}
-		testClusterPool.suiteScoped.Delete(rootName)
+		testClusterRouter.suiteScoped.Delete(rootName)
 	})
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
 	defer func() {
 		tb.RegisterTest(t)
 	}()
@@ -221,13 +221,13 @@ func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynami
 	return p.getShared(t)
 }
 
-func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
+func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, nil, true, nil)
 	})
 }
 
-func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
+func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if _, ok := p.suiteScoped.Load(rootName); !ok {
 		return nil
@@ -242,7 +242,7 @@ func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	return suiteCluster.cluster
 }
 
-func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func (p *clusterRouter) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.reserveSlot(t)
@@ -264,7 +264,7 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 	})
 }
 
-func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
