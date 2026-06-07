@@ -205,7 +205,9 @@ func UseSuiteScopedCluster(t *testing.T) {
 
 func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
 	defer func() {
-		tb.RegisterTest(t)
+		if tb != nil {
+			tb.RegisterTest(t)
+		}
 	}()
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, dynamicConfig, clusterOpts)
