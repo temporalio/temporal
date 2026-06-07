@@ -58,7 +58,7 @@ type SignalWithStartFromWorkflowTestSuite struct {
 }
 
 func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &SignalWithStartFromWorkflowTestSuite{})
+	parallelsuite.RunLegacySequential(t, &SignalWithStartFromWorkflowTestSuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config required to exercise

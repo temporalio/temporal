@@ -62,7 +62,7 @@ type ActivityAPIUpdateClientTestSuite struct {
 }
 
 func TestActivityAPIUpdateClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIUpdateClientTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ActivityAPIUpdateClientTestSuite{})
 }
 
 func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInterval() {

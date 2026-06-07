@@ -48,7 +48,7 @@ type HttpApiTestSuite struct {
 }
 
 func TestHttpApiTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &HttpApiTestSuite{})
+	parallelsuite.RunLegacySequential(t, &HttpApiTestSuite{})
 }
 
 func (s *HttpApiTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

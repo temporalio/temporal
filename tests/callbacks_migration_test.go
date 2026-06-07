@@ -26,7 +26,7 @@ type CallbacksMigrationSuite struct {
 }
 
 func TestCallbacksMigrationSuite(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksMigrationSuite{})
+	parallelsuite.RunLegacySequential(t, &CallbacksMigrationSuite{})
 }
 
 func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {

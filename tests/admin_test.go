@@ -24,11 +24,11 @@ type AdminTestSuite struct {
 }
 
 func TestAdminRebuildMutableState_ChasmDisabled(t *testing.T) {
-	parallelsuite.Run(t, &AdminTestSuite{}, false)
+	parallelsuite.RunLegacySequential(t, &AdminTestSuite{}, false)
 }
 
 func TestAdminRebuildMutableState_ChasmEnabled(t *testing.T) {
-	parallelsuite.Run(t, &AdminTestSuite{}, true)
+	parallelsuite.RunLegacySequential(t, &AdminTestSuite{}, true)
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {

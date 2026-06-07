@@ -51,7 +51,7 @@ type ActivityApiResetClientTestSuite struct {
 }
 
 func TestActivityApiResetClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ActivityApiResetClientTestSuite{})
 }
 
 func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions, retryPolicy *temporal.RetryPolicy) WorkflowFunction {

@@ -53,7 +53,7 @@ type TaskQueueStatsSuite struct {
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	parallelsuite.Run(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
+	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) {
@@ -139,7 +139,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMa
 func (s *TaskQueueStatsSuite) TestVersioningSuite(usePriMatcher bool) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
-			parallelsuite.Run(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior)
+			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior)
 		})
 	}
 }

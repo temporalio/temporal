@@ -32,7 +32,7 @@ type RawHistorySuite struct {
 }
 
 func TestRawHistorySuite(t *testing.T) {
-	parallelsuite.Run(t, &RawHistorySuite{})
+	parallelsuite.RunLegacySequential(t, &RawHistorySuite{})
 }
 
 type GetHistorySuite struct {
@@ -40,11 +40,11 @@ type GetHistorySuite struct {
 }
 
 func TestGetHistorySuite_DisableTransitionHistory(t *testing.T) {
-	parallelsuite.Run(t, &GetHistorySuite{}, false)
+	parallelsuite.RunLegacySequential(t, &GetHistorySuite{}, false)
 }
 
 func TestGetHistorySuite_EnableTransitionHistory(t *testing.T) {
-	parallelsuite.Run(t, &GetHistorySuite{}, true)
+	parallelsuite.RunLegacySequential(t, &GetHistorySuite{}, true)
 }
 
 func (s *GetHistorySuite) newTestEnv(enableTransitionHistory bool, opts ...testcore.TestOption) *testcore.TestEnv {

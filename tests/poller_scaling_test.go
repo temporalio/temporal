@@ -30,7 +30,7 @@ type PollerScalingIntegSuite struct {
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &PollerScalingIntegSuite{})
+	parallelsuite.RunLegacySequential(t, &PollerScalingIntegSuite{})
 }
 
 func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {

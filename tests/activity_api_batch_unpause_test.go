@@ -31,7 +31,7 @@ type ActivityApiBatchUnpauseClientTestSuite struct {
 }
 
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityApiBatchUnpauseClientTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ActivityApiBatchUnpauseClientTestSuite{})
 }
 
 type internalTestWorkflow struct {

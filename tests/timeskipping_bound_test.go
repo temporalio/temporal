@@ -27,7 +27,7 @@ type TimeSkippingBoundFunctionalSuite struct {
 }
 
 func TestTimeSkippingBoundFunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &TimeSkippingBoundFunctionalSuite{})
+	parallelsuite.RunLegacySequential(t, &TimeSkippingBoundFunctionalSuite{})
 }
 
 func (s *TimeSkippingBoundFunctionalSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {

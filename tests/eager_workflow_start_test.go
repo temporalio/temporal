@@ -27,7 +27,7 @@ type EagerWorkflowTestSuite struct {
 }
 
 func TestEagerWorkflowTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &EagerWorkflowTestSuite{})
+	parallelsuite.RunLegacySequential(t, &EagerWorkflowTestSuite{})
 }
 
 func (s *EagerWorkflowTestSuite) defaultWorkflowID() string {

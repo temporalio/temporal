@@ -31,7 +31,7 @@ type WorkflowFailuresSuite struct {
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowFailuresSuite{})
+	parallelsuite.RunLegacySequential(t, &WorkflowFailuresSuite{})
 }
 
 func (suite *WorkflowFailuresSuite) TestWorkflowTimeout() {

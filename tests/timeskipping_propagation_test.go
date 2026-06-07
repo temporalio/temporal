@@ -83,7 +83,7 @@ type TimeSkippingPropagationTestSuite struct {
 }
 
 func TestTimeSkippingPropagationTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &TimeSkippingPropagationTestSuite{})
+	parallelsuite.RunLegacySequential(t, &TimeSkippingPropagationTestSuite{})
 }
 
 // TestTSPInChildWf_Basic exercises end-to-end

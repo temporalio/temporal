@@ -27,7 +27,7 @@ type WorkflowAliasSearchAttributeTestSuite struct {
 }
 
 func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowAliasSearchAttributeTestSuite{})
+	parallelsuite.RunLegacySequential(t, &WorkflowAliasSearchAttributeTestSuite{})
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

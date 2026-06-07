@@ -27,7 +27,7 @@ type CancelWorkflowSuite struct {
 }
 
 func TestCancelWorkflowSuite(t *testing.T) {
-	parallelsuite.Run(t, &CancelWorkflowSuite{})
+	parallelsuite.RunLegacySequential(t, &CancelWorkflowSuite{})
 }
 
 func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {

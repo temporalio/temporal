@@ -12,7 +12,7 @@ type TestEnvSuite struct {
 }
 
 func TestTestEnvSuite(t *testing.T) {
-	parallelsuite.Run(t, &TestEnvSuite{})
+	parallelsuite.RunLegacySequential(t, &TestEnvSuite{})
 }
 
 func (s *TestEnvSuite) TestDedicatedClusterGuard_NoErrorWithoutExplicitRequest() {

@@ -214,6 +214,10 @@ linters:
         text: "assert\\.CollectT"
         linters:
           - forbidigo
+      - path: tests/.+_test\.go$
+        text: "RunLegacySequential is deprecated"
+        linters:
+          - staticcheck
       - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo

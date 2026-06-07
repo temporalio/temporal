@@ -39,7 +39,7 @@ type NexusStandaloneTestSuite struct {
 }
 
 func TestNexusStandaloneTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &NexusStandaloneTestSuite{})
+	parallelsuite.RunLegacySequential(t, &NexusStandaloneTestSuite{})
 }
 
 func (s *NexusStandaloneTestSuite) newTestEnv(opts ...testcore.TestOption) *NexusTestEnv {

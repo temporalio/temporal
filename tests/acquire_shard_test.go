@@ -22,7 +22,7 @@ type AcquireShardSuite struct {
 }
 
 func TestAcquireShardSuite(t *testing.T) {
-	parallelsuite.Run(t, &AcquireShardSuite{})
+	parallelsuite.RunLegacySequential(t, &AcquireShardSuite{})
 }
 
 // logRecord represents a call to Info or Error.

@@ -32,7 +32,7 @@ type NexusWorkflowUpdateTestSuite struct {
 }
 
 func TestNexusWorkflowUpdateTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &NexusWorkflowUpdateTestSuite{})
+	parallelsuite.RunLegacySequential(t, &NexusWorkflowUpdateTestSuite{})
 }
 
 // updateNexusTestConfig holds configuration for workflow update + nexus integration tests.

@@ -90,7 +90,7 @@ type standaloneActivityTestSuite struct {
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &standaloneActivityTestSuite{})
+	parallelsuite.RunLegacySequential(t, &standaloneActivityTestSuite{})
 }
 
 type standaloneActivityEnv struct {

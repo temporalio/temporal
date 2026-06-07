@@ -33,7 +33,7 @@ type ContinueAsNewTestSuite struct {
 }
 
 func TestContinueAsNewTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ContinueAsNewTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ContinueAsNewTestSuite{})
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {

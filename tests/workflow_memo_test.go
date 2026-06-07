@@ -28,7 +28,7 @@ type WorkflowMemoTestSuite struct {
 }
 
 func TestWorkflowMemoTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowMemoTestSuite{})
+	parallelsuite.RunLegacySequential(t, &WorkflowMemoTestSuite{})
 }
 
 type RunIDGetter interface {

@@ -17,7 +17,7 @@ type PrematureEosTestSuite struct {
 }
 
 func TestPrematureEosTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &PrematureEosTestSuite{})
+	parallelsuite.RunLegacySequential(t, &PrematureEosTestSuite{})
 }
 
 // Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination demonstrates the

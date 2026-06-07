@@ -25,7 +25,7 @@ type (
 )
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
-	parallelsuite.Run(t, &PurgeDLQTasksSuite{})
+	parallelsuite.RunLegacySequential(t, &PurgeDLQTasksSuite{})
 }
 
 func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {

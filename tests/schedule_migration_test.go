@@ -42,7 +42,7 @@ type ScheduleMigrationTestSuite struct {
 }
 
 func TestScheduleMigrationTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleMigrationTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ScheduleMigrationTestSuite{})
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {

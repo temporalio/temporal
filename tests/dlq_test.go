@@ -73,7 +73,7 @@ type (
 )
 
 func TestDLQSuite(t *testing.T) {
-	parallelsuite.Run(t, &DLQSuite{})
+	parallelsuite.RunLegacySequential(t, &DLQSuite{})
 }
 
 func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {

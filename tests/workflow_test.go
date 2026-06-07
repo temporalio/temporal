@@ -41,7 +41,7 @@ type WorkflowTestSuite struct {
 }
 
 func TestWorkflowTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkflowTestSuite{})
+	parallelsuite.RunLegacySequential(t, &WorkflowTestSuite{})
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution() {

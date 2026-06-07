@@ -44,11 +44,11 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuiteHSM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{})
+	parallelsuite.RunLegacySequential(t, &CallbacksSuite{}, []testcore.TestOption{})
 }
 
 func TestCallbacksSuiteCHASM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+	parallelsuite.RunLegacySequential(t, &CallbacksSuite{}, []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 	})

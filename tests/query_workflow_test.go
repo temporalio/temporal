@@ -36,7 +36,7 @@ type QueryWorkflowSuite struct {
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {
-	parallelsuite.Run(t, &QueryWorkflowSuite{})
+	parallelsuite.RunLegacySequential(t, &QueryWorkflowSuite{})
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {

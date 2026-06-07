@@ -39,7 +39,7 @@ type ResetWorkflowTestSuite struct {
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ResetWorkflowTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ResetWorkflowTestSuite{})
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow() {

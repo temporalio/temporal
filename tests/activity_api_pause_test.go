@@ -25,7 +25,7 @@ type ActivityAPIPauseClientTestSuite struct {
 }
 
 func TestActivityAPIPauseClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIPauseClientTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ActivityAPIPauseClientTestSuite{})
 }
 
 func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {

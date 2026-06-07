@@ -21,7 +21,7 @@ type RelayTaskTestSuite struct {
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &RelayTaskTestSuite{})
+	parallelsuite.RunLegacySequential(t, &RelayTaskTestSuite{})
 }
 
 func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {

@@ -13,7 +13,7 @@ type MetricCaptureSuite struct {
 }
 
 func TestMetricCaptureSuite(t *testing.T) {
-	parallelsuite.Run(t, &MetricCaptureSuite{})
+	parallelsuite.RunLegacySequential(t, &MetricCaptureSuite{})
 }
 
 func (s *MetricCaptureSuite) TestNamespaceMetricCapture() {

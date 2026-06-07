@@ -26,7 +26,7 @@ type ActivityAPIBatchResetClientTestSuite struct {
 }
 
 func TestActivityAPIBatchResetClientTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ActivityAPIBatchResetClientTestSuite{})
+	parallelsuite.RunLegacySequential(t, &ActivityAPIBatchResetClientTestSuite{})
 }
 
 func newBatchResetEnv(t *testing.T) *testcore.TestEnv {
