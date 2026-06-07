@@ -34,14 +34,14 @@ func init() {
 
 	// In CI, recreate clusters after 50 tests to prevent resource accumulation.
 	// Locally, clusters are reused indefinitely for faster iteration.
-	var maxUsage int
+	var maxLeases int
 	if os.Getenv("CI") != "" {
-		maxUsage = 50
+		maxLeases = 50
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:    newClusterPool(sharedSize, false, maxUsage),
-		dedicated: newClusterPool(dedicatedSize, true, maxUsage),
+		shared:    newClusterPool(sharedSize, false, maxLeases),
+		dedicated: newClusterPool(dedicatedSize, true, maxLeases),
 	}
 }
 
@@ -61,20 +61,20 @@ type clusterPoolSlot struct {
 
 	cluster *FunctionalTestBase
 
-	// Track leases and max-usage recycling under the slot lock.
-	useCount     int
+	// Track leases and lease-limit recycling under the slot lock.
+	leaseCount   int
 	activeLeases int
-	maxUsage     int // max tests per cluster before recreate (0 = unlimited)
+	maxLeases    int // max tests per cluster before recreate (0 = unlimited)
 }
 
-func newClusterPool(size int, exclusive bool, maxUsage int) *clusterPool {
+func newClusterPool(size int, exclusive bool, maxLeases int) *clusterPool {
 	p := &clusterPool{
 		slots: make([]*clusterPoolSlot, size),
 	}
 	for i := range size {
 		p.slots[i] = &clusterPoolSlot{
-			idx:      i,
-			maxUsage: maxUsage,
+			idx:       i,
+			maxLeases: maxLeases,
 		}
 	}
 	if exclusive {
@@ -130,18 +130,18 @@ func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *Functional
 			s.tearDownLocked(t)
 		}
 		s.cluster = createCluster()
-		s.useCount = 0
+		s.leaseCount = 0
 		cluster = s.cluster
 	}
 
-	// Recreate idle clusters after maxUsage tests.
-	if s.maxUsage > 0 && s.useCount >= s.maxUsage && s.activeLeases == 0 {
+	// Recreate idle clusters after the lease limit is reached.
+	if s.maxLeases > 0 && s.leaseCount >= s.maxLeases && s.activeLeases == 0 {
 		s.tearDownLocked(t)
 		s.cluster = createCluster()
 		cluster = s.cluster
 	}
 
-	s.useCount++
+	s.leaseCount++
 	s.activeLeases++
 	cluster.SetT(t)
 	return cluster
@@ -164,7 +164,7 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 		t.Logf("Failed to tear down cluster %d: %v", s.idx, err)
 	}
 	s.cluster = nil
-	s.useCount = 0
+	s.leaseCount = 0
 }
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
