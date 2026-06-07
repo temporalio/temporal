@@ -478,7 +478,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(c.internalServiceDCRedirectionPolicy),
+			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -631,7 +631,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(c.internalServiceDCRedirectionPolicy),
+			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -677,10 +677,6 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
-}
-
-func (c *TemporalImpl) internalServiceDCRedirectionPolicy() config.DCRedirectionPolicy {
-	return config.DCRedirectionPolicy{}
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {
@@ -772,7 +768,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 				RPC: config.RPC{},
 			},
 		},
-		DCRedirectionPolicy: c.internalServiceDCRedirectionPolicy(),
+		DCRedirectionPolicy: config.DCRedirectionPolicy{},
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
