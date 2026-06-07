@@ -322,8 +322,10 @@ func (r *runner) writeCurrentReport() {
 	}
 }
 
+// nolint:revive,deep-exit
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
+	var totalTimeoutFired bool
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
 
@@ -339,6 +341,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// flush the XML before the external kill arrives.
 		if ctx.Err() != nil {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
+			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
 			if readErr := currentAttempt.junitReport.read(); readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
@@ -349,6 +352,12 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			}
+			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
+			currentAttempt.junitReport.appendSyntheticFailure(
+				"testrunner.TotalTimeout",
+				failureTypeTimeout,
+				fmt.Sprintf("test-runner total timeout (%s) reached before all tests completed", r.totalTimeout),
+			)
 			break
 		}
 
@@ -434,6 +443,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if currentAttempt.exitErr != nil {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
 		os.Exit(currentAttempt.exitErr.ExitCode())
+	}
+	// Without a non-zero exit, a total-timeout makes CI silently green.
+	if totalTimeoutFired {
+		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
+		os.Exit(1)
 	}
 }
 
