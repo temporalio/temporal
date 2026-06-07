@@ -90,15 +90,13 @@ func newPool(size int, exclusive bool, maxUsage int) *pool {
 // For shared pools, uses round-robin.
 // Both pool types may recreate clusters after maxUsage tests (in CI).
 func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	slot := p.acquireSlot(t)
+	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
 	t.Cleanup(slot.release)
 	return cluster
 }
 
-// acquireSlot gets exclusive access to a slot without using a pooled cluster.
-// Used when a fresh cluster is needed (e.g., custom dynamic config).
-func (p *pool) acquireSlot(t *testing.T) *clusterSlot {
+func (p *pool) reserveSlot(t *testing.T) *clusterSlot {
 	if p.available != nil {
 		slot := <-p.available
 		t.Cleanup(func() { p.available <- slot })
@@ -241,7 +239,7 @@ func (p *clusterPool) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		// Custom config or fx options require a fresh cluster (can't reuse).
-		p.dedicated.acquireSlot(t)
+		p.dedicated.reserveSlot(t)
 		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
 
 		// Register cleanup to tear down the cluster when the test completes.
