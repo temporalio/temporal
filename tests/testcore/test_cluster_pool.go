@@ -89,7 +89,6 @@ func newClusterPool(size int, exclusive bool, maxUsage int) *clusterPool {
 // get returns a cluster from the [clusterPool], creating it lazily if needed.
 // For exclusive pools, blocks until a slot is available and registers cleanup.
 // For shared pools, uses round-robin.
-// Both [clusterPool] variants may recreate idle clusters after maxUsage tests (in CI).
 func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
