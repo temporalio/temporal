@@ -45,7 +45,7 @@ func init() {
 	}
 }
 
-// pool manages a fixed number of test clusters with lazy initialization.
+// pool manages a fixed number of test cluster slots.
 type pool struct {
 	slots []*clusterSlot
 	next  int
@@ -102,11 +102,14 @@ func (p *pool) reserveSlot(t *testing.T) *clusterSlot {
 		t.Cleanup(func() { p.available <- slot })
 		return slot
 	}
+	return p.nextSlot()
+}
 
+func (p *pool) nextSlot() *clusterSlot {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	slot := p.slots[p.next]
 	p.next = (p.next + 1) % len(p.slots)
-	p.mu.Unlock()
 	return slot
 }
 
