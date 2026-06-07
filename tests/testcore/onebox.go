@@ -111,7 +111,6 @@ type (
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		dcRedirectionPolicy              config.DCRedirectionPolicy
-		dcRedirectionPolicyAllServices   bool
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -176,7 +175,6 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DCRedirectionPolicy              config.DCRedirectionPolicy
-		DCRedirectionPolicyAllServices   bool
 		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -219,7 +217,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		dcRedirectionPolicy:              params.DCRedirectionPolicy,
-		dcRedirectionPolicyAllServices:   params.DCRedirectionPolicyAllServices,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -683,9 +680,6 @@ func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName
 }
 
 func (c *TemporalImpl) internalServiceDCRedirectionPolicy() config.DCRedirectionPolicy {
-	if c.dcRedirectionPolicyAllServices {
-		return c.dcRedirectionPolicy
-	}
 	return config.DCRedirectionPolicy{}
 }
 

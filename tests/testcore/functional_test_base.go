@@ -96,7 +96,6 @@ type (
 	TestClusterParams struct {
 		ServiceOptions                  map[primitives.ServiceName][]fx.Option
 		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DCRedirectionPolicyAllServices  bool
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
 		EnableMTLS                      bool
@@ -140,19 +139,6 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.DCRedirectionPolicy = policy
-		params.ServiceOptions[primitives.FrontendService] = append(
-			params.ServiceOptions[primitives.FrontendService],
-			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-				return policy
-			}),
-		)
-	}
-}
-
-func WithDCRedirectionPolicyForAllServices(policy config.DCRedirectionPolicy) TestClusterOption {
-	return func(params *TestClusterParams) {
-		WithDCRedirectionPolicy(policy)(params)
-		params.DCRedirectionPolicyAllServices = true
 	}
 }
 
@@ -331,7 +317,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
 		DCRedirectionPolicy:             params.DCRedirectionPolicy,
-		DCRedirectionPolicyAllServices:  params.DCRedirectionPolicyAllServices,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
 		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,
