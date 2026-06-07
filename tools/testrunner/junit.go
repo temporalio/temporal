@@ -99,11 +99,8 @@ func (j *junitReport) write() error {
 	return nil
 }
 
-// appendSyntheticFailure adds a synthetic JUnit failure entry — useful when the
-// runner needs to surface a failure that the underlying test framework didn't
-// produce a testcase for (e.g. total-timeout that killed gotestsum before it
-// wrote its JUnit). The entry lands in a "testrunner" suite so it's grouped
-// separately from real test failures.
+// appendSyntheticFailure adds a failure entry under a "testrunner" suite for
+// events outside any real testcase (e.g. timeout killing gotestsum pre-write).
 func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
 	tc := junit.Testcase{
 		Name:    name,

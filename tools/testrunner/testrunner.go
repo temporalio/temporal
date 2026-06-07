@@ -322,6 +322,7 @@ func (r *runner) writeCurrentReport() {
 	}
 }
 
+// nolint:revive,deep-exit
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
 	var totalTimeoutFired bool
@@ -351,10 +352,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			}
-			// Surface the timeout as a synthetic failure so it appears in the
-			// merged JUnit (and therefore in the test summary). Without this, a
-			// timeout that killed gotestsum mid-run produced an empty JUnit and
-			// hid every test that hadn't been reported yet — silent green CI.
+			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
 			currentAttempt.junitReport.appendSyntheticFailure(
 				"testrunner.TotalTimeout",
 				failureTypeTimeout,
@@ -446,10 +444,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
 		os.Exit(currentAttempt.exitErr.ExitCode())
 	}
-	// Surface the total-timeout as a non-zero exit. Previously this fell through
-	// to an implicit zero exit, which let CI report green even though gotestsum
-	// was killed before all tests could run (and any failures in the unreported
-	// tail were silently dropped).
+	// Without a non-zero exit, a total-timeout makes CI silently green.
 	if totalTimeoutFired {
 		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
 		os.Exit(1)
