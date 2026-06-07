@@ -419,7 +419,6 @@ func (s *DLQSuite) executeDoomedWorkflow(env *dlqTestEnv) (sdkclient.WorkflowRun
 		}
 		require.Failf(t, "workflow task not found in DLQ", "run ID: %s", run.GetRunID())
 	}, 10*time.Second, 100*time.Millisecond)
-	require.NotNil(s.T(), found, "workflow task not found in DLQ for run ID %s", run.GetRunID())
 
 	return run, found.MessageID
 }
