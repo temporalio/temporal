@@ -30,6 +30,15 @@ runs:
         [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
           CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
+    - name: Require test results
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        if [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -eq 0 ]; then
+          echo "::error::no junit reports found in .testoutput"
+          exit 1
+        fi
+
     - name: Generate test summary
       if: ${{ !cancelled() }}
       shell: bash
