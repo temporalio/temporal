@@ -28,14 +28,6 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_FailsWhenUnused() {
 		`testcore.WithDedicatedCluster() was requested but no dedicated-cluster-only feature was used`)
 }
 
-func (s *TestEnvSuite) TestWithWorkerServiceDoesNotRequireDedicatedCluster() {
-	var opts testOptions
-	WithWorkerService("test")(&opts)
-
-	s.False(opts.dedicatedCluster)
-	s.True(opts.workerService)
-}
-
 func (s *TestEnvSuite) TestDedicatedClusterGuard_NoErrorAfterUse() {
 	guard := newDedicatedClusterGuard(true)
 	guard.record("global hook")

@@ -18,13 +18,9 @@ func TestReportTimeout(t *testing.T) {
 			effectiveTimeout: time.Second,
 			attempts:         3,
 			attemptTimeouts:  2,
-		}.reportTimeout(tb, nil, nil, 0, "Require", "")
+		}.reportTimeout(tb, "Require", "")
 
 		require.Equal(t, strings.Join([]string{
-			"await stats: polls=3 failed_attempts=0 stopped_attempts=0 deadlock_attempts=0 attempt_duration=(none) sleep_duration=(none)",
-			"slowest attempts: (none)",
-			"context at timeout: parent_err=<nil> await_err=<nil> deadline_remaining=0s",
-			"",
 			"Require: condition not satisfied after 1s",
 			"details:",
 			"  attempts         = 3",
@@ -39,13 +35,9 @@ func TestReportTimeout(t *testing.T) {
 			effectiveTimeout: 2 * time.Second,
 			attempts:         4,
 			attemptTimeouts:  1,
-		}.reportTimeout(tb, nil, nil, 0, "Require", "workflow wf-123 not ready")
+		}.reportTimeout(tb, "Require", "workflow wf-123 not ready")
 
 		require.Equal(t, strings.Join([]string{
-			"await stats: polls=4 failed_attempts=0 stopped_attempts=0 deadlock_attempts=0 attempt_duration=(none) sleep_duration=(none)",
-			"slowest attempts: (none)",
-			"context at timeout: parent_err=<nil> await_err=<nil> deadline_remaining=0s",
-			"",
 			"Require: workflow wf-123 not ready (not satisfied after 2s)",
 			"details:",
 			"  attempts         = 4",

@@ -1000,9 +1000,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 	})
 
-	// TODO(quinn, #10569): un-skip after PR #10569 lands — fails deterministically on current main.
 	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {
-		t.Skip("known failure on current main; tracked by PR #10569 (TODO(quinn, #10569) above)")
 		// Reproduces the SAA Nexus-handler scenario: a benign retry of
 		// StartActivityExecution against an already-running activity with
 		// USE_EXISTING and no OnConflictOptions.attach_links must succeed and
