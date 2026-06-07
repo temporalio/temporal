@@ -14,7 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1843,14 +1843,14 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_FiresWhenNoPo
 		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
 	}()
 
-	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
 
 	cancel()
-	s.Require().Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		select {
 		case <-done:
 			return true
@@ -1915,7 +1915,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQ
 		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
 	}()
 
-	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
 	s.ProtoEqual(&deploymentpb.WorkerDeploymentVersion{
@@ -1924,7 +1924,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQ
 	}, calls[0].DeploymentVersion)
 
 	cancel()
-	s.Require().Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		select {
 		case <-done:
 			return true
