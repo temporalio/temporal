@@ -38,6 +38,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.Test
 
 	env := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowFunc)
+	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
 	tv := env.Tv().WithDeploymentSeries("alias-sa").WithBuildID("v1")
 	return env, tv
 }

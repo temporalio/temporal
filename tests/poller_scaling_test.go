@@ -239,6 +239,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
+	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
 	tv := env.Tv().WithDeploymentSeries("poller-scaling").WithBuildID("v1")
 
 	// Queueing up unversioned workflows
