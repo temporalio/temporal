@@ -47,23 +47,21 @@ func init() {
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
 type clusterPool struct {
-	slots []*clusterPoolSlot
-	next  int
-	lock  sync.Mutex
-
+	slots     []*clusterPoolSlot
 	available chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
+
+	lock sync.Mutex // protects next
+	next int
 }
 
 // clusterPoolSlot owns one pooled cluster and its lease state.
 type clusterPoolSlot struct {
-	idx  int
-	lock sync.Mutex
+	idx int
 
-	cluster *FunctionalTestBase
-
-	// Track leases and lease-limit recycling under the slot lock.
-	leaseCount   int
-	activeLeases int
+	lock         sync.Mutex
+	cluster      *FunctionalTestBase
+	activeLeases int // how many tests are currently using this cluster
+	leaseCount   int // how often it has been leased
 	maxLeases    int // max tests per cluster before recreate (0 = unlimited)
 }
 
