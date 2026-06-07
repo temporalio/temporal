@@ -97,6 +97,7 @@ var Module = fx.Options(
 	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(ContextMetadataInterceptorProvider),
+	fx.Provide(NewPrincipalTokenInterceptor),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -239,6 +240,7 @@ func GrpcServerOptionsProvider(
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
+	principalTokenInterceptor *PrincipalTokenInterceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	contextMetadataInterceptor *interceptor.ContextMetadataInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
@@ -284,6 +286,10 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// Promote a verified forwarded principal token (after auth has stripped
+		// any spoofed principal headers) so a workflow started in response to a
+		// Nexus operation inherits the original end-user as RootCallerPrincipal.
+		principalTokenInterceptor.Intercept,
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,

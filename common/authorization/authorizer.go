@@ -43,6 +43,9 @@ type (
 		Reason string
 		// Principal is the server-computed identity of the caller. Can be nil when not computed.
 		Principal *commonpb.Principal
+		// PrincipalResolvedName is the display-name snapshot for Principal when its
+		// Name is an opaque ID (Cloud). Empty when Name is already human-readable.
+		PrincipalResolvedName string
 	}
 
 	// Decision is enum type for auth decision

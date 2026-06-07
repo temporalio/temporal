@@ -138,6 +138,10 @@ type (
 		Metrics *metrics.Config `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
+		// NexusPrincipalPropagation configures signed caller-identity
+		// propagation across the Nexus hop. Empty (the default) disables the
+		// feature: nothing is signed and no inbound token is trusted.
+		NexusPrincipalPropagation NexusPrincipalPropagation `yaml:"nexusPrincipalPropagation"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -633,6 +637,39 @@ type (
 		//   is no-op.
 		// This config only applies to SQL or custom Visibility stores.
 		PersistenceCustomSearchAttributes map[string]int `yaml:"persistenceCustomSearchAttributes" validate:"persistence_custom_search_attributes"`
+	}
+
+	// NexusPrincipalPropagation configures the signed token used to propagate
+	// caller identity across the Nexus hop. Keys are PEM-encoded EC keys,
+	// supplied inline (Data) or by file path (File). Leaving SigningKey empty
+	// disables minting; leaving TrustedIssuers empty disables verification.
+	NexusPrincipalPropagation struct {
+		// Issuer identifies this cluster as the "iss" of minted tokens.
+		Issuer string `yaml:"issuer"`
+		// SigningKeyData / SigningKeyFile is this cluster's PEM EC private key.
+		SigningKeyData string `yaml:"signingKeyData"`
+		SigningKeyFile string `yaml:"signingKeyFile"`
+		// SigningKeyID is the "kid" advertised in minted tokens and the JWKS.
+		SigningKeyID string `yaml:"signingKeyId"`
+		// TTL is the minted-token lifetime (default applied downstream if zero).
+		TTL time.Duration `yaml:"ttl"`
+		// Leeway tolerates clock skew on verification.
+		Leeway time.Duration `yaml:"leeway"`
+		// TrustMode selects how inbound tokens are trusted: "signature" (default,
+		// JWS verified against TrustedIssuers) or "transport" (trust the
+		// connection peer, e.g. cell-to-cell mTLS — no key distribution needed).
+		TrustMode string `yaml:"trustMode"`
+		// TrustedIssuers lists the issuer/kid public keys this cluster will
+		// accept inbound tokens from (signature mode).
+		TrustedIssuers []NexusTrustedIssuer `yaml:"trustedIssuers"`
+	}
+
+	// NexusTrustedIssuer is one trusted (issuer, kid) -> PEM EC public key entry.
+	NexusTrustedIssuer struct {
+		Issuer        string `yaml:"issuer"`
+		KeyID         string `yaml:"keyId"`
+		PublicKeyData string `yaml:"publicKeyData"`
+		PublicKeyFile string `yaml:"publicKeyFile"`
 	}
 
 	Authorization struct {

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/principaltoken"
 	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
@@ -51,6 +52,13 @@ type operationInvocationTaskHandlerOptions struct {
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
+	// PrincipalSigner mints the signed identity carrier attached to outbound
+	// Nexus dispatches. Optional: when absent, dispatch falls back to raw
+	// server-to-server principal headers. Cloud may supply a KMS-backed signer.
+	PrincipalSigner principaltoken.Signer `optional:"true"`
+	// PrincipalResolver snapshots the human-readable name for a principal at
+	// dispatch time (noop in OSS). Optional; nil resolves to no snapshot.
+	PrincipalResolver principaltoken.PrincipalResolver `optional:"true"`
 }
 
 type operationInvocationTaskHandler struct {
@@ -66,6 +74,8 @@ type operationInvocationTaskHandler struct {
 	httpTraceProvider      commonnexus.HTTPClientTraceProvider
 	historyClient          resource.HistoryClient
 	chasmRegistry          *chasm.Registry
+	principalSigner        principaltoken.Signer
+	principalResolver      principaltoken.PrincipalResolver
 }
 
 func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOptions) *operationInvocationTaskHandler {
@@ -80,6 +90,8 @@ func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOption
 		httpTraceProvider:      opts.HTTPTraceProvider,
 		historyClient:          opts.HistoryClient,
 		chasmRegistry:          opts.ChasmRegistry,
+		principalSigner:        opts.PrincipalSigner,
+		principalResolver:      opts.PrincipalResolver,
 	}
 }
 
@@ -167,6 +179,17 @@ func (h *operationInvocationTaskHandler) Execute(
 	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
 	if h.config.UseNewFailureWireFormat(ns.Name().String()) {
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+	}
+	// Propagate the captured caller principals to the handler (no signer ⇒ no
+	// token ⇒ nothing propagated). The namespace caller is this cluster's own
+	// namespace, self-asserted in the token. A minting failure must not fail the
+	// dispatch: log and proceed (equivalent to the feature being off).
+	namespaceCaller := &commonpb.Principal{Type: namespacePrincipalType, Name: ns.Name().String()}
+	if err := attachPrincipalIdentity(
+		ctx, header, h.principalSigner, h.principalResolver,
+		args.serviceCallerPrincipal, args.endUserCallerPrincipal, namespaceCaller,
+	); err != nil {
+		h.logger.Warn("failed to mint principal token for nexus dispatch", tag.Error(err))
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)

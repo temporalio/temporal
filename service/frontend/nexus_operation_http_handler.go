@@ -15,12 +15,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/principaltoken"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
@@ -44,6 +46,7 @@ type NexusOperationHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	principalKeys                        principaltoken.KeyProvider
 }
 
 func NewNexusOperationHTTPHandler(
@@ -64,8 +67,11 @@ func NewNexusOperationHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	principalVerifier principaltoken.Verifier,
+	principalKeys principaltoken.KeyProvider,
 ) *NexusOperationHTTPHandler {
 	return &NexusOperationHTTPHandler{
+		principalKeys: principalKeys,
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
 			FailureConverter: nexusrpc.DefaultFailureConverter(),
@@ -97,6 +103,7 @@ func NewNexusOperationHTTPHandler(
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
+				principalVerifier:             principalVerifier,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
@@ -110,7 +117,19 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
 		HandlerFunc(h.dispatchNexusTaskByEndpoint)
+	// Public JWKS endpoint exposing this cluster's principal-token verification
+	// keys, so peer clusters using signature trust can validate tokens this
+	// cluster mints. Public, unauthenticated (exposes only public keys); serves
+	// an empty key set when the feature is off.
+	if h.principalKeys != nil {
+		r.HandleFunc(principalTokenJWKSPath, principaltoken.JWKSHandler(h.principalKeys)).
+			Methods(http.MethodGet)
+	}
 }
+
+// principalTokenJWKSPath is the public JWKS endpoint for Nexus principal-token
+// verification keys, served on the frontend HTTP listener.
+const principalTokenJWKSPath = "/_temporal/nexus/principal-token/jwks"
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
 	h.preprocessErrorCounter.Record(1)
@@ -119,6 +138,12 @@ func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
 func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
+	// Strip principal-bearing HTTP headers before any handler code observes
+	// them. The caller-side server is the only authorized writer of these
+	// headers; if they arrived from an external caller they must be discarded
+	// before authorization, otherwise the trust model breaks.
+	headers.StripPrincipalHTTP(r.Header)
+
 	var err error
 	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
@@ -159,6 +184,10 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
 func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
+	// Strip principal-bearing HTTP headers before any handler code observes
+	// them. See dispatchNexusTaskByNamespaceAndTaskQueue for rationale.
+	headers.StripPrincipalHTTP(r.Header)
+
 	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)

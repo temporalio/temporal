@@ -48,3 +48,4 @@
 
 # Ignoring AI agent files
 .agents/
+/server

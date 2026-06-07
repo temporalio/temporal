@@ -2619,6 +2619,9 @@ pollLoop:
 				TaskToken:             serializedToken,
 				Request:               nexusReq,
 				PollerScalingDecision: task.pollerScalingDecision,
+				// Verified caller identity carried with the task; surfaced to the
+				// handler worker so it can authorize/audit the caller.
+				CallerInfo: task.nexus.request.GetCallerInfo(),
 			},
 		}, nil
 	}

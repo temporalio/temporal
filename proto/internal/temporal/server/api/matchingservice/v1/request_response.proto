@@ -549,6 +549,11 @@ message DispatchNexusTaskRequest {
   // Nexus request extracted by the frontend and translated into Temporal API format.
   temporal.api.nexus.v1.Request request = 3;
   temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 4;
+  // Verified caller identity the frontend attributed to this request, carried
+  // with the task so matching can surface it on PollNexusTaskQueueResponse for
+  // the handler worker. Server-set and trusted; never sourced from the inbound
+  // request. Unset when caller attribution is not configured.
+  temporal.api.nexus.v1.NexusCallerInfo caller_info = 5;
 }
 
 message DispatchNexusTaskResponse {

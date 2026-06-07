@@ -13,6 +13,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -121,11 +122,21 @@ func newStandaloneOperation(
 		ScheduledTime:          timestamppb.New(ctx.Now(nil)),
 		RequestId:              uuid.NewString(),
 	})
+	// Capture the inbound RPC's principal as both the service caller and
+	// the end-user principal: for standalone Nexus operations the SDK
+	// client that invoked us is both the immediate caller and the
+	// originator. The auth interceptor wrote the principal headers onto
+	// the gRPC incoming metadata (and stripped any spoofed inbound
+	// values), so reading them via the chasm context's RequestHeader is
+	// safe.
+	callerPrincipal := newAttributedPrincipal(PrincipalFromContext(ctx), resolvedNameFromChasmContext(ctx))
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{
-		Input:        frontendReq.GetInput(),
-		NexusHeader:  frontendReq.GetNexusHeader(),
-		UserMetadata: frontendReq.GetUserMetadata(),
-		Identity:     frontendReq.GetIdentity(),
+		Input:                  frontendReq.GetInput(),
+		NexusHeader:            frontendReq.GetNexusHeader(),
+		UserMetadata:           frontendReq.GetUserMetadata(),
+		Identity:               frontendReq.GetIdentity(),
+		ServiceCallerPrincipal: callerPrincipal,
+		EndUserCallerPrincipal: callerPrincipal,
 	})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
@@ -289,6 +300,11 @@ func (o *Operation) loadStartArgs(
 	var (
 		invocationData InvocationData
 		err            error
+		// Principals captured at schedule time (AttributedPrincipal = identity +
+		// resolved-name snapshot). Read from RequestData below, independently of
+		// the input source.
+		serviceCaller *commonspb.AttributedPrincipal
+		endUserCaller *commonspb.AttributedPrincipal
 	)
 	if store, ok := o.Store.TryGet(ctx); ok {
 		invocationData, err = store.NexusOperationInvocationData(ctx, o)
@@ -301,6 +317,16 @@ func (o *Operation) loadStartArgs(
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
 		}
+	}
+	// Principals live on RequestData for both standalone operations and
+	// workflow-initiated operations. For the latter, SetCallerPrincipals writes
+	// a RequestData carrying only the principals alongside the parent Store that
+	// supplies the input — so read them here via TryGet regardless of the branch
+	// taken above. Nil principals are the graceful-degradation case (feature
+	// off, or no authenticated identity).
+	if requestData, ok := o.RequestData.TryGet(ctx); ok {
+		serviceCaller = requestData.GetServiceCallerPrincipal()
+		endUserCaller = requestData.GetEndUserCallerPrincipal()
 	}
 	invocationData.NexusLinks = append(invocationData.NexusLinks,
 		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
@@ -329,6 +355,8 @@ func (o *Operation) loadStartArgs(
 		header:                 invocationData.Header,
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
+		serviceCallerPrincipal: serviceCaller,
+		endUserCallerPrincipal: endUserCaller,
 	}, nil
 }
 

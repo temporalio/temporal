@@ -85,7 +85,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		if opts.chasmEnabled {
 			out.chasmWorkflowRegistry = chasmworkflow.NewRegistry()
 			mockCtx := &chasm.MockMutableContext{}
-			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
+			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{}, nil)
 			out.ms.EXPECT().ChasmEnabled().Return(true).AnyTimes()
 			out.ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)

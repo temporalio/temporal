@@ -168,12 +168,15 @@ func (a *Interceptor) Intercept(
 			APIName:   info.FullMethod,
 			Request:   req,
 		}
-		principal, err := a.Authorize(ctx, claims, ct)
+		result, err := a.authorizeResult(ctx, claims, ct)
 		if err != nil {
 			return nil, err
 		}
-		if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespace) && principal != nil {
-			ctx = headers.SetPrincipal(ctx, principal)
+		if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespace) && result.Principal != nil {
+			ctx = headers.SetPrincipal(ctx, result.Principal)
+			if result.PrincipalResolvedName != "" {
+				ctx = headers.SetPrincipalResolvedName(ctx, result.PrincipalResolvedName)
+			}
 		}
 
 		// Authorize target namespaces in cross-namespace commands
@@ -302,8 +305,15 @@ func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, cl
 // Logs and emits metrics when unauthorized.
 // Returns the principal identity and any authorization error.
 func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) (*commonpb.Principal, error) {
+	result, err := a.authorizeResult(ctx, claims, ct)
+	return result.Principal, err
+}
+
+// authorizeResult is Authorize but returns the full Result (incl. the resolved-name
+// snapshot) for callers that promote the principal onto the context.
+func (a *Interceptor) authorizeResult(ctx context.Context, claims *Claims, ct *CallTarget) (Result, error) {
 	if a.authorizer == nil {
-		return nil, nil
+		return Result{}, nil
 	}
 
 	mh := a.getMetricsHandler(ct.Namespace)
@@ -315,19 +325,19 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
 		a.logger.Error("Authorization error", tag.Error(err))
 		if a.exposeAuthorizerErrors() {
-			return nil, err
+			return Result{}, err
 		}
-		return nil, errUnauthorized // return a generic error to the caller without disclosing details
+		return Result{}, errUnauthorized // return a generic error to the caller without disclosing details
 	}
 	if result.Decision != DecisionAllow {
 		metrics.ServiceErrUnauthorizedCounter.With(mh).Record(1)
 		// if a reason is included in the result, include it in the error message
 		if result.Reason != "" {
-			return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+			return Result{}, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
 		}
-		return nil, errUnauthorized // return a generic error to the caller without disclosing details
+		return Result{}, errUnauthorized // return a generic error to the caller without disclosing details
 	}
-	return result.Principal, nil
+	return result, nil
 }
 
 // getMetricsHandler returns a metrics handler with a namespace tag
