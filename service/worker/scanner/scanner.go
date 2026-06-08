@@ -179,19 +179,19 @@ func (s *Scanner) Start() error {
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName, executionsScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName, tqScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
 	}
 
 	if s.context.cfg.HistoryScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName, executionsScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
 	if s.context.cfg.BuildIdScavengerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName, executionsScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerWorkflowName)
 
 		buildIdsActivities := build_ids.NewActivities(
 			s.context.logger,

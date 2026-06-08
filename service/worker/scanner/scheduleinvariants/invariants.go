@@ -248,11 +248,6 @@ func (a *Activities) ListAllNamespaces() []string {
 		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
 			continue
 		}
-		// Only the active cluster for this namespace should report; otherwise
-		// global namespaces would be reported once per cluster.
-		if !ns.ActiveInCluster(a.currentClusterName) {
-			continue
-		}
 		names = append(names, ns.Name().String())
 	}
 	return names

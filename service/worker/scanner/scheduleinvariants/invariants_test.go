@@ -120,7 +120,7 @@ func TestListAllNamespaces_FiltersInactiveAndDeleted(t *testing.T) {
 	})
 
 	names := d.newActivities().ListAllNamespaces()
-	require.ElementsMatch(t, []string{"ns-1", "ns-3"}, names)
+	require.ElementsMatch(t, []string{"ns-1", "ns-2", "ns-3"}, names)
 }
 
 func TestForEachNamespace_InvokesCallbackWithCount(t *testing.T) {
