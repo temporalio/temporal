@@ -143,18 +143,15 @@ func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCa
 	return nil
 }
 
-// addCallbacksToMap converts common callbacks to CHASM callback components and inserts them into the
-// target map, keyed by "<requestID>-<index>". All callbacks are validated up front, so target is not
-// mutated unless every callback converts successfully (atomic from the caller's POV).
+// addCallbacksToMap converts common callbacks to CHASM callback components and
+// inserts them into the target map, keyed by "<requestID>-<index>".
 //
-// callbackRequestIDs, when non-empty, holds each callback's original request ID to preserve across
-// continue-as-new; the stored request ID falls back to requestID otherwise. The map key stays seeded
-// by requestID so it remains unique per attaching API call.
+// All callbacks are validated up front, so target is not mutated unless every
+// callback can be converted successfully (atomic from the caller's POV).
 func addCallbacksToMap(
 	ctx chasm.MutableContext,
 	target chasm.Map[string, *callback.Callback],
 	requestID string,
-	callbackRequestIDs []string,
 	eventTime *timestamppb.Timestamp,
 	completionCallbacks []*commonpb.Callback,
 ) error {
@@ -184,11 +181,7 @@ func addCallbacksToMap(
 			// Already registered, skip to avoid overwriting.
 			continue
 		}
-		storedRequestID := requestID
-		if idx < len(callbackRequestIDs) && callbackRequestIDs[idx] != "" {
-			storedRequestID = callbackRequestIDs[idx]
-		}
-		callbackObj := callback.NewCallback(storedRequestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
 		target[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
@@ -196,14 +189,11 @@ func addCallbacksToMap(
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
 // maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
-// callbackRequestIDs, when non-empty, carries the per-callback request IDs to preserve across
-// continue-as-new (parallel to completionCallbacks).
 func (w *Workflow) AddCompletionCallbacks(
 	ctx chasm.MutableContext,
 	eventTime *timestamppb.Timestamp,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	callbackRequestIDs []string,
 	maxCallbacksPerWorkflow int,
 ) error {
 	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
@@ -214,7 +204,7 @@ func (w *Workflow) AddCompletionCallbacks(
 		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
 	}
 
-	return addCallbacksToMap(ctx, w.Callbacks, requestID, callbackRequestIDs, eventTime, completionCallbacks)
+	return addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -254,8 +244,7 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 		)
 	}
 
-	// Update callbacks are not inherited across continue-as-new, so no request IDs to preserve.
-	return addCallbacksToMap(ctx, update.Callbacks, requestID, nil, eventTime, completionCallbacks)
+	return addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
 // addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,

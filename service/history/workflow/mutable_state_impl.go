@@ -251,12 +251,6 @@ type (
 		// Task deletion is just a best-effort optimization after all, so not complicating the logic to account for that here.
 		chasmPureTasks []*tasks.ChasmTaskPure
 
-		// Request IDs of completion callbacks inherited via continue-as-new (cron/retry included),
-		// parallel to the new run's start-event CompletionCallbacks. Set just before the start event
-		// is applied and consumed by addCompletionCallbacks so inherited callbacks keep their original
-		// request IDs rather than being re-stamped with the new run's start request ID.
-		continueAsNewCompletionCallbackRequestIDs []string
-
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -2642,12 +2636,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
-	completionCallbacks, completionCallbackRequestIDs, err := getCompletionCallbacksAsProtoSlice(ctx, previousExecutionState)
+	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(ctx, previousExecutionState)
 	if err != nil {
 		return nil, err
 	}
-	// Preserve inherited callbacks' original request IDs; consumed by addCompletionCallbacks below.
-	ms.continueAsNewCompletionCallbackRequestIDs = completionCallbackRequestIDs
 
 	// If there is a pinned override, then the effective version will be the same as the pinned override version.
 	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
@@ -3357,19 +3349,15 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-	// Original request IDs of callbacks inherited via continue-as-new, consumed once so they don't
-	// leak into a later attach. Empty for normal starts/updates/standby replay (prior behavior).
-	callbackRequestIDs := ms.continueAsNewCompletionCallbackRequestIDs
-	ms.continueAsNewCompletionCallbackRequestIDs = nil
 	if ms.chasmCallbacksEnabled() {
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
 		ms.EnsureChasmWorkflowComponent(context.Background())
-		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks, callbackRequestIDs)
+		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
-	return ms.addCompletionCallbacksHsm(event, requestID, completionCallbacks, callbackRequestIDs)
+	return ms.addCompletionCallbacksHsm(event, requestID, completionCallbacks)
 }
 
 // addCompletionCallbacksHsm creates completion callbacks using the HSM implementation.
@@ -3377,7 +3365,6 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	event *historypb.HistoryEvent,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	callbackRequestIDs []string,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
@@ -3403,13 +3390,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 		default:
 			return serviceerror.NewInvalidArgumentf("unknown callback variant: %T", cb.Variant)
 		}
-		// Preserve the inherited callback's original request ID across continue-as-new (the callback ID
-		// below stays seeded by the start event for deterministic cross-cluster uniqueness).
-		callbackRequestID := requestID
-		if idx < len(callbackRequestIDs) && callbackRequestIDs[idx] != "" {
-			callbackRequestID = callbackRequestIDs[idx]
-		}
-		machine := callbacks.NewCallback(callbackRequestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
 		// This is for backwards compatibility: callbacks were initially only attached when the workflow
 		// execution started, but now they can be attached while the workflow is running.
@@ -3432,7 +3413,6 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 	event *historypb.HistoryEvent,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	callbackRequestIDs []string,
 ) error {
 	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
@@ -3440,7 +3420,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 	}
 
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, callbackRequestIDs, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated

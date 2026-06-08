@@ -595,8 +595,15 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
+	// Pack this start's request ID into the callback token so the completion is matched by request ID
+	// from the token (which rides in the callback header and survives continue-as-new) rather than
+	// from the started workflow's callback state, which is re-stamped on each new run.
+	startCallback, err := chasm.WithNexusCallbackRequestID(callback, start.RequestId)
+	if err != nil {
+		return err
+	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
+		CompletionCallbacks:      []*commonpb.Callback{startCallback},
 		Header:                   requestSpec.Header,
 		Identity:                 scheduler.identity(),
 		Input:                    requestSpec.Input,
