@@ -376,7 +376,14 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	// the SDK signals that history is large enough to CAN. Errors
 	// here latch into lastErr and fall through to the unified exit
 	// funnel — same drain-and-decide path as activity-driven errors.
-	for !workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+	//
+	// On a CAN cycle (ContinuedAsNewCount > 0), an empty NextPageToken
+	// means a prior cycle already exhausted pagination — empty token at
+	// the start of cycle 0 is "haven't started", but at the start of any
+	// later cycle it's "finished". Skip listing in that case; otherwise
+	// a carry-over-driven CAN (drained InFlight, recovered buckets, …)
+	// would re-list page 1 and re-enqueue every visible execution.
+	for s.shouldList() && !workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
 		if s.lastErr != nil {
 			break
 		}
@@ -432,6 +439,14 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	next.ResumeShards = s.collectResumeShardsForCarryover()
 	next.RecoveredBuckets = s.collectRecoveredBucketsForCarryover()
 	return workflow.NewContinueAsNewError(ctx, ShardedForceReplicationWorkflow, next)
+}
+
+// shouldList returns true if the page loop has more work to do this
+// cycle. Cycle 0 always lists (NextPageToken is empty either way).
+// On later cycles, an empty NextPageToken can only mean a prior cycle
+// already drained pagination — there's nothing left to list.
+func (s *shardedWorkflowState) shouldList() bool {
+	return s.params.ContinuedAsNewCount == 0 || len(s.params.NextPageToken) > 0
 }
 
 var (

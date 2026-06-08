@@ -422,6 +422,57 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	require.Equal(t, 42*time.Second, nextParams.ResumeShards[0].NoProgressDuration)
 }
 
+// TestSharded_ListingDoneAcrossCAN_SkipsPageLoop pins down that a
+// post-listing CAN cycle does not re-enter ListWorkflows. The prior
+// cycle finished pagination (NextPageToken empty) but still had carry-
+// over (e.g. InFlight from a returned activity), so it CAN'd. Without
+// the ContinuedAsNewCount > 0 guard in the page loop, the next cycle
+// can't distinguish "haven't started listing" from "finished listing"
+// and would re-list page 1, double-enqueueing every visible execution.
+func TestSharded_ListingDoneAcrossCAN_SkipsPageLoop(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
+	registerShardedScaffolding(env, 4)
+
+	var listCalls atomic.Int32
+	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		listCalls.Add(1)
+		return &listWorkflowsResponse{}, nil
+	}, activity.RegisterOptions{Name: "ListWorkflows"})
+
+	// Resume-only batches; no fresh inject work.
+	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+		require.True(t, req.Resume, "this cycle should only dispatch resume batches; no listing should occur")
+		return replicateBatchResult{
+			CompletedShards: req.Executions.sortedShards(),
+		}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	// Mimic a CAN-cycle entry: prior cycle exhausted pagination
+	// (NextPageToken empty) and CAN'd because it had ResumeShards to
+	// carry over. ContinuedAsNewCount > 0 is the signal that empty
+	// NextPageToken means "done", not "haven't started".
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:           "test-ns",
+		TargetClusterName:   "remote_cluster",
+		ContinuedAsNewCount: 1,
+		ResumeShards: []ResumeShard{{
+			Shard: 0,
+			Execs: map[string][]RunEntry{"wf-resume": {{RunID: "run-resume"}}},
+		}},
+		// On a real CAN cycle the prior cycle's child kicked off in
+		// cycle 0, so its signal arrives once; subsequent cycles see
+		// Done=true in their input params and skip both the kickoff
+		// and the terminal Await. The test mirrors that.
+		TaskQueueUserDataReplicationStatus: TaskQueueUserDataReplicationStatus{Done: true},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Zero(t, listCalls.Load(), "ListWorkflows must not be called on a CAN cycle that inherited an exhausted page token")
+}
+
 // TestSharded_CancelBeforeStart_NoLostExecs pins down recovery when
 // an activity is dispatched and the workflow CANs before the activity
 // body runs: the activity returns CanceledError with no result, and
