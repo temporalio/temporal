@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,7 +19,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
@@ -33,7 +31,6 @@ const testClusterName = "test-cluster"
 
 type testDeps struct {
 	ctrl              *gomock.Controller
-	metadataManager   *persistence.MockMetadataManager
 	visibilityManager *manager.MockVisibilityManager
 	namespaceRegistry *namespace.MockRegistry
 	sdkClientFactory  *sdk.MockClientFactory
@@ -47,7 +44,6 @@ func newTestDeps(t *testing.T) *testDeps {
 	ctrl := gomock.NewController(t)
 	d := &testDeps{
 		ctrl:              ctrl,
-		metadataManager:   persistence.NewMockMetadataManager(ctrl),
 		visibilityManager: manager.NewMockVisibilityManager(ctrl),
 		namespaceRegistry: namespace.NewMockRegistry(ctrl),
 		sdkClientFactory:  sdk.NewMockClientFactory(ctrl),
@@ -62,35 +58,37 @@ func newTestDeps(t *testing.T) *testDeps {
 }
 
 func (d *testDeps) newActivities() *Activities {
+	return d.newActivitiesWithParams(dynamicconfig.DefaultScheduleInvariantsScannerParams)
+}
+
+func (d *testDeps) newActivitiesWithParams(params dynamicconfig.ScheduleInvariantsScannerParams) *Activities {
 	// A very high RPS rate-limiter so Wait() never blocks under test.
 	rl := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(dynamicconfig.GetFloatPropertyFn(10000.0)))
 	return &Activities{
-		logger:                            log.NewNoopLogger(),
-		metricsHandler:                    metrics.NoopMetricsHandler,
-		metadataManager:                   d.metadataManager,
-		visibilityManager:                 d.visibilityManager,
-		namespaceRegistry:                 d.namespaceRegistry,
-		sdkClientFactory:                  d.sdkClientFactory,
-		currentClusterName:                testClusterName,
-		timeSource:                        d.timeSource,
-		overdueTolerance:                  dynamicconfig.GetDurationPropertyFn(10 * time.Minute),
-		scanInterval:                      dynamicconfig.GetDurationPropertyFn(15 * time.Minute),
-		stuckOpenIdleTimeBufferMultiplier: dynamicconfig.GetIntPropertyFn(2),
-		rateLimiter:                       rl,
-	}
-}
-
-func nsDetail(id, name string) *persistence.GetNamespaceResponse {
-	return &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: id, Name: name},
-		},
+		logger:             log.NewNoopLogger(),
+		metricsHandler:     metrics.NoopMetricsHandler,
+		visibilityManager:  d.visibilityManager,
+		namespaceRegistry:  d.namespaceRegistry,
+		sdkClientFactory:   d.sdkClientFactory,
+		currentClusterName: testClusterName,
+		timeSource:         d.timeSource,
+		opts:               dynamicconfig.GetTypedPropertyFn(params),
+		rateLimiter:        rl,
 	}
 }
 
 func localNS(id, name, activeCluster string) *namespace.Namespace {
 	return namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: id, Name: name},
+		nil,
+		activeCluster,
+	)
+}
+
+// deletedNS builds a local namespace in the DELETED state, which ListAllNamespaces skips.
+func deletedNS(id, name, activeCluster string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: id, Name: name, State: enumspb.NAMESPACE_STATE_DELETED},
 		nil,
 		activeCluster,
 	)
@@ -111,61 +109,18 @@ func globalNS(id, name, activeCluster string) *namespace.Namespace {
 	)
 }
 
-func TestListAllNamespaces_PaginatesAndFiltersInactive(t *testing.T) {
+func TestListAllNamespaces_FiltersInactiveAndDeleted(t *testing.T) {
 	d := newTestDeps(t)
 
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespaceListPageSize,
-		NextPageToken:  nil,
-		IncludeDeleted: false,
-	}).Return(&persistence.ListNamespacesResponse{
-		Namespaces:    []*persistence.GetNamespaceResponse{nsDetail("id-1", "ns-1"), nsDetail("id-2", "ns-2")},
-		NextPageToken: []byte("page2"),
-	}, nil)
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespaceListPageSize,
-		NextPageToken:  []byte("page2"),
-		IncludeDeleted: false,
-	}).Return(&persistence.ListNamespacesResponse{
-		Namespaces:    []*persistence.GetNamespaceResponse{nsDetail("id-3", "ns-3")},
-		NextPageToken: nil,
-	}, nil)
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{
+		localNS("id-1", "ns-1", testClusterName),
+		globalNS("id-2", "ns-2", "other-cluster"),  // inactive in this cluster
+		globalNS("id-3", "ns-3", testClusterName),  // active here
+		deletedNS("id-4", "ns-4", testClusterName), // deleted
+	})
 
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-1")).Return(globalNS("id-1", "ns-1", testClusterName), nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-2")).Return(globalNS("id-2", "ns-2", "other-cluster"), nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-3")).Return(globalNS("id-3", "ns-3", testClusterName), nil)
-
-	names, err := d.newActivities().ListAllNamespaces(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, []string{"ns-1", "ns-3"}, names)
-}
-
-func TestListAllNamespaces_SkipsRegistryLookupFailures(t *testing.T) {
-	d := newTestDeps(t)
-
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
-		Namespaces: []*persistence.GetNamespaceResponse{
-			nsDetail("good", "good-ns"),
-			nsDetail("bad", "bad-ns"),
-		},
-		NextPageToken: nil,
-	}, nil)
-
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("good")).Return(localNS("good", "good-ns", testClusterName), nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("bad")).Return(nil, errors.New("not found"))
-
-	names, err := d.newActivities().ListAllNamespaces(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, []string{"good-ns"}, names)
-}
-
-func TestListAllNamespaces_ReturnsErrorOnMetadataFailure(t *testing.T) {
-	d := newTestDeps(t)
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).
-		Return(nil, errors.New("boom"))
-
-	_, err := d.newActivities().ListAllNamespaces(context.Background())
-	require.Error(t, err)
+	names := d.newActivities().ListAllNamespaces()
+	require.ElementsMatch(t, []string{"ns-1", "ns-3"}, names)
 }
 
 func TestForEachNamespace_InvokesCallbackWithCount(t *testing.T) {
@@ -206,7 +161,7 @@ func chasmExec(id string) *chasmspb.VisibilityExecutionInfo {
 	return &chasmspb.VisibilityExecutionInfo{BusinessId: id}
 }
 
-func TestForEachScheduleInNamespace_PaginatesAndVisitsEachSchedule(t *testing.T) {
+func TestSchedulesInNamespace_PaginatesAndYieldsEachSchedule(t *testing.T) {
 	d := newTestDeps(t)
 
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
@@ -235,24 +190,34 @@ func TestForEachScheduleInNamespace_PaginatesAndVisitsEachSchedule(t *testing.T)
 	}, nil)
 
 	var visited []string
-	err := d.newActivities().forEachScheduleInNamespace(context.Background(), "ns-1", "q", func(scheduleID string) {
+	var iterErr error
+	for scheduleID, err := range d.newActivities().schedulesInNamespace(context.Background(), "ns-1", "q") {
+		if err != nil {
+			iterErr = err
+			break
+		}
 		visited = append(visited, scheduleID)
-	})
-	require.NoError(t, err)
+	}
+	require.NoError(t, iterErr)
 	require.Equal(t, []string{"sched-1", "sched-2", "sched-3"}, visited)
 }
 
-func TestForEachScheduleInNamespace_StopsOnError(t *testing.T) {
+func TestSchedulesInNamespace_YieldsErrorAndStops(t *testing.T) {
 	d := newTestDeps(t)
 
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("list failed"))
 
-	err := d.newActivities().forEachScheduleInNamespace(context.Background(), "ns-1", "q", func(string) {
-		t.Fatal("should not visit any schedule")
-	})
-	require.Error(t, err)
+	var iterErr error
+	for scheduleID, err := range d.newActivities().schedulesInNamespace(context.Background(), "ns-1", "q") {
+		if err != nil {
+			iterErr = err
+			continue
+		}
+		t.Fatalf("should not visit any schedule, got %q", scheduleID)
+	}
+	require.Error(t, iterErr)
 }
 
 func describeResp(paused bool, overlap enumspb.ScheduleOverlapPolicy, runningCount int) *workflowservice.DescribeScheduleResponse {
@@ -329,11 +294,7 @@ func TestScheduleIsExpectedNotToFire(t *testing.T) {
 func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testing.T) {
 	d := newTestDeps(t)
 
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
-		Namespaces:    []*persistence.GetNamespaceResponse{nsDetail("id-1", "ns-1")},
-		NextPageToken: nil,
-	}, nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-1")).Return(localNS("id-1", "ns-1", testClusterName), nil)
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS("id-1", "ns-1", testClusterName)})
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
 
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).Return(&visibilityservice.ListChasmExecutionsResponse{
@@ -362,15 +323,10 @@ func TestRunOverdueScan_FiltersExpectedNotToFireSchedulesAndCountsRest(t *testin
 func TestRunOverdueScan_ContinuesPastPerNamespaceErrors(t *testing.T) {
 	d := newTestDeps(t)
 
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
-		Namespaces: []*persistence.GetNamespaceResponse{
-			nsDetail("id-broken", "ns-broken"),
-			nsDetail("id-ok", "ns-ok"),
-		},
-		NextPageToken: nil,
-	}, nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-broken")).Return(localNS("id-broken", "ns-broken", testClusterName), nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-ok")).Return(localNS("id-ok", "ns-ok", testClusterName), nil)
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{
+		localNS("id-broken", "ns-broken", testClusterName),
+		localNS("id-ok", "ns-ok", testClusterName),
+	})
 
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-broken")).Return(namespace.ID("id-broken"), nil)
 	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.AssignableToTypeOf(&visibilityservice.ListChasmExecutionsRequest{})).
@@ -392,18 +348,38 @@ func TestRunOverdueScan_ContinuesPastPerNamespaceErrors(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunScan_EmitsPerNamespaceCounts(t *testing.T) {
+func TestRunOverdueScan_StopsAtPerNamespaceCap(t *testing.T) {
 	d := newTestDeps(t)
 
-	d.metadataManager.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
-		Namespaces: []*persistence.GetNamespaceResponse{
-			nsDetail("id-1", "ns-1"),
-			nsDetail("id-2", "ns-2"),
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS("id-1", "ns-1", testClusterName)})
+	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
+
+	// Five overdue schedules, but the cap is 2: only the first two should be checked.
+	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).Return(&visibilityservice.ListChasmExecutionsResponse{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
+			chasmExec("sched-1"), chasmExec("sched-2"), chasmExec("sched-3"),
+			chasmExec("sched-4"), chasmExec("sched-5"),
 		},
 		NextPageToken: nil,
 	}, nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-1")).Return(localNS("id-1", "ns-1", testClusterName), nil)
-	d.namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("id-2")).Return(localNS("id-2", "ns-2", testClusterName), nil)
+
+	// Exactly two DescribeSchedule calls; gomock fails the test on a third.
+	d.frontendClient.EXPECT().DescribeSchedule(gomock.Any(), gomock.Any()).
+		Return(describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0), nil).Times(2)
+
+	params := dynamicconfig.DefaultScheduleInvariantsScannerParams
+	params.OverdueNextActionTimeMaxChecksPerNamespace = 2
+	err := d.newActivitiesWithParams(params).runOverdueScan(context.Background(), "q")
+	require.NoError(t, err)
+}
+
+func TestRunScan_EmitsPerNamespaceCounts(t *testing.T) {
+	d := newTestDeps(t)
+
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{
+		localNS("id-1", "ns-1", testClusterName),
+		localNS("id-2", "ns-2", testClusterName),
+	})
 
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
 	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-2")).Return(namespace.ID("id-2"), nil)

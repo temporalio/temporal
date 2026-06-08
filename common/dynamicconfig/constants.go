@@ -604,49 +604,14 @@ is currently processing a task.
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
 	)
 
-	ScheduleInvariantsScannerOverdueNextActionTimeEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerOverdueNextActionTimeEnabled",
-		false,
-		`ScheduleInvariantsScannerOverdueNextActionTimeEnabled enables flagging schedules whose
-TemporalScheduleNextActionTime lies further in the past than the tolerance.`,
-	)
-	ScheduleInvariantsScannerStuckOpenEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerStuckOpenEnabled",
-		false,
-		`ScheduleInvariantsScannerStuckOpenEnabled enables flagging schedules that appear stuck open
-long after their CloseTime.`,
-	)
-	ScheduleInvariantsScannerUnknownStateEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerUnknownStateEnabled",
-		false,
-		`ScheduleInvariantsScannerUnknownStateEnabled enables flagging running, unpaused schedules with
-no TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known to be
-backfilled on legacy schedules.`,
-	)
-	ScheduleInvariantsScannerOverdueNextActionTimeTolerance = NewGlobalDurationSetting(
-		"worker.scheduleInvariantsScannerOverdueNextActionTimeTolerance",
-		10*time.Minute,
-		`ScheduleInvariantsScannerOverdueNextActionTimeTolerance is how far in the past
-TemporalScheduleNextActionTime must be before the schedule is flagged.`,
-	)
-	ScheduleInvariantsScannerVisibilityRPS = NewGlobalFloatSetting(
-		"worker.scheduleInvariantsScannerVisibilityRPS",
-		1.0,
-		`ScheduleInvariantsScannerVisibilityRPS rate-limits visibility calls from the
-schedule-invariants scanner.`,
-	)
-	ScheduleInvariantsScannerScanInterval = NewGlobalDurationSetting(
-		"worker.scheduleInvariantsScannerScanInterval",
-		15*time.Minute,
-		`ScheduleInvariantsScannerScanInterval is how often each schedule-invariants scanner
-activity kicks off a fresh scan pass.`,
-	)
-	ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier = NewGlobalIntSetting(
-		"worker.scheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier",
-		2,
-		`ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier multiplies the configured
-schedule IdleTime to set how far past a schedule's idle-close deadline it must be before the
-stuck-open scanner flags it.`,
+	ScheduleInvariantsScannerOptions = NewGlobalTypedSetting(
+		"worker.scheduleInvariantsScannerOptions",
+		DefaultScheduleInvariantsScannerParams,
+		`ScheduleInvariantsScannerOptions configures the schedule-invariants scanners.
+Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled (per-invariant
+toggles, all default false), OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+VisibilityRPS, ScanInterval, and StuckOpenIdleTimeBufferMultiplier. See
+ScheduleInvariantsScannerParams comments for details.`,
 	)
 
 	// keys for frontend

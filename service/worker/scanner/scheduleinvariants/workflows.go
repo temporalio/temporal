@@ -10,20 +10,14 @@ import (
 )
 
 const (
-	OverdueNextActionTimeWorkflowName = "schedule-invariants-overdue-next-action-time-scanner"
-	OverdueNextActionTimeActivityName = "scan-schedule-invariants-overdue-next-action-time"
-	OverdueNextActionTimeWorkflowID   = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner"
-	OverdueNextActionTimeTaskQueue    = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner-taskqueue-0"
+	OverdueNextActionTimeWorkflowID = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner"
+	OverdueNextActionTimeTaskQueue  = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner-taskqueue-0"
 
-	StuckOpenWorkflowName = "schedule-invariants-stuck-open-scanner"
-	StuckOpenActivityName = "scan-schedule-invariants-stuck-open"
-	StuckOpenWorkflowID   = "temporal-sys-schedule-invariants-stuck-open-scanner"
-	StuckOpenTaskQueue    = "temporal-sys-schedule-invariants-stuck-open-scanner-taskqueue-0"
+	StuckOpenWorkflowID = "temporal-sys-schedule-invariants-stuck-open-scanner"
+	StuckOpenTaskQueue  = "temporal-sys-schedule-invariants-stuck-open-scanner-taskqueue-0"
 
-	UnknownStateWorkflowName = "schedule-invariants-unknown-state-scanner"
-	UnknownStateActivityName = "scan-schedule-invariants-unknown-state"
-	UnknownStateWorkflowID   = "temporal-sys-schedule-invariants-unknown-state-scanner"
-	UnknownStateTaskQueue    = "temporal-sys-schedule-invariants-unknown-state-scanner-taskqueue-0"
+	UnknownStateWorkflowID = "temporal-sys-schedule-invariants-unknown-state-scanner"
+	UnknownStateTaskQueue  = "temporal-sys-schedule-invariants-unknown-state-scanner-taskqueue-0"
 
 	// activityStartToCloseTimeout is "effectively infinite" - the activity runs an
 	// internal scan ticker forever and is only ever expected to exit on transient
@@ -70,25 +64,30 @@ var (
 // is in the past beyond the configured tolerance. The activity runs an internal scan
 // ticker; this workflow continues-as-new each time the activity exits.
 func OverdueNextActionTimeWorkflow(ctx workflow.Context) error {
-	return runScanActivity(ctx, OverdueNextActionTimeActivityName, OverdueNextActionTimeWorkflow)
+	var a *Activities
+	runScanActivity(ctx, a.ScanOverdueNextActionTime)
+	return workflow.NewContinueAsNewError(ctx, OverdueNextActionTimeWorkflow)
 }
 
 // StuckOpenWorkflow scans for schedules that appear stuck open long after their CloseTime.
 func StuckOpenWorkflow(ctx workflow.Context) error {
-	return runScanActivity(ctx, StuckOpenActivityName, StuckOpenWorkflow)
+	var a *Activities
+	runScanActivity(ctx, a.ScanStuckOpen)
+	return workflow.NewContinueAsNewError(ctx, StuckOpenWorkflow)
 }
 
 // UnknownStateWorkflow scans for running, unpaused schedules with no
 // TemporalScheduleNextActionTime.
 func UnknownStateWorkflow(ctx workflow.Context) error {
-	return runScanActivity(ctx, UnknownStateActivityName, UnknownStateWorkflow)
+	var a *Activities
+	runScanActivity(ctx, a.ScanUnknownState)
+	return workflow.NewContinueAsNewError(ctx, UnknownStateWorkflow)
 }
 
-// runScanActivity executes the named long-running scan activity. The activity is
-// expected to outlive a single workflow run only on the steady-state path; when it
-// does eventually exit (retry budget exhausted, worker restart, etc.) the workflow
-// continues-as-new so the scan loop is reborn.
-func runScanActivity(ctx workflow.Context, activityName string, wfFn any) error {
+// runScanActivity executes the long-running scan activity. The activity is expected
+// to run 'infinitely', timing out on server restart and being retried here and eventually
+// continue-as-new'd
+func runScanActivity(ctx workflow.Context, activityFn any) {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: activityStartToCloseTimeout,
 		HeartbeatTimeout:    activityHeartbeatTimeout,
@@ -97,6 +96,5 @@ func runScanActivity(ctx workflow.Context, activityName string, wfFn any) error 
 	// Ignore the activity result intentionally: the activity is expected to exit
 	// eventually (heartbeat timeout on worker restart, retry budget exhausted, etc.),
 	// and we want to continue-as-new and rebirth the scan loop in every case.
-	_ = workflow.ExecuteActivity(activityCtx, activityName).Get(ctx, nil)
-	return workflow.NewContinueAsNewError(ctx, wfFn)
+	_ = workflow.ExecuteActivity(activityCtx, activityFn).Get(ctx, nil)
 }

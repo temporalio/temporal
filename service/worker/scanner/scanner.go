@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
@@ -75,15 +74,9 @@ type (
 		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 
-		// Schedule-invariants scanners. Each runs as an independent cron workflow; all three
-		// require advanced (Elasticsearch) visibility to be configured (otherwise they're skipped).
-		ScheduleInvariantsScannerOverdueNextActionTimeEnabled      dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerStuckOpenEnabled                  dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerUnknownStateEnabled               dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerOverdueNextActionTimeTolerance    dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerVisibilityRPS                     dynamicconfig.FloatPropertyFn
-		ScheduleInvariantsScannerScanInterval                      dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier dynamicconfig.IntPropertyFn
+		// ScheduleInvariantsScannerOptions configures the schedule-invariants scanners. Each
+		// invariant check runs as an independent cron workflow.
+		ScheduleInvariantsScannerOptions dynamicconfig.TypedPropertyFn[dynamicconfig.ScheduleInvariantsScannerParams]
 	}
 
 	// scannerContext is the context object that gets
@@ -178,7 +171,7 @@ func (s *Scanner) Start() error {
 	var workerTaskQueueNames []string
 	if s.context.cfg.Persistence.DefaultStoreType() != config.StoreTypeSQL && s.context.cfg.ExecutionsScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
 	} else if s.context.cfg.ExecutionsScannerEnabled() {
 		s.context.logger.Info("ExecutionsScanner is not supported for SQL store")
@@ -186,19 +179,19 @@ func (s *Scanner) Start() error {
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
 	}
 
 	if s.context.cfg.HistoryScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
 	if s.context.cfg.BuildIdScavengerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName)
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName, executionsScannerWFTypeName)
 
 		buildIdsActivities := build_ids.NewActivities(
 			s.context.logger,
@@ -222,34 +215,26 @@ func (s *Scanner) Start() error {
 		}
 	}
 
-	scheduleInvariantsAnyEnabled := s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() ||
-		s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() ||
-		s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled()
-	if scheduleInvariantsAnyEnabled && !s.context.visibilityManager.HasStoreName(elasticsearch.PersistenceName) {
-		s.context.logger.Info("schedule-invariants scanners are enabled but advanced (Elasticsearch) visibility is not configured; skipping")
-	} else if scheduleInvariantsAnyEnabled {
+	siOpts := s.context.cfg.ScheduleInvariantsScannerOptions()
+	if siOpts.OverdueNextActionTimeEnabled || siOpts.StuckOpenEnabled || siOpts.UnknownStateEnabled {
 		scheduleActivities := scheduleinvariants.NewActivities(
 			s.context.logger,
 			s.context.metricsHandler,
-			s.context.metadataManager,
 			s.context.visibilityManager,
 			s.context.namespaceRegistry,
 			s.context.sdkClientFactory,
 			s.context.currentClusterName,
 			clock.NewRealTimeSource(),
-			s.context.cfg.ScheduleInvariantsScannerVisibilityRPS,
-			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
-			s.context.cfg.ScheduleInvariantsScannerScanInterval,
-			s.context.cfg.ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier,
+			s.context.cfg.ScheduleInvariantsScannerOptions,
 		)
 
-		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {
+		if siOpts.OverdueNextActionTimeEnabled {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, scheduleinvariants.OverdueNextActionTimeWFStartOptions, scheduleinvariants.OverdueNextActionTimeWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.OverdueNextActionTimeWFStartOptions, scheduleinvariants.OverdueNextActionTimeWorkflow, "schedule_invariants_overdue_action_time_scanner")
 
 			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.OverdueNextActionTimeTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(scheduleinvariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeActivityName})
+			work.RegisterWorkflow(scheduleinvariants.OverdueNextActionTimeWorkflow)
+			work.RegisterActivity(scheduleActivities.ScanOverdueNextActionTime)
 
 			// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 			if err := work.Start(); err != nil {
@@ -257,26 +242,26 @@ func (s *Scanner) Start() error {
 			}
 		}
 
-		if s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() {
+		if siOpts.StuckOpenEnabled {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StuckOpenWFStartOptions, scheduleinvariants.StuckOpenWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StuckOpenWFStartOptions, scheduleinvariants.StuckOpenWorkflow, "schedule_invariants_stuck_open_scanner")
 
 			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.StuckOpenTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(scheduleinvariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.StuckOpenWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: scheduleinvariants.StuckOpenActivityName})
+			work.RegisterWorkflow(scheduleinvariants.StuckOpenWorkflow)
+			work.RegisterActivity(scheduleActivities.ScanStuckOpen)
 
 			if err := work.Start(); err != nil {
 				return err
 			}
 		}
 
-		if s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled() {
+		if siOpts.UnknownStateEnabled {
 			s.wg.Add(1)
-			go s.startWorkflowWithRetry(ctx, scheduleinvariants.UnknownStateWFStartOptions, scheduleinvariants.UnknownStateWorkflowName)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.UnknownStateWFStartOptions, scheduleinvariants.UnknownStateWorkflow, "schedule_invariants_unknown_state_scanner")
 
 			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.UnknownStateTaskQueue, workerOpts)
-			work.RegisterWorkflowWithOptions(scheduleinvariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.UnknownStateWorkflowName})
-			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: scheduleinvariants.UnknownStateActivityName})
+			work.RegisterWorkflow(scheduleinvariants.UnknownStateWorkflow)
+			work.RegisterActivity(scheduleActivities.ScanUnknownState)
 
 			if err := work.Start(); err != nil {
 				return err
@@ -309,7 +294,10 @@ func (s *Scanner) Stop() {
 	s.wg.Wait()
 }
 
-func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...any) {
+// startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the
+// scanner shuts down. workflowType may be either a registered type-name string or the
+// workflow function itself (registered under its Go function name).
+func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType any, workflowTypeName string, workflowArgs ...any) {
 	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
@@ -321,6 +309,7 @@ func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.
 			s.context.sdkClientFactory.GetSystemClient(),
 			options,
 			workflowType,
+			workflowTypeName,
 			workflowArgs...,
 		)
 	}, policy, func(err error) bool {
@@ -328,7 +317,7 @@ func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.
 	})
 	// if the scanner shuts down before the workflow is started, then the error will be context canceled
 	if err != nil && !common.IsContextCanceledErr(err) {
-		s.context.logger.Fatal("unable to start scanner", tag.WorkflowType(workflowType), tag.Error(err))
+		s.context.logger.Fatal("unable to start scanner", tag.WorkflowType(workflowTypeName), tag.Error(err))
 	}
 }
 
@@ -336,7 +325,8 @@ func (s *Scanner) startWorkflow(
 	ctx context.Context,
 	client sdkclient.Client,
 	options sdkclient.StartWorkflowOptions,
-	workflowType string,
+	workflowType any,
+	workflowTypeName string,
 	workflowArgs ...any,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -346,9 +336,9 @@ func (s *Scanner) startWorkflow(
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			return nil
 		}
-		s.context.logger.Error("error starting workflow", tag.WorkflowType(workflowType), tag.Error(err))
+		s.context.logger.Error("error starting workflow", tag.WorkflowType(workflowTypeName), tag.Error(err))
 		return err
 	}
-	s.context.logger.Info("workflow successfully started", tag.WorkflowType(workflowType))
+	s.context.logger.Info("workflow successfully started", tag.WorkflowType(workflowTypeName))
 	return nil
 }
