@@ -3139,14 +3139,16 @@ func (s *nodeSuite) TestMutableContextNowStableWithinContext() {
 	mutableContext := NewMutableContext(context.Background(), root)
 	component, err := root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
+	testComponent := component.(*TestComponent)
 
-	s.Equal(startTime, mutableContext.Now(component))
+	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
+	s.Equal(startTime, contextWithValue.Now(component))
 
 	s.timeSource.Update(updatedTime)
 	s.Equal(startTime, mutableContext.Now(component))
 
-	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
-	s.Equal(startTime, contextWithValue.Now(component))
+	childComponent := testComponent.SubComponent1.Get(mutableContext)
+	s.Equal(startTime, mutableContext.Now(childComponent))
 
 	newMutableContext := NewMutableContext(context.Background(), root)
 	s.Equal(updatedTime, newMutableContext.Now(component))

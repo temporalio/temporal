@@ -99,7 +99,7 @@ type immutableCtx struct {
 type mutableCtx struct {
 	*immutableCtx
 
-	nowByComponent map[*Node]time.Time
+	now **time.Time
 }
 
 // NewContext creates a new Context from an existing Context and root Node.
@@ -210,27 +210,25 @@ func NewMutableContext(
 	ctx context.Context,
 	node *Node,
 ) MutableContext {
+	var now *time.Time
 	return &mutableCtx{
-		immutableCtx:   newContext(ctx, node),
-		nowByComponent: make(map[*Node]time.Time),
+		immutableCtx: newContext(ctx, node),
+		now:          &now,
 	}
 }
 
 func (c *mutableCtx) Now(component Component) time.Time {
-	node, ok := c.root.valueToNode[component]
-	if !ok || !node.isComponent() {
-		return c.root.Now(component)
+	if c.now == nil {
+		var now *time.Time
+		c.now = &now
 	}
 
-	if now, ok := c.nowByComponent[node]; ok {
-		return now
+	if *c.now != nil {
+		return **c.now
 	}
 
 	now := c.root.Now(component)
-	if c.nowByComponent == nil {
-		c.nowByComponent = make(map[*Node]time.Time)
-	}
-	c.nowByComponent[node] = now
+	*c.now = &now
 	return now
 }
 
@@ -243,9 +241,14 @@ func (c *mutableCtx) AddTask(
 }
 
 func (c *mutableCtx) withValue(key any, value any) Context {
+	if c.now == nil {
+		var now *time.Time
+		c.now = &now
+	}
+
 	return &mutableCtx{
-		immutableCtx:   ContextWithValue(c.immutableCtx, key, value),
-		nowByComponent: c.nowByComponent,
+		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
+		now:          c.now,
 	}
 }
 
