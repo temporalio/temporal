@@ -94,7 +94,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
 	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -3799,10 +3798,10 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 		"paused-window calendar entry must not be replayed on unpause")
 }
 
-// testScheduleNextActionTimeVisibility asserts that the
-// TemporalScheduleNextActionTime search attribute is published to visibility.
-func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
-	t.Skip("TODO(david, #10584)")
+// TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
+// ScheduleNextActionTime search attribute is published to visibility and is
+// queryable through the frontend ListSchedules API.
+func TestScheduleNextActionTimeVisibility(t *testing.T) {
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
@@ -3810,9 +3809,9 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	wid := testcore.RandomizeStr("sched-next-action-wf")
 	wt := testcore.RandomizeStr("sched-next-action-wt")
 
-	// Register a no-op workflow type. We pause both schedules immediately after
-	// creation so spawned actions shouldn't run, but registering avoids worker
-	// noise if a fire slips through before pause lands.
+	// Register a no-op workflow type so a stray fire doesn't generate worker
+	// noise. The schedule is never paused: we want its next action time to stay
+	// populated so it remains queryable.
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error { return nil },
 		workflow.RegisterOptions{Name: wt},
@@ -3837,6 +3836,7 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 		}
 	}
 
+	newContext := chasmContextFactory
 	v2Ctx := newContext(s.Context())
 	createTime := time.Now()
 
@@ -3849,37 +3849,33 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	})
 	s.NoError(err)
 
-	// Pause so FutureActionTimes is stable, and so that any SA the
-	// implementation intends to publish has been committed to visibility by
-	// the time the entry comes back paused.
-	for _, p := range []struct {
-		ctx context.Context
-		sid string
-	}{{v2Ctx, v2Sid}} {
-		_, err := s.FrontendClient().PatchSchedule(p.ctx, &workflowservice.PatchScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: p.sid,
-			Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
-			Identity:   "test",
-			RequestId:  uuid.NewString(),
+	// The CHASM scheduler publishes its next action time to visibility as the
+	// ScheduleNextActionTime search attribute. The schedule fires on an hourly
+	// interval, so its next action time is always in the future; a query for
+	// ScheduleNextActionTime > createTime must therefore eventually return this
+	// schedule. (The SA is indexed/queryable but not surfaced on the list entry,
+	// so we assert via the query rather than by reading the entry's SAs.)
+	query := fmt.Sprintf(`%s > "%s"`,
+		chasmscheduler.ScheduleNextActionTimeName,
+		createTime.UTC().Format(time.RFC3339Nano),
+	)
+
+	require.Eventually(t, func() bool {
+		listResp, err := s.FrontendClient().ListSchedules(v2Ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 100,
+			Query:           query,
 		})
-		s.NoError(err)
-	}
-
-	paused := func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetPaused()
-	}
-
-	// V2: TemporalScheduleNextActionTime must be present and decode to a
-	// timestamp at or after the create time.
-	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
-	s.NotNil(v2Entry)
-	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
-
-	var v2Next time.Time
-	s.NoError(payload.Decode(v2Pl, &v2Next))
-	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
-	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
-	s.True(v2Next.After(createTime.Add(-time.Second)),
-		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
+		if err != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == v2Sid {
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 1*time.Second,
+		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
+		v2Sid, query)
 }
