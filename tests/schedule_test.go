@@ -134,6 +134,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
 	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { testListSchedulesFilterByScheduleID(t, newContext) })
 	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { testBufferSizeReportedWhenBuffered(t, newContext) })
+	t.Run("TestActionContinueAsNew", func(t *testing.T) { testActionContinueAsNew(t, newContext) })
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
@@ -4006,4 +4007,107 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
 	s.True(v2Next.After(createTime.Add(-time.Second)),
 		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
+}
+
+// testActionContinueAsNew verifies that a scheduled workflow that performs a
+// continue-as-new before completing is tracked correctly by the scheduler.
+// The workflow does CAN once, then completes. The scheduler should then fire
+// the next action on the following interval.
+func testActionContinueAsNew(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-can")
+	wid := testcore.RandomizeStr("sched-can-wf")
+	wt := testcore.RandomizeStr("sched-can-wt")
+
+	var completions int32
+	workflowFn := func(ctx workflow.Context, continued bool) error {
+		if !continued {
+			return workflow.NewContinueAsNewError(ctx, wt, true)
+		}
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&completions, 1)
+			return 0
+		})
+		return nil
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for at least 2 completions, proving the scheduler fires a second
+	// action after the first CAN chain completes.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&completions) >= 2 },
+		15*time.Second, 500*time.Millisecond,
+		"scheduler should fire at least 2 actions after CAN completions",
+	)
+
+	// Wait for visibility to reflect both actions as completed before
+	// calling describe, to avoid flaky status assertions.
+	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		actions := ent.GetInfo().GetRecentActions()
+		return len(actions) >= 2 &&
+			actions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED &&
+			actions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	})
+
+	descResp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.GreaterOrEqual(len(descResp.Info.RecentActions), 2,
+		"should have at least 2 recent actions")
+	s.GreaterOrEqual(descResp.Info.ActionCount, int64(2))
+	// A third action may already be running by this point, so we don't assert
+	// RunningWorkflows is empty.
+
+	// Assert the first two completed actions. Later actions may still be running.
+	for i, action := range descResp.Info.RecentActions[:2] {
+		t.Logf("action %d: wfID=%s runID=%s status=%s scheduleTime=%s",
+			i,
+			action.GetStartWorkflowResult().GetWorkflowId(),
+			action.GetStartWorkflowResult().GetRunId(),
+			action.GetStartWorkflowStatus(),
+			action.GetScheduleTime().AsTime(),
+		)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, action.GetStartWorkflowStatus(),
+			"action %d should be completed (the scheduler should follow the CAN chain)", i)
+		s.NotEmpty(action.GetStartWorkflowResult().GetWorkflowId(),
+			"action %d should have a workflow ID", i)
+		s.NotEmpty(action.GetStartWorkflowResult().GetRunId(),
+			"action %d should have a run ID", i)
+		s.NotNil(action.GetScheduleTime(),
+			"action %d should have a schedule time", i)
+		s.NotNil(action.GetActualTime(),
+			"action %d should have an actual time", i)
+	}
+	assertRecentActionsNoDuplicateRunIDs(t, descResp.Info.RecentActions)
 }
