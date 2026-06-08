@@ -828,9 +828,10 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 // testScheduledWorkflowContinueAsNewCompletion validates that the CHASM scheduler observes the
 // completion of a scheduled workflow that continues-as-new before completing. The scheduler matches
 // completions by the request ID on the Nexus completion callback it attaches at start; if that ID is
-// lost across continue-as-new the completion is silently dropped and LastCompletionResult never
-// propagates. Each action continues-as-new once then completes, so once a completion is recorded a
-// later action observes a non-empty LastCompletionResult. CHASM-only: V1 uses no Nexus callbacks.
+// lost across continue-as-new the completion is silently dropped, so with a buffering overlap policy
+// the scheduler believes the action is still running and never starts the buffered actions. With the
+// fix, completions are observed and the buffer drains, so multiple distinct actions complete.
+// CHASM-only: V1 uses no Nexus completion callbacks.
 func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
@@ -838,28 +839,24 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 	wid := testcore.RandomizeStr("sched-can-completion-wf")
 	wt := testcore.RandomizeStr("sched-can-completion-wt")
 
-	observedLCR := make(chan string, 64)
+	// Each scheduled action reports its (unique) workflow ID once its continued run completes.
+	completed := make(chan string, 64)
 
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		// The first run reports the LastCompletionResult the scheduler propagated (set only if the
-		// previous action's completion was recorded), then continues-as-new once. Reading it here
-		// avoids depending on whether LastCompletionResult survives the workflow's own CaN.
+	workflowFn := func(ctx workflow.Context) error {
+		// Continue-as-new once so the completion is delivered from the continued run, exercising
+		// completion-callback propagation across continue-as-new.
 		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
-			var lcr string
-			if workflow.HasLastCompletionResult(ctx) {
-				_ = workflow.GetLastCompletionResult(ctx, &lcr)
-			}
-			_ = workflow.SideEffect(ctx, func(workflow.Context) any {
-				select {
-				case observedLCR <- lcr:
-				default:
-				}
-				return nil
-			}).Get(nil)
-			return "", workflow.NewContinueAsNewError(ctx, wt)
+			return workflow.NewContinueAsNewError(ctx, wt)
 		}
-		// The CaN'd run completes, exercising completion delivery across continue-as-new.
-		return "completed-" + workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
+		wfID := workflow.GetInfo(ctx).WorkflowExecution.ID
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
+			select {
+			case completed <- wfID:
+			default:
+			}
+			return nil
+		}).Get(nil)
+		return nil
 	}
 	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
@@ -869,9 +866,11 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 				{Interval: durationpb.New(1 * time.Second)},
 			},
 		},
-		// ALLOW_ALL so later actions run even if an earlier action is (incorrectly) still running.
+		// BUFFER_ALL gates each start on the previous action completing. If a completion is dropped
+		// (the bug), the scheduler believes the action is still running and the buffered actions never
+		// start, so only the first action ever completes.
 		Policies: &schedulepb.SchedulePolicies{
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 		},
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
@@ -893,18 +892,20 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
-	s.NoError(err)
+	require.NoError(t, err)
 
-	// A non-empty observation only happens once the scheduler has recorded a prior CaN'd completion.
+	// Each new action only starts after the scheduler observes the previous one complete. Seeing
+	// several distinct actions complete proves completions are delivered across continue-as-new; with
+	// the bug the scheduler stalls after the first.
+	const wantDistinct = 3
+	seen := make(map[string]struct{})
 	deadline := time.After(15 * time.Second)
-	for {
+	for len(seen) < wantDistinct {
 		select {
-		case lcr := <-observedLCR:
-			if lcr != "" {
-				return
-			}
+		case id := <-completed:
+			seen[id] = struct{}{}
 		case <-deadline:
-			t.Fatal("scheduler never propagated a completion result from a continue-as-new'd scheduled workflow")
+			t.Fatalf("only %d buffered scheduled action(s) completed before timeout; expected %d (continue-as-new completions are being dropped)", len(seen), wantDistinct)
 		}
 	}
 }
