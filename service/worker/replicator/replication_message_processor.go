@@ -34,13 +34,9 @@ const (
 
 	// Namespace replication tasks (failover, register, update) are gated on the
 	// cluster-global namespace metadata CAS, which can churn under contention.
-	// Give them a wider retry budget than other task types so a brief CAS burst
-	// or storage wobble doesn't drop them into the DLQ.
-	namespaceTaskRetryInitialInterval    = 2 * time.Second
-	namespaceTaskRetryBackoffCoefficient = 2.0
-	namespaceTaskRetryMaximumInterval    = 10 * time.Second
-	namespaceTaskRetryExpiration         = 1 * time.Minute
-	namespaceTaskRetryMaximumAttempts    = 15
+	// Allow more attempts than other task types so a brief CAS burst or storage
+	// wobble doesn't drop them into the DLQ.
+	namespaceTaskRetryMaxAttempts = 30
 )
 
 func newReplicationMessageProcessor(
@@ -61,13 +57,11 @@ func newReplicationMessageProcessor(
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
 		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
-	namespaceTaskRetryPolicy := backoff.NewExponentialRetryPolicy(namespaceTaskRetryInitialInterval).
-		WithBackoffCoefficient(namespaceTaskRetryBackoffCoefficient).
-		WithMaximumInterval(namespaceTaskRetryMaximumInterval).
-		WithExpirationInterval(namespaceTaskRetryExpiration).
-		WithMaximumAttempts(namespaceTaskRetryMaximumAttempts)
+	namespaceTaskRetryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
+		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
+		WithMaximumAttempts(namespaceTaskRetryMaxAttempts)
 
-	// Namespace tasks get a longer budget because they're gated on the
+	// Namespace tasks get more retry attempts because they're gated on the
 	// cluster-global namespace metadata CAS; other task types stay on the
 	// shorter default to keep the single-threaded loop responsive.
 	retryPolicyForTask := func(task *replicationspb.ReplicationTask) backoff.RetryPolicy {
