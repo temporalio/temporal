@@ -71,11 +71,6 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		return replicateBatchResult{}, nil
 	}
 
-	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(req.TargetClusterName)
-	if err != nil {
-		return replicateBatchResult{}, fmt.Errorf("get remote admin client for %s: %w", req.TargetClusterName, err)
-	}
-
 	var hb replicateBatchHeartbeat
 	if activity.HasHeartbeatDetails(ctx) {
 		_ = activity.GetHeartbeatDetails(ctx, &hb)
@@ -105,6 +100,11 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 	ns, err := a.NamespaceRegistry.GetNamespaceByID(namespace.ID(req.NamespaceID))
 	if err != nil {
 		return replicateBatchResult{}, fmt.Errorf("look up namespace %s: %w", req.NamespaceID, err)
+	}
+
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(req.TargetClusterName)
+	if err != nil {
+		return replicateBatchResult{}, fmt.Errorf("get remote admin client for %s: %w", req.TargetClusterName, err)
 	}
 
 	return a.runVerifyPhase(ctx, req, execs, execCount, remoteAdminClient, ns)
