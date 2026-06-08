@@ -67,8 +67,6 @@ func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
 	return m.persistence.GetHistoryBranchUtil()
 }
 
-// The below three APIs are related to serialization/deserialization
-
 // historySizeRollback records HistorySize increments applied to caller-owned ExecutionStats
 // during a write so they can be reverted if the write fails. The persistence layer mutates
 // the caller's (shared) in-memory mutable state in place; without reverting on failure, a
@@ -103,6 +101,7 @@ func (r *historySizeRollback) revertOnError(err *error) {
 	}
 }
 
+// The below three APIs are related to serialization/deserialization
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
