@@ -4058,7 +4058,7 @@ func testActionContinueAsNew(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for at least 2 completions, proving the scheduler fires a second
 	// action after the first CAN chain completes.
@@ -4081,7 +4081,7 @@ func testActionContinueAsNew(t *testing.T, newContext contextFactory) {
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.GreaterOrEqual(len(descResp.Info.RecentActions), 2,
 		"should have at least 2 recent actions")
