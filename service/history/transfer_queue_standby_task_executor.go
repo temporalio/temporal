@@ -133,7 +133,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Retry even if locally invalid; wait for replication from active to remove the task.
 		return ms.ChasmTree(), nil
 	}
