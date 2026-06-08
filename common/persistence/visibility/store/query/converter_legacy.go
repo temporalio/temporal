@@ -25,9 +25,9 @@ type (
 		fnInterceptor  FieldNameInterceptor
 		whereConverter ExprConverter
 
-		// anchor is the reference time used to resolve NOW() expressions. When zero,
-		// getAnchor() falls back to time.Now().UTC() at resolution time.
-		anchor time.Time
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
 	}
 
 	WhereConverter struct {
@@ -83,18 +83,18 @@ func NewConverterLegacy(fnInterceptor FieldNameInterceptor, whereConverter ExprC
 	}
 }
 
-// WithAnchor sets the reference time used to resolve NOW() expressions in the query.
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
 // If not set, time.Now().UTC() is used at resolution time.
-func (c *ConverterLegacy) WithAnchor(t time.Time) *ConverterLegacy {
-	c.anchor = t.UTC()
+func (c *ConverterLegacy) WithQueryTime(t time.Time) *ConverterLegacy {
+	c.queryTime = t.UTC()
 	return c
 }
 
-func (c *ConverterLegacy) getAnchor() time.Time {
-	if c.anchor.IsZero() {
-		c.anchor = time.Now().UTC()
+func (c *ConverterLegacy) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
 	}
-	return c.anchor
+	return c.queryTime
 }
 
 func NewWhereConverter(
@@ -236,7 +236,7 @@ func (c *ConverterLegacy) convertSelect(sel *sqlparser.Select) (*QueryParamsLega
 
 	queryParams := &QueryParamsLegacy{}
 	if sel.Where != nil {
-		if err := ResolveNowInExpr(&sel.Where.Expr, c.getAnchor()); err != nil {
+		if err := ResolveNowInExpr(&sel.Where.Expr, c.getQueryTime()); err != nil {
 			return nil, wrapConverterError("unable to resolve NOW() expressions", err)
 		}
 		query, err := c.whereConverter.Convert(sel.Where.Expr)

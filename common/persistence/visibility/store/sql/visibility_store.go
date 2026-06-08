@@ -505,7 +505,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 		request.Query,
 		request.ChasmMapper,
 		request.ArchetypeID,
-	).WithAnchor(queryTime)
+	).WithQueryTime(queryTime)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
@@ -958,7 +958,7 @@ func buildQueryParams(
 	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper).
 		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID).
-		WithAnchor(anchor)
+		WithQueryTime(anchor)
 
 	queryParams, err := c.Convert(queryString)
 	if err != nil {
