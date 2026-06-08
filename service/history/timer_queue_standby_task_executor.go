@@ -85,6 +85,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 
 	var err error
 
+	// todo@time-skipping: replication, add support for standby task_executor
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
@@ -108,6 +109,10 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
+	case *tasks.TimeSkippingTimerTask:
+		// todo@time-skipping: replication. The disable-after-bound transition is emitted
+		// on the active side and will replicate; standby drops the local task.
+		err = nil
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -255,7 +260,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				timerSequenceID.Timestamp,
+				mutableState.ToRealTime(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -316,7 +321,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				timerSequenceID.Timestamp,
+				mutableState.ToRealTime(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -335,7 +340,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToRealTime(heartbeatTimeoutVis)) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}

@@ -104,7 +104,7 @@ type (
 // by the history engine as a function value.
 type noopWorkerDeploymentClient struct{ workerdeployment.Client }
 
-func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string) error {
+func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string, int64) error {
 	return nil
 }
 
@@ -1712,6 +1712,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
+	s.setupStartWorkflowExecutionForTerminate()
+
+	//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	s.NoError(err)
+	s.True(resp.Started)
+	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
@@ -1803,6 +1816,22 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
+
+				s.NoError(err)
+				s.True(resp.Started)
+				s.NotEqual(prevRunID, resp.GetRunId())
+			})
+
+			s.Run("and id reuse policy is TERMINATE_IF_RUNNING", func() {
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
+					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
+					Return(tests.CreateWorkflowExecutionResponse, nil)
+
+				resp, err := s.historyEngine.StartWorkflowExecution(
+					metrics.AddMetricsContext(context.Background()),
+					//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
+					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
 				s.NoError(err)
 				s.True(resp.Started)

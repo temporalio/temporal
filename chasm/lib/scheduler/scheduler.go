@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,9 +19,9 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -48,6 +49,9 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	// Human-readable event history used for debugging.
+	EventLog chasm.Field[*EventLog]
+
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
@@ -65,7 +69,15 @@ var (
 	executionStatusCompleted = "Completed"
 )
 
-var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+const ScheduleNextActionTimeName = "ScheduleNextActionTime"
+const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
+
+var (
+	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+	scheduleIdleCloseTimeSearchAttribute  = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+)
+
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
 
 const (
@@ -118,6 +130,7 @@ func NewScheduler(
 		cacheConflictToken:   scheduler.InitialConflictToken,
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
@@ -156,6 +169,7 @@ func NewSentinel(
 			Info:          &schedulepb.ScheduleInfo{},
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
+		EventLog:           chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	now := ctx.Now(s)
 	s.Info.CreateTime = timestamppb.New(now)
@@ -259,9 +273,14 @@ func CreateSchedulerFromMigration(
 		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
 
+	// These components won't start with any tasks, as stale running workflow entries
+	// can cause immediate computation after migration to drop actions due to overlap
+	// policy. Instead, SchedulerCallbacksTask fires both tasks after ensuring cached
+	// running workflow state is up-to-date.
 	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
 	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
 
@@ -274,9 +293,13 @@ func CreateSchedulerFromMigration(
 	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
 	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
-	// Schedule a callbacks task to attach Nexus callbacks to any migrated
-	// running workflows. The task self-invalidates if there's no work to do.
-	ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
+	// state; if there are none, generate directly.
+	if slices.ContainsFunc(state.GetInvokerState().GetBufferedStarts(), needsCallback) {
+		ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+	} else {
+		sched.Generator.Get(ctx).Generate(ctx)
+	}
 
 	return sched, nil
 }
@@ -444,58 +467,64 @@ func (s *Scheduler) updateConflictToken() {
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
 func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
-	var lastEvent time.Time
-	invoker := s.Invoker.Get(ctx)
-	recentActions := invoker.recentActions()
-	if len(recentActions) > 0 {
-		lastEvent = recentActions[len(recentActions)-1].GetActualTime().AsTime()
+	latest := util.MaxTime(
+		s.Info.GetCreateTime().AsTime(),
+		s.Info.GetUpdateTime().AsTime(),
+	)
+
+	// The recentActions list is unsorted.
+	for _, a := range s.Invoker.Get(ctx).recentActions() {
+		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
-	return lastEvent
+
+	return latest
 }
 
-// getIdleExpiration returns an idle close time and the boolean value of 'true'
-// for when a schedule is idle (pending soft delete).
+// isHeldOpen reports whether the schedule must stay open regardless of having
+// no current work:
+// - Paused: customer expects to resume.
+// - Pending backfill: must drain (any pending backfill blocks idle).
+// - Sentinels are exempt .
+//
+// Manual-only schedules (empty spec, but active) idle out like any other -
+// matching V1's RetentionTime semantics, where lastEventTime is advanced by
+// manual triggers via recentActions.
+func (s *Scheduler) isHeldOpen() bool {
+	if s.IsSentinel() {
+		return false
+	}
+	return s.Schedule.GetState().GetPaused() ||
+		s.hasMoreBackfills()
+}
+
+// idleDeadline returns when the schedule becomes eligible to close. Sentinels
+// anchor on CreateTime - they have no Invoker (and thus no recentActions).
+func (s *Scheduler) idleDeadline(ctx chasm.Context, idleTime time.Duration) time.Time {
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime)
+	}
+	return s.getLastEventTime(ctx).Add(idleTime)
+}
+
+// getIdleExpiration returns an idle close time and whether the schedule is
+// idle. Generator-only: nextWakeup must reflect the spec's next pending wakeup
+// so the predicate can skip arming idle when work remains. Validate calls
+// isHeldOpen and idleDeadline directly.
 func (s *Scheduler) getIdleExpiration(
 	ctx chasm.Context,
 	idleTime time.Duration,
 	nextWakeup time.Time,
 ) (time.Time, bool) {
-	// The idle timer to close off the component is started only for schedules with
-	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.GetSchedule().GetState().GetPaused() ||
-		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
-		s.hasMoreAllowAllBackfills(ctx) {
+		s.isHeldOpen() ||
+		(!nextWakeup.IsZero() && s.useScheduledAction(false)) {
 		return time.Time{}, false
 	}
-
-	if s.IsSentinel() {
-		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
-	}
-	return s.getLastEventTime(ctx).Add(idleTime), true
+	return s.idleDeadline(ctx, idleTime), true
 }
 
-func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
-	for _, field := range s.Backfillers {
-		backfiller := field.Get(ctx)
-		var policy enumspb.ScheduleOverlapPolicy
-		switch request := backfiller.GetRequest().(type) {
-		case *schedulerpb.BackfillerState_BackfillRequest:
-			policy = request.BackfillRequest.OverlapPolicy
-		case *schedulerpb.BackfillerState_TriggerRequest:
-			policy = request.TriggerRequest.OverlapPolicy
-		default:
-			return false
-		}
-
-		if enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL == s.resolveOverlapPolicy(policy) {
-			return true
-		}
-	}
-
-	return false
+func (s *Scheduler) hasMoreBackfills() bool {
+	return len(s.Backfillers) > 0
 }
 
 type schedulerActionResult struct {
@@ -540,6 +569,16 @@ func (s *Scheduler) HandleNexusCompletion(
 		return nil
 	}
 
+	// Record how long it took for the callback to arrive after the action completed.
+	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
+	// and clamp to zero in case of clock skew.
+	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
+		latency := max(0, ctx.Now(s).Sub(closeTime))
+		newTaggedMetricsHandler(ctx.MetricsHandler(), s).
+			Timer(metrics.ScheduleCallbackLatency.Name()).
+			Record(latency)
+	}
+
 	// Handle last completed/failed status and payloads.
 	//
 	// TODO - also record payload sizes once we have metrics wired into CHASM context.
@@ -578,6 +617,11 @@ func (s *Scheduler) HandleNexusCompletion(
 		CloseTime: info.CloseTime,
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
+
+	// Generate immediately after recording completions, so that an idle task
+	// can be scheduled if no more actions are remaining. Necessary as
+	// additional events invalidate in-flight idle tasks.
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return nil
 }
@@ -624,6 +668,12 @@ func (s *Scheduler) Describe(
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
 	info.FutureActionTimes = generator.GetFutureActionTimes()
+	// BufferedStarts holds waiting, running, and recently-completed entries; only the
+	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+
+	executionInfo := ctx.ExecutionInfo()
+	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
@@ -711,6 +761,9 @@ func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
@@ -745,6 +798,8 @@ func (s *Scheduler) MigrateToWorkflow(
 	}
 	s.Schedule.State.Paused = true
 	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
+
+	s.EventLog.Get(ctx).LogEvent(ctx, "started migration to V1")
 
 	// Schedule a side-effect task to export state and start the V1 workflow.
 	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
@@ -802,10 +857,10 @@ func (s *Scheduler) Update(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+	s.EventLog.Get(ctx).LogEvent(ctx, "updated via API")
 
 	// Since the spec may have been updated, kick off the generator.
-	generator := s.Generator.Get(ctx)
-	generator.Generate(ctx)
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return &schedulerpb.UpdateScheduleResponse{
 		FrontendResponse: &workflowservice.UpdateScheduleResponse{},
@@ -829,6 +884,7 @@ func (s *Scheduler) Patch(
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
+		s.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
 		if s.WorkflowMigration != nil {
@@ -836,7 +892,7 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
-		s.Generator.Get(ctx).Generate(ctx)
+		s.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
@@ -845,6 +901,9 @@ func (s *Scheduler) Patch(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+
+	// Since the paused state may have been updated, kick off the generator.
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return &schedulerpb.PatchScheduleResponse{
 		FrontendResponse: &workflowservice.PatchScheduleResponse{},
@@ -873,16 +932,25 @@ func (s *Scheduler) executionStatus() string {
 }
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
-func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	if s.Sentinel {
 		return []chasm.SearchAttributeKeyValue{
 			executionStatusSearchAttribute.Value(s.executionStatus()),
 		}
 	}
-	return []chasm.SearchAttributeKeyValue{
+	out := []chasm.SearchAttributeKeyValue{
 		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
+	if !s.Closed {
+		if gen := s.Generator.Get(ctx); len(gen.FutureActionTimes) > 0 {
+			out = append(out, scheduleNextActionTimeSearchAttribute.Value(gen.FutureActionTimes[0].AsTime()))
+		}
+		if s.IdleCloseTime != nil {
+			out = append(out, scheduleIdleCloseTimeSearchAttribute.Value(s.IdleCloseTime.AsTime()))
+		}
+	}
+	return out
 }
 
 // Memo returns the scheduler's info block for visibility.
@@ -901,6 +969,7 @@ func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
+	executionInfo := ctx.ExecutionInfo()
 
 	// Clear fields that are too large/not useful for the list view.
 	spec.TimezoneData = nil
@@ -920,6 +989,7 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
+		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
 	}
 }
 
@@ -928,15 +998,15 @@ func (s *Scheduler) ListInfo(
 func (s *Scheduler) startWorkflowSearchAttributes(
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
-
-	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
-	if p, err := payload.Encode(nominal); err == nil {
-		fields[sadefs.TemporalScheduledStartTime] = p
-	}
-	if p, err := payload.Encode(s.ScheduleId); err == nil {
-		fields[sadefs.TemporalScheduledById] = p
-	}
+	scheduledStartTime := chasm.SearchAttributeTemporalScheduledStartTime.Value(nominal)
+	scheduledByID := chasm.SearchAttributeTemporalScheduledByID.Value(s.ScheduleId)
+	fields := payload.MergeMapOfPayload(
+		s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes().GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			scheduledStartTime.Field: scheduledStartTime.Value.MustEncode(),
+			scheduledByID.Field:      scheduledByID.Value.MustEncode(),
+		},
+	)
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}

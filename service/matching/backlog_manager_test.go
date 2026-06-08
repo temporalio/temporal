@@ -85,6 +85,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
+	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
@@ -442,6 +443,33 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
+	if !s.newMatcher {
+		s.T().Skip("SyncState is only used by the new backlog manager")
+	}
+
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingUpdateAckInterval.Key(), 100*time.Millisecond)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// physical queue should unload soon
+	var unloadCalled atomic.Bool
+	s.ptqMgr.EXPECT().UnloadFromPartitionManager(unloadCauseConflict).Do(func(unloadCause) {
+		unloadCalled.Store(true)
+	}).AnyTimes()
+
+	// simulate another partition stealing and releasing ownership
+	db := s.blm.getDB()
+	tqd := s.taskMgr.getQueueDataByKey(db.queue)
+	tqd.Lock()
+	tqd.rangeID++
+	tqd.Unlock()
+
+	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
 }
 
 type taskBlock struct {

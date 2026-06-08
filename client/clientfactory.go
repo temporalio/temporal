@@ -129,18 +129,20 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (any, error) {
+	clientProvider := func(clientKey string) (any, func() error, error) {
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
-		return matchingservice.NewMatchingServiceClient(connection), nil
+		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
-		common.NewClientCache(keyResolver, clientProvider),
+		common.NewClientCache(keyResolver, clientProvider, cf.logger),
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(cf.dynConfig),
+		resolver,
+		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {

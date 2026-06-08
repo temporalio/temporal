@@ -90,6 +90,10 @@ message ActivityState {
 
   // Set if the activity was terminated
   ActivityTerminateState terminate_state = 12;
+
+  // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
+  // has a retry policy, retry attempts will not have start delay applied.
+  google.protobuf.Duration start_delay = 13;
 }
 
 message ActivityCancelState {
@@ -151,6 +155,15 @@ message ActivityAttemptState {
   // The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
   // case of implicit retries.
   string start_request_id = 9;
+
+  // The name of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+  // `client-name` header on PollActivityTaskQueue). Overwritten on each new attempt. Empty if no worker has ever
+  // picked up this activity, or if the most recent worker did not send a client-name header.
+  string sdk_name = 10;
+
+  // The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
+  // `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
+  string sdk_version = 11;
 }
 
 message ActivityHeartbeatState {
@@ -158,6 +171,8 @@ message ActivityHeartbeatState {
   temporal.api.common.v1.Payloads details = 1;
   // Time the last heartbeat was recorded.
   google.protobuf.Timestamp recorded_time = 2;
+  // Total number of heartbeats recorded across all attempts of this activity, including retries.
+  int64 total_heartbeat_count = 3;
 }
 
 message ActivityRequestData {
@@ -165,8 +180,10 @@ message ActivityRequestData {
   temporal.api.common.v1.Payloads input = 1;
   temporal.api.common.v1.Header header = 2;
 
-  // Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
-  temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+  // Deprecated: now stored in ChasmComponentAttributes.user_metadata. Kept here
+  // only to read state persisted before the migration; new activities leave
+  // this empty.
+  temporal.api.sdk.v1.UserMetadata user_metadata = 3 [deprecated = true];
 }
 
 message ActivityOutcome {

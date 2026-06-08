@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -31,14 +32,22 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(
+	config *Config,
+	linkValidator *linkValidator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+) *handler {
 	return &handler{
 		config:            config,
+		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -61,16 +70,32 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
+	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
+			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
+			// Only enforce the per-component cap when we'll actually persist the links —
+			// i.e., when creating a new activity. On returning an existing activity
+			// without attach_links the request.Links field is dropped, so the cap check
+			// is skipped to avoid false rejects. Per-request shape/size/count is already
+			// validated by the frontend (the only caller of this handler).
+			if err := h.linkValidator.ValidateComponentTotal(request.GetNamespace(), 0, len(request.GetLinks())); err != nil {
+				return nil, err
+			}
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, err
+			}
+
+			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+					return nil, err
+				}
 			}
 
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
@@ -80,8 +105,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, nil
 		},
-		req.GetFrontendRequest(),
-		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
+		frontendReq,
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
@@ -94,10 +119,52 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	// Apply on_conflict_options to an existing activity.
+	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
+		requestID := frontendReq.GetRequestId()
+		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			ref,
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				if attachCallbacks {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
 			RunId:   result.ExecutionKey.RunID,
 			Started: result.Created,
+			Link: &commonpb.Link{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  frontendReq.GetNamespace(),
+						ActivityId: frontendReq.GetActivityId(),
+						RunId:      result.ExecutionKey.RunID,
+					},
+				},
+			},
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil

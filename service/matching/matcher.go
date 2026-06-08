@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,6 +41,7 @@ type TaskMatcher struct {
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
+	waitingPollerCount     atomic.Int64
 }
 
 var (
@@ -383,7 +383,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.ForwardedTag(forwarded),
 		metrics.StringTag(metrics.TaskPriorityTagName, ""),
 	)
 }
@@ -421,10 +421,19 @@ func (tm *TaskMatcher) poll(
 	defer func() {
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
+			var pollResult string
+			if err == nil {
+				pollResult = "success"
+			} else if errors.Is(err, errNoTasks) {
+				pollResult = "timeout"
+			} else {
+				pollResult = "failed"
+			}
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
-				metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)),
+				metrics.ForwardedTag(forwardedPoll),
 				metrics.StringTag(metrics.TaskPriorityTagName, ""),
+				metrics.PollResultTag(pollResult),
 			)
 		}
 
@@ -468,6 +477,11 @@ func (tm *TaskMatcher) poll(
 		return task, false, nil
 	default:
 	}
+
+	// From here on the goroutine will block on taskC (in step 3 or 4), so it
+	// is ready to receive a sync-matched task.
+	tm.waitingPollerCount.Add(1)
+	defer tm.waitingPollerCount.Add(-1)
 
 	if tm.isBacklogNegligible() {
 		// 3. forwarding (and all other clauses repeated)
@@ -617,6 +631,12 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 
 func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
 	return time.Since(time.Unix(0, tm.lastPoller.Load()))
+}
+
+// HasWaitingPoller returns true if it there's a poller ready and waiting
+// this is mostly useful in testing to avoid test races on setup
+func (tm *TaskMatcher) HasWaitingPoller() bool {
+	return tm.waitingPollerCount.Load() > 0
 }
 
 // contextWithCancelOnChannelClose returns a child Context and CancelFunc just like

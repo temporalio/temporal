@@ -33,7 +33,7 @@ linters:
     forbidigo:
       forbid:
         - pattern: time.Sleep
-          msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
+          msg: "Please use await.Require / s.Await unless there's no better option"
         - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
@@ -48,8 +48,10 @@ linters:
           msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
         - pattern: context\.Background\(\)
           msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
+        - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)(\(|$)'
+          msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
         - pattern: 'assert\.\w+'
-          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure. assert.CollectT is still allowed for EventuallyWithT callbacks."
+          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
     depguard:
       rules:
         main:
@@ -202,7 +204,14 @@ linters:
         text: "context.Background"
         linters:
           - forbidigo
-      - text: "use of `assert\\.CollectT`" # allowed for EventuallyWithT callbacks
+      # Existing legacy call sites are tracked separately; keep this PR scoped
+      # to preventing new usage while migrating touched tests.
+      - path: tests/(nexus_standalone|nexus_workflow|schedule|schedule_migration)_test\.go$
+        text: "Eventually"
+        linters:
+          - forbidigo
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
+        text: "assert\\.CollectT"
         linters:
           - forbidigo
       - text: "use of `softassert\\.\\w+`"

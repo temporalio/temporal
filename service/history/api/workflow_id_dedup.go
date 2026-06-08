@@ -247,3 +247,18 @@ func generateWorkflowAlreadyStartedError(
 		workflowKey.RunID,
 	)
 }
+
+func MigrateWorkflowIDReusePolicyForRunningWorkflow(
+	wfIDReusePolicy *enumspb.WorkflowIdReusePolicy,
+	wfIDConflictPolicy *enumspb.WorkflowIdConflictPolicy,
+) {
+	// workflow id reuse policy's Terminate-if-Running has been replaced by
+	// workflow id conflict policy's Terminate-Existing
+	//nolint:staticcheck // SA1019: intentional migration of deprecated policy
+	if *wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		*wfIDConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+
+		// for *closed* workflows, its behavior is defined as ALLOW_DUPLICATE
+		*wfIDReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	}
+}

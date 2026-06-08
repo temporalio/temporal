@@ -377,8 +377,8 @@ func (c *cacheImpl) makeReleaseFunc(
 					isDirty := wfContext.IsDirty()
 					if isDirty {
 						wfContext.Clear()
-						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
-						logger.Error("Cache encountered dirty mutable state transaction",
+						softassert.Fail(shardContext.GetLogger(), "Cache encountered dirty mutable state transaction",
+							tag.ComponentHistoryCache,
 							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
 							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),

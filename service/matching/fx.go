@@ -35,9 +35,12 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(WorkersRegistryProvider),
@@ -47,6 +50,7 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
+	fx.Provide(func() PartitionScalerFactory { return nil }),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -59,6 +63,14 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 ) *Config {
 	return NewConfig(dc)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+	)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
@@ -96,6 +108,33 @@ func TelemetryInterceptorProvider(
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		map[string]int{},       // no token overrides
+		configs.PollTaskAPISet, // set of APIs that will wait for token instead of immediate rejection
+		serviceConfig.PollWaitForNamespaceRateLimitToken,
+		metricsHandler,
+	)
 }
 
 func RateLimitInterceptorProvider(
@@ -187,6 +226,10 @@ func VisibilityManagerProvider(
 		logger,
 		serializer,
 	)
+}
+
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

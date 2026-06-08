@@ -161,7 +161,17 @@ runs:
           unset ALPINE_TAG
         fi
 
-        docker buildx bake \
-          --push \
-          -f docker/docker-bake.hcl \
-          server admin-tools
+        for attempt in 1 2 3; do
+          echo "Docker build/push attempt $attempt/3"
+          if timeout 1200 docker buildx bake \
+              --push \
+              -f docker/docker-bake.hcl \
+              server admin-tools; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "Attempt $attempt failed, retrying in 30s..."
+            sleep 30
+          fi
+        done
+        exit 1

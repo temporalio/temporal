@@ -59,6 +59,7 @@ func (s *registrySuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		log.NewTestLogger(),
 		namespace.NewDefaultReplicationResolverFactory(),
+		nsregistry.DefaultNamespaceStateChanged,
 	)
 }
 

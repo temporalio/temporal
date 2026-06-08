@@ -3,6 +3,7 @@ package history
 import (
 	"fmt"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -307,6 +308,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		outboundTaskGroupPostProcessor(f.ChasmRegistry),
 	)
 }
 
@@ -358,4 +360,19 @@ func getNamespaceNameOrDefault(
 		return def
 	}
 	return nsName.String()
+}
+
+func outboundTaskGroupPostProcessor(registry *chasm.Registry) func([]tasks.Task) {
+	if registry == nil {
+		return nil
+	}
+	return func(taskSlice []tasks.Task) {
+		for _, t := range taskSlice {
+			if ct, ok := t.(*tasks.ChasmTask); ok {
+				if rt, ok := registry.TaskByID(ct.Info.GetTypeId()); ok {
+					ct.SetOutboundTaskGroup(rt.TaskGroup())
+				}
+			}
+		}
+	}
 }

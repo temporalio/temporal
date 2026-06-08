@@ -132,6 +132,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	testClusterFactory := testcore.NewTestClusterFactory()
 	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
 		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
+		clusterConfigs[clusterIndex].DCRedirectionPolicy = params.DCRedirectionPolicy
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
@@ -427,7 +428,7 @@ func (s *xdcBaseSuite) failover(
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyBusinessID))
+				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.RoutingKey{}))
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)

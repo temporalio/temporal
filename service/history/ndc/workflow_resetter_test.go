@@ -397,6 +397,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		nil,
 		true,
 		nil,
+		gomock.Any(),
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
@@ -1044,6 +1045,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			Input:      payloads.EncodeString("signal-input-1"),
 			Identity:   "signal-identity-1",
 			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
+			RequestId:  "signal-request-id-1",
 		}},
 	}
 	// This event is not reapplied
@@ -1062,6 +1064,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				SignalName: "signal-name-2",
 				Input:      payloads.EncodeString("signal-input-2"),
 				Identity:   "signal-identity-2",
+				RequestId:  "signal-request-id-2",
 			},
 		},
 	}
@@ -1203,6 +1206,8 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						event.Links,
 						attr.GetIdentity(),
 						attr.GetPriority(),
+						attr.GetTimeSkippingConfig(),
+						attr.GetWorkflowUpdateOptions(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 					attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -1211,6 +1216,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetInput(),
 						attr.GetIdentity(),
 						attr.GetHeader(),
+						attr.GetRequestId(),
 						event.Links,
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
@@ -1313,7 +1319,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	ms := historyi.NewMockMutableState(s.controller)
 	// Assert that none of these following methods are invoked.
 	arg := gomock.Any()
-	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg).Times(0)
+	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg, arg).Times(0)
 	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
 	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
 
@@ -1552,6 +1558,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		nil,
 		true,
 		nil,
+		gomock.Any(),
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(
@@ -1700,4 +1707,41 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", true)
 	s.NoError(err)
 	s.Empty(appliedEvents) // Event should be skipped
+}
+
+func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTimeSkippingConfig() {
+	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	event := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				AttachedRequestId:  "test-request-id",
+				TimeSkippingConfig: timeSkippingConfig,
+			},
+		},
+	}
+	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	ms := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		attr.GetVersioningOverride(),
+		attr.GetUnsetVersioningOverride(),
+		attr.GetAttachedRequestId(),
+		attr.GetAttachedCompletionCallbacks(),
+		event.Links,
+		attr.GetIdentity(),
+		attr.GetPriority(),
+		timeSkippingConfig,
+		attr.GetWorkflowUpdateOptions(),
+	).Return(&historypb.HistoryEvent{}, nil)
+
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, []*historypb.HistoryEvent{event}, nil, "", true)
+	s.NoError(err)
+	s.Len(appliedEvents, 1)
 }

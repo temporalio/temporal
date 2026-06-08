@@ -5,70 +5,78 @@ package temporal.server.chasm.lib.nexusoperation.proto.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
 message OperationState {
   // Current status of the operation.
   OperationStatus status = 1;
-
   // Endpoint ID - used internally to avoid failing requests when endpoint is renamed.
   string endpoint_id = 2;
-
   // Endpoint name - resolved from the endpoint registry for this workflow's namespace.
   string endpoint = 3;
-
   // Service name.
   string service = 4;
-
   // Operation name.
   string operation = 5;
-
   // The time when the operation was scheduled.
   google.protobuf.Timestamp scheduled_time = 6;
-
   // The time when the operation was started. Only set for asynchronous operations after a successful StartOperation
   // call. Taken from the component time or the time reported in an async completion request, whichever happens first.
   google.protobuf.Timestamp started_time = 7;
-
   // The time when the operation reached a terminal state. Taken from the component time or the time reported in an
   // async completion request, whichever happens first.
   google.protobuf.Timestamp closed_time = 8;
-
   // Schedule-to-start timeout for this operation.
   google.protobuf.Duration schedule_to_start_timeout = 9;
-
   // Start-to-close timeout for this operation.
   google.protobuf.Duration start_to_close_timeout = 10;
-
   // Schedule-to-close timeout for this operation.
   google.protobuf.Duration schedule_to_close_timeout = 11;
-
   // Unique request ID allocated for all retry attempts of the StartOperation request.
   string request_id = 12;
-
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The operation component itself does not interpret this field.
   google.protobuf.Any parent_data = 13;
-
   // The number of attempts made to deliver the start operation request.
   // This number is approximate, it is incremented when a task is added to the history queue.
   // In practice, there could be more attempts if a task is executed but fails to commit, or less attempts if a task was
   // never executed.
   int32 attempt = 14;
-
   // The time when the last attempt completed.
   google.protobuf.Timestamp last_attempt_complete_time = 15;
-
   // The last attempt's failure, if any.
   temporal.api.failure.v1.Failure last_attempt_failure = 16;
-
   // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
   google.protobuf.Timestamp next_attempt_schedule_time = 17;
-
   // Operation token - only set for asynchronous operations after a successful StartOperation call.
   string operation_token = 18;
+  // Explicit terminate request state for standalone operations.
+  NexusOperationTerminateState terminate_state = 19;
+  // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
+  repeated temporal.api.common.v1.Link links = 20;
+}
+
+message NexusOperationTerminateState {
+  string request_id = 1;
+}
+
+message OperationOutcome {
+  message Successful {
+    temporal.api.common.v1.Payload result = 1;
+  }
+
+  message Failed {
+    temporal.api.failure.v1.Failure failure = 1;
+  }
+
+  oneof variant {
+    Successful successful = 1;
+    Failed failed = 2;
+  }
 }
 
 enum OperationStatus {
@@ -91,31 +99,29 @@ enum OperationStatus {
   // Operation timed out - exceeded the user supplied schedule-to-close timeout.
   // Any attempts to complete the operation in this status will be ignored.
   OPERATION_STATUS_TIMED_OUT = 7;
+  OPERATION_STATUS_TERMINATED = 8;
 }
 
 message CancellationState {
   // Current status of the cancellation request.
   CancellationStatus status = 1;
-
   // The time when cancellation was requested.
   google.protobuf.Timestamp requested_time = 2;
-
   // The number of attempts made to deliver the cancel operation request.
   // This number represents a minimum bound since the attempt is incremented after the request completes.
   int32 attempt = 3;
-
   // The time when the last attempt completed.
   google.protobuf.Timestamp last_attempt_complete_time = 4;
-
   // The last attempt's failure, if any.
   temporal.api.failure.v1.Failure last_attempt_failure = 5;
-
   // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
   google.protobuf.Timestamp next_attempt_schedule_time = 6;
-
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The cancellation component itself does not interpret this field.
   google.protobuf.Any parent_data = 7;
+  string request_id = 8;
+  string identity = 9;
+  string reason = 10;
 }
 
 enum CancellationStatus {
@@ -133,4 +139,11 @@ enum CancellationStatus {
   CANCELLATION_STATUS_TIMED_OUT = 5;
   // Cancellation request is blocked (eg: by circuit breaker).
   CANCELLATION_STATUS_BLOCKED = 6;
+}
+
+message OperationRequestData {
+  temporal.api.common.v1.Payload input = 1;
+  map<string, string> nexus_header = 2;
+  temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+  string identity = 4;
 }

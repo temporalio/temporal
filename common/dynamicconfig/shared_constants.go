@@ -117,3 +117,32 @@ var DefaultHistoryCacheBackgroundEvictSettings = CacheBackgroundEvictSettings{
 	LoopInterval:    1 * time.Minute,
 	MaxEntryPerCall: 1024,
 }
+
+type PartitionScaleAllowedDrift struct {
+	// Delta and Ratio controls how far off client counts can be before we reject an RPC.
+	// If the client count is within the delta, it's allowed. Also, if the ratio of
+	// client's count / current count is within [1/ratio, ratio], then it's allowed.
+	// To always allow: set Delta to a very high number and Ratio to 1.0.
+	// To never allow except on exact match: set Delta to 0 and Ratio to 1.0.
+	// Allowing more means fewer retries, allowing less means more accurate load balancing.
+	Delta int32
+	Ratio float32
+}
+
+type PartitionScaleManagerSettings struct {
+	// MaxRate limits scale change frequency.
+	MaxRate float32
+	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
+	// reload.)
+	BatchSize int32
+	// BackgroundInterval is the interval for background work:
+	// - send signals to the scaler even if not a full batch of tasks has been received yet
+	// - check drained partition state
+	BackgroundInterval time.Duration
+	// DrainBufferTime is how long to wait until after scaling down before we can consider
+	// draining queues. It's needed because there's a tiny window where tasks may be written
+	// after a scale down, since draining state is only checked at the start of an RPC. This
+	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
+	// that query/nexus tasks will be processed without interruption even after scale down.
+	DrainBufferTime time.Duration
+}

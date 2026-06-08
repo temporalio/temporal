@@ -147,7 +147,7 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		NamespaceId: task.NamespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: task.Destination,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
 		},
 		Request: nexusRequest,
 	})

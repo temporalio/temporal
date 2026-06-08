@@ -33,6 +33,7 @@ const (
 	headerCallsiteTagName          = "header_callsite"
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
+	timeoutTypeTagName             = "timeout_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -47,9 +48,10 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
-	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
+	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
+	ReplicationProgressCacheTypeTagValue              = "replication_progress"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
@@ -459,8 +461,9 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
-	// VersionReactivationSignalCacheShouldSendScope is the scope used by version reactivation signal cache
-	VersionReactivationSignalCacheShouldSendScope = "VersionReactivationSignalCacheShouldSend"
+	// ReactivationSignalDedupScope is the scope used by the per-pod reactivation-signal
+	// dedup cache on the worker-deployment client.
+	ReactivationSignalDedupScope = "ReactivationSignalDedup"
 	// RoutingInfoCacheGetScope is the scope used by routing info cache
 	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
 	// RoutingInfoCachePutScope is the scope used by routing info cache
@@ -503,6 +506,8 @@ const (
 	VisibilityArchiverScope = "VisibilityArchiver"
 	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
 	HistoryScavengerScope = "HistoryScavenger"
+	// ScheduleInvariantsScannerScope is scope used by metrics emitted by the schedule-invariants scanner
+	ScheduleInvariantsScannerScope = "ScheduleInvariantsScanner"
 	// ArchiverDeleteHistoryActivityScope is scope used by all metrics emitted by archiver.DeleteHistoryActivity
 	ArchiverDeleteHistoryActivityScope = "ArchiverDeleteHistoryActivity"
 	// ArchiverUploadHistoryActivityScope is scope used by all metrics emitted by archiver.UploadHistoryActivity
@@ -593,6 +598,7 @@ const (
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
 	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
+	TaskTypeTimerActiveTaskTimeSkippingTimer              = "TimerActiveTaskTimeSkippingTimer"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -602,6 +608,7 @@ const (
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
 	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
+	TaskTypeTimerStandbyTaskTimeSkippingTimer             = "TimerStandbyTaskTimeSkippingTimer"
 )
 
 // Schedule action types
@@ -612,6 +619,11 @@ const (
 	ScheduleBackendChasm                 = "chasm"
 	ScheduleBackendLegacy                = "legacy"
 	ScheduleBackendWorkflow              = "workflow"
+	ScheduleOverlapPolicyTag             = "schedule_overlap_policy"
+	ScheduleMissedReasonTag              = "reason"
+	ScheduleMissedReasonNotBuffered      = "not_buffered"
+	ScheduleMissedReasonBufferExpired    = "buffer_expired"
+	ScheduleActionRunningTag             = "action_running"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
@@ -732,6 +744,10 @@ var (
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
+	NexusRequestErrors = NewCounterDef(
+		"nexus_request_errors",
+		WithDescription("The number of Nexus requests that resulted in errors."),
+	)
 	NexusLatency = NewTimerDef(
 		"nexus_latency",
 		WithDescription("Latency of Nexus requests."),
@@ -756,6 +772,8 @@ var (
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
+
+	VisibilityListWorkflowsQueryLength = NewDimensionlessHistogramDef("visibility_list_workflows_query_length")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
@@ -889,6 +907,14 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmIncomingSignalWritten = NewCounterDef(
+		"chasm_incoming_signal_written",
+		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
+	)
+	ChasmIncomingSignalDuplicate = NewCounterDef(
+		"chasm_incoming_signal_duplicate",
+		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
@@ -921,6 +947,7 @@ var (
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                   = NewCounterDef("command")
@@ -991,30 +1018,34 @@ var (
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
-	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                      = NewBytesHistogramDef("activity_info_size")
-	TimerInfoSize                         = NewBytesHistogramDef("timer_info_size")
-	ChildInfoSize                         = NewBytesHistogramDef("child_info_size")
-	RequestCancelInfoSize                 = NewBytesHistogramDef("request_cancel_info_size")
-	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
-	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
-	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
-	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
-	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
-	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
-	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
-	SignalInfoCount                       = NewDimensionlessHistogramDef("signal_info_count")
-	RequestCancelInfoCount                = NewDimensionlessHistogramDef("request_cancel_info_count")
-	SignalRequestIDCount                  = NewDimensionlessHistogramDef("signal_request_id_count")
-	BufferedEventsCount                   = NewDimensionlessHistogramDef("buffered_events_count")
-	TaskCount                             = NewDimensionlessHistogramDef("task_count")
-	TotalActivityCount                    = NewDimensionlessHistogramDef("total_activity_count")
-	TotalUserTimerCount                   = NewDimensionlessHistogramDef("total_user_timer_count")
-	TotalChildExecutionCount              = NewDimensionlessHistogramDef("total_child_execution_count")
-	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
-	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
-	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	ExecutionInfoSize                    = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize                   = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize                     = NewBytesHistogramDef("activity_info_size")
+	TimerInfoSize                        = NewBytesHistogramDef("timer_info_size")
+	ChildInfoSize                        = NewBytesHistogramDef("child_info_size")
+	RequestCancelInfoSize                = NewBytesHistogramDef("request_cancel_info_size")
+	SignalInfoSize                       = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                  = NewBytesHistogramDef("signal_request_id_size")
+	BufferedEventsSize                   = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                       = NewBytesHistogramDef("chasm_total_size")
+	ActivityInfoCount                    = NewDimensionlessHistogramDef("activity_info_count")
+	TimerInfoCount                       = NewDimensionlessHistogramDef("timer_info_count")
+	ChildInfoCount                       = NewDimensionlessHistogramDef("child_info_count")
+	SignalInfoCount                      = NewDimensionlessHistogramDef("signal_info_count")
+	RequestCancelInfoCount               = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                 = NewDimensionlessHistogramDef("signal_request_id_count")
+	BufferedEventsCount                  = NewDimensionlessHistogramDef("buffered_events_count")
+	TaskCount                            = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                   = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                  = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount             = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount      = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount             = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                     = NewDimensionlessHistogramDef("total_signal_count")
+	DescribeWorkflowSignalBacklinksCount = NewCounterDef(
+		"describe_workflow_signal_backlinks",
+		WithDescription("The number of signal backlinks resolved from the CHASM IncomingSignals map in DescribeWorkflow responses."),
+	)
 	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
@@ -1149,6 +1180,9 @@ var (
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
+	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
+	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1184,11 +1218,16 @@ var (
 	ForceLoadedTaskQueuePartitions                    = NewCounterDef("force_loaded_task_queue_partitions_count")
 	ForceLoadedTaskQueuePartitionUnnecessarilyCounter = NewCounterDef("force_loaded_task_queue_partition_unnecessarily_count")
 	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
+	PendingPolls                                      = NewGaugeDef("pending_polls")
 	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
-	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
-	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
-	TaskRewrites                                      = NewCounterDef(
+	TasksAddedCounter                                 = NewCounterDef(
+		"tasks_added",
+		WithDescription("Number of tasks arriving at a physical task queue, broken down by add result, forwarding, and versioning behavior"),
+	)
+	TaskWriteThrottlePerTaskQueueCounter = NewCounterDef("task_write_throttle_count")
+	TaskWriteLatencyPerTaskQueue         = NewTimerDef("task_write_latency")
+	TaskRewrites                         = NewCounterDef(
 		"task_rewrites",
 		WithDescription("Number of times tasks are rewritten to persistence after failing to process"),
 	)
@@ -1213,6 +1252,9 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
+	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
@@ -1239,6 +1281,14 @@ var (
 		"worker_registry_activity_slots_used",
 		WithDescription("Number of activity slots in use per worker."),
 	)
+	WorkerRegistryWorkerCount = NewGaugeDef(
+		"worker_registry_worker_count",
+		WithDescription("Number of workers per namespace."),
+	)
+	WorkerRegistryWorkersPerProcess = NewDimensionlessHistogramDef(
+		"worker_registry_workers_per_process",
+		WithDescription("Number of workers per SDK process."),
+	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.
 	WorkerPluginNameMetric = NewGaugeDef(
@@ -1262,6 +1312,11 @@ var (
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
+
+	PartitionCacheSize = NewGaugeDef(
+		"partition_cache_size",
+		WithDescription("Size of client-size matching partition cache (# entries)"),
+	)
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1289,17 +1344,21 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 
-	VisibilityArchiverArchiveNonRetryableErrorCount = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount    = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                   = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                    = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                      = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                       = NewCounterDef("scavenger_skips")
-	ExecutionsOutstandingCount                      = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                   = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                = NewCounterDef("add_search_attributes_failures")
+	VisibilityArchiverArchiveNonRetryableErrorCount     = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount        = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                       = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                        = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                          = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                           = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerStuckOpenCount             = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount          = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                 = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                          = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                    = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                    = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                       = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                    = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
@@ -1362,7 +1421,11 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef(
+	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+		"signal_external_workflow_execution_failures",
+		WithDescription("The number of signal external workflow execution failures by cause."),
+	)
+	ScheduleMissedCatchupWindow = NewCounterDef(
 		"schedule_missed_catchup_window",
 		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
 	)
@@ -1394,6 +1457,14 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleActionE2EDelay = NewTimerDef(
+		"schedule_action_e2e_delay",
+		WithDescription("End-to-end delay between the action's original schedule time and when it was actually started, including overlap policy wait"),
+	)
+	ScheduleGenerateLatency = NewTimerDef(
+		"schedule_generate_latency",
+		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
+	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
@@ -1409,6 +1480,14 @@ var (
 	ScheduleMigrationFailed = NewCounterDef(
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
+	)
+	ScheduleOverlapSkipped = NewCounterDef(
+		"schedule_overlap_skipped",
+		WithDescription("The number of schedule actions skipped due to overlap policy"),
+	)
+	ScheduleCallbackLatency = NewTimerDef(
+		"schedule_callback_latency",
+		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
 	)
 
 	// Worker Versioning
