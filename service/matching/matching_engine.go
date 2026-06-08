@@ -780,17 +780,17 @@ pollLoop:
 		if err != nil {
 			switch err := err.(type) {
 			case *serviceerror.Internal:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonInternalTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInternalTag)
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
 				task.finish(nil, false)
 			case *serviceerror.DataLoss:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonDataLossTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonDataLossTag)
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
 				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonNotFoundTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonNotFoundTag)
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -803,11 +803,11 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonAlreadyStartedTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonAlreadyStartedTag)
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonObsoleteBuildIDTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteBuildIDTag)
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -820,7 +820,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteMatchingTask:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
 				e.logger.Info("dropping obsolete workflow task",
@@ -854,7 +854,6 @@ pollLoop:
 					// as record start request will be rejected by history service
 					return nil, err
 				}
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonOtherTag)
 			}
 
 			continue pollLoop
@@ -1014,17 +1013,17 @@ pollLoop:
 		if err != nil {
 			switch err := err.(type) {
 			case *serviceerror.Internal:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonInternalTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInternalTag)
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
 				task.finish(nil, false)
 			case *serviceerror.DataLoss:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonDataLossTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonDataLossTag)
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
 				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonNotFoundTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonNotFoundTag)
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 					tag.WorkflowID(task.event.Data.GetWorkflowId()),
@@ -1037,11 +1036,11 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonAlreadyStartedTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonAlreadyStartedTag)
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonObsoleteBuildIDTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteBuildIDTag)
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -1054,7 +1053,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteMatchingTask:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
 				e.logger.Info("dropping obsolete activity task",
@@ -1074,7 +1073,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ActivityStartDuringTransition:
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonActivityStartDuringTransitionTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonActivityStartDuringTransitionTag)
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -1106,7 +1105,6 @@ pollLoop:
 					// as record start request will be rejected by history service
 					return nil, err
 				}
-				metrics.DroppedTasksPerTaskQueueCounter.With(opMetrics).Record(1, metrics.DroppedTaskReasonOtherTag)
 			}
 
 			continue pollLoop
