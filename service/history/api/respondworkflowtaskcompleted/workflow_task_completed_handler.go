@@ -1120,7 +1120,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,
-		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
 		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
