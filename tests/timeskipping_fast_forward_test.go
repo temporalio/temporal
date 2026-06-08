@@ -26,15 +26,15 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-type TimeSkippingBoundFunctionalSuite struct {
-	parallelsuite.Suite[*TimeSkippingBoundFunctionalSuite]
+type TimeSkippingFastForwardFunctionalSuite struct {
+	parallelsuite.Suite[*TimeSkippingFastForwardFunctionalSuite]
 }
 
-func TestTimeSkippingBoundFunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &TimeSkippingBoundFunctionalSuite{})
+func TestTimeSkippingFastForwardFunctionalSuite(t *testing.T) {
+	parallelsuite.Run(t, &TimeSkippingFastForwardFunctionalSuite{})
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {
+func (s *TimeSkippingFastForwardFunctionalSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		workflowID,
@@ -51,7 +51,7 @@ func (s *TimeSkippingBoundFunctionalSuite) getMutableState(env *testcore.TestEnv
 	return ms
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) findTransitionedEvents(history []*historypb.HistoryEvent) []*historypb.HistoryEvent {
+func (s *TimeSkippingFastForwardFunctionalSuite) findTransitionedEvents(history []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	var out []*historypb.HistoryEvent
 	for _, e := range history {
 		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
@@ -61,7 +61,7 @@ func (s *TimeSkippingBoundFunctionalSuite) findTransitionedEvents(history []*his
 	return out
 }
 
-func boundStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration, cfg *workflowpb.TimeSkippingConfig) *workflowservice.StartWorkflowExecutionRequest {
+func fastForwardStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration, cfg *workflowpb.TimeSkippingConfig) *workflowservice.StartWorkflowExecutionRequest {
 	return &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -74,8 +74,8 @@ func boundStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time
 	}
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
-	// B3 not fixed: bound disable fires regardless of in-flight activity. Update this
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() {
+	// B3 not fixed: fast-forward disable fires regardless of in-flight activity. Update this
 	// test when B3 lands so it asserts the disable is deferred to the next idle moment.
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
@@ -83,7 +83,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	ctx := testcore.NewContext()
 
 	const (
-		bound       = 30 * time.Minute
+		fastForward = 30 * time.Minute
 		timer1Dur   = 29*time.Minute + 58*time.Second
 		minuteToler = time.Minute
 		accumTol    = 30 * time.Second
@@ -91,8 +91,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 
 	cfg := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
+		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
 
@@ -112,17 +112,17 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	})
 	s.NoError(err)
 
-	// Wait for the bound's TimeSkippingTimerTask to fire while the activity is still in
-	// flight. With timer1=29:58 and bound=30m, the regenerated bound task's wall
+	// Wait for the fast-forward's TimeSkippingTimerTask to fire while the activity is still in
+	// flight. With timer1=29:58 and fast-forward=30m, the regenerated fast-forward task's wall
 	// VisibilityTime is at startTime+2s; the executor hits this within seconds of WT2
 	// closing. B3 not fixed: the executor emits the disable transition regardless of
-	// the in-flight activity, flipping Enabled=false / HasReached=true on the bound.
+	// the in-flight activity, flipping Enabled=false / HasReached=true on the fast-forward.
 	s.Eventually(func() bool {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		bi := tsi.GetCurrentElapsedDurationBound()
-		return bi != nil && bi.GetHasReached()
-	}, 30*time.Second, 200*time.Millisecond, "expected bound timer task to fire while activity is in-flight (B3 path)")
+		ff := tsi.GetFastForward()
+		return ff != nil && ff.GetHasReached()
+	}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while activity is in-flight (B3 path)")
 
 	// AT1: complete the activity.
 	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
@@ -157,7 +157,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
 
 	secondVirtual := transitions[1].GetEventTime().AsTime().Sub(startTime)
-	s.InDelta(float64(bound), float64(secondVirtual), float64(minuteToler))
+	s.InDelta(float64(fastForward), float64(secondVirtual), float64(minuteToler))
 
 	var activityCompleted int
 	for _, e := range hist {
@@ -171,19 +171,19 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	bi := tsi.GetCurrentElapsedDurationBound()
-	s.NotNil(bi)
-	s.True(bi.GetHasReached())
+	ff := tsi.GetFastForward()
+	s.NotNil(ff)
+	s.True(ff.GetHasReached())
 }
 
-// TestBound_MaxElapsed_PauseLifecycle exercises the full paused-workflow
+// TestFastForward_PauseLifecycle exercises the full paused-workflow
 // time-skipping lifecycle and verifies three invariants together:
 //
 //	(1) Pause blocks close-transaction skipping. While paused, no new
 //	    TimeSkippingTransitioned event is added on close-tx — both
 //	    closeTransactionHandleTimeSkipping and shouldExecuteTimeSkipping
 //	    short-circuit on IsWorkflowExecutionStatusPaused.
-//	(2) The MaxElapsed bound's TimeSkippingTimerTask still fires while paused.
+//	(2) The fast-forward's TimeSkippingTimerTask still fires while paused.
 //	    executeTimeSkippingTimerTask only checks IsWorkflowExecutionRunning
 //	    (paused workflows are State=RUNNING), so the disable transition is
 //	    written through pause — analogous to user-timer-fired events firing
@@ -196,12 +196,12 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 // Sequence:
 //
 //	WT1 → start timer1 (29:50). Close-tx fires transition 1 (skip-to-timer1)
-//	      and timer1 fires. Bound wake-up timer task is wall-anchored at
+//	      and timer1 fires. Fast-forward wake-up timer task is wall-anchored at
 //	      ~10s real-time from now.
 //	WT2 → schedule activity1. Close-tx: pending activity → no skip.
 //	Pause → activity1 stamp bumped (dispatched task now invalid). Pause
 //	        close-tx is blocked by IsWorkflowExecutionStatusPaused.
-//	(wait) Bound timer task fires while paused → transition 2
+//	(wait) Fast-forward timer task fires while paused → transition 2
 //	       (DisabledAfterBound=true); Config.Enabled becomes false.
 //	Unpause → activity1 re-dispatched, WT3 scheduled in the same tx;
 //	          close-tx pending WFT → no extra transition.
@@ -209,8 +209,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 //	WT3 → completeWorkflowCmd.
 //
 // Final history must contain exactly two transitions, in order:
-// (a) skip-to-timer1 (DisabledAfterBound=false), (b) bound-disable.
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle() {
+// (a) skip-to-timer1 (DisabledAfterBound=false), (b) fast-forward-disable.
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
@@ -218,15 +218,15 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	ctx := testcore.NewContext()
 
 	const (
-		bound       = 30 * time.Minute
+		fastForward = 30 * time.Minute
 		timer1Dur   = 29*time.Minute + 50*time.Second
 		minuteToler = time.Minute
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
 
@@ -238,8 +238,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	})
 	s.NoError(err)
 
-	// WT2: timer1 fired → schedule activity1. The bound wake-up timer is wall-anchored
-	// at start+bound (~10s real time from this point).
+	// WT2: timer1 fired → schedule activity1. The fast-forward wake-up timer is wall-anchored
+	// at start+fast-forward (~10s real time from this point).
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
@@ -260,18 +260,18 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	})
 	s.NoError(err)
 
-	// Wait for the bound TimeSkippingTimerTask to fire while paused. The executor
+	// Wait for the fast-forward TimeSkippingTimerTask to fire while paused. The executor
 	// writes the disable event regardless of pause status: HasReached becomes true
 	// and Config.Enabled becomes false.
 	s.AwaitTruef(func() bool {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		bi := tsi.GetCurrentElapsedDurationBound()
-		return bi != nil && bi.GetHasReached()
-	}, 30*time.Second, 200*time.Millisecond, "expected bound timer task to fire while paused")
+		ff := tsi.GetFastForward()
+		return ff != nil && ff.GetHasReached()
+	}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while paused")
 
 	// Snapshot history while still paused: exactly two transitions — skip-to-timer1
-	// (from WT1 close-tx) and bound-disable (from the timer task that just fired).
+	// (from WT1 close-tx) and fast-forward-disable (from the timer task that just fired).
 	// No spurious third transition from any close-tx evaluated under pause.
 	histDuringPause := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
@@ -314,7 +314,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	s.NotNil(first.GetTargetTime())
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(second.GetDisabledAfterBound(), "second transition must be the bound-disable event")
+	s.True(second.GetDisabledAfterBound(), "second transition must be the fast-forward-disable event")
 
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED), "pause event must be in history")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED), "unpause event must be in history")
@@ -327,33 +327,33 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_PauseLifecycle()
 	s.NoError(err)
 	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
 	secondVirtual := transitions[1].GetEventTime().AsTime().Sub(startTime)
-	s.InDelta(float64(bound), float64(secondVirtual), float64(minuteToler))
+	s.InDelta(float64(fastForward), float64(secondVirtual), float64(minuteToler))
 
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled(), "Config.Enabled must be false after bound reached")
-	bi := tsi.GetCurrentElapsedDurationBound()
-	s.NotNil(bi)
-	s.True(bi.GetHasReached(), "HasReached must be true after bound timer fired")
+	s.False(tsi.GetConfig().GetEnabled(), "Config.Enabled must be false after fastForward reached")
+	ff := tsi.GetFastForward()
+	s.NotNil(ff)
+	s.True(ff.GetHasReached(), "HasReached must be true after fastForward timer fired")
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	const (
-		bound       = 30 * time.Minute
+		fastForward = 30 * time.Minute
 		minuteToler = time.Minute
 		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)}}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
 
@@ -380,10 +380,10 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(bound), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
-	bi := tsi.GetCurrentElapsedDurationBound()
-	s.NotNil(bi)
-	s.True(bi.GetHasReached())
+	s.InDelta(float64(fastForward), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
+	ff := tsi.GetFastForward()
+	s.NotNil(ff)
+	s.True(ff.GetHasReached())
 
 	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
@@ -392,14 +392,14 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	})
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundEqualsRunTimeout() {
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeout() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	ctx := testcore.NewContext()
 
 	const (
-		runTimeout = 5 * time.Minute
-		bound      = runTimeout // bound == runTimeout
+		runTimeout  = 5 * time.Minute
+		fastForward = runTimeout // fastForward == runTimeout
 	)
 
 	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
@@ -408,7 +408,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundEqualsRunTi
 
 	cfg := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)},
 	}
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -445,27 +445,27 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundEqualsRunTi
 	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
 }
 
-// TestBound_MaxElapsed_RunTimeoutBeforeBound is a two-phase test:
+// TestFastForward_RunTimeoutBeforeFastForward is a two-phase test:
 //
-//  1. Workflow starts with time-skipping enabled but NO bound. The workflow is
+//  1. Workflow starts with time-skipping enabled but NO fast-forward. The workflow is
 //     idle (blocking on a condition) so there are no skip candidates. The
 //     run/execution timeout alone must NOT advance virtual time — it is not a
 //     skip target. The workflow stays RUNNING indefinitely in real time.
 //
-//  2. A MaxElapsed bound larger than the run timeout is added via
-//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the bound
+//  2. A fast-forward larger than the run timeout is added via
+//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the fast-forward
 //     as the only skip candidate, which is then capped at the run timeout
-//     (5 min < 10 min bound). Virtual time advances to the run timeout and the
+//     (5 min < 10 min fast-forward). Virtual time advances to the run timeout and the
 //     workflow is TIMED_OUT. The single transition carries DisabledAfterBound=false
-//     (the cap fired before the bound was reached).
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBeforeBound() {
+//     (the cap fired before the fast-forward was reached).
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBeforeFastForward() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	ctx := testcore.NewContext()
 
 	const (
-		runTimeout = 5 * time.Minute
-		bound      = 10 * time.Minute // larger than runTimeout
+		runTimeout  = 5 * time.Minute
+		fastForward = 10 * time.Minute // larger than runTimeout
 	)
 
 	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
@@ -481,7 +481,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBefore
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 		WorkflowRunTimeout:  durationpb.New(runTimeout),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true}, // no bound yet
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true}, // no fastForward yet
 	})
 	s.NoError(err)
 	runID := startResp.RunId
@@ -498,8 +498,8 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBefore
 	s.Empty(s.findTransitionedEvents(hist),
 		"run/execution timeout alone is not a skip target — no transition must have fired")
 
-	// Phase 2: add MaxElapsed bound > run timeout. The update's close-tx finds
-	// the bound as the skip candidate, caps it at the run timeout, and the
+	// Phase 2: add fast-forward > run timeout. The update's close-tx finds
+	// the fast-forward as the skip candidate, caps it at the run timeout, and the
 	// workflow is timed out.
 	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:         env.Namespace().String(),
@@ -507,7 +507,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBefore
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
 			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)},
 			},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
@@ -523,6 +523,6 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBefore
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
 	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
-		"run timeout caps the skip before bound is reached: DisabledAfterBound must be false")
+		"run timeout caps the skip before fast-forward is reached: DisabledAfterBound must be false")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }

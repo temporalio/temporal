@@ -421,7 +421,7 @@ type (
 		// adjusting for accumulated skipped duration which may have happened.
 		ToRealTime(virtualTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
-			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)
+			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
 	}
 )
