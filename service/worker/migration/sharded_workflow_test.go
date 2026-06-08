@@ -385,7 +385,10 @@ func TestSharded_DrainResult_FromActivityResult_FeedsCANCarryover(t *testing.T) 
 	}, activity.RegisterOptions{Name: "ListWorkflows"})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
-		env.SetContinueAsNewSuggested(true)
+		// Hop to the main loop goroutine to flip CAN-suggested; the
+		// activity goroutine writing workflowInfo directly would race
+		// the workflow coroutine reading it at the top of its page loop.
+		env.RegisterDelayedCallback(func() { env.SetContinueAsNewSuggested(true) }, 0)
 		return replicateBatchResult{
 			InFlight: []ResumeShard{{
 				Shard:              drainedShard,
@@ -438,8 +441,10 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 		}
 		pageServed = true
 		// Trigger CAN as soon as this page is served so drainForCAN
-		// runs before any dispatched batches can complete.
-		env.SetContinueAsNewSuggested(true)
+		// runs before any dispatched batches can complete. Hop to the
+		// main loop goroutine — writing workflowInfo directly from the
+		// activity goroutine would race the workflow coroutine's read.
+		env.RegisterDelayedCallback(func() { env.SetContinueAsNewSuggested(true) }, 0)
 		return &listWorkflowsResponse{
 			Executions:    execs,
 			NextPageToken: []byte("more"),
