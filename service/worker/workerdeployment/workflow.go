@@ -1033,7 +1033,8 @@ func (d *WorkflowRunner) setRamp(
 
 	// tell previous ramping version, if present, that it's no longer ramping
 	if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
-		if workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0 {
+		commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
+		if asyncMode && commitRoutingFirst {
 			// Commit routing config before demoting prev ramp to avoid partial state on failure.
 			d.State.RoutingConfig = pendingRoutingConfig
 			// Signal the prev ramp version workflow to demote. Unversioned ramp has no version
@@ -1415,7 +1416,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		// do is tell the previous current version that it is not current. Then, the task queues in the
 		// previous current version will have no current version and will become unversioned implicitly.
 
-		if workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0 {
+		commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
+		if asyncMode && commitRoutingFirst {
 			// Commit routing config before demoting old version to avoid partial state on step 2 failure.
 			d.State.RoutingConfig = pendingRoutingConfig
 
