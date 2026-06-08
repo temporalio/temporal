@@ -51,6 +51,10 @@ func TestRewriteSchemaStatements_EnforcesVarcharLengthChecks(t *testing.T) {
 				PRIMARY KEY (id)
 			);`,
 		},
+		{
+			name:                 "single-line first varchar column",
+			createTableStatement: `CREATE TABLE test (value VARCHAR(3), id BIGINT NOT NULL, PRIMARY KEY (id));`,
+		},
 	}
 
 	for _, tc := range testCases {

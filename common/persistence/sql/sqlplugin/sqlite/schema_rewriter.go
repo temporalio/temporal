@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	testSchemaCreateTablePattern   = regexp.MustCompile(`(?is)^\s*create\s+(?:temp(?:orary)?\s+)?table\b`)
-	testSchemaVarcharColumnPattern = regexp.MustCompile(`(?im)(?:^|,)\s*("?[a-z_][a-z0-9_]*"?)\s+varchar\s*\(\s*(\d+)\s*\)`)
+	testSchemaCreateTablePattern   = regexp.MustCompile(`(?i)^\s*create\s+(?:temp(?:orary)?\s+)?table\b`)
+	testSchemaVarcharColumnPattern = regexp.MustCompile(`(?im)(?:^|[,(])\s*("?[a-z_][a-z0-9_]*"?)\s+varchar\s*\(\s*(\d+)\s*\)`)
 )
 
 // RewriteSchemaStatements makes SQLite schemas catch values that would
