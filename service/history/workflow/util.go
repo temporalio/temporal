@@ -280,29 +280,36 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 	return false
 }
 
-func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.MutableState) ([]*commonpb.Callback, error) {
+// getCompletionCallbacksAsProtoSlice returns the workflow's completion callbacks as commonpb.Callback
+// protos and a parallel slice of the request IDs that registered them. The request IDs are returned
+// separately because commonpb.Callback has no field for them; callers preserve them across
+// continue-as-new so inherited callbacks keep their original request ID (some completions, e.g. the
+// CHASM scheduler's, are matched by request ID and would otherwise be silently dropped).
+func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.MutableState) ([]*commonpb.Callback, []string, error) {
 	coll := callbacks.MachineCollection(ms.HSM())
 	result := make([]*commonpb.Callback, 0, coll.Size())
+	requestIDs := make([]string, 0, coll.Size())
 	for _, node := range coll.List() {
 		cb, err := coll.Data(node.Key.ID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
 		cbSpec, err := PersistenceCallbackToAPICallback(cb.Callback)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		result = append(result, cbSpec)
+		requestIDs = append(requestIDs, cb.GetRequestId())
 	}
 
 	// Collect CHASM callbacks
 	if ms.ChasmEnabled() {
 		wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for _, field := range wf.Callbacks {
@@ -314,14 +321,14 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 			// Convert CHASM callback to API callback
 			cbSpec, err := cb.ToAPICallback()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			result = append(result, cbSpec)
+			requestIDs = append(requestIDs, cb.GetRequestId())
 		}
 	}
-	// }
 
-	return result, nil
+	return result, requestIDs, nil
 }
 
 func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Callback, error) {
