@@ -43,9 +43,6 @@ import (
 // Whenever there's a change in logic, consider capturing a new history with the
 // testdata/generate_history.sh script and checking it in.
 func TestReplays(t *testing.T) {
-	replayer := worker.NewWorkflowReplayer()
-	replayer.RegisterWorkflowWithOptions(scheduler.SchedulerWorkflow, workflow.RegisterOptions{Name: scheduler.WorkflowType})
-
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
 
@@ -53,15 +50,34 @@ func TestReplays(t *testing.T) {
 
 	for _, filename := range files {
 		logger.Info("Replaying", "file", filename)
-		f, err := os.Open(filename)
-		require.NoError(t, err)
-		r, err := gzip.NewReader(f)
-		require.NoError(t, err)
-		history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
-		require.NoError(t, err)
-		err = replayer.ReplayWorkflowHistory(logger, history)
-		require.NoError(t, err)
-		_ = r.Close()
-		_ = f.Close()
+		replayHistoryFile(t, logger, filename)
 	}
+}
+
+// TestReplay_ProtoCache replays a history that exercises the proto-encoded
+// NextTimeCache (v2) SideEffect path.
+func TestReplay_ProtoCache(t *testing.T) {
+	logger := log.NewSdkLogger(log.NewTestLogger())
+	replayHistoryFile(t, logger, "testdata/replay_with_proto_cache.json.gz")
+}
+
+func replayHistoryFile(t *testing.T, logger *log.SdkLogger, filename string) {
+	t.Helper()
+
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflowWithOptions(scheduler.SchedulerWorkflow, workflow.RegisterOptions{Name: scheduler.WorkflowType})
+
+	f, err := os.Open(filename)
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+
+	r, err := gzip.NewReader(f)
+	require.NoError(t, err)
+	defer func() { _ = r.Close() }()
+
+	history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
+	require.NoError(t, err)
+
+	err = replayer.ReplayWorkflowHistory(logger, history)
+	require.NoError(t, err)
 }
