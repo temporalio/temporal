@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -9,45 +8,42 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type WorkerRegistryTestSuite struct {
-	testcore.FunctionalTestBase
-	tv *testvars.TestVars
+	parallelsuite.Suite[*WorkerRegistryTestSuite]
 }
 
 func TestWorkerRegistryTestSuite(t *testing.T) {
-	s := new(WorkerRegistryTestSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, &WorkerRegistryTestSuite{})
 }
 
-func (s *WorkerRegistryTestSuite) SetupTest() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true)
-	s.FunctionalTestBase.SetupTest()
-
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
+func (s *WorkerRegistryTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	baseOpts := []testcore.TestOption{
+		testcore.WithWorkerService("worker registry tests need worker service"),
+		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
+	}
+	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Record heartbeat for 2 workers
-	worker1Key := s.tv.WorkerIdentity()
-	worker2Key := s.tv.WorkerIdentity() + "_2"
-	taskQueue1 := s.tv.WithTaskQueueNumber(1).TaskQueue().Name
-	taskQueue2 := s.tv.WithTaskQueueNumber(2).TaskQueue().Name
+	worker1Key := env.Tv().WorkerIdentity()
+	worker2Key := env.Tv().WorkerIdentity() + "_2"
+	taskQueue1 := env.Tv().WithTaskQueueNumber(1).TaskQueue().Name
+	taskQueue2 := env.Tv().WithTaskQueueNumber(2).TaskQueue().Name
 
-	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-		Namespace: s.Namespace().String(),
+	hbResp, err := env.FrontendClient().RecordWorkerHeartbeat(s.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: env.Namespace().String(),
 		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
 			{
 				WorkerInstanceKey:   worker1Key,
@@ -65,9 +61,9 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 	s.NotNil(hbResp)
 
 	// Test error case - worker that doesn't exist
-	nonExistentWorkerKey := s.tv.WorkerIdentity() + "_nonexistent"
-	_, err = s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
-		Namespace:         s.Namespace().String(),
+	nonExistentWorkerKey := env.Tv().WorkerIdentity() + "_nonexistent"
+	_, err = env.FrontendClient().DescribeWorker(s.Context(), &workflowservice.DescribeWorkerRequest{
+		Namespace:         env.Namespace().String(),
 		WorkerInstanceKey: nonExistentWorkerKey,
 	})
 	s.Error(err)
@@ -75,8 +71,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 	s.ErrorAs(err, &notFound)
 
 	// Test error case - unknown namespace
-	unknownNamespace := s.tv.NamespaceName().String() + "_unknown"
-	_, err = s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
+	unknownNamespace := env.Tv().NamespaceName().String() + "_unknown"
+	_, err = env.FrontendClient().DescribeWorker(s.Context(), &workflowservice.DescribeWorkerRequest{
 		Namespace:         unknownNamespace,
 		WorkerInstanceKey: worker1Key,
 	})
@@ -86,8 +82,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 
 	// Test success case - verify worker1 heartbeat data
 	{
-		resp, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
-			Namespace:         s.Namespace().String(),
+		resp, err := env.FrontendClient().DescribeWorker(s.Context(), &workflowservice.DescribeWorkerRequest{
+			Namespace:         env.Namespace().String(),
 			WorkerInstanceKey: worker1Key,
 		})
 		s.NoError(err)
@@ -102,8 +98,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 	}
 	// Test success case - verify worker2 heartbeat data
 	{
-		resp, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
-			Namespace:         s.Namespace().String(),
+		resp, err := env.FrontendClient().DescribeWorker(s.Context(), &workflowservice.DescribeWorkerRequest{
+			Namespace:         env.Namespace().String(),
 			WorkerInstanceKey: worker2Key,
 		})
 		s.NoError(err)
@@ -119,11 +115,10 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-		Namespace: s.Namespace().String(),
+	resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+		Namespace: env.Namespace().String(),
 		Query:     "TaskQueue='no-heartbeats-recorded-on-this-queue'",
 	})
 	s.NoError(err)
@@ -133,14 +128,13 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbeats() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	_, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
-		Namespace:         s.Namespace().String(),
+	_, err := env.FrontendClient().DescribeWorker(s.Context(), &workflowservice.DescribeWorkerRequest{
+		Namespace:         env.Namespace().String(),
 		WorkerInstanceKey: "nonexistent-worker",
 	})
-	s.Require().Error(err)
+	s.Error(err)
 	var notFound *serviceerror.NotFound
 	var namespaceNotFound *serviceerror.NamespaceNotFound
 	s.True(
@@ -150,16 +144,15 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbe
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Record heartbeats for 2 workers
-	worker1Key := s.tv.WorkerIdentity()
-	worker2Key := s.tv.WorkerIdentity() + "_2"
-	sharedTaskQueue := s.tv.TaskQueue().Name
+	worker1Key := env.Tv().WorkerIdentity()
+	worker2Key := env.Tv().WorkerIdentity() + "_2"
+	sharedTaskQueue := env.Tv().TaskQueue().Name
 
-	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-		Namespace: s.Namespace().String(),
+	hbResp, err := env.FrontendClient().RecordWorkerHeartbeat(s.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: env.Namespace().String(),
 		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
 			{
 				WorkerInstanceKey:   worker1Key,
@@ -177,8 +170,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 	s.NotNil(hbResp)
 
 	{
-		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkerInstanceKey='%s'", worker1Key),
 		})
 		s.NoError(err)
@@ -198,8 +191,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.Equal(sharedTaskQueue, workerListInfo.GetTaskQueue())
 	}
 	{
-		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue),
 		})
 		s.NoError(err)
@@ -241,9 +234,9 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.Equal(sharedTaskQueue, listInfo2.GetTaskQueue())
 	}
 	{
-		nonExistentWorkerKey := s.tv.WorkerIdentity() + "_nonexistent"
-		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-			Namespace: s.Namespace().String(),
+		nonExistentWorkerKey := env.Tv().WorkerIdentity() + "_nonexistent"
+		resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkerInstanceKey='%s'", nonExistentWorkerKey),
 		})
 		s.NoError(err)
@@ -254,16 +247,15 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	sharedTaskQueue := s.tv.TaskQueue().Name
+	sharedTaskQueue := env.Tv().TaskQueue().Name
 
 	// Create 5 workers with predictable keys for pagination testing
 	workerKeys := make([]string, 5)
 	heartbeats := make([]*workerpb.WorkerHeartbeat, 5)
 	for i := range 5 {
-		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", s.tv.WorkerIdentity(), i)
+		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", env.Tv().WorkerIdentity(), i)
 		heartbeats[i] = &workerpb.WorkerHeartbeat{
 			WorkerInstanceKey:   workerKeys[i],
 			TaskQueue:           sharedTaskQueue,
@@ -272,8 +264,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	}
 
 	// Record all worker heartbeats
-	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-		Namespace:       s.Namespace().String(),
+	hbResp, err := env.FrontendClient().RecordWorkerHeartbeat(s.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace:       env.Namespace().String(),
 		WorkerHeartbeat: heartbeats,
 	})
 	s.NoError(err)
@@ -282,8 +274,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	query := fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue)
 
 	// Page 1: Request first 2 workers
-	resp1, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-		Namespace: s.Namespace().String(),
+	resp1, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+		Namespace: env.Namespace().String(),
 		Query:     query,
 		PageSize:  2,
 	})
@@ -294,8 +286,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	s.Equal(workerKeys[1], resp1.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
 
 	// Page 2: Request next 2 workers using token from page 1
-	resp2, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-		Namespace:     s.Namespace().String(),
+	resp2, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+		Namespace:     env.Namespace().String(),
 		Query:         query,
 		PageSize:      2,
 		NextPageToken: resp1.GetNextPageToken(),
@@ -307,8 +299,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	s.Equal(workerKeys[3], resp2.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
 
 	// Page 3: Request remaining workers using token from page 2
-	resp3, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-		Namespace:     s.Namespace().String(),
+	resp3, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+		Namespace:     env.Namespace().String(),
 		Query:         query,
 		PageSize:      2,
 		NextPageToken: resp2.GetNextPageToken(),
@@ -320,11 +312,10 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTask() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	nexusWorkerKey := s.tv.WorkerIdentity() + "_nexus"
-	nexusTaskQueue := s.tv.TaskQueue().Name
+	nexusWorkerKey := env.Tv().WorkerIdentity() + "_nexus"
+	nexusTaskQueue := env.Tv().TaskQueue().Name
 
 	heartbeat := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey:   nexusWorkerKey,
@@ -335,8 +326,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTa
 	// Send worker heartbeat via PollNexusTaskQueue in a goroutine.
 	// This is because PollNexusTaskQueue is a blocking call and we need to wait for the heartbeat to be registered.
 	go func() {
-		_, _ = s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-			Namespace:       s.Namespace().String(),
+		_, _ = env.FrontendClient().PollNexusTaskQueue(s.Context(), &workflowservice.PollNexusTaskQueueRequest{
+			Namespace:       env.Namespace().String(),
 			TaskQueue:       &taskqueuepb.TaskQueue{Name: nexusTaskQueue},
 			Identity:        nexusWorkerKey,
 			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{heartbeat},
@@ -345,8 +336,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTa
 
 	// Verify heartbeat was registered.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkerInstanceKey='%s'", nexusWorkerKey),
 		})
 		require.NoError(t, err)
