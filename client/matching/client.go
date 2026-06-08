@@ -5,8 +5,11 @@ package matching
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -15,6 +18,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
@@ -27,6 +31,8 @@ const (
 	DefaultTimeout = time.Minute * debug.TimeoutMultiplier
 	// DefaultLongPollTimeout is the max timeout for long poll calls
 	DefaultLongPollTimeout = time.Minute * 5 * debug.TimeoutMultiplier
+	// evictionCheckInterval is how often departed hosts are reaped from the cache.
+	evictionCheckInterval = 30 * time.Second
 )
 
 type clientImpl struct {
@@ -48,8 +54,10 @@ func NewClient(
 	logger log.Logger,
 	lb LoadBalancer,
 	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
+	resolver membership.ServiceResolver,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) matchingservice.MatchingServiceClient {
-	return &clientImpl{
+	c := &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
 		clients:         clients,
@@ -57,6 +65,76 @@ func NewClient(
 		logger:          logger,
 		loadBalancer:    lb,
 		spreadRouting:   spreadRouting,
+	}
+
+	// Evict cached clients whose host leaves the membership ring.
+	ctx, cancel := context.WithCancel(context.Background())
+	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
+	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
+
+	return c
+}
+
+func watchMembershipForEviction(
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	clients common.ClientCache,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
+	logger log.Logger,
+) {
+	listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := resolver.AddListener(listenerName, ch); err != nil {
+		logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
+		return
+	}
+	defer func() { _ = resolver.RemoveListener(listenerName) }()
+
+	// Reap departed hosts via a per-address deadline checked by a single ticker;
+	// a re-add resets it to the latest removal.
+	evictAt := make(map[string]time.Time)
+	ticker := time.NewTicker(evictionCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-ch:
+			for _, h := range event.HostsRemoved {
+				evictAt[h.GetAddress()] = time.Now().Add(connectionCloseDelay())
+			}
+			for _, h := range event.HostsAdded {
+				delete(evictAt, h.GetAddress())
+			}
+		case <-ticker.C:
+			reapEvictableClients(resolver, clients, evictAt)
+		}
+	}
+}
+
+func reapEvictableClients(
+	resolver membership.ServiceResolver,
+	clients common.ClientCache,
+	evictAt map[string]time.Time,
+) {
+	if len(evictAt) == 0 {
+		return
+	}
+	members := make(map[string]struct{})
+	for _, m := range resolver.Members() {
+		members[m.GetAddress()] = struct{}{}
+	}
+	now := time.Now()
+	for addr, deadline := range evictAt {
+		if _, ok := members[addr]; ok {
+			delete(evictAt, addr) // back in the ring; cancel the eviction
+			continue
+		}
+		if now.Before(deadline) {
+			continue
+		}
+		clients.Evict(addr)
+		delete(evictAt, addr)
 	}
 }
 
