@@ -1041,7 +1041,7 @@ func (d *WorkflowRunner) setRamp(
 			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 				d.signalDemoteVersion(ctx, prevRampingVersion, pendingRoutingConfig)
 			}
-			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+			d.setVersionSummaryDraining(prevRampingVersion, routingUpdateTime)
 		} else {
 			err := d.unsetPreviousRamp(ctx, routingUpdateTime, routingConfigToSync, prevRampingVersion, asyncMode)
 			if err != nil {
@@ -1095,6 +1095,17 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 			LastChangedTime: routingUpdateTime,
 			LastCheckedTime: routingUpdateTime,
 		}
+	}
+}
+
+func (d *WorkflowRunner) setVersionSummaryDraining(version string, routingUpdateTime *timestamppb.Timestamp) {
+	if summary := d.State.GetVersions()[version]; summary != nil {
+		summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
+		summary.CurrentSinceTime = nil
+		summary.RampingSinceTime = nil
+		summary.RoutingUpdateTime = routingUpdateTime
+		summary.LastDeactivationTime = routingUpdateTime
+		d.setDrainageStatus(version, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
 	}
 }
 
@@ -1412,7 +1423,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			// TODO (Shivam): remove the empty string check once canary stops flaking out
 			if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
 				d.signalDemoteVersion(ctx, prevCurrentVersion, pendingRoutingConfig)
-				d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+				d.setVersionSummaryDraining(prevCurrentVersion, updateTime)
 			}
 		} else {
 			// TODO (Shivam): remove the empty string check once canary stops flaking out
@@ -1569,8 +1580,8 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 }
 
 // signalDemoteVersion sends a signal to a version workflow to demote it with the given
-// routing config. The version workflow will determine its new status, propagate to task
-// queues, and sync its summary back to the deployment workflow.
+// routing config. The version workflow will determine its new status and propagate to task
+// queues.
 func (d *WorkflowRunner) signalDemoteVersion(ctx workflow.Context, version string, routingConfig *deploymentpb.RoutingConfig) {
 	v := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version)
 	bld := v.GetBuildId()

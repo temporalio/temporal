@@ -223,8 +223,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 				d.startDrainage(ctx)
 			}
 
-			// Sync summary back to deployment workflow
-			d.syncSummary(ctx)
 			d.setStateChanged()
 		})
 	}
