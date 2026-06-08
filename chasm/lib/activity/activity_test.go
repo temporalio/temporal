@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -14,7 +13,6 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -306,73 +304,4 @@ func TestContextMetadata(t *testing.T) {
 		md := activity.ContextMetadata(ctx)
 		require.Nil(t, md)
 	})
-}
-
-func TestGetOutcomeOrAddCallbacks(t *testing.T) {
-
-	getOutcomeOrAddCallbacks := func(
-		ctx *chasm.MockMutableContext,
-		a *Activity,
-		includeOutcome bool,
-	) (*apiactivitypb.ActivityExecutionOutcome, error) {
-
-		callbacks := []*commonpb.Callback{}
-		maxCallbacks := 0
-
-		outcome, err := a.getOutcomeOrAddCallbacks(ctx, getOutcomeOrAddCallbacksInput{
-			includeOutcome: includeOutcome,
-			requestID:      "test-request-id",
-			callbacks:      callbacks,
-			maxCallbacks:   maxCallbacks,
-		})
-
-		return outcome, err
-	}
-
-	t.Run("returns no outcome if includeOutcome is false and has outcome", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
-		successOutput := &commonpb.Payloads{Payloads: []*commonpb.Payload{payload.EncodeString("success")}}
-		activity := &Activity{
-			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
-			Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{
-				Variant: &activitypb.ActivityOutcome_Successful_{
-					Successful: &activitypb.ActivityOutcome_Successful{Output: successOutput},
-				},
-			}),
-		}
-
-		outcome, err := getOutcomeOrAddCallbacks(ctx, activity, false)
-		require.NoError(t, err)
-		require.Nil(t, outcome)
-	})
-
-	t.Run("returns no outcome if includeOutcome is true and has no outcome", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
-		activity := &Activity{
-			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED},
-		}
-
-		outcome, err := getOutcomeOrAddCallbacks(ctx, activity, true)
-		require.NoError(t, err)
-		require.Nil(t, outcome)
-	})
-
-	t.Run("returns outcome if includeOutcome is true and has outcome", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
-		successOutput := &commonpb.Payloads{Payloads: []*commonpb.Payload{payload.EncodeString("success")}}
-		activity := &Activity{
-			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
-			Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{
-				Variant: &activitypb.ActivityOutcome_Successful_{
-					Successful: &activitypb.ActivityOutcome_Successful{Output: successOutput},
-				},
-			}),
-		}
-
-		outcome, err := getOutcomeOrAddCallbacks(ctx, activity, true)
-		require.NoError(t, err)
-		require.NotNil(t, outcome)
-		require.Equal(t, successOutput, outcome.GetResult())
-	})
-
 }

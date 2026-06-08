@@ -291,25 +291,6 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
-type getOutcomeOrAddCallbacksInput struct {
-	includeOutcome bool
-	requestID      string
-	callbacks      []*commonpb.Callback
-	maxCallbacks   int
-}
-
-// Get outcome if includeOutcome is set and outcome is available.
-// Add completion callbacks only if the activity is not yet completed.
-func (a *Activity) getOutcomeOrAddCallbacks(
-	ctx chasm.MutableContext, input getOutcomeOrAddCallbacksInput,
-) (*apiactivitypb.ActivityExecutionOutcome, error) {
-	if input.includeOutcome && a.LifecycleState(ctx).IsClosed() {
-		return a.outcome(ctx), nil
-	}
-
-	return nil, a.addCompletionCallbacks(ctx, input.requestID, input.callbacks, input.maxCallbacks)
-}
-
 func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,

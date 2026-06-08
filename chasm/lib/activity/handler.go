@@ -97,7 +97,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	// runID to be used in the success result
 	var resultRunID string
-	// outcome is set in result only when IncludeOutcome is set and the activity is already completed
+	// outcome is set in result only when IdReusePolicyReturnExistingOutcomeOnReject is set and the activity is already completed
 	var outcome *apiactivitypb.ActivityExecutionOutcome
 
 	if err != nil {
@@ -121,22 +121,16 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if outcome == nil && !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
-		var updateErr error
-		outcome, _, updateErr = chasm.UpdateComponent(
+		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
-			(*Activity).getOutcomeOrAddCallbacks,
-			getOutcomeOrAddCallbacksInput{
-				includeOutcome: frontendReq.GetIncludeOutcome(),
-				requestID:      requestID,
-				callbacks:      cbs,
-				maxCallbacks:   maxCallbacks,
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
 			},
+			nil,
 		)
-		if updateErr != nil {
-			if outcome == nil {
-				return nil, updateErr
-			} // else fallback to return success later
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -174,7 +168,7 @@ func (h *handler) handleAlreadyStartedError(
 	resultRunID := alreadyStartedErr.CurrentRunID
 
 	// Get outcome if needed, and if reuse policy or conflict policy result in an already started error.
-	if frontendReq.GetIncludeOutcome() {
+	if frontendReq.GetIdReusePolicyReturnExistingOutcomeOnReject() {
 		var readerr error
 		outcome, readerr = chasm.ReadComponent(
 			ctx,

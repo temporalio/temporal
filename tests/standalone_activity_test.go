@@ -6328,7 +6328,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestStartWithIncludeOutcome() {
+func (s *standaloneActivityTestSuite) TestStartWithReturnExistingOutcome() {
 	env := s.newTestEnv()
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -6346,7 +6346,7 @@ func (s *standaloneActivityTestSuite) TestStartWithIncludeOutcome() {
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			IdReusePolicy:       idReusePolicy,
-			IncludeOutcome:      true,
+			IdReusePolicyReturnExistingOutcomeOnReject: true,
 		})
 	}
 
