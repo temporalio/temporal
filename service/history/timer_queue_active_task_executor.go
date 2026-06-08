@@ -730,7 +730,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	// TODO@time-skipping: if time skipping happened, the virtual time is
-	// propagated to the new mutable state, need to check the bound works correctly in the retry.
+	// propagated to the new mutable state, need to check the fast-forward works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -901,9 +901,9 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	return workflow.NewTimerSequence(mutableState)
 }
 
-// executeTimeSkippingTimerTask fires when the elapsed-duration bound is hit. It emits the
-// disable transition directly so the bound is honored even if the workflow has accumulated
-// in-flight work since the bound was configured. The bound's wake-up cue is wall-clock-anchored,
+// executeTimeSkippingTimerTask fires when the fast-forward is hit. It emits the
+// disable transition directly so the fast-forward is honored even if the workflow has accumulated
+// in-flight work since the fast-forward was configured. The fast-forward's wake-up cue is wall-clock-anchored,
 // so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
@@ -932,7 +932,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowCompleted
 	}
 
-	if !timeSkippingBoundTaskIsLive(mutableState, task) {
+	if !fastForwardTaskIsLive(mutableState, task) {
 		release(nil)
 		return errNoTimerFired
 	}
@@ -945,20 +945,20 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 }
 
-// timeSkippingBoundTaskIsLive returns false when the task should be dropped silently —
-// either time skipping has been disabled since the task was emitted, or the bound this
+// fastForwardTaskIsLive returns false when the task should be dropped silently —
+// either time skipping has been disabled since the task was emitted, or the fast-forward this
 // task was associated with has been superseded (different SourceEventId) or already fired
-// (HasReached=true). Dropping is harmless: the new bound, if any, has its own wake-up task.
-func timeSkippingBoundTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
+// (HasReached=true). Dropping is harmless: the new fast-forward, if any, has its own wake-up task.
+func fastForwardTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		return false
 	}
-	boundInfo := tsi.GetCurrentElapsedDurationBound()
-	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
+	fastForward := tsi.GetFastForward()
+	if fastForward == nil || fastForward.GetTargetTime() == nil || fastForward.GetSourceEventId() == 0 || fastForward.GetHasReached() {
 		return false
 	}
-	return boundInfo.GetSourceEventId() == task.EventID
+	return fastForward.GetSourceEventId() == task.EventID
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(

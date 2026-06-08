@@ -1,0 +1,60 @@
+package workflow
+
+import (
+	"time"
+
+	workflowpb "go.temporal.io/api/workflow/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
+	newSource := func() *persistencespb.WorkflowExecutionInfo {
+		return &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config: &workflowpb.TimeSkippingConfig{
+					Enabled: true,
+					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(3 * time.Hour)},
+				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+		}
+	}
+
+	s.Run("continuation keeps MaxElapsedDuration and Enabled", func() {
+		cfg, initialSkip := propagateTimeSkippingForExecutionChain(newSource())
+		s.Require().NotNil(cfg)
+		s.True(cfg.GetEnabled())
+		s.Equal(3*time.Hour, cfg.GetMaxElapsedDuration().AsDuration())
+		s.Require().NotNil(initialSkip)
+		s.Equal(time.Hour, initialSkip.AsDuration())
+	})
+
+	s.Run("child clears MaxElapsedDuration and inherits Enabled", func() {
+		cfg, _ := propagateTimeSkippingForChild(newSource())
+		s.Require().NotNil(cfg)
+		s.True(cfg.GetEnabled())
+		s.Nil(cfg.GetMaxElapsedDuration(), "MaxElapsedDuration never cascades into children")
+	})
+
+	s.Run("child does not propagate config when Enabled is false", func() {
+		src := newSource()
+		src.TimeSkippingInfo.Config.Enabled = false
+		cfg, initialSkip := propagateTimeSkippingForChild(src)
+		s.Nil(cfg, "Enabled=false → no config propagated to the child")
+		s.Require().NotNil(initialSkip)
+		s.Equal(time.Hour, initialSkip.AsDuration(),
+			"virtual time is always propagated, even when config propagation is disabled")
+	})
+
+	s.Run("execution-chain snapshot does not mutate the source config", func() {
+		src := newSource()
+		cfg, _ := propagateTimeSkippingForExecutionChain(src)
+		s.Require().NotNil(cfg)
+		cfg.Enabled = false
+		cfg.Bound = nil
+		s.True(src.GetTimeSkippingInfo().GetConfig().GetEnabled(), "source Enabled must not be mutated")
+		s.Equal(3*time.Hour, src.GetTimeSkippingInfo().GetConfig().GetMaxElapsedDuration().AsDuration(),
+			"source MaxElapsedDuration must not be mutated")
+	})
+}
