@@ -233,7 +233,10 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 	suiteCluster.once.Do(func() {
-		suiteCluster.cluster = p.createCluster(t, nil, true, nil)
+		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
+		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
+		// worker for worker-deployment APIs.
+		suiteCluster.cluster = p.createCluster(t, nil, true, []TestClusterOption{withWorkerService(true)})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster

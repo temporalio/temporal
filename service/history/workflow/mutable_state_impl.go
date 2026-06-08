@@ -10185,14 +10185,13 @@ func (d timeSkippingTransition) isValid() bool {
 	return !d.targetTime.IsZero() || d.disabledAfterBound
 }
 
-// calculateTimeSkippingTransition calculates the transition state which includes two fields:
-// 1. targetTime: the time to skip to
-// 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
-// right now the time points considered for target time are:
-// - the first expiry time of the pending user timers
-// - the workflow execution retry backoff
-// - the current elapsed duration bound of the time skipping config
-// - the activity retry backoff
+// calculateTimeSkippingTransition determines the next skip target.
+// Candidates (in collection order): pending user timers, activity retry backoffs,
+// workflow start-with-delay/CaN/retry backoff, and the MaxElapsed bound.
+// The run/execution timeout is NOT a standalone candidate — it only applies as
+// a cap: if any candidate wins, the skip target is clamped to min(target,
+// runExpiry, execExpiry). This ensures we never advance virtual time past the
+// workflow timeout, even when a user timer or bound would otherwise overshoot.
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
@@ -10232,19 +10231,29 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	}
 
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	bound := info.GetConfig().GetBound()
-	if bound == nil {
-		return transition, nil
+	if bound := info.GetConfig().GetBound(); bound != nil {
+		switch bound.(type) {
+		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+			if info.GetCurrentElapsedDurationBound() == nil {
+				return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+			}
+			advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
+		default:
+			return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+		}
 	}
 
-	switch bound.(type) {
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if info.GetCurrentElapsedDurationBound() == nil {
-			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+	// Cap any skip target at the run/execution timeout: never advance virtual time past
+	// them. Timeouts alone do not create a skip target — only existing candidates
+	// (timers, backoffs, bound) do. This also handles the case where a user timer fires
+	// past the workflow timeout: we cap the skip so the timeout fires on schedule.
+	if !transition.targetTime.IsZero() {
+		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
 		}
-		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-	default:
-		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
+		}
 	}
 	return transition, nil
 }
