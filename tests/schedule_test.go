@@ -860,8 +860,8 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 			},
 		},
 		// BUFFER_ALL gates each start on the previous action completing. If a completion is dropped
-		// (the bug), the scheduler believes the action is still running and the buffered actions never
-		// start, so only the first action ever completes.
+		// because request ID is not carried over on continue-as-newthe scheduler believes the action
+		// is still running and the buffered actions never start, so only the first action ever completes.
 		Policies: &schedulepb.SchedulePolicies{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 		},
@@ -923,7 +923,7 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 		}
 		return completed >= wantCompleted
 	}, 15*time.Second, 200*time.Millisecond,
-		"scheduler should record %d completed actions; it stalls after the first when the continue-as-new completion callback is dropped", wantCompleted)
+		"scheduler should record %d completed actions", wantCompleted)
 
 	// Verify the completion callback was written into both runs of a completed action: the
 	// continued-as-new run (latest) and the original run it continued from. The header (callback
