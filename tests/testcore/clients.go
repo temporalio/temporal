@@ -47,8 +47,6 @@ type historyClients struct {
 }
 
 type matchingClient struct {
-	once   sync.Once
-	conn   *grpc.ClientConn
 	client matchingservice.MatchingServiceClient
 }
 
@@ -115,19 +113,7 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
-	c.ensureMatching()
 	return c.matching.client
-}
-
-func (c *clients) ensureMatching() {
-	c.matching.once.Do(func() {
-		conn, err := c.newConn(primitives.MatchingService)
-		if err != nil {
-			c.logger.Fatal("unable to create matching test client", tag.Error(err))
-		}
-		c.matching.conn = conn
-		c.matching.client = matchingservice.NewMatchingServiceClient(conn)
-	})
 }
 
 func (c *clients) close() []error {
@@ -135,7 +121,6 @@ func (c *clients) close() []error {
 	for _, conn := range []*grpc.ClientConn{
 		c.frontend.conn,
 		c.history.conn,
-		c.matching.conn,
 	} {
 		if conn != nil {
 			errs = append(errs, conn.Close())
@@ -143,7 +128,6 @@ func (c *clients) close() []error {
 	}
 	c.frontend.conn = nil
 	c.history.conn = nil
-	c.matching.conn = nil
 	return errs
 }
 
@@ -152,7 +136,6 @@ func (c *clients) newConn(serviceName primitives.ServiceName) (*grpc.ClientConn,
 	if err != nil {
 		return nil, err
 	}
-
 	tlsConfig, err := c.tlsConfig(serviceName)
 	if err != nil {
 		return nil, err

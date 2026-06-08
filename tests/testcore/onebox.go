@@ -329,6 +329,7 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
+	var matchingRawClient resource.MatchingRawClient
 	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
@@ -390,7 +391,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &grpcResolver),
+			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
@@ -403,6 +404,8 @@ func (c *TemporalImpl) startFrontend() {
 
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		// TODO: create matching client without reaching into fx graph
+		c.matching.client = matchingRawClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
