@@ -2,6 +2,7 @@ package tdbg
 
 import (
 	"go.temporal.io/server/chasm"
+	callbacklib "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -27,8 +28,9 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 		return nil, err
 	}
 
-	// Note: Activity and Callback libraries are not included because their constructors
-	// are unexported. Add them if/when they're needed.
+	if err := registry.Register(callbacklib.NewNilLibrary()); err != nil {
+		return nil, err
+	}
 
 	return registry, nil
 }
