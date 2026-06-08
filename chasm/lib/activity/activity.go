@@ -181,11 +181,6 @@ func NewStandaloneActivity(
 			return nil, err
 		}
 	}
-	if len(request.GetLinks()) > 0 {
-		if err := ctx.SetRequestLinks(activity, request.GetRequestId(), request.GetLinks()); err != nil {
-			return nil, err
-		}
-	}
 
 	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
 
