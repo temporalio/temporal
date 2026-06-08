@@ -8633,6 +8633,73 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		s.Require().NoError(err)
 		s.Equal(timerTime, tr.targetTime)
 	})
+
+	// Universal cap: skip target must not exceed the run/execution timeout.
+	// MaxElapsedDuration's value is irrelevant to calculateTimeSkippingTransition;
+	// only CurrentElapsedDurationBound.TargetTime is read. We use a large dummy
+	// duration solely to configure the bound type.
+	const largeBound = 24 * time.Hour
+	setBoundAt := func(target time.Time) {
+		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
+			&workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(largeBound)}
+		s.mutableState.executionInfo.TimeSkippingInfo.CurrentElapsedDurationBound =
+			&persistencespb.TimeSkippingBoundInfo{TargetTime: timestamppb.New(target)}
+	}
+
+	s.Run("Bound_LargerThanRunTimeout_CappedAtRunTimeout", func() {
+		resetMS()
+		runExpiry := baseTime.Add(30 * time.Minute)
+		boundTarget := baseTime.Add(2 * time.Hour) // bound > run timeout
+		setBoundAt(boundTarget)
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExpiry)
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(runExpiry, tr.targetTime, "skip must be capped at run timeout")
+		s.False(tr.disabledAfterBound, "cap fires before bound; bound must not be marked reached")
+	})
+
+	s.Run("Bound_SmallerThanRunTimeout_NoCap_TargetIsBound", func() {
+		resetMS()
+		boundTarget := baseTime.Add(30 * time.Minute)
+		runExpiry := baseTime.Add(2 * time.Hour) // run timeout > bound, no cap needed
+		setBoundAt(boundTarget)
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExpiry)
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(boundTarget, tr.targetTime, "bound is minimum; no cap applies")
+		s.True(tr.disabledAfterBound, "bound fires before run timeout; bound must be marked reached")
+	})
+
+	s.Run("Bound_LargerThanExecTimeout_NoRunTimeout_CappedAtExecTimeout", func() {
+		resetMS()
+		execExpiry := baseTime.Add(30 * time.Minute)
+		boundTarget := baseTime.Add(2 * time.Hour) // bound > execution timeout
+		setBoundAt(boundTarget)
+		// No WorkflowRunExpirationTime; only execution timeout.
+		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(execExpiry)
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(execExpiry, tr.targetTime, "skip must be capped at execution timeout")
+		s.False(tr.disabledAfterBound, "cap fires before bound; bound must not be marked reached")
+	})
+
+	s.Run("Bound_ZeroRunTimeout_TreatedAsNoTimeout_NoCap", func() {
+		// A zero-value timestamp means "no timeout configured". The cap must not
+		// fire: the bound target should be the skip destination unchanged.
+		resetMS()
+		boundTarget := baseTime.Add(time.Hour)
+		setBoundAt(boundTarget)
+		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(time.Time{})
+		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
+
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.Equal(boundTarget, tr.targetTime, "zero timeout must not cap the skip")
+		s.True(tr.disabledAfterBound)
+	})
 }
 
 // TestToRealTime tests ms.ToRealTime() exhaustively as this function is also used by executions that don't
