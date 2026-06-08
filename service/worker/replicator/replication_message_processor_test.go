@@ -3,7 +3,7 @@ package replicator
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/metrics"
@@ -17,16 +17,16 @@ func TestRetryPolicyForTask(t *testing.T) {
 	p := newReplicationMessageProcessor(
 		"currentCluster",
 		"sourceCluster",
-		nil,                          // logger
-		nil,                          // remotePeer
-		metrics.NoopMetricsHandler,   // metricsHandler — actually used by constructor
-		nil,                          // namespaceTaskExecutor
-		nil,                          // customTaskHandler
-		nil,                          // hostInfo
-		nil,                          // serviceResolver
-		nil,                          // namespaceReplicationQueue
-		nil,                          // matchingClient
-		nil,                          // namespaceRegistry
+		nil,                        // logger
+		nil,                        // remotePeer
+		metrics.NoopMetricsHandler, // metricsHandler — actually used by constructor
+		nil,                        // namespaceTaskExecutor
+		nil,                        // customTaskHandler
+		nil,                        // hostInfo
+		nil,                        // serviceResolver
+		nil,                        // namespaceReplicationQueue
+		nil,                        // matchingClient
+		nil,                        // namespaceRegistry
 	)
 
 	nsTask := &replicationspb.ReplicationTask{TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK}
@@ -37,13 +37,13 @@ func TestRetryPolicyForTask(t *testing.T) {
 	nsPolicy := p.retryPolicyForTask(nsTask)
 	defaultPolicy := p.retryPolicyForTask(tqTask)
 
-	assert.NotSame(t, nsPolicy, defaultPolicy,
+	require.NotSame(t, nsPolicy, defaultPolicy,
 		"namespace task must use a different retry policy from other task types")
 
 	// All non-namespace task types share the same default policy instance.
-	assert.Same(t, defaultPolicy, p.retryPolicyForTask(historyTask))
-	assert.Same(t, defaultPolicy, p.retryPolicyForTask(unspecifiedTask))
+	require.Same(t, defaultPolicy, p.retryPolicyForTask(historyTask))
+	require.Same(t, defaultPolicy, p.retryPolicyForTask(unspecifiedTask))
 
 	// Selector is stable across calls.
-	assert.Same(t, nsPolicy, p.retryPolicyForTask(nsTask))
+	require.Same(t, nsPolicy, p.retryPolicyForTask(nsTask))
 }
