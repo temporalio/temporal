@@ -22,6 +22,7 @@ import (
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -92,14 +93,6 @@ type (
 		NamespaceID string
 	}
 
-	DescribeTargetClusterRequest struct {
-		TargetClusterName string
-	}
-
-	DescribeTargetClusterResponse struct {
-		ShardCount int32
-	}
-
 	ReplicationStatus struct {
 		MaxReplicationTaskIds map[int32]int64
 	}
@@ -129,6 +122,7 @@ type (
 		adminClient                      adminservice.AdminServiceClient
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
+		clusterMetadata                  cluster.Metadata
 		Logger                           log.Logger
 		MetricsHandler                   metrics.Handler
 		forceReplicationMetricsHandler   metrics.Handler
@@ -199,23 +193,6 @@ func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*M
 		ShardCount:  a.HistoryShardCount,
 		NamespaceID: string(nsEntry.ID()),
 	}, nil
-}
-
-// DescribeTargetCluster fetches the remote cluster's history shard count via
-// its admin DescribeCluster RPC. The remote must be registered with the
-// source cluster's cluster metadata (the cluster name doubles as the
-// adminClient cache key) — which is already a prerequisite for force
-// replication, since the source generates replication tasks against it.
-func (a *activities) DescribeTargetCluster(ctx context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
-	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(req.TargetClusterName)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := remoteAdminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
-	if err != nil {
-		return nil, err
-	}
-	return &DescribeTargetClusterResponse{ShardCount: resp.GetHistoryShardCount()}, nil
 }
 
 // GetMaxReplicationTaskIDs returns max replication task id per shard

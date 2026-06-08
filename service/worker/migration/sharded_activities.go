@@ -21,6 +21,39 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
+type (
+	DescribeTargetClusterRequest struct {
+		TargetClusterName string
+	}
+
+	DescribeTargetClusterResponse struct {
+		ShardCount int32
+	}
+)
+
+// DescribeTargetCluster returns the remote cluster's history shard count
+// from the locally-cached cluster_metadata table. The remote is registered
+// via AdminService.AddOrUpdateRemoteCluster (which fetches HistoryShardCount
+// from the remote at registration time and stores it) — a prerequisite for
+// force replication, since the source generates replication tasks against
+// it. ClusterMetadata refreshes the cache every minute, so the value can be
+// at most that stale; shard count never changes for a live cluster so this
+// is fine.
+func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
+	info, ok := a.clusterMetadata.GetAllClusterInfo()[req.TargetClusterName]
+	if !ok {
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("target cluster %q not registered in cluster metadata", req.TargetClusterName),
+			"TargetClusterNotRegistered", nil)
+	}
+	if info.ShardCount <= 0 {
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("target cluster %q has non-positive ShardCount (%d) in cluster metadata", req.TargetClusterName, info.ShardCount),
+			"InvalidTargetShardCount", nil)
+	}
+	return &DescribeTargetClusterResponse{ShardCount: info.ShardCount}, nil
+}
+
 // ReplicateBatch is the per-batch activity body for the sharded force
 // replication workflow. Runs inject (skipped on Resume) then verify,
 // signal-releasing completed shards mid-flight as their cumulative

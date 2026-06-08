@@ -167,7 +167,7 @@ func maybeKickoffShardedTaskQueueUserDataReplication(ctx workflow.Context, param
 // status query's progress reporting.
 func shardedCountWorkflowsForReplication(ctx workflow.Context, params *ShardedForceReplicationParams) (int64, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 	var a *activities
@@ -273,27 +273,21 @@ type shardedWorkflowState struct {
 }
 
 func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicationParams) (*shardedWorkflowState, error) {
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 24 * time.Hour,
-		HeartbeatTimeout:    time.Minute,
+	lao := workflow.LocalActivityOptions{
+		StartToCloseTimeout: 1 * time.Second,
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
-	metaCtx := workflow.WithActivityOptions(ctx, ao)
+	localCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	var a *activities
 	var md MetadataResponse
-	if err := workflow.ExecuteActivity(metaCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
+	if err := workflow.ExecuteLocalActivity(localCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
 		return nil, err
 	}
 	var targetMd DescribeTargetClusterResponse
-	if err := workflow.ExecuteActivity(metaCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
+	if err := workflow.ExecuteLocalActivity(localCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
 		TargetClusterName: params.TargetClusterName,
 	}).Get(ctx, &targetMd); err != nil {
 		return nil, err
-	}
-	if targetMd.ShardCount <= 0 {
-		return nil, temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("DescribeTargetCluster returned non-positive ShardCount (%d) for target %q", targetMd.ShardCount, params.TargetClusterName),
-			"InvalidTargetShardCount", nil)
 	}
 	if params.BatchSize <= 0 {
 		params.BatchSize = defaultBatchSize

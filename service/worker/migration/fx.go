@@ -228,6 +228,7 @@ func newActivitiesFromParams(params initParams, workflowTypeName string) (*activ
 		adminClient:                      localAdmin,
 		clientFactory:                    params.ClientFactory,
 		clientBean:                       params.ClientBean,
+		clusterMetadata:                  params.ClusterMetadata,
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		taskManager:                      params.TaskManager,
 		Logger:                           params.Logger,
