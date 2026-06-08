@@ -95,7 +95,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
-	// runID to be used in the success result
 	var resultRunID string
 	// outcome is set in result only when IdReusePolicyReturnExistingOutcomeOnReject is set and the activity is already completed
 	var outcome *apiactivitypb.ActivityExecutionOutcome
@@ -169,8 +168,8 @@ func (h *handler) handleAlreadyStartedError(
 
 	// Get outcome if needed, and if reuse policy or conflict policy result in an already started error.
 	if frontendReq.GetIdReusePolicyReturnExistingOutcomeOnReject() {
-		var readerr error
-		outcome, readerr = chasm.ReadComponent(
+		var err error
+		outcome, err = chasm.ReadComponent(
 			ctx,
 			chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
 				NamespaceID: req.GetNamespaceId(),
@@ -183,8 +182,8 @@ func (h *handler) handleAlreadyStartedError(
 			nil,
 		)
 
-		if readerr != nil {
-			return nil, "", readerr
+		if err != nil {
+			return nil, "", err
 		}
 	}
 
