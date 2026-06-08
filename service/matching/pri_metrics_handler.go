@@ -24,6 +24,11 @@ type (
 		name    string
 		handler metrics.Handler
 	}
+	priMetricsHistogram struct {
+		name    string
+		unit    metrics.MetricUnit
+		handler metrics.Handler
+	}
 	fairMetricHandler struct {
 		handler metrics.Handler
 	}
@@ -37,6 +42,11 @@ type (
 	}
 	fairMetricsGauge struct {
 		name    string
+		handler metrics.Handler
+	}
+	fairMetricsHistogram struct {
+		name    string
+		unit    metrics.MetricUnit
 		handler metrics.Handler
 	}
 )
@@ -67,8 +77,8 @@ func (p priMetricHandler) WithTags(...metrics.Tag) metrics.Handler {
 	panic("not implemented")
 }
 
-func (p priMetricHandler) Histogram(string, metrics.MetricUnit) metrics.HistogramIface {
-	panic("not implemented")
+func (p priMetricHandler) Histogram(name string, unit metrics.MetricUnit) metrics.HistogramIface {
+	return priMetricsHistogram{name: name, unit: unit, handler: p.handler}
 }
 
 func (p priMetricHandler) StartBatch(string) metrics.BatchHandler {
@@ -88,6 +98,11 @@ func (t priMetricsTimer) Record(duration time.Duration, tag ...metrics.Tag) {
 func (t priMetricsGauge) Record(v float64, tag ...metrics.Tag) {
 	t.handler.Gauge(t.name).Record(v, tag...)
 	t.handler.Gauge(withPriPrefix(t.name)).Record(v, tag...)
+}
+
+func (h priMetricsHistogram) Record(v int64, tag ...metrics.Tag) {
+	h.handler.Histogram(h.name, h.unit).Record(v, tag...)
+	h.handler.Histogram(withPriPrefix(h.name), h.unit).Record(v, tag...)
 }
 
 func withPriPrefix(name string) string {
@@ -119,8 +134,8 @@ func (p fairMetricHandler) WithTags(...metrics.Tag) metrics.Handler {
 	panic("not implemented")
 }
 
-func (p fairMetricHandler) Histogram(string, metrics.MetricUnit) metrics.HistogramIface {
-	panic("not implemented")
+func (p fairMetricHandler) Histogram(name string, unit metrics.MetricUnit) metrics.HistogramIface {
+	return fairMetricsHistogram{name: name, unit: unit, handler: p.handler}
 }
 
 func (p fairMetricHandler) StartBatch(string) metrics.BatchHandler {
@@ -140,6 +155,11 @@ func (t fairMetricsTimer) Record(duration time.Duration, tag ...metrics.Tag) {
 func (t fairMetricsGauge) Record(v float64, tag ...metrics.Tag) {
 	t.handler.Gauge(t.name).Record(v, tag...)
 	t.handler.Gauge(withFairPrefix(t.name)).Record(v, tag...)
+}
+
+func (h fairMetricsHistogram) Record(v int64, tag ...metrics.Tag) {
+	h.handler.Histogram(h.name, h.unit).Record(v, tag...)
+	h.handler.Histogram(withFairPrefix(h.name), h.unit).Record(v, tag...)
 }
 
 func withFairPrefix(name string) string {

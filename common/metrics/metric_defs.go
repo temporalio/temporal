@@ -1252,9 +1252,21 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
-	PartitionScaleEvents = NewCounterDef("partition_scale_events")
-	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
-	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
+	PartitionScaleEvents          = NewCounterDef("partition_scale_events")
+	PartitionScaleRead            = NewGaugeDef("partition_scale_read")
+	PartitionScaleWrite           = NewGaugeDef("partition_scale_write")
+	TaskQueuePartitionLoadLatency = NewTimerDef(
+		"task_queue_partition_load_latency",
+		WithDescription("Time from taskQueuePartitionManager.Start() until initialize() completes successfully, covering user-data fetch and default physical queue lease acquisition. Tagged with `load_cause`."),
+	)
+	TaskBatchWriteSize = NewDimensionlessHistogramDef(
+		"task_batch_write_size",
+		WithDescription("Number of tasks in each CreateTasks/CreateFairTasks persistence batch issued by matching."),
+	)
+	TaskBatchReadSize = NewDimensionlessHistogramDef(
+		"task_batch_read_size",
+		WithDescription("Number of tasks returned by each GetTasks/GetFairTasks persistence batch read by matching. Tagged with `reader` (standard|fair)."),
+	)
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.

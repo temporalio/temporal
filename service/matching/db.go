@@ -573,6 +573,7 @@ func (db *taskQueueDB) CreateTasks(
 	}
 
 	if err == nil {
+		metrics.TaskBatchWriteSize.With(db.metricsHandler).Record(int64(len(allTasks)))
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
@@ -649,6 +650,7 @@ func (db *taskQueueDB) CreateFairTasks(
 		})
 
 	if err == nil {
+		metrics.TaskBatchWriteSize.With(db.metricsHandler).Record(int64(len(allTasks)))
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
@@ -675,7 +677,7 @@ func (db *taskQueueDB) GetTasks(
 	exclusiveMaxTaskID int64,
 	batchSize int,
 ) (*persistence.GetTasksResponse, error) {
-	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
+	resp, err := db.store.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueue:          db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
@@ -684,6 +686,13 @@ func (db *taskQueueDB) GetTasks(
 		Subqueue:           int(subqueue),
 		PageSize:           batchSize,
 	})
+	if err == nil {
+		metrics.TaskBatchReadSize.With(db.metricsHandler).Record(
+			int64(len(resp.Tasks)),
+			metrics.StringTag("reader", "standard"),
+		)
+	}
+	return resp, err
 }
 
 // GetFairTasks returns a batch of tasks after the given level
@@ -693,7 +702,7 @@ func (db *taskQueueDB) GetFairTasks(
 	inclusiveMinLevel fairLevel,
 	batchSize int,
 ) (*persistence.GetTasksResponse, error) {
-	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
+	resp, err := db.store.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueue:          db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
@@ -704,6 +713,13 @@ func (db *taskQueueDB) GetFairTasks(
 		PageSize:           batchSize,
 		UseLimit:           true,
 	})
+	if err == nil {
+		metrics.TaskBatchReadSize.With(db.metricsHandler).Record(
+			int64(len(resp.Tasks)),
+			metrics.StringTag("reader", "fair"),
+		)
+	}
+	return resp, err
 }
 
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is

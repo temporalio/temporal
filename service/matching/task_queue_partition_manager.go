@@ -274,6 +274,10 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	// that they can forward their tasks the poller which caused the root partition to be
 	// loaded. We're in a separate goroutine in initialize() so we can do it here.
 	if defaultQ.WaitUntilInitialized(pm.initCtx) == nil {
+		metrics.TaskQueuePartitionLoadLatency.With(pm.metricsHandler).Record(
+			time.Since(pm.loadTime),
+			metrics.StringTag("load_cause", pm.config.loadCause.String()),
+		)
 		pm.ForceLoadAllChildPartitions()
 	}
 
