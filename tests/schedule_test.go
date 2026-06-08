@@ -95,6 +95,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
 	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
 	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
+	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -822,6 +823,90 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+}
+
+// testScheduledWorkflowContinueAsNewCompletion validates that the CHASM scheduler observes the
+// completion of a scheduled workflow that continues-as-new before completing. The scheduler matches
+// completions by the request ID on the Nexus completion callback it attaches at start; if that ID is
+// lost across continue-as-new the completion is silently dropped and LastCompletionResult never
+// propagates. Each action continues-as-new once then completes, so once a completion is recorded a
+// later action observes a non-empty LastCompletionResult. CHASM-only: V1 uses no Nexus callbacks.
+func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-can-completion")
+	wid := testcore.RandomizeStr("sched-can-completion-wf")
+	wt := testcore.RandomizeStr("sched-can-completion-wt")
+
+	observedLCR := make(chan string, 64)
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		// The first run reports the LastCompletionResult the scheduler propagated (set only if the
+		// previous action's completion was recorded), then continues-as-new once. Reading it here
+		// avoids depending on whether LastCompletionResult survives the workflow's own CaN.
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			var lcr string
+			if workflow.HasLastCompletionResult(ctx) {
+				_ = workflow.GetLastCompletionResult(ctx, &lcr)
+			}
+			_ = workflow.SideEffect(ctx, func(workflow.Context) any {
+				select {
+				case observedLCR <- lcr:
+				default:
+				}
+				return nil
+			}).Get(nil)
+			return "", workflow.NewContinueAsNewError(ctx, wt)
+		}
+		// The CaN'd run completes, exercising completion delivery across continue-as-new.
+		return "completed-" + workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		// ALLOW_ALL so later actions run even if an earlier action is (incorrectly) still running.
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+
+	// A non-empty observation only happens once the scheduler has recorded a prior CaN'd completion.
+	deadline := time.After(15 * time.Second)
+	for {
+		select {
+		case lcr := <-observedLCR:
+			if lcr != "" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("scheduler never propagated a completion result from a continue-as-new'd scheduled workflow")
+		}
+	}
 }
 
 func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
