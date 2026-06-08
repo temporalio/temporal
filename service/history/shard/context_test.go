@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -351,9 +350,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflow
 func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 	workflowActiveCluster string,
 ) *persistence.AddHistoryTasksRequest {
-	// Enable the dynamic-config gate the producer checks.
-	s.mockShard.GetConfig().EnableDeleteWorkflowExecutionReplication = dynamicconfig.GetBoolPropertyFn(true)
-
 	nsID := namespace.NewID()
 	nsEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: nsID.String(), Name: "global-ns-for-delete-replication"},
