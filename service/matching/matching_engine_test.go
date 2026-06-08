@@ -865,10 +865,10 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 		{"Internal", serviceerror.NewInternal("boom"), metrics.DroppedTaskReasonInternalTag.Value, true},
 		{"DataLoss", serviceerror.NewDataLoss("boom"), metrics.DroppedTaskReasonDataLossTag.Value, true},
 		{"NotFound", serviceerror.NewNotFound("gone"), metrics.DroppedTaskReasonNotFoundTag.Value, false},
-		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("activity"), metrics.DroppedTaskReasonAlreadyStartedTag.Value, false},
-		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonObsoleteBuildIDTag.Value, false},
-		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonObsoleteMatchingTaskTag.Value, false},
-		{"ActivityStartDuringTransition", serviceerrors.NewActivityStartDuringTransition(), metrics.DroppedTaskReasonActivityStartDuringTransitionTag.Value, false},
+		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("activity"), metrics.DroppedTaskReasonInvalidTag.Value, false},
+		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonInvalidTag.Value, false},
+		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonInvalidTag.Value, false},
+		{"ActivityStartDuringTransition", serviceerrors.NewActivityStartDuringTransition(), metrics.DroppedTaskReasonInvalidTag.Value, false},
 	}
 
 	for _, tc := range cases {
@@ -926,9 +926,9 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 		{"Internal", serviceerror.NewInternal("boom"), metrics.DroppedTaskReasonInternalTag.Value, true},
 		{"DataLoss", serviceerror.NewDataLoss("boom"), metrics.DroppedTaskReasonDataLossTag.Value, true},
 		{"NotFound", serviceerror.NewNotFound("gone"), metrics.DroppedTaskReasonNotFoundTag.Value, false},
-		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("workflow"), metrics.DroppedTaskReasonAlreadyStartedTag.Value, false},
-		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonObsoleteBuildIDTag.Value, false},
-		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonObsoleteMatchingTaskTag.Value, false},
+		{"TaskAlreadyStarted", serviceerrors.NewTaskAlreadyStarted("workflow"), metrics.DroppedTaskReasonInvalidTag.Value, false},
+		{"ObsoleteDispatchBuildId", serviceerrors.NewObsoleteDispatchBuildId("bad build id"), metrics.DroppedTaskReasonInvalidTag.Value, false},
+		{"ObsoleteMatchingTask", serviceerrors.NewObsoleteMatchingTask("obsolete"), metrics.DroppedTaskReasonInvalidTag.Value, false},
 	}
 
 	for _, tc := range cases {

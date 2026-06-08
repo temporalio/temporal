@@ -803,11 +803,11 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonAlreadyStartedTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteBuildIDTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -820,7 +820,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteMatchingTask:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
 				e.logger.Info("dropping obsolete workflow task",
@@ -1036,11 +1036,11 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonAlreadyStartedTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteBuildIDTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -1053,7 +1053,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ObsoleteMatchingTask:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonObsoleteMatchingTaskTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
 				e.logger.Info("dropping obsolete activity task",
@@ -1073,7 +1073,7 @@ pollLoop:
 				)
 				task.finish(nil, false)
 			case *serviceerrors.ActivityStartDuringTransition:
-				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonActivityStartDuringTransitionTag)
+				recordDroppedTask(opMetrics, task, metrics.DroppedTaskReasonInvalidTag)
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
 					tag.WorkflowTaskQueueName(taskQueueName),

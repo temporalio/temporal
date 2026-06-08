@@ -573,16 +573,12 @@ var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 // Closed enum of reasons used with DroppedTasksCounter.
 // new failure modes should be added here rather than passed as ad-hoc strings.
 var (
-	DroppedTaskReasonNotFoundTag                      = Tag{Key: reason, Value: "not_found"}
-	DroppedTaskReasonAlreadyStartedTag                = Tag{Key: reason, Value: "already_started"}
-	DroppedTaskReasonObsoleteBuildIDTag               = Tag{Key: reason, Value: "obsolete_build_id"}
-	DroppedTaskReasonObsoleteMatchingTaskTag          = Tag{Key: reason, Value: "obsolete_matching_task"}
-	DroppedTaskReasonActivityStartDuringTransitionTag = Tag{Key: reason, Value: "activity_start_during_transition"}
-	DroppedTaskReasonInternalTag                      = Tag{Key: reason, Value: "internal_error"}
-	DroppedTaskReasonDataLossTag                      = Tag{Key: reason, Value: "data_loss"}
-	DroppedTaskReasonExpiredReadTag                   = Tag{Key: reason, Value: "expired_read"}
-	DroppedTaskReasonExpiredMemoryTag                 = Tag{Key: reason, Value: "expired_memory"}
-	DroppedTaskReasonInvalidTag                       = Tag{Key: reason, Value: "invalid"}
+	DroppedTaskReasonNotFoundTag      = Tag{Key: reason, Value: "not_found"}
+	DroppedTaskReasonInternalTag      = Tag{Key: reason, Value: "internal_error"}
+	DroppedTaskReasonDataLossTag      = Tag{Key: reason, Value: "data_loss"}
+	DroppedTaskReasonExpiredReadTag   = Tag{Key: reason, Value: "expired_read"}
+	DroppedTaskReasonExpiredMemoryTag = Tag{Key: reason, Value: "expired_memory"}
+	DroppedTaskReasonInvalidTag       = Tag{Key: reason, Value: "invalid"}
 )
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
