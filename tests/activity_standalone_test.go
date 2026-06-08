@@ -3638,6 +3638,36 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 		})
 	})
 
+	s.Run("StartDelay", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := env.Tv().ActivityID()
+		taskQueue := env.Tv().TaskQueue()
+		startDelay := durationpb.New(300 * time.Second)
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue.GetName()},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          startDelay,
+			RequestId:           env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, startDelay, describeResp.GetInfo().GetStartDelay())
+	})
+
 	s.Run("WaitAnyStateChange", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
