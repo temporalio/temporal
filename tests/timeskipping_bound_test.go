@@ -9,8 +9,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdktemporal "go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -20,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingBoundFunctionalSuite struct {
@@ -389,4 +393,140 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		Reason:            "test cleanup",
 	})
+}
+
+// blockingConditionWorkflow is used by the run-timeout/bound tests: it awaits a
+// condition that never becomes true, simulating a workflow blocked on an external
+// event with no inherent timeout.
+func blockingConditionWorkflow(ctx workflow.Context) error {
+	return workflow.Await(ctx, func() bool { return false })
+}
+
+// TestBound_MaxElapsed_BoundJustBeforeRunTimeout covers the case where MaxElapsed
+// is set 1ms less than WorkflowRunTimeout. The bound is always the minimum
+// candidate in the close-tx skip (1ms before the run expiry), so DisabledAfterBound
+// is deterministically true. The run-timeout timer then fires 1ms of real time
+// later and closes the execution with TIMED_OUT.
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundJustBeforeRunTimeout() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const (
+		runTimeout = 5 * time.Minute
+		bound      = runTimeout - time.Millisecond // bound < runTimeout by 1ms
+	)
+
+	env.SdkWorker().RegisterWorkflow(blockingConditionWorkflow)
+
+	cfg := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+	}
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowRunTimeout:  durationpb.New(runTimeout),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  cfg,
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 1, "exactly one transition: skip to bound (1ms before run timeout)")
+	s.True(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
+		"bound fires before run timeout: DisabledAfterBound must be true")
+	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT),
+		"run-timeout fires 1ms later and closes the workflow")
+}
+
+// TestBound_MaxElapsed_RunTimeoutBeforeBound is a two-phase test:
+//
+//  1. Workflow starts with time-skipping enabled but NO bound. The workflow is
+//     idle (blocking on a condition) so there are no skip candidates. The
+//     run/execution timeout alone must NOT advance virtual time — it is not a
+//     skip target. The workflow stays RUNNING indefinitely in real time.
+//
+//  2. A MaxElapsed bound larger than the run timeout is added via
+//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the bound
+//     as the only skip candidate, which is then capped at the run timeout
+//     (5 min < 10 min bound). Virtual time advances to the run timeout and the
+//     workflow is TIMED_OUT. The single transition carries DisabledAfterBound=false
+//     (the cap fired before the bound was reached).
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBeforeBound() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const (
+		runTimeout = 5 * time.Minute
+		bound      = 10 * time.Minute // larger than runTimeout
+	)
+
+	env.SdkWorker().RegisterWorkflow(blockingConditionWorkflow)
+
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowRunTimeout:  durationpb.New(runTimeout),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true}, // no bound yet
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// Phase 1: wait for the SDK worker to complete the first WFT (workflow blocks
+	// on Await). After the close-tx there are no skip candidates, so virtual time
+	// must not have advanced and no TimeSkippingTransitioned event should exist.
+	s.AwaitTruef(func() bool {
+		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+		return hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
+	}, 10*time.Second, 200*time.Millisecond, "first WFT must complete")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	s.Empty(s.findTransitionedEvents(hist),
+		"run/execution timeout alone is not a skip target — no transition must have fired")
+
+	// Phase 2: add MaxElapsed bound > run timeout. The update's close-tx finds
+	// the bound as the skip candidate, caps it at the run timeout, and the
+	// workflow is timed out.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	hist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
+	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
+		"run timeout caps the skip before bound is reached: DisabledAfterBound must be false")
+	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }
