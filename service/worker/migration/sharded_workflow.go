@@ -215,8 +215,8 @@ type shardedWorkflowState struct {
 	// shardInFlight is the per-shard exclusivity set: a shard's
 	// entry is set when it's part of any in-flight batch and
 	// cleared when that batch returns (either fully or via mid-flight
-	// signal-release). Concurrent batches are limited only by this
-	// set — there is no global slot cap.
+	// signal-release). The packer uses this set to ensure that each
+	// shard can only be present in one in-flight batch at a time.
 	shardInFlight map[int32]bool
 
 	// heldByBatch tracks per-batch shard ownership. spawnBatch

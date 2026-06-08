@@ -601,7 +601,7 @@ func TestSharded_ListWorkflowsError(t *testing.T) {
 }
 
 // TestSharded_ReplicateBatchRetryableError: when ReplicateBatch returns
-// a retryable error, the workflow exhausts its 3-attempt retry policy
+// a retryable error, the workflow exhausts its configured retry policy
 // and surfaces the error as lastErr. Mirrors the existing
 // TestGenerateReplicationTaskRetryableError.
 func TestSharded_ReplicateBatchRetryableError(t *testing.T) {
@@ -626,9 +626,6 @@ func TestSharded_ReplicateBatchRetryableError(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "transient backend error")
-	// MaximumAttempts: 3 in spawnBatch's activity options — assert at
-	// least 2 retries actually happened so a future change that drops
-	// the retry policy fails this test.
 	require.GreaterOrEqual(t, attempts.Load(), int32(2),
 		"expected ReplicateBatch to be retried at least twice before failing")
 }
