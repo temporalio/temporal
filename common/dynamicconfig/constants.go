@@ -1664,13 +1664,6 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 [go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
-	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
-		"history.enableDeleteWorkflowExecutionReplication",
-		false,
-		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
-execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
-	)
-
 	HistoryRPS = NewGlobalIntSetting(
 		"history.rps",
 		3000,
