@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -566,6 +567,10 @@ func (s *Scheduler) HandleNexusCompletion(
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
+		msg := "handled Nexus completion with an unrecognized request ID"
+		s.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("%s: %s", msg, info.RequestId))
+		ctx.Logger().Warn(msg, tag.RequestID(info.RequestId))
 		return nil
 	}
 
