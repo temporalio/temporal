@@ -144,21 +144,21 @@ func (a *activities) runVerifyPhase(
 	defer drainCancel()
 
 	for {
-		// Worker shutdown short-circuits drain mode entirely. The SDK
-		// closes WorkerStopChannel WorkerStopTimeout before forcibly
-		// returning; burning that window on DMS calls that can't drive
-		// their results back is worse than returning current state and
-		// letting ResumeShards / RecoveredBuckets recover next cycle.
-		// Re-checked each iteration because shutdown can fire after
-		// we've already entered drain — the detached ctx wouldn't
-		// notice on its own.
+		// Worker shutdown short-circuits with a retryable error so the
+		// SDK reschedules on another worker. Folding partial state into
+		// the workflow's drain bucket would conflate worker shutdown
+		// (deploys, host loss — orthogonal to migration progress) with
+		// drain-for-CAN. Returning here also avoids the ~HeartbeatTimeout
+		// wait that the alternative (silent worker death) would incur
+		// before the server retries the attempt. Inject is already
+		// heartbeat-preserved (InjectDone), so retry skips it; verify
+		// re-runs from scratch but DMS reads are idempotent.
 		select {
 		case <-activity.GetWorkerStopChannel(ctx):
-			return replicateBatchResult{
-				CompletedShards: shards.allCompleted(),
-				InFlight:        buildInFlight(execs, verified, shards, time.Now()),
-				VerifiedCount:   int64(doneCount),
-			}, nil
+			return replicateBatchResult{}, temporal.NewApplicationErrorWithOptions(
+				"worker shutdown", "WorkerShutdown",
+				temporal.ApplicationErrorOptions{NextRetryDelay: time.Second},
+			)
 		default:
 		}
 

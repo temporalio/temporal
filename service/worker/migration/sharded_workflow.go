@@ -449,8 +449,14 @@ var (
 	// lets a transient activity failure recover via heartbeat-resume
 	// without losing inject progress. WaitForCancellation lets a
 	// cancelled activity run drain logic and return its drain result.
+	//
+	// 10 attempts is sized for fleet rollouts: a rolling deploy of the
+	// activity workers can burn several attempts per batch (each
+	// shutdown surfaces as a retryable WorkerShutdown error from the
+	// activity). 3 was tight enough that two unlucky deploys could
+	// exhaust the budget on a long-running CAN cycle.
 	shardedReplicateBatchRetryPolicy = &temporal.RetryPolicy{
-		MaximumAttempts: 3,
+		MaximumAttempts: 10,
 	}
 	shardedReplicateBatchActivityOptions = workflow.ActivityOptions{
 		StartToCloseTimeout: 24 * time.Hour,
