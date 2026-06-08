@@ -142,6 +142,15 @@ func (sc *shardedWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) 
 	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{
 		Name: forceTaskQueueUserDataReplicationWorkflow,
 	})
+	// Local activities dispatch from the workflow worker's own registry, so
+	// the ones invoked via ExecuteLocalActivity (GetMetadata,
+	// DescribeTargetCluster) need to be visible here too. Registering the
+	// whole *activities set mirrors the activity-worker registration; the
+	// workflow worker has LocalActivityWorkerOnly=true so this doesn't
+	// race the activity worker for regular activity tasks.
+	registry.RegisterActivityWithOptions(sc.activities, activity.RegisterOptions{
+		DisableAlreadyRegisteredCheck: true,
+	})
 }
 
 func (sc *shardedWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
