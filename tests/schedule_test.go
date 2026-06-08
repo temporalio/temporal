@@ -3928,7 +3928,7 @@ func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Pause so the entry is stable and committed to visibility before we query it.
 	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -3938,25 +3938,25 @@ func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	paused := func(e *schedulepb.ScheduleListEntry) bool {
 		return e.GetInfo().GetPaused()
 	}
 
 	entry := getScheduleEntryFromVisibility(s, sid, newContext, paused)
-	s.NotNil(entry)
+	require.NotNil(t, entry)
 	fields := entry.GetSearchAttributes().GetIndexedFields()
 
 	runningPl, ok := fields[chasmscheduler.ScheduleRunningWorkflowCountName]
-	s.True(ok, "schedule must publish %s", chasmscheduler.ScheduleRunningWorkflowCountName)
+	require.True(t, ok, "schedule must publish %s", chasmscheduler.ScheduleRunningWorkflowCountName)
 	var running int64
-	s.NoError(payload.Decode(runningPl, &running))
+	require.NoError(t, payload.Decode(runningPl, &running))
 	require.Equal(t, int64(0), running)
 
 	bufferedPl, ok := fields[chasmscheduler.ScheduleBufferedStartsCountName]
-	s.True(ok, "schedule must publish %s", chasmscheduler.ScheduleBufferedStartsCountName)
+	require.True(t, ok, "schedule must publish %s", chasmscheduler.ScheduleBufferedStartsCountName)
 	var buffered int64
-	s.NoError(payload.Decode(bufferedPl, &buffered))
+	require.NoError(t, payload.Decode(bufferedPl, &buffered))
 	require.Equal(t, int64(0), buffered)
 }
