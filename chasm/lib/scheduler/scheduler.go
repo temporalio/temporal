@@ -71,11 +71,15 @@ var (
 
 const ScheduleNextActionTimeName = "ScheduleNextActionTime"
 const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
+const ScheduleRunningWorkflowCountName = "ScheduleRunningWorkflowCount"
+const ScheduleBufferedStartsCountName = "ScheduleBufferedStartsCount"
 
 var (
-	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
-	scheduleIdleCloseTimeSearchAttribute  = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+	executionStatusSearchAttribute              = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute       = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+	scheduleIdleCloseTimeSearchAttribute        = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+	scheduleRunningWorkflowCountSearchAttribute = chasm.NewSearchAttributeInt(ScheduleRunningWorkflowCountName, chasm.SearchAttributeFieldInt01)
+	scheduleBufferedStartsCountSearchAttribute  = chasm.NewSearchAttributeInt(ScheduleBufferedStartsCountName, chasm.SearchAttributeFieldInt02)
 )
 
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
@@ -949,6 +953,16 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 		if s.IdleCloseTime != nil {
 			out = append(out, scheduleIdleCloseTimeSearchAttribute.Value(s.IdleCloseTime.AsTime()))
 		}
+
+		invoker := s.Invoker.Get(ctx)
+		runningWorkflowCount := int64(len(invoker.runningWorkflowExecutions()))
+		bufferedStartsCount := int64(len(invoker.GetBufferedStarts()) - len(invoker.recentActions()))
+
+		// Emitted even when zero so that exact and range queries both work.
+		out = append(out,
+			scheduleRunningWorkflowCountSearchAttribute.Value(runningWorkflowCount),
+			scheduleBufferedStartsCountSearchAttribute.Value(bufferedStartsCount),
+		)
 	}
 	return out
 }

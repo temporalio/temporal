@@ -95,6 +95,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
 	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
 	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
+	t.Run("TestCountsVisibility", func(t *testing.T) { testScheduleCountsVisibility(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -3882,4 +3883,80 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
 	s.True(v2Next.After(createTime.Add(-time.Second)),
 		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
+}
+
+// testScheduleCountsVisibility asserts that the ScheduleRunningWorkflowCount and
+// ScheduleBufferedStartsCount search attributes are published to visibility. A
+// freshly-created, immediately-paused schedule has no running workflows and no
+// backlog, so both attributes must be present and zero.
+func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
+	opts := scheduleCommonOpts(t)
+	s := testcore.NewEnv(t, opts...)
+
+	sid := testcore.RandomizeStr("sched-counts-v2")
+	wid := testcore.RandomizeStr("sched-counts-wf")
+	wt := testcore.RandomizeStr("sched-counts-wt")
+
+	// Register a no-op workflow type in case a fire slips through before pause lands.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Pause so the entry is stable and committed to visibility before we query it.
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	paused := func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetPaused()
+	}
+
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, paused)
+	s.NotNil(entry)
+	fields := entry.GetSearchAttributes().GetIndexedFields()
+
+	runningPl, ok := fields[chasmscheduler.ScheduleRunningWorkflowCountName]
+	s.True(ok, "schedule must publish %s", chasmscheduler.ScheduleRunningWorkflowCountName)
+	var running int64
+	s.NoError(payload.Decode(runningPl, &running))
+	require.Equal(t, int64(0), running)
+
+	bufferedPl, ok := fields[chasmscheduler.ScheduleBufferedStartsCountName]
+	s.True(ok, "schedule must publish %s", chasmscheduler.ScheduleBufferedStartsCountName)
+	var buffered int64
+	s.NoError(payload.Decode(bufferedPl, &buffered))
+	require.Equal(t, int64(0), buffered)
 }
