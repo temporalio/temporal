@@ -497,7 +497,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 
 func (s *historyBuilderSuite) TestWorkflowExecutionTimeout() {
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
-	event := s.historyBuilder.AddTimeoutWorkflowEvent(
+	event, _ := s.historyBuilder.AddTimeoutWorkflowEvent(
 		retryState,
 		"",
 	)
@@ -543,7 +543,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelled() {
 
 func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 	reason := "random reason"
-	event := s.historyBuilder.AddWorkflowExecutionTerminatedEvent(
+	event, _ := s.historyBuilder.AddWorkflowExecutionTerminatedEvent(
 		reason,
 		testPayloads,
 		testIdentity,
@@ -589,7 +589,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 		Memo:                 testMemo,
 		SearchAttributes:     testSearchAttributes,
 	}
-	event := s.historyBuilder.AddContinuedAsNewEvent(
+	event, _ := s.historyBuilder.AddContinuedAsNewEvent(
 		workflowTaskCompletionEventID,
 		testRunID,
 		attributes,
@@ -2537,7 +2537,7 @@ func (s *historyBuilderSuite) TestContinuedAsNew_NilSearchAttributesFiltered() {
 		},
 	}
 
-	event := s.historyBuilder.AddContinuedAsNewEvent(
+	event, _ := s.historyBuilder.AddContinuedAsNewEvent(
 		rand.Int63(),
 		testRunID,
 		command,

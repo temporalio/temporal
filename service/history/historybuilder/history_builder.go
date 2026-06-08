@@ -450,11 +450,9 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 func (b *HistoryBuilder) AddTimeoutWorkflowEvent(
 	retryState enumspb.RetryState,
 	newExecutionRunID string,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateTimeoutWorkflowEvent(retryState, newExecutionRunID)
-
-	event, _ = b.add(event)
-	return event
+	return b.add(event)
 }
 
 func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
@@ -462,11 +460,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 	details *commonpb.Payloads,
 	identity string,
 	links []*commonpb.Link,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity, links)
-
-	event, _ = b.add(event)
-	return event
+	return b.add(event)
 }
 
 func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
@@ -528,10 +524,9 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	newRunID string,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.EventFactory.CreateContinuedAsNewEvent(workflowTaskCompletedEventID, newRunID, command)
-	event, _ = b.add(event)
-	return event
+	return b.add(event)
 }
 
 func (b *HistoryBuilder) AddTimerStartedEvent(
