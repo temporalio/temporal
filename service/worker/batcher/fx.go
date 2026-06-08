@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
@@ -32,12 +33,14 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		ClientFactory  sdk.ClientFactory
-		FrontendClient workflowservice.WorkflowServiceClient
-		AdminClient    adminservice.AdminServiceClient
-		HistoryClient  resource.HistoryClient
+		MetricsHandler                 metrics.Handler
+		Logger                         log.Logger
+		ClientFactory                  sdk.ClientFactory
+		FrontendClient                 workflowservice.WorkflowServiceClient
+		AdminClient                    adminservice.AdminServiceClient
+		HistoryClient                  resource.HistoryClient
+		SearchAttributesProvider       searchattribute.Provider
+		SearchAttributesMapperProvider searchattribute.MapperProvider
 	}
 
 	fxResult struct {

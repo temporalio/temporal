@@ -63,9 +63,9 @@ type (
 		chasmMapper   *chasm.VisibilitySearchAttributesMapper
 		archetypeID   chasm.ArchetypeID
 
-		// anchor is the reference time used to resolve NOW() expressions. When zero,
-		// getAnchor() falls back to time.Now().UTC() at resolution time.
-		anchor time.Time
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
 
 		seenNamespaceDivision bool
 	}
@@ -162,21 +162,21 @@ func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
 	return c
 }
 
-// WithAnchor sets the reference time used to resolve NOW() expressions in the query.
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
 // When not set, NOW() resolves to time.Now().UTC() at the time the query is converted.
-func (c *QueryConverter[ExprT]) WithAnchor(t time.Time) *QueryConverter[ExprT] {
-	c.anchor = t.UTC()
+func (c *QueryConverter[ExprT]) WithQueryTime(t time.Time) *QueryConverter[ExprT] {
+	c.queryTime = t.UTC()
 	return c
 }
 
-// getAnchor returns the configured anchor time. If no anchor was set via WithAnchor,
+// getQueryTime returns the configured query time. If no query time was set via WithQueryTime,
 // it computes time.Now().UTC() once on first call and caches it, so that all NOW()
 // expressions within a single query evaluate to the same timestamp.
-func (c *QueryConverter[ExprT]) getAnchor() time.Time {
-	if c.anchor.IsZero() {
-		c.anchor = time.Now().UTC()
+func (c *QueryConverter[ExprT]) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
 	}
-	return c.anchor
+	return c.queryTime
 }
 
 func (c *QueryConverter[ExprT]) WithChasmMapper(
@@ -621,21 +621,33 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
 		// Allow bare NOW() as a value, e.g. StartTime > NOW().
-		resolved, ok, err := resolveNowToTime(e, c.getAnchor())
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: NOW() is only supported for DateTime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		resolved, err := resolveNowToTime(e, c.getQueryTime())
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		if resolved == nil {
 			return nil, NewConverterError("%s: unsupported function %q", NotSupportedErrMessage, e.Name.String())
 		}
 		return c.parseValueExpr(sqlparser.NewStrVal([]byte(resolved.Format(time.RFC3339Nano))), saName, saFieldName, saType)
 	case *sqlparser.BinaryExpr:
 		// Allow NOW() +/- 'duration', e.g. StartTime > NOW() - '5h'.
-		resolved, ok, err := resolveNowToTime(e, c.getAnchor())
+		if saType != enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return nil, NewConverterError(
+				"%s: NOW() is only supported for DateTime search attributes",
+				NotSupportedErrMessage,
+			)
+		}
+		resolved, err := resolveNowToTime(e, c.getQueryTime())
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		if resolved == nil {
 			return nil, NewConverterError("%s: unsupported binary expression", NotSupportedErrMessage)
 		}
 		return c.parseValueExpr(sqlparser.NewStrVal([]byte(resolved.Format(time.RFC3339Nano))), saName, saFieldName, saType)
@@ -655,61 +667,64 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 }
 
 // resolveNowToTime resolves a NOW() or NOW() ± 'duration' AST expression to a concrete time.
-// Returns (resolvedTime, true, nil) if the expression is a NOW() expression.
-// Returns (zero, false, nil) if the expression is not a NOW() expression.
-// Returns (zero, false, err) if it looks like a malformed NOW() expression.
-func resolveNowToTime(expr sqlparser.Expr, anchor time.Time) (time.Time, bool, error) {
+// Returns (non-nil, nil) if the expression is a NOW() expression.
+// Returns (nil, nil) if the expression is not a NOW() expression.
+// Returns (nil, err) if it looks like a malformed NOW() expression.
+func resolveNowToTime(expr sqlparser.Expr, queryTime time.Time) (*time.Time, error) {
 	//nolint:revive // missing default case: non-NOW() expressions are handled by the final return
 	switch e := expr.(type) {
 	case *sqlparser.FuncExpr:
 		if strings.EqualFold(e.Name.String(), "now") && len(e.Exprs) == 0 {
-			return anchor, true, nil
+			t := queryTime
+			return &t, nil
 		}
 	case *sqlparser.BinaryExpr:
 		funcExpr, ok := e.Left.(*sqlparser.FuncExpr)
 		if !ok || !strings.EqualFold(funcExpr.Name.String(), "now") || len(funcExpr.Exprs) != 0 {
-			return time.Time{}, false, nil
+			return nil, nil
 		}
 		if e.Operator != sqlparser.PlusStr && e.Operator != sqlparser.MinusStr {
-			return time.Time{}, false, NewConverterError(
+			return nil, NewConverterError(
 				"%s: NOW() only supports + and - operators",
 				NotSupportedErrMessage,
 			)
 		}
-		strVal, ok := e.Right.(*sqlparser.SQLVal)
-		if !ok || strVal.Type != sqlparser.StrVal {
-			return time.Time{}, false, NewConverterError(
-				"%s: NOW() duration offset must be a quoted string, e.g. NOW() - '5h'",
+		sqlVal, ok := e.Right.(*sqlparser.SQLVal)
+		if !ok || (sqlVal.Type != sqlparser.StrVal && sqlVal.Type != sqlparser.IntVal) {
+			return nil, NewConverterError(
+				"%s: NOW() duration offset must be a quoted string or integer nanoseconds, e.g. NOW() - '5h' or NOW() - 300000000000",
 				InvalidExpressionErrMessage,
 			)
 		}
-		duration, err := ParseDurationStr(string(strVal.Val))
+		duration, err := ParseDurationStr(string(sqlVal.Val))
 		if err != nil {
-			return time.Time{}, false, NewConverterError(
-				"%s: invalid NOW() duration %q: %v",
+			return nil, NewConverterError(
+				"%s: invalid duration %q: %v",
 				InvalidExpressionErrMessage,
-				string(strVal.Val),
+				string(sqlVal.Val),
 				err,
 			)
 		}
 		if e.Operator == sqlparser.PlusStr {
-			return anchor.Add(duration), true, nil
+			t := queryTime.Add(duration)
+			return &t, nil
 		}
-		return anchor.Add(-duration), true, nil
+		t := queryTime.Add(-duration)
+		return &t, nil
 	}
-	return time.Time{}, false, nil
+	return nil, nil
 }
 
 // ResolveNowInExpr recursively walks expr and replaces any NOW() or NOW() ± 'duration'
-// sub-expressions with a quoted RFC3339Nano timestamp StrVal node, using anchor as the
+// sub-expressions with a quoted RFC3339Nano timestamp StrVal node, using queryTime as the
 // reference time. The expression pointer is updated in place.
-func ResolveNowInExpr(exprRef *sqlparser.Expr, anchor time.Time) error {
+func ResolveNowInExpr(exprRef *sqlparser.Expr, queryTime time.Time) error {
 	// Try to resolve the current node directly.
-	resolved, ok, err := resolveNowToTime(*exprRef, anchor)
+	resolved, err := resolveNowToTime(*exprRef, queryTime)
 	if err != nil {
 		return err
 	}
-	if ok {
+	if resolved != nil {
 		*exprRef = sqlparser.NewStrVal([]byte(resolved.Format(time.RFC3339Nano)))
 		return nil
 	}
@@ -717,46 +732,46 @@ func ResolveNowInExpr(exprRef *sqlparser.Expr, anchor time.Time) error {
 	// Recurse into sub-expressions.
 	switch e := (*exprRef).(type) {
 	case *sqlparser.AndExpr:
-		if err := ResolveNowInExpr(&e.Left, anchor); err != nil {
+		if err := ResolveNowInExpr(&e.Left, queryTime); err != nil {
 			return err
 		}
-		return ResolveNowInExpr(&e.Right, anchor)
+		return ResolveNowInExpr(&e.Right, queryTime)
 	case *sqlparser.OrExpr:
-		if err := ResolveNowInExpr(&e.Left, anchor); err != nil {
+		if err := ResolveNowInExpr(&e.Left, queryTime); err != nil {
 			return err
 		}
-		return ResolveNowInExpr(&e.Right, anchor)
+		return ResolveNowInExpr(&e.Right, queryTime)
 	case *sqlparser.ParenExpr:
-		return ResolveNowInExpr(&e.Expr, anchor)
+		return ResolveNowInExpr(&e.Expr, queryTime)
 	case *sqlparser.NotExpr:
-		return ResolveNowInExpr(&e.Expr, anchor)
+		return ResolveNowInExpr(&e.Expr, queryTime)
 	case *sqlparser.ComparisonExpr:
-		return ResolveNowInExpr(&e.Right, anchor)
+		return ResolveNowInExpr(&e.Right, queryTime)
 	case *sqlparser.RangeCond:
-		if err := ResolveNowInExpr(&e.From, anchor); err != nil {
+		if err := ResolveNowInExpr(&e.From, queryTime); err != nil {
 			return err
 		}
-		return ResolveNowInExpr(&e.To, anchor)
+		return ResolveNowInExpr(&e.To, queryTime)
 	case *sqlparser.BinaryExpr:
 		// Not a NOW() expression (already checked above). Recurse into both sides.
-		if err := ResolveNowInExpr(&e.Left, anchor); err != nil {
+		if err := ResolveNowInExpr(&e.Left, queryTime); err != nil {
 			return err
 		}
-		return ResolveNowInExpr(&e.Right, anchor)
+		return ResolveNowInExpr(&e.Right, queryTime)
 	}
 	return nil
 }
 
 // ResolveNow parses queryStr, replaces any NOW() expressions with concrete timestamps
-// relative to anchor, and returns the modified query string. If anchor is zero,
+// relative to queryTime, and returns the modified query string. If queryTime is zero,
 // time.Now().UTC() is used. Intended for pre-processing queries before they are sent
-// over RPC (e.g. in the batch workflow, where the anchor must be the deterministic
+// over RPC (e.g. in the batch workflow, where queryTime must be the deterministic
 // batch start time).
-func ResolveNow(queryStr string, anchor time.Time) (string, error) {
-	if anchor.IsZero() {
-		anchor = time.Now().UTC()
+func ResolveNow(queryStr string, queryTime time.Time) (string, error) {
+	if queryTime.IsZero() {
+		queryTime = time.Now().UTC()
 	} else {
-		anchor = anchor.UTC()
+		queryTime = queryTime.UTC()
 	}
 
 	if !strings.Contains(strings.ToUpper(queryStr), "NOW") {
@@ -774,7 +789,7 @@ func ResolveNow(queryStr string, anchor time.Time) (string, error) {
 		return queryStr, nil
 	}
 
-	if err := ResolveNowInExpr(&sel.Where.Expr, anchor); err != nil {
+	if err := ResolveNowInExpr(&sel.Where.Expr, queryTime); err != nil {
 		return "", err
 	}
 

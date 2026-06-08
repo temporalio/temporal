@@ -227,8 +227,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, _, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -243,8 +244,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
 	filterQuery = newBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
-	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -259,8 +261,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -275,7 +278,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 
 	// test for wrong query
 	request.Query = "invalid query"
-	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.Nil(p)
 	s.Error(err)
 	request.Query = ""
@@ -300,8 +303,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, _, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -313,7 +317,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 
 	// test invalid query with ORDER BY
 	request.Query = `ORDER BY WorkflowId`
-	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.Nil(p)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
@@ -2134,7 +2138,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, _, err := s.visibilityStore.BuildChasmSearchParameters(
+	p, err := s.visibilityStore.BuildChasmSearchParameters(
 		&visibilityservice.ListChasmExecutionsRequest{
 			NamespaceId: testNamespaceID.String(),
 			Namespace:   testNamespace.String(),
@@ -2145,6 +2149,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		chasmMapper,
 	)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -2161,7 +2166,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 	)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	p, _, err = s.visibilityStore.BuildChasmSearchParameters(
+	p, err = s.visibilityStore.BuildChasmSearchParameters(
 		&visibilityservice.ListChasmExecutionsRequest{
 			NamespaceId: testNamespaceID.String(),
 			Namespace:   testNamespace.String(),
@@ -2172,6 +2177,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		chasmMapper,
 	)
 	s.NoError(err)
+	p.QueryTime = time.Time{}
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,

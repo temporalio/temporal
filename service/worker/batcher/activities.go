@@ -357,14 +357,14 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		rawQuery, err := resolveRelativeTimestamps(adminReq.GetVisibilityQuery(), batchParams)
+		rawQuery, err := a.resolveRelativeTimestamps(adminReq.GetVisibilityQuery(), batchParams)
 		if err != nil {
 			return hbd, err
 		}
 		visibilityQuery = rawQuery
 		executions = adminReq.GetExecutions()
 	} else {
-		rawQuery, err := resolveRelativeTimestamps(batchParams.Request.VisibilityQuery, batchParams)
+		rawQuery, err := a.resolveRelativeTimestamps(batchParams.Request.VisibilityQuery, batchParams)
 		if err != nil {
 			return hbd, err
 		}
@@ -431,11 +431,30 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 
 // resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the anchor.
 // Returns the query unchanged if BatchStartTime is not set or the query contains no NOW().
-func resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
+// Uses a query converter to validate that NOW() is only used with DateTime search attributes,
+// ensuring consistent behavior with regular visibility queries.
+func (a *activities) resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
 	if batchParams.GetBatchStartTime() == nil || query == "" {
 		return query, nil
 	}
-	return visquery.ResolveNow(query, batchParams.BatchStartTime.AsTime())
+	queryTime := batchParams.BatchStartTime.AsTime()
+
+	// Validate the query using a converter to catch type errors upfront (e.g. NOW() on a
+	// non-DateTime search attribute), giving the same error behavior as a normal visibility query.
+	saTypeMap, err := a.SearchAttributesProvider.GetSearchAttributes("", false)
+	if err != nil {
+		return "", err
+	}
+	saMapper, err := a.SearchAttributesMapperProvider.GetMapper(a.namespace)
+	if err != nil {
+		return "", err
+	}
+	c := visquery.NewNilQueryConverter(a.namespace, saTypeMap, saMapper).WithQueryTime(queryTime)
+	if _, err := c.Convert(query); err != nil {
+		return "", err
+	}
+
+	return visquery.ResolveNow(query, queryTime)
 }
 
 func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {

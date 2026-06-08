@@ -377,7 +377,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListExecutionsResponse, error) {
-	p, queryTime, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
+	p, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +387,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil, queryTime)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil, p.QueryTime)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -400,7 +400,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 	}
 	chasmMapper := rc.SearchAttributesMapper()
 
-	p, queryTime, err := s.BuildChasmSearchParameters(request, s.GetListFieldSorter, chasmMapper)
+	p, err := s.BuildChasmSearchParameters(request, s.GetListFieldSorter, chasmMapper)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +415,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		namespace.Name(request.Namespace),
 		int(request.PageSize),
 		chasmMapper,
-		queryTime,
+		p.QueryTime,
 	)
 }
 
@@ -583,7 +583,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
-) (*client.SearchParameters, time.Time, error) {
+) (*client.SearchParameters, error) {
 	return s.buildSearchParametersInternal(&searchParametersInternal{
 		NamespaceName: request.Namespace,
 		NamespaceID:   request.NamespaceID,
@@ -599,7 +599,7 @@ func (s *VisibilityStore) BuildChasmSearchParameters(
 	request *visibilityservice.ListChasmExecutionsRequest,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-) (*client.SearchParameters, time.Time, error) {
+) (*client.SearchParameters, error) {
 	return s.buildSearchParametersInternal(&searchParametersInternal{
 		NamespaceName: namespace.Name(request.Namespace),
 		NamespaceID:   namespace.ID(request.NamespaceId),
@@ -613,10 +613,10 @@ func (s *VisibilityStore) BuildChasmSearchParameters(
 
 func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
-) (*client.SearchParameters, time.Time, error) {
+) (*client.SearchParameters, error) {
 	pageToken, err := s.deserializePageToken(params.NextPageToken)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, err
 	}
 	queryTime := time.Now().UTC()
 	if pageToken != nil && pageToken.QueryTime != nil {
@@ -627,7 +627,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	if s.enableUnifiedQueryConverter() {
 		queryParams, err = s.convertQuery(params.NamespaceName, params.NamespaceID, params.Query, params.ChasmMapper, params.ArchetypeID, queryTime)
 		if err != nil {
-			return nil, time.Time{}, err
+			return nil, err
 		}
 	} else {
 		queryParamsLegacy, err := s.convertQueryLegacy(
@@ -639,7 +639,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 			queryTime,
 		)
 		if err != nil {
-			return nil, time.Time{}, err
+			return nil, err
 		}
 		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
@@ -651,7 +651,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	}
 
 	if len(queryParams.GroupBy) > 0 {
-		return nil, time.Time{}, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
+		return nil, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
 	}
 
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
@@ -660,7 +660,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
 	if s.disableOrderByClause(params.NamespaceName.String()) && len(queryParams.Sorter) > 0 {
-		return nil, time.Time{}, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
 	if len(queryParams.Sorter) > 0 {
@@ -671,15 +671,16 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 
 	searchParams.Sorter, err = s.GetListFieldSorter(queryParams.Sorter)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, err
 	}
 
 	err = s.processPageToken(searchParams, pageToken, params.NamespaceName)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, err
 	}
 
-	return searchParams, queryTime, nil
+	searchParams.QueryTime = queryTime
+	return searchParams, nil
 }
 
 func (s *VisibilityStore) processPageToken(
@@ -762,7 +763,7 @@ func (s *VisibilityStore) convertQuery(
 	c := query.NewQueryConverter(&queryConverter{}, namespaceName, saTypeMap, saMapper).
 		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID).
-		WithAnchor(anchor)
+		WithQueryTime(anchor)
 
 	queryParams, err := c.Convert(queryString)
 	if err != nil {
@@ -822,7 +823,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger),
 		saTypeMap,
 		chasmMapper,
-	).WithAnchor(anchor)
+	).WithQueryTime(anchor)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).

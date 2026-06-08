@@ -1939,13 +1939,14 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name   string
-		expr   sqlparser.Expr
-		alias  string
-		field  string
-		saType enumspb.IndexedValueType
-		out    any
-		err    string
+		name      string
+		expr      sqlparser.Expr
+		alias     string
+		field     string
+		saType    enumspb.IndexedValueType
+		mockSetup func(m *MockStoreQueryConverter[sqlparser.Expr])
+		out       any
+		err       string
 	}{
 		{
 			name:   "success SQLVal",
@@ -2054,6 +2055,46 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 				InvalidExpressionErrMessage,
 			),
 		},
+
+		{
+			name: "success NOW() for DateTime",
+			expr: &sqlparser.FuncExpr{
+				Name: sqlparser.NewColIdent("NOW"),
+			},
+			alias:  sadefs.StartTime,
+			field:  sadefs.StartTime,
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			mockSetup: func(m *MockStoreQueryConverter[sqlparser.Expr]) {
+				m.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
+			},
+			// out is a time.Time formatted string; we only check no error in the test loop below
+		},
+
+		{
+			name: "fail NOW() for non-DateTime",
+			expr: &sqlparser.FuncExpr{
+				Name: sqlparser.NewColIdent("NOW"),
+			},
+			alias:  "AliasForKeyword01",
+			field:  "Keyword01",
+			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			err:    NotSupportedErrMessage,
+		},
+
+		{
+			name: "fail NOW() binary expr for non-DateTime",
+			expr: &sqlparser.BinaryExpr{
+				Operator: sqlparser.MinusStr,
+				Left: &sqlparser.FuncExpr{
+					Name: sqlparser.NewColIdent("NOW"),
+				},
+				Right: sqlparser.NewStrVal([]byte("5h")),
+			},
+			alias:  sadefs.ExecutionDuration,
+			field:  sadefs.ExecutionDuration,
+			saType: enumspb.INDEXED_VALUE_TYPE_INT,
+			err:    NotSupportedErrMessage,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -2068,6 +2109,10 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 				&searchattribute.TestMapper{},
 			)
 
+			if tc.mockSetup != nil {
+				tc.mockSetup(storeQCMock)
+			}
+
 			out, err := queryConverter.parseValueExpr(tc.expr, tc.alias, tc.field, tc.saType)
 			if tc.err != "" {
 				r.Error(err)
@@ -2076,7 +2121,11 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 				r.ErrorAs(err, &expectedErr)
 			} else {
 				r.NoError(err)
-				r.Equal(tc.out, out)
+				if tc.out != nil {
+					r.Equal(tc.out, out)
+				} else {
+					r.NotNil(out)
+				}
 			}
 		})
 	}

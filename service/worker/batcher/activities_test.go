@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/protomock"
@@ -758,10 +759,12 @@ func (s *activitiesSuite) TestBatchActivityWithProtobuf_ResolvesRelativeTimestam
 	mockSDKClient := mocksdk.NewMockClient(s.controller)
 	a := &activities{
 		activityDeps: activityDeps{
-			MetricsHandler: metrics.NoopMetricsHandler,
-			Logger:         log.NewNoopLogger(),
-			ClientFactory:  mockClientFactory,
-			FrontendClient: s.mockFrontendClient,
+			MetricsHandler:                 metrics.NoopMetricsHandler,
+			Logger:                         log.NewNoopLogger(),
+			ClientFactory:                  mockClientFactory,
+			FrontendClient:                 s.mockFrontendClient,
+			SearchAttributesProvider:       searchattribute.NewTestProvider(),
+			SearchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
 		},
 		namespace:   "test-namespace",
 		namespaceID: "test-namespace-id",
