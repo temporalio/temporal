@@ -457,6 +457,114 @@ func TestSearchAttributes_IdleCloseTime(t *testing.T) {
 	})
 }
 
+func TestSearchAttributes_RunningWorkflowCount(t *testing.T) {
+
+	t.Run("counts only started, not-yet-completed workflows", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		invoker := sched.Invoker.Get(ctx)
+		invoker.BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+			{RequestId: "running-1", RunId: "run-1"},
+			{RequestId: "running-2", RunId: "run-2"},
+			{RequestId: "done-1", RunId: "run-3", Completed: &schedulespb.CompletedResult{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleRunningWorkflowCountName)
+		require.Equal(t, int64(2), val)
+	})
+
+	t.Run("emits zero when there are no running workflows", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Invoker.Get(ctx).BufferedStarts = nil
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.True(t, ok, "expected %s to be present even when zero", scheduler.ScheduleRunningWorkflowCountName)
+		require.Equal(t, int64(0), val)
+	})
+
+	t.Run("closed does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "running-1", RunId: "run-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.False(t, ok, "expected %s to be absent once closed", scheduler.ScheduleRunningWorkflowCountName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.False(t, ok)
+	})
+}
+
+func TestSearchAttributes_BufferedStartsCount(t *testing.T) {
+
+	t.Run("counts only the not-yet-started backlog", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		invoker := sched.Invoker.Get(ctx)
+		invoker.BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+			{RequestId: "waiting-2"},
+			{RequestId: "running-1", RunId: "run-1"},
+			{RequestId: "done-1", RunId: "run-2", Completed: &schedulespb.CompletedResult{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleBufferedStartsCountName)
+		require.Equal(t, int64(2), val)
+	})
+
+	t.Run("emits zero when nothing is buffered", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "running-1", RunId: "run-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.True(t, ok, "expected %s to be present even when zero", scheduler.ScheduleBufferedStartsCountName)
+		require.Equal(t, int64(0), val)
+	})
+
+	t.Run("closed does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.False(t, ok, "expected %s to be absent once closed", scheduler.ScheduleBufferedStartsCountName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.False(t, ok)
+	})
+}
+
 func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
 	t.Helper()
 	for _, sa := range sas {
