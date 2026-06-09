@@ -1357,11 +1357,13 @@ func (s *sutTestingAdapter) AddFailWorkflowEvent(_ ...eventConfig) *historypb.Hi
 }
 
 func (s *sutTestingAdapter) AddTimeoutWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddTimeoutWorkflowEvent(enumspb.RETRY_STATE_IN_PROGRESS, "new-rung-1")
+	event, _ := s.HistoryBuilder.AddTimeoutWorkflowEvent(enumspb.RETRY_STATE_IN_PROGRESS, "new-rung-1")
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionTerminatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
+	event, _ := s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionUpdateAcceptedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1375,7 +1377,8 @@ func (s *sutTestingAdapter) AddWorkflowExecutionUpdateCompletedEvent(_ ...eventC
 
 func (s *sutTestingAdapter) AddContinuedAsNewEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddContinuedAsNewEvent(64, "new-run-5", attrs)
+	event, _ := s.HistoryBuilder.AddContinuedAsNewEvent(64, "new-run-5", attrs)
+	return event
 }
 
 func (s *sutTestingAdapter) AddTimerStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {

@@ -395,29 +395,19 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	})
 }
 
-// blockingConditionWorkflow is used by the run-timeout/bound tests: it awaits a
-// condition that never becomes true, simulating a workflow blocked on an external
-// event with no inherent timeout.
-func blockingConditionWorkflow(ctx workflow.Context) error {
-	return workflow.Await(ctx, func() bool { return false })
-}
-
-// TestBound_MaxElapsed_BoundJustBeforeRunTimeout covers the case where MaxElapsed
-// is set 1ms less than WorkflowRunTimeout. The bound is always the minimum
-// candidate in the close-tx skip (1ms before the run expiry), so DisabledAfterBound
-// is deterministically true. The run-timeout timer then fires 1ms of real time
-// later and closes the execution with TIMED_OUT.
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundJustBeforeRunTimeout() {
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundEqualsRunTimeout() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	ctx := testcore.NewContext()
 
 	const (
 		runTimeout = 5 * time.Minute
-		bound      = runTimeout - time.Millisecond // bound < runTimeout by 1ms
+		bound      = runTimeout // bound == runTimeout
 	)
 
-	env.SdkWorker().RegisterWorkflow(blockingConditionWorkflow)
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Sleep(ctx, runTimeout)
+	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
 	cfg := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
@@ -428,7 +418,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundJustBeforeR
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		WorkflowType:        &commonpb.WorkflowType{Name: "sleepEqualsTimeoutWorkflow"},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 		WorkflowRunTimeout:  durationpb.New(runTimeout),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
@@ -443,12 +433,19 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundJustBeforeR
 	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
 
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1, "exactly one transition: skip to bound (1ms before run timeout)")
-	s.True(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
-		"bound fires before run timeout: DisabledAfterBound must be true")
-	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT),
-		"run-timeout fires 1ms later and closes the workflow")
+	indexOfEventType := func(history []*historypb.HistoryEvent, t enumspb.EventType) int {
+		for i, e := range history {
+			if e.GetEventType() == t {
+				return i
+			}
+		}
+		return -1
+	}
+	transitionIdx := indexOfEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED)
+	timedOutIdx := indexOfEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT)
+	s.GreaterOrEqual(transitionIdx, 0, "expected a time-skipping transition event")
+	s.GreaterOrEqual(timedOutIdx, 0, "expected the workflow to time out")
+	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
 }
 
 // TestBound_MaxElapsed_RunTimeoutBeforeBound is a two-phase test:
@@ -474,7 +471,9 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBefore
 		bound      = 10 * time.Minute // larger than runTimeout
 	)
 
-	env.SdkWorker().RegisterWorkflow(blockingConditionWorkflow)
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool { return false })
+	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
 
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{

@@ -97,6 +97,7 @@ type testOptions struct {
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
+	testVars                 func(*testvars.TestVars) *testvars.TestVars
 }
 
 type dynamicConfigOverride struct {
@@ -129,6 +130,13 @@ func WithDisableTestloggerFailure() TestOption {
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
+	}
+}
+
+// WithTestVars customizes the default test variables for the environment.
+func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
+	return func(o *testOptions) {
+		o.testVars = fn
 	}
 }
 
@@ -244,6 +252,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	tv := testvars.New(t)
+	if options.testVars != nil {
+		tv = options.testVars(tv)
+	}
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -253,7 +266,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
-		tv:                 testvars.New(t),
+		tv:                 tv,
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
