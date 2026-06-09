@@ -42,6 +42,11 @@ func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcor
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp, 50*time.Millisecond),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters.
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("poller-scaling").WithBuildID("v1")
+		}),
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
@@ -239,8 +244,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
-	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
-	tv := env.Tv().WithDeploymentSeries("poller-scaling").WithBuildID("v1")
+	tv := env.Tv()
 
 	// Queueing up unversioned workflows
 	for range 5 {
