@@ -307,7 +307,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	for wfidx := range N {
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowId:   testcore.RandomizeStr(fmt.Sprintf("wf%d", wfidx)),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 		})
