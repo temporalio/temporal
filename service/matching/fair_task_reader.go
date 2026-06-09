@@ -490,6 +490,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// readLevel calculation above and advance ackLevel + get GC'd below.
 			tr.outstandingTasks.Put(level, nil)
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			metrics.DroppedTasksCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.DroppedTaskReasonExpiredReadTag)
 			hasExpired = true
 			continue
 		}
