@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,6 +15,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,17 +26,23 @@ import (
 type SchedulerIdleTaskHandlerOptions struct {
 	fx.In
 
-	Config *Config
+	Config         *Config
+	MetricsHandler metrics.Handler
+	BaseLogger     log.Logger
 }
 
 type SchedulerIdleTaskHandler struct {
 	chasm.PureTaskHandlerBase
-	config *Config
+	config         *Config
+	metricsHandler metrics.Handler
+	baseLogger     log.Logger
 }
 
 func NewSchedulerIdleTaskHandler(opts SchedulerIdleTaskHandlerOptions) *SchedulerIdleTaskHandler {
 	return &SchedulerIdleTaskHandler{
-		config: opts.Config,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
 	}
 }
 
@@ -44,34 +52,45 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
+	scheduler.EventLog.Get(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
 	return nil
 }
 
-// Validate returns true when all three conditions hold:
-//  1. The schedule is still idle — no new actions have been queued since this
-//     task was created (getIdleExpiration returns isIdle=true).
-//  2. The idle expiration has not shifted — getIdleExpiration recomputes
-//     getLastEventTime()+idleTimeTotal and it must equal the task's scheduled
-//     time. If a workflow start has advanced getLastEventTime() since the task
-//     was written, the expiration no longer matches and the task is dropped.
-//  3. The scheduler is not already closed (idempotency guard).
+// Validate returns true (fire) when the schedule should still close. False
+// drops for: already-closed (idempotency), held-open by state, or a deadline
+// that shifted later than ScheduledTime (the Generator will have re-armed at
+// the new deadline). It deliberately does not re-derive "is the spec
+// exhausted" - that's an arm-time concern.
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	taskAttrs chasm.TaskAttributes,
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
-	idleTimeTotal := task.IdleTimeTotal.AsDuration()
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
-
-	// If the scheduler has since woken up, or its idle expiration time changed, this
-	// task must be obsolete.
-	if !isIdle || idleExpiration.Compare(taskAttrs.ScheduledTime) != 0 {
+	if scheduler.Closed {
+		return false, nil
+	}
+	if scheduler.isHeldOpen() {
 		return false, nil
 	}
 
-	return !scheduler.Closed, nil
+	// Use After (not strict equality) so sub-precision drift doesn't drop tasks
+	// that should still fire.
+	idleExpiration := scheduler.idleDeadline(ctx, task.IdleTimeTotal.AsDuration())
+	if idleExpiration.After(taskAttrs.ScheduledTime) {
+		return false, nil
+	}
+
+	// Deadline moved earlier - shouldn't happen if getLastEventTime is monotonic.
+	// Fire (closing the schedule is the safe call) but log so a real regression
+	// surfaces.
+	if idleExpiration.Before(taskAttrs.ScheduledTime) {
+		newTaggedLogger(r.baseLogger, scheduler).Warn("idle deadline regressed",
+			tag.Timestamp(idleExpiration),
+			tag.NewTimeTag("scheduled-time", taskAttrs.ScheduledTime))
+	}
+	return true, nil
 }
 
 type SchedulerCallbacksTaskHandlerOptions struct {
@@ -170,6 +189,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 					}
 				}
 			}
+
+			s.EventLog.Get(ctx).LogEvent(ctx,
+				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
 			// Now that running workflow state has been refreshed, scheduler tasks can be
 			// fired.

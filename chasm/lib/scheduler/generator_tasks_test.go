@@ -134,6 +134,47 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.Len(t, generator.FutureActionTimes, 2)
 }
 
+func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Exhaust the schedule's actions so it goes idle (no more work to do).
+	sched.Schedule.State.LimitedActions = true
+	sched.Schedule.State.RemainingActions = 0
+
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	// The idle-close deadline must be recorded so it can be surfaced as the
+	// ScheduleIdleCloseTime search attribute.
+	require.NotNil(t, sched.IdleCloseTime, "expected IdleCloseTime to be set once idle")
+	require.True(t, sched.IdleCloseTime.AsTime().After(ctx.Now(generator)),
+		"expected idle-close deadline in the future, got %v", sched.IdleCloseTime.AsTime())
+}
+
+func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Simulate a stale deadline left over from a prior idle period.
+	sched.IdleCloseTime = timestamppb.New(ctx.Now(generator).Add(7 * 24 * time.Hour))
+
+	// A normal execution generates future actions, so the schedule is not idle.
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, generator.FutureActionTimes)
+	require.Nil(t, sched.IdleCloseTime, "expected IdleCloseTime to be cleared when the schedule has work")
+}
+
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)

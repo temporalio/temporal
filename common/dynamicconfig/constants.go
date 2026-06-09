@@ -604,6 +604,51 @@ is currently processing a task.
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
 	)
 
+	ScheduleInvariantsScannerOverdueNextActionTimeEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerOverdueNextActionTimeEnabled",
+		false,
+		`ScheduleInvariantsScannerOverdueNextActionTimeEnabled enables flagging schedules whose
+TemporalScheduleNextActionTime lies further in the past than the tolerance.`,
+	)
+	ScheduleInvariantsScannerStuckOpenEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerStuckOpenEnabled",
+		false,
+		`ScheduleInvariantsScannerStuckOpenEnabled enables flagging schedules that appear stuck open
+long after their CloseTime.`,
+	)
+	ScheduleInvariantsScannerUnknownStateEnabled = NewGlobalBoolSetting(
+		"worker.scheduleInvariantsScannerUnknownStateEnabled",
+		false,
+		`ScheduleInvariantsScannerUnknownStateEnabled enables flagging running, unpaused schedules with
+no TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known to be
+backfilled on legacy schedules.`,
+	)
+	ScheduleInvariantsScannerOverdueNextActionTimeTolerance = NewGlobalDurationSetting(
+		"worker.scheduleInvariantsScannerOverdueNextActionTimeTolerance",
+		10*time.Minute,
+		`ScheduleInvariantsScannerOverdueNextActionTimeTolerance is how far in the past
+TemporalScheduleNextActionTime must be before the schedule is flagged.`,
+	)
+	ScheduleInvariantsScannerVisibilityRPS = NewGlobalFloatSetting(
+		"worker.scheduleInvariantsScannerVisibilityRPS",
+		1.0,
+		`ScheduleInvariantsScannerVisibilityRPS rate-limits visibility calls from the
+schedule-invariants scanner.`,
+	)
+	ScheduleInvariantsScannerScanInterval = NewGlobalDurationSetting(
+		"worker.scheduleInvariantsScannerScanInterval",
+		15*time.Minute,
+		`ScheduleInvariantsScannerScanInterval is how often each schedule-invariants scanner
+activity kicks off a fresh scan pass.`,
+	)
+	ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier = NewGlobalIntSetting(
+		"worker.scheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier",
+		2,
+		`ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier multiplies the configured
+schedule IdleTime to set how far past a schedule's idle-close deadline it must be before the
+stuck-open scanner flags it.`,
+	)
+
 	// keys for frontend
 	FrontendAllowedExperiments = NewNamespaceTypedSetting(
 		"frontend.allowedExperiments",
@@ -2945,6 +2990,14 @@ Requires service restart to take effect.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerCreationRolloutPercent",
+		0,
+		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage of new schedules that will be
+created on the CHASM (V2) implementation. This setting is only consulted when EnableCHASMSchedulerCreation is true and
+is re-evaluated on every CreateSchedule RPC.`,
+	)
+
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
 		true,
@@ -2957,6 +3010,23 @@ first (with fallback to V1), excluding CreateSchedule.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	CHASMSchedulerMigrationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerMigrationRolloutPercent",
+		0,
+		`CHASMSchedulerMigrationRolloutPercent is the per-namespace percentage of V1 schedules that will be
+migrated to the CHASM (V2) implementation This setting is only consulted when
+EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
+scheduler workflow starts or continues-as-new.`,
+	)
+
+	EnableCHASMSchedulerMigrationWithRunningWorkflows = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerMigrationWithRunningWorkflows",
+		false,
+		`EnableCHASMSchedulerMigrationWithRunningWorkflows, when set to false, prevents schedules with
+running workflows from being migrated. This works around a known bug in 3P SDKs involving updating
+existing workflows to attach callbacks.`,
 	)
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(

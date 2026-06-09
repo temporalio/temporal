@@ -506,6 +506,8 @@ const (
 	VisibilityArchiverScope = "VisibilityArchiver"
 	// HistoryScavengerScope is scope used by all metrics emitted by worker.history.Scavenger module
 	HistoryScavengerScope = "HistoryScavenger"
+	// ScheduleInvariantsScannerScope is scope used by metrics emitted by the schedule-invariants scanner
+	ScheduleInvariantsScannerScope = "ScheduleInvariantsScanner"
 	// ArchiverDeleteHistoryActivityScope is scope used by all metrics emitted by archiver.DeleteHistoryActivity
 	ArchiverDeleteHistoryActivityScope = "ArchiverDeleteHistoryActivity"
 	// ArchiverUploadHistoryActivityScope is scope used by all metrics emitted by archiver.UploadHistoryActivity
@@ -617,6 +619,11 @@ const (
 	ScheduleBackendChasm                 = "chasm"
 	ScheduleBackendLegacy                = "legacy"
 	ScheduleBackendWorkflow              = "workflow"
+	ScheduleOverlapPolicyTag             = "schedule_overlap_policy"
+	ScheduleMissedReasonTag              = "reason"
+	ScheduleMissedReasonNotBuffered      = "not_buffered"
+	ScheduleMissedReasonBufferExpired    = "buffer_expired"
+	ScheduleActionRunningTag             = "action_running"
 	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
 	ScheduleMigrationDirectionToChasm    = "to_chasm"
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
@@ -1324,17 +1331,21 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 
-	VisibilityArchiverArchiveNonRetryableErrorCount = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount    = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                   = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                    = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                      = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                       = NewCounterDef("scavenger_skips")
-	ExecutionsOutstandingCount                      = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                   = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                = NewCounterDef("add_search_attributes_failures")
+	VisibilityArchiverArchiveNonRetryableErrorCount     = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount        = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                       = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                        = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                          = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                           = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerStuckOpenCount             = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount          = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                 = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                          = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                    = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                    = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                       = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                    = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
@@ -1433,6 +1444,10 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleActionE2EDelay = NewTimerDef(
+		"schedule_action_e2e_delay",
+		WithDescription("End-to-end delay between the action's original schedule time and when it was actually started, including overlap policy wait"),
+	)
 	ScheduleGenerateLatency = NewTimerDef(
 		"schedule_generate_latency",
 		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
@@ -1452,6 +1467,14 @@ var (
 	ScheduleMigrationFailed = NewCounterDef(
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
+	)
+	ScheduleOverlapSkipped = NewCounterDef(
+		"schedule_overlap_skipped",
+		WithDescription("The number of schedule actions skipped due to overlap policy"),
+	)
+	ScheduleCallbackLatency = NewTimerDef(
+		"schedule_callback_latency",
+		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
 	)
 
 	// Worker Versioning

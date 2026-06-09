@@ -183,14 +183,17 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
-					MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-					HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
-					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
-					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
-					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
+					MaxConcurrentActivityExecutionSize:                    dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskExecutionSize:                dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentActivityTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+					HistoryScannerEnabled:                                 dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
+					BuildIdScavengerEnabled:                               dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
+					ExecutionsScannerEnabled:                              dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
+					TaskQueueScannerEnabled:                               dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
+					ScheduleInvariantsScannerOverdueNextActionTimeEnabled: dynamicconfig.GetBoolPropertyFn(false),
+					ScheduleInvariantsScannerStuckOpenEnabled:             dynamicconfig.GetBoolPropertyFn(false),
+					ScheduleInvariantsScannerUnknownStateEnabled:          dynamicconfig.GetBoolPropertyFn(false),
 					Persistence: &config.Persistence{
 						DefaultStore: c.DefaultStore,
 						DataStores: map[string]config.DataStore{
@@ -263,14 +266,17 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	scanner := New(
 		logger,
 		&Config{
-			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
-			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
-			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
-			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
-			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			MaxConcurrentActivityExecutionSize:                    dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskExecutionSize:                dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskPollers:                      dynamicconfig.GetIntPropertyFn(1),
+			HistoryScannerEnabled:                                 dynamicconfig.GetBoolPropertyFn(true),
+			ExecutionsScannerEnabled:                              dynamicconfig.GetBoolPropertyFn(false),
+			TaskQueueScannerEnabled:                               dynamicconfig.GetBoolPropertyFn(false),
+			BuildIdScavengerEnabled:                               dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerOverdueNextActionTimeEnabled: dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerStuckOpenEnabled:             dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerUnknownStateEnabled:          dynamicconfig.GetBoolPropertyFn(false),
 			Persistence: &config.Persistence{
 				DefaultStore: config.StoreTypeNoSQL,
 				DataStores: map[string]config.DataStore{

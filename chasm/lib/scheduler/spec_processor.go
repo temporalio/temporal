@@ -123,6 +123,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
 	var droppedCount int64
+	recordedGenerateLatency := false
 	limitReached := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
@@ -138,19 +139,26 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
+		// Record generate latency only for the first action in the batch to
+		// avoid inflating the metric when catching up over a large time range.
+		if !manual && !recordedGenerateLatency {
+			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
+				Record(end.Sub(next.Next))
+			recordedGenerateLatency = true
+		}
+
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Info("Schedule missed catchup window",
 				tag.Time("now", end),
 				tag.Time("time", next.Next))
-			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			// Action's nominal time was already past the catchup window when
+			// the generator processed the time range. It was never buffered.
+			metricsHandler.WithTags(
+				metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonNotBuffered),
+			).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
-		}
-
-		if !manual {
-			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
-				Record(end.Sub(next.Next))
 		}
 
 		if limitReached {
