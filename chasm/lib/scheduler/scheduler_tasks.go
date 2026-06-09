@@ -112,9 +112,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 ) error {
 	var scheduler *Scheduler
 	var starts []*schedulespb.BufferedStart
-	var callback *commonpb.Callback
+	var componentRef []byte
 
-	// Read scheduler state and generate the Nexus callback token.
+	// Read scheduler state and capture the scheduler's component ref.
 	_, err := chasm.ReadComponent(
 		ctx,
 		schedulerRef,
@@ -130,11 +130,11 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 
-			cb, err := chasm.GenerateNexusCallback(ctx, s)
+			ref, err := ctx.Ref(s)
 			if err != nil {
 				return struct{}{}, err
 			}
-			callback = common.CloneProto(cb)
+			componentRef = ref
 
 			return struct{}{}, nil
 		},
@@ -147,7 +147,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	// Attach callbacks and check workflow status.
 	results := make(map[string]*watchResult, len(starts))
 	for _, start := range starts {
-		result, err := r.watchRunningStart(ctx, scheduler, start, callback)
+		result, err := r.watchRunningStart(ctx, scheduler, start, componentRef)
 		if err != nil {
 			return err
 		}
@@ -194,7 +194,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 ) (*watchResult, error) {
 	// Describe the workflow to ensure it exists and is still running.
 	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
@@ -238,6 +238,13 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	// reuse policy prevents accidentally starting a new workflow if the original
 	// completes between the describe and this call.
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
+
+	// Pack this start's request ID into the callback token so completions are matched from the token
+	// (which survives continue-as-new) rather than the started workflow's callback state.
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
