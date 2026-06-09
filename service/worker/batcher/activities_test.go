@@ -49,6 +49,45 @@ func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
 
+func (s *activitiesSuite) TestTaskTimeoutContext() {
+	s.Run("no parent deadline applies default timeout", func() {
+		ctx, cancel := taskTimeoutContext(context.Background())
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("longer parent deadline is shortened to default timeout", func() {
+		parent, parentCancel := context.WithTimeout(context.Background(), defaultTaskTimeout+time.Hour)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("shorter parent deadline is preserved", func() {
+		shorter := defaultTaskTimeout - 5*time.Second
+		parent, parentCancel := context.WithTimeout(context.Background(), shorter)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		// The parent context is returned unchanged so we never extend an
+		// existing, shorter deadline.
+		s.Equal(parent, ctx)
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(shorter, time.Until(deadline), float64(time.Second))
+	})
+}
+
 const NumTotalEvents = 10
 
 // Pattern contains either c or f representing completed or failed task.
