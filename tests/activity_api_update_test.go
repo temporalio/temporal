@@ -144,9 +144,9 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -162,10 +162,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{"retry_policy.initial_interval"},
 					false,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 
 				select {
@@ -174,7 +174,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					t.Fatal("timed out waiting for activity to receive update signal")
 				}
 
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Empty(t, description.GetPendingActivities())
@@ -184,7 +184,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityUpdateApi_ChangeScheduleToClose", func(t *testing.T) {
@@ -217,10 +217,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start (and fail)
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -236,10 +236,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{"schedule_to_close_timeout"},
 					false,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// activity should fail immediately
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Empty(t, description.GetPendingActivities())
@@ -295,10 +295,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start (and fail)
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					require.NotZero(t, startedActivityCount.Load())
 				}, 2*time.Second, 200*time.Millisecond)
 
@@ -315,14 +315,14 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{"schedule_to_close_timeout", "retry_policy.initial_interval"},
 					false,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 				// check that the update was successful
 				s.Equal(int64(newScheduleToCloseTimeout.Seconds()), respOpts.ScheduleToCloseTimeout.GetSeconds())
 				// check that field we didn't update is the same
 				s.Equal(int64(scheduleToCloseTimeout.Seconds()), respOpts.StartToCloseTimeout.GetSeconds())
 
 				// now activity should succeed
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Empty(t, description.GetPendingActivities())
@@ -331,7 +331,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityUpdateApi_ResetDefaultOptions", func(t *testing.T) {
@@ -374,10 +374,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start (and fail)
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -394,10 +394,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{"retry_policy.maximum_attempts"},
 					false,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// check that the update was successful
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -410,10 +410,10 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{},
 					true,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// check that the reset was successful
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -432,7 +432,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 					[]string{"schedule_to_close_timeout", "retry_policy.initial_interval"},
 					false,
 				)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// let activity finish
 				select {
@@ -442,7 +442,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				}
 
 				// wait for activity to finish
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Empty(t, description.GetPendingActivities())
@@ -452,7 +452,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 		})
 	}
@@ -490,9 +490,9 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Len(t, description.GetPendingActivities(), 1)
@@ -511,7 +511,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 
 		select {
@@ -520,7 +520,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			t.Fatal("timed out waiting for activity to receive update signal")
 		}
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Empty(t, description.GetPendingActivities())
@@ -529,7 +529,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 
 		var out string
 		err = workflowRun.Get(ctx, &out)
-		s.NoError(err)
+		require.NoError(t, err)
 	})
 
 	t.Run("ChangeScheduleToClose", func(t *testing.T) {
@@ -555,9 +555,9 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Len(t, description.GetPendingActivities(), 1)
@@ -574,10 +574,10 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Empty(t, description.GetPendingActivities())
@@ -619,9 +619,9 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			require.NotZero(t, startedActivityCount.Load())
 		}, 2*time.Second, 200*time.Millisecond)
 
@@ -639,12 +639,12 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 		s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
 		s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Empty(t, description.GetPendingActivities())
@@ -653,7 +653,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 
 		var out string
 		err = workflowRun.Get(ctx, &out)
-		s.NoError(err)
+		require.NoError(t, err)
 	})
 
 	t.Run("ResetDefaultOptions", func(t *testing.T) {
@@ -682,9 +682,9 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Len(t, description.GetPendingActivities(), 1)
@@ -704,10 +704,10 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Len(t, description.PendingActivities, 1)
@@ -722,10 +722,10 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			ActivityId:      "activity-id",
 			RestoreOriginal: true,
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Len(t, description.PendingActivities, 1)
@@ -746,7 +746,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		s.NotNil(resp)
 
 		select {
@@ -755,7 +755,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			t.Fatal("timed out waiting for activity to receive update signal")
 		}
 
-		await.Require(s.Context(), s.T(), func(t *await.T) {
+		await.Require(s.Context(), t, func(t *await.T) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 			require.NoError(t, err)
 			require.Empty(t, description.GetPendingActivities())
@@ -764,6 +764,6 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 
 		var out string
 		err = workflowRun.Get(ctx, &out)
-		s.NoError(err)
+		require.NoError(t, err)
 	})
 }
