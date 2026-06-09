@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -1795,10 +1796,13 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		WorkflowID:  request.Execution.GetWorkflowId(),
-		RunID:       request.Execution.GetRunId(),
-		TaskID:      math.MaxInt64,
+		NamespaceID:       namespaceID,
+		WorkflowID:        request.Execution.GetWorkflowId(),
+		RunID:             request.Execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		CloseTime:         new(request.WorkflowCloseTime.AsTime()),
+		StartTime:         request.WorkflowStartTime.AsTime(),
+		IsRetentionDelete: false,
 	})
 	if err != nil {
 		return nil, h.convertError(err)
