@@ -529,7 +529,7 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				var eventId int64
+				var eventID int64
 				var err error
 				//nolint:staticcheck // SA1019: worker versioning v0.31
 				var resetReapplyType enumspb.ResetReapplyType
@@ -538,7 +538,7 @@ func (a *activities) processSingleTask(
 					// Using ResetOptions
 					// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
+					eventID, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
 					//nolint:staticcheck // SA1019: worker versioning v0.31
 					resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
 					//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -546,7 +546,7 @@ func (a *activities) processSingleTask(
 				} else {
 					// Old fields
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
+					eventID, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
 					//nolint:staticcheck // SA1019: worker versioning v0.31
 					resetReapplyType = operation.ResetOperation.ResetReapplyType
 				}
@@ -558,7 +558,7 @@ func (a *activities) processSingleTask(
 					WorkflowExecution:         executionInfo.Execution,
 					Reason:                    batchOperation.Request.Reason,
 					RequestId:                 uuid.NewString(),
-					WorkflowTaskFinishEventId: eventId,
+					WorkflowTaskFinishEventId: eventID,
 					ResetReapplyType:          resetReapplyType,
 					ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
 					PostResetOperations:       operation.ResetOperation.PostResetOperations,
@@ -586,7 +586,7 @@ func (a *activities) processSingleTask(
 				case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 					unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
 				default:
-					return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity()))
+					return fmt.Errorf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity())
 				}
 
 				_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
@@ -625,7 +625,7 @@ func (a *activities) processSingleTask(
 				case *batchpb.BatchOperationResetActivities_MatchAll:
 					resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
 				default:
-					return errors.New(fmt.Sprintf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity()))
+					return fmt.Errorf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity())
 				}
 
 				_, err = frontendClient.ResetActivity(ctx, resetRequest)
@@ -648,7 +648,7 @@ func (a *activities) processSingleTask(
 				case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
 					updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
 				default:
-					return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UpdateActivityOptionsOperation.GetActivity()))
+					return fmt.Errorf("unknown activity type: %v", operation.UpdateActivityOptionsOperation.GetActivity())
 				}
 
 				updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
@@ -656,7 +656,7 @@ func (a *activities) processSingleTask(
 				return err
 			})
 	default:
-		err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
+		err = fmt.Errorf("unknown batch type: %v", batchOperation.BatchType)
 	}
 	a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
 }
