@@ -897,8 +897,16 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		cancellationInfo := descResp.GetInfo().GetCancellationInfo()
 		s.NotNil(cancellationInfo)
 		s.NotEqual(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, cancellationInfo.GetState())
-		s.Equal(int32(1), cancellationInfo.GetAttempt())
-		s.Equal("test cancellation", cancellationInfo.GetReason())
+		protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionCancellationInfo{
+			Attempt: 1,
+			Reason:  "test cancellation",
+		}, cancellationInfo, protorequire.IgnoreFields(
+			"requested_time",
+			"state",
+			"last_attempt_complete_time",
+			"last_attempt_failure",
+			"next_attempt_schedule_time",
+		))
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
