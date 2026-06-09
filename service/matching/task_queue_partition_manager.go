@@ -54,8 +54,9 @@ var (
 )
 
 const (
-	defaultTaskDispatchRPS    = 100000.0
-	defaultTaskDispatchRPSTTL = time.Minute
+	defaultTaskDispatchRPS         = 100000.0
+	defaultTaskDispatchRPSTTL      = time.Minute
+	defaultQueryHookNoPollerWindow = 5 * time.Second
 )
 
 type (
@@ -965,7 +966,7 @@ reredirectTask:
 	// Only fire for non-forwarded queries: forwarded queries already had the hook fired
 	// on the originating partition.
 	if request.ForwardInfo == nil &&
-		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.QueryPollerUnavailableWindow())) {
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-defaultQueryHookNoPollerWindow)) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
 	}
@@ -983,6 +984,11 @@ reredirectTask:
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
+	}
+	// Report a sync match when the query was dispatched locally
+	if err == nil && res == nil && request.ForwardInfo == nil {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
 	return res, err
 }
