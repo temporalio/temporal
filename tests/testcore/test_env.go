@@ -427,31 +427,38 @@ func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
 // SdkClient returns the SDK client. It is lazily initialized on the first call.
 func (e *TestEnv) SdkClient() sdkclient.Client {
 	e.sdkClientOnce.Do(func() {
-		clientOptions := sdkclient.Options{
-			HostPort:  e.FrontendGRPCAddress(),
-			Namespace: e.nsName.String(),
-			Logger:    log.NewSdkLogger(e.Logger),
-		}
-
-		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
-			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-		}
-
-		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(interceptor.Unary()),
-				grpc.WithStreamInterceptor(interceptor.Stream()),
-			}
-		}
-
-		var err error
-		e.sdkClient, err = sdkclient.Dial(clientOptions)
-		if err != nil {
-			e.t.Fatalf("Failed to create SDK client: %v", err)
-		}
-		e.t.Cleanup(func() { e.sdkClient.Close() })
+		c := e.SdkClientForNamespace(e.nsName.String())
+		e.sdkClient = c
 	})
 	return e.sdkClient
+}
+
+func (e *TestEnv) SdkClientForNamespace(ns string) sdkclient.Client {
+	clientOptions := sdkclient.Options{
+		HostPort:  e.FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(e.Logger),
+	}
+
+	if provider := e.cluster.host.tlsConfigProvider; provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+
+	if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
+		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+			grpc.WithUnaryInterceptor(interceptor.Unary()),
+			grpc.WithStreamInterceptor(interceptor.Stream()),
+		}
+	}
+
+	var err error
+	newClient, err := sdkclient.Dial(clientOptions)
+	if err != nil {
+		e.t.Fatalf("Failed to create SDK client: %v", err)
+	}
+	e.t.Cleanup(func() { newClient.Close() })
+
+	return newClient
 }
 
 // SdkWorker returns the SDK worker. It is lazily initialized on the first call.

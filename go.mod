@@ -66,7 +66,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.temporal.io/api v1.62.14-0.20260605195506-b526f51bd9f1
 	go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2
-	go.temporal.io/sdk v1.41.1
+	go.temporal.io/sdk v1.44.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
 	go.uber.org/multierr v1.11.0
