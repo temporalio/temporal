@@ -23,6 +23,7 @@ env:
   # members' PRs should receive an automated Claude review.
   REVIEW_TEAMS: |
     nexus
+  REVIEW_OPT_OUT_LABEL: opt-out
 
 jobs:
   check-membership:
@@ -32,6 +33,7 @@ jobs:
     permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
     outputs:
       is_member: ${{ steps.check.outputs.is_member }}
+      should_review: ${{ steps.decision.outputs.should_review }}
       head_sha: ${{ steps.resolve.outputs.head_sha }}
     steps:
       - name: Generate app token
@@ -42,14 +44,17 @@ jobs:
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           # Least-privilege: members:read for team-membership lookups,
-          # pull-requests:read for the workflow_dispatch PR lookup.
+          # pull-requests:read for the workflow_dispatch PR lookup, and
+          # issues:read for PR label lookups.
           permission-members: read
           permission-pull-requests: read
+          permission-issues: read
       - id: resolve
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ inputs.pr_number }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
@@ -57,16 +62,48 @@ jobs:
           set -euo pipefail
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             pr_json=$(gh api -H "Accept: application/vnd.github+json" \
-              "/repos/${REPO}/pulls/${PR_NUMBER}")
+              "/repos/${REPO}/pulls/${INPUT_PR_NUMBER}")
             author=$(echo "$pr_json" | jq -r '.user.login')
             head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+            pr_number="$INPUT_PR_NUMBER"
           else
             author="$PR_AUTHOR"
             head_sha="$PR_HEAD_SHA"
+            pr_number="$EVENT_PR_NUMBER"
           fi
-          echo "author=${author}" >> "$GITHUB_OUTPUT"
-          echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
+          echo "Resolved PR #${pr_number}: author=${author}, head_sha=${head_sha}"
+          {
+            echo "pr_number=${pr_number}"
+            echo "author=${author}"
+            echo "head_sha=${head_sha}"
+          } >> "$GITHUB_OUTPUT"
+      - id: opt_out
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "Checking PR #${PR_NUMBER} for opt-out label '${REVIEW_OPT_OUT_LABEL}'"
+          labels=$(gh api -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/issues/${PR_NUMBER}" --jq '.labels[].name')
+          if [ -z "$labels" ]; then
+            echo "PR #${PR_NUMBER} has no labels"
+          else
+            echo "PR #${PR_NUMBER} labels:"
+            printf '%s\n' "$labels" | sed 's/^/- /'
+          fi
+          opt_out_label=$(printf '%s\n' "$labels" | awk -v label="$REVIEW_OPT_OUT_LABEL" 'tolower($0) == tolower(label) { print; exit }')
+          if [ -n "$opt_out_label" ]; then
+            echo "Found opt-out label '${opt_out_label}' on PR #${PR_NUMBER}"
+            has_opt_out=true
+          else
+            echo "No opt-out label '${REVIEW_OPT_OUT_LABEL}' found on PR #${PR_NUMBER}"
+            has_opt_out=false
+          fi
+          echo "has_opt_out=${has_opt_out}" >> "$GITHUB_OUTPUT"
       - id: check
+        if: steps.opt_out.outputs.has_opt_out != 'true'
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
@@ -90,10 +127,28 @@ jobs:
             fi
           done
           echo "is_member=${is_member}" >> "$GITHUB_OUTPUT"
+      - id: decision
+        env:
+          HAS_OPT_OUT: ${{ steps.opt_out.outputs.has_opt_out }}
+          IS_MEMBER: ${{ steps.check.outputs.is_member }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_OPT_OUT" = "true" ]; then
+            echo "Skipping Claude review for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
+            should_review=false
+          elif [ "$IS_MEMBER" = "true" ]; then
+            echo "Claude review enabled for PR #${PR_NUMBER}: author is in an opted-in team and no opt-out label is present"
+            should_review=true
+          else
+            echo "Skipping Claude review for PR #${PR_NUMBER}: author is not in an opted-in team"
+            should_review=false
+          fi
+          echo "should_review=${should_review}" >> "$GITHUB_OUTPUT"
 
   review:
     needs: check-membership
-    if: needs.check-membership.outputs.is_member == 'true'
+    if: needs.check-membership.outputs.should_review == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
