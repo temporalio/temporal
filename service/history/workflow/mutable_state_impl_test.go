@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -8908,6 +8909,33 @@ func (s *mutableStateSuite) TestAddActivityTaskScheduledEvent_ScheduledEventBatc
 	)
 	s.NoError(err)
 	s.Equal(event.GetEventId(), activityInfo.ScheduledEventBatchId)
+}
+
+func (s *mutableStateSuite) TestGenerateEventLoadToken_MultiBatch() {
+	_, completedEvent := s.scheduleCompletedWFTForBatchIDTest()
+
+	event := s.mutableState.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:                     "endpoint",
+				Service:                      "service",
+				Operation:                    "operation",
+				Input:                        &commonpb.Payload{Data: []byte("input")},
+				WorkflowTaskCompletedEventId: completedEvent.GetEventId(),
+			},
+		}
+	})
+
+	token, err := s.mutableState.GenerateEventLoadToken(event)
+	s.NoError(err)
+
+	ref := &tokenspb.HistoryEventRef{}
+	s.NoError(proto.Unmarshal(token, ref))
+	s.Equal(event.GetEventId(), ref.EventId)
+	// The event rolled into its own batch, so the token must reference that batch,
+	// not the batch of the WFT-completed event that added this command.
+	s.Equal(event.GetEventId(), ref.EventBatchId)
+	s.NotEqual(completedEvent.GetEventId(), ref.EventBatchId)
 }
 
 func (s *mutableStateSuite) TestAddCompletedWorkflowEvent_CompletionEventBatchID() {

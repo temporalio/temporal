@@ -1361,33 +1361,35 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
+// SetLatestEventBatchID records the first event ID of the persistence batch that subsequent
+// GenerateEventLoadToken calls should reference. The live path sets this automatically when an
+// event is added. The rebuilder sets it for each batch before replaying its events.
+func (ms *MutableStateImpl) SetLatestEventBatchID(batchID int64) {
+	ms.hBuilder.SetLatestEventBatchID(batchID)
+}
+
 // GenerateEventLoadToken generates a token for loading a history event at a later time. The token encodes the event ID
 // and the batch ID (if applicable) which can be used to load the event from the events cache.
+//
+// The batch ID comes from the latest event batch (see [MutableStateImpl.SetLatestEventBatchID]), which assumes the
+// token is generated for the event that was just added (live path) or is currently being applied during replay. This must
+// be called after adding the event and not for an arbitrary historical event.
 func (ms *MutableStateImpl) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
-	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default, events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+	batchID := ms.hBuilder.LatestEventBatchID()
+	if batchID == common.EmptyEventID {
 		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
+	}
+	if batchID > event.EventId {
+		// The batch ID is the first event ID of the event's own batch, so it can never exceed the
+		// event's ID. A larger value means the cursor advanced past this event (token generated
+		// after a later event rolled the batch).
+		return nil, serviceerror.NewInternalf(
+			"event load token batch ID %d exceeds event ID %d",
+			batchID, event.EventId)
 	}
 	ref := &tokenspb.HistoryEventRef{
 		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
+		EventBatchId: batchID,
 	}
 	return proto.Marshal(ref)
 }
