@@ -59,7 +59,12 @@ func ExecutePureTask[C chasm.Component, T any](
 				return err
 			}
 			if valid {
-				return chasm.NewTaskNotInvalidatedError("pure", fmt.Sprintf("task_type=%T", task))
+				return chasm.NewTaskNotInvalidatedErrorWithDetails("pure", chasm.TaskNotInvalidatedDetails{
+					TaskType:      fmt.Sprintf("%T", task),
+					ScheduledTime: attrs.ScheduledTime,
+					Destination:   attrs.Destination,
+					Immediate:     attrs.IsImmediate(),
+				})
 			}
 			return nil
 		},

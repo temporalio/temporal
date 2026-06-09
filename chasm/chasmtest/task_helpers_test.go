@@ -65,6 +65,10 @@ func TestExecutePureTaskRequiresPostExecutionInvalidation(t *testing.T) {
 	var taskNotInvalidatedErr *chasm.TaskNotInvalidatedError
 	require.ErrorAs(t, err, &taskNotInvalidatedErr)
 	require.True(t, taskNotInvalidatedErr.IsTerminalTaskError())
+	require.Equal(t, "pure", taskNotInvalidatedErr.TaskKind)
+	require.Contains(t, taskNotInvalidatedErr.TaskType, "TestPayloadTTLPureTask")
+	require.Equal(t, attrs.ScheduledTime, taskNotInvalidatedErr.ScheduledTime)
+	require.False(t, taskNotInvalidatedErr.Immediate)
 	require.False(t, taskDropped)
 }
 

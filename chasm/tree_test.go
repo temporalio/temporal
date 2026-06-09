@@ -3311,9 +3311,19 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidatio
 
 	_, err = root.CloseTransaction()
 	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
+	s.ErrorContains(err, "LogicalTask{Type: "+testPureTaskFQN)
+	s.ErrorContains(err, "Path: ,")
 	var taskNotInvalidatedErr *TaskNotInvalidatedError
 	s.ErrorAs(err, &taskNotInvalidatedErr)
 	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
+	s.Equal("pure", taskNotInvalidatedErr.TaskKind)
+	s.Equal(testPureTaskFQN, taskNotInvalidatedErr.TaskType)
+	s.Equal(testPureTaskTypeID, taskNotInvalidatedErr.TaskTypeID)
+	s.Equal(testComponentTypeID, taskNotInvalidatedErr.ArchetypeID)
+	s.Empty(taskNotInvalidatedErr.ComponentPath)
+	s.Empty(taskNotInvalidatedErr.EncodedComponentPath)
+	s.True(taskNotInvalidatedErr.Immediate)
+	s.True(taskNotInvalidatedErr.ScheduledTime.IsZero())
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -3583,9 +3593,19 @@ func (s *nodeSuite) TestExecutePureTask() {
 	)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
+	s.ErrorContains(err, "LogicalTask{Type: "+testPureTaskFQN)
+	s.ErrorContains(err, "Path: ,")
 	var taskNotInvalidatedErr *TaskNotInvalidatedError
 	s.ErrorAs(err, &taskNotInvalidatedErr)
 	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
+	s.Equal("pure", taskNotInvalidatedErr.TaskKind)
+	s.Equal(testPureTaskFQN, taskNotInvalidatedErr.TaskType)
+	s.Equal(testPureTaskTypeID, taskNotInvalidatedErr.TaskTypeID)
+	s.Equal(testComponentTypeID, taskNotInvalidatedErr.ArchetypeID)
+	s.Empty(taskNotInvalidatedErr.ComponentPath)
+	s.Empty(taskNotInvalidatedErr.EncodedComponentPath)
+	s.Equal(taskAttributes.ScheduledTime, taskNotInvalidatedErr.ScheduledTime)
+	s.False(taskNotInvalidatedErr.Immediate)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	// Succeed execution, but post-execution validation errors.

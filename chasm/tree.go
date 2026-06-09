@@ -3310,7 +3310,20 @@ func (n *Node) ExecutePureTask(
 		return true, err
 	}
 	if valid {
-		return true, NewTaskNotInvalidatedError("pure", fmt.Sprintf("task_type=%s", registrableTask.fqType()))
+		archetypeID := n.ArchetypeID()
+		archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+		encodedPath, _ := n.getEncodedPath()
+		return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+			TaskType:             registrableTask.fqType(),
+			TaskTypeID:           registrableTask.taskTypeID,
+			Archetype:            archetype,
+			ArchetypeID:          archetypeID,
+			ComponentPath:        n.path(),
+			EncodedComponentPath: encodedPath,
+			ScheduledTime:        taskAttributes.ScheduledTime,
+			Destination:          taskAttributes.Destination,
+			Immediate:            taskAttributes.IsImmediate(),
+		})
 	}
 
 	return true, nil
