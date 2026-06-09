@@ -12,7 +12,7 @@ var _ Task = (*TimeSkippingTimerTask)(nil)
 
 type (
 	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
-	// on its TimeSkippingConfig is reached, so the executor can emit a disable transition.
+	// on its TimeSkippingConfig should take effect.
 	//
 	// EventID identifies the event (WorkflowExecutionStartedEvent or
 	// WorkflowExecutionOptionsUpdatedEvent) that installed the fast-forward this task targets.

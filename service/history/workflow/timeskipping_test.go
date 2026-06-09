@@ -22,37 +22,37 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 	}
 
 	s.Run("continuation keeps MaxElapsedDuration and Enabled", func() {
-		cfg, initialSkip := propagateTimeSkippingForExecutionChain(newSource())
-		s.Require().NotNil(cfg)
-		s.True(cfg.GetEnabled())
-		s.Equal(3*time.Hour, cfg.GetMaxElapsedDuration().AsDuration())
-		s.Require().NotNil(initialSkip)
+		tsc, initialSkip := propagateTimeSkippingToNextRun(newSource())
+		s.Require().NotNil(tsc)
+		s.True(tsc.GetEnabled())
+		s.Equal(3*time.Hour, tsc.GetMaxElapsedDuration().AsDuration())
 		s.Equal(time.Hour, initialSkip.AsDuration())
-	})
-
-	s.Run("child clears MaxElapsedDuration and inherits Enabled", func() {
-		cfg, _ := propagateTimeSkippingForChild(newSource())
-		s.Require().NotNil(cfg)
-		s.True(cfg.GetEnabled())
-		s.Nil(cfg.GetMaxElapsedDuration(), "MaxElapsedDuration never cascades into children")
 	})
 
 	s.Run("child does not propagate config when Enabled is false", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.Enabled = false
-		cfg, initialSkip := propagateTimeSkippingForChild(src)
-		s.Nil(cfg, "Enabled=false → no config propagated to the child")
+		tsc, initialSkip := propagateTimeSkippingToChild(src)
+		s.Nil(tsc, "Enabled=false → no config propagated to the child")
 		s.Require().NotNil(initialSkip)
 		s.Equal(time.Hour, initialSkip.AsDuration(),
 			"virtual time is always propagated, even when config propagation is disabled")
 	})
 
+	s.Run("child clears MaxElapsedDuration and inherits Enabled", func() {
+		tsc, initialSkip := propagateTimeSkippingToChild(newSource())
+		s.Require().NotNil(tsc)
+		s.True(tsc.GetEnabled())
+		s.Nil(tsc.GetMaxElapsedDuration(), "MaxElapsedDuration never cascades into children")
+		s.Equal(time.Hour, initialSkip.AsDuration())
+	})
+
 	s.Run("execution-chain snapshot does not mutate the source config", func() {
 		src := newSource()
-		cfg, _ := propagateTimeSkippingForExecutionChain(src)
-		s.Require().NotNil(cfg)
-		cfg.Enabled = false
-		cfg.Bound = nil
+		tsc, _ := propagateTimeSkippingToNextRun(src)
+		s.Require().NotNil(tsc)
+		tsc.Enabled = false
+		tsc.Bound = nil
 		s.True(src.GetTimeSkippingInfo().GetConfig().GetEnabled(), "source Enabled must not be mutated")
 		s.Equal(3*time.Hour, src.GetTimeSkippingInfo().GetConfig().GetMaxElapsedDuration().AsDuration(),
 			"source MaxElapsedDuration must not be mutated")
