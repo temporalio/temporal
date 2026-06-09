@@ -92,6 +92,7 @@ func (d *workerCommandsTaskDispatcher) execute(
 
 	if !d.config.EnableCancelActivityWorkerCommand(namespaceName) {
 		d.logger.Info("Worker commands feature disabled, dropping task",
+			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(task.WorkflowID),
 			tag.WorkflowRunID(task.RunID),
 			tag.NewStringTag("control_queue", task.Destination),
