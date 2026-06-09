@@ -372,7 +372,7 @@ type Config struct {
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
-	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFn
+	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 

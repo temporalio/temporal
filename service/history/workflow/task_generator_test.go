@@ -1148,6 +1148,7 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
 				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
 			)).AnyTimes()
+			mutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 
 			var capturedTasks []tasks.Task
 			if tc.expectTask {
@@ -1157,7 +1158,7 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 			}
 
 			cfg := &configs.Config{
-				EnableCancelActivityWorkerCommand: func() bool { return tc.featureEnabled },
+				EnableCancelActivityWorkerCommand: func(string) bool { return tc.featureEnabled },
 			}
 
 			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())
