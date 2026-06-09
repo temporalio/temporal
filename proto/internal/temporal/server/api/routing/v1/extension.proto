@@ -7,7 +7,7 @@ import "google/protobuf/descriptor.proto";
 option go_package = "go.temporal.io/server/api/routing/v1;routing";
 
 extend google.protobuf.MethodOptions {
-  optional RoutingOptions routing = 50234;
+  optional RoutingOptions routing = 7234;
 }
 
 message RoutingOptions {
@@ -15,6 +15,7 @@ message RoutingOptions {
   bool random = 1;
   // Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
   string namespace_id = 2;
-  // Request will be routed by resolving the namespace ID and business ID to a given shard.
-  string business_id = 3;
+  // Requests will be routed by resolving the namespace ID and business ID to a given shard.
+  // If multiple fields are specified, the first non-empty value is used.
+  repeated string business_id = 3;
 }
