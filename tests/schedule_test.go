@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -87,6 +89,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
+	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -814,6 +817,127 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+}
+
+// testScheduledWorkflowContinueAsNewCompletion validates that the CHASM scheduler observes the
+// completion of a scheduled workflow that continues-as-new before completing. The scheduler matches
+// completions by the request ID on the Nexus completion callback it attaches at start; if that ID is
+// lost across continue-as-new the completion is silently dropped, so with a buffering overlap policy
+// the scheduler believes the action is still running and never starts the buffered actions.
+//
+// It asserts the schedule records several COMPLETED actions (the buffer only drains as completions
+// are observed) and that the completion callback is written intact into both the original and the
+// continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
+func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := testcore.RandomizeStr("sched-can-completion")
+	wid := testcore.RandomizeStr("sched-can-completion-wf")
+	wt := testcore.RandomizeStr("sched-can-completion-wt")
+
+	// Continue-as-new once, then complete: the completion is delivered from the continued run,
+	// exercising completion-callback propagation across continue-as-new.
+	workflowFn := func(ctx workflow.Context) error {
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			return workflow.NewContinueAsNewError(ctx, wt)
+		}
+		return nil
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		// BUFFER_ALL gates each start on the previous action completing. If a completion is dropped
+		// because request ID is not carried over on continue-as-newthe scheduler believes the action
+		// is still running and the buffered actions never start, so only the first action ever completes.
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	require.NoError(t, err)
+
+	// getCompletionCallback returns the Nexus completion callback the scheduler attached, found in the
+	// run's WorkflowExecutionStarted event.
+	getCompletionCallback := func(events []*historypb.HistoryEvent) *commonpb.Callback {
+		for _, e := range events {
+			for _, cb := range e.GetWorkflowExecutionStartedEventAttributes().GetCompletionCallbacks() {
+				if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+					return cb
+				}
+			}
+		}
+		return nil
+	}
+
+	// The scheduler only starts the next buffered action after observing the previous one complete,
+	// so it records multiple COMPLETED actions only if continue-as-new completions are delivered. With
+	// the bug it stalls after the first. (StartWorkflowStatus is set solely from the completion
+	// callback the scheduler records, not from visibility.)
+	const wantCompleted = 3
+	var completedWFID string
+	s.Eventually(func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		completed := 0
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				completed++
+				completedWFID = a.GetStartWorkflowResult().GetWorkflowId()
+			}
+		}
+		return completed >= wantCompleted
+	}, 15*time.Second, 200*time.Millisecond,
+		"scheduler should record %d completed actions", wantCompleted)
+
+	// Verify the completion callback was written into both runs of a completed action: the
+	// continued-as-new run (latest) and the original run it continued from. The header (callback
+	// token) must be identical, confirming the callback was propagated intact across continue-as-new.
+	s.NotEmpty(completedWFID)
+	canHist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: completedWFID})
+	canCB := getCompletionCallback(canHist)
+	s.NotNil(canCB, "continued-as-new run must carry the completion callback")
+
+	var continuedFromRunID string
+	for _, e := range canHist {
+		if a := e.GetWorkflowExecutionStartedEventAttributes(); a != nil {
+			continuedFromRunID = a.GetContinuedExecutionRunId()
+			break
+		}
+	}
+	s.NotEmpty(continuedFromRunID, "completed action should have continued-as-new")
+
+	origHist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: completedWFID, RunId: continuedFromRunID})
+	origCB := getCompletionCallback(origHist)
+	s.NotNil(origCB, "original run must carry the completion callback")
+	s.Equal(origCB.GetNexus().GetHeader(), canCB.GetNexus().GetHeader(), "completion callback must be propagated intact across continue-as-new")
 }
 
 func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
