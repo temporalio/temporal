@@ -411,7 +411,7 @@ func TestGetNexusCompletion(t *testing.T) {
 		{
 			name: "termination",
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
+				return mutableState.AddWorkflowExecutionTerminatedEvent("dont care", nil, "identity", false, nil)
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.NotNil(t, completion.Error)
