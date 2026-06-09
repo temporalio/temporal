@@ -4164,11 +4164,12 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			expectNilCfg: true,
 		},
 		{
-			name: "config only, no accumulated skip → config cloned verbatim, no initial skip",
+			name: "config only, no accumulated skip → config cloned, zero initial skip",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 			},
-			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(0),
 		},
 		{
 			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
@@ -4189,12 +4190,11 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			expectInitialSkip: durationpb.New(2 * time.Hour),
 		},
 		{
-			name: "accumulated skip only, no config (corrupt-ish but handled) → no config snapshot, just InitialSkippedDuration",
+			name: "accumulated skip only, no config → nothing propagated (skipping disabled)",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
-			expectNilCfg:      true,
-			expectInitialSkip: durationpb.New(15 * time.Minute),
+			expectNilCfg: true,
 		},
 		{
 			name: "MaxElapsedDuration is never propagated to children → cleared from child snapshot",

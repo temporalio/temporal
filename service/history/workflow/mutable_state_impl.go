@@ -2715,7 +2715,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
-	newRunTSConfig, newRunInitialSkipped := propagateTimeSkippingForExecutionChain(previousExecutionInfo)
+	tsc, initialSkip := propagateTimeSkippingToNextRun(previousExecutionInfo)
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2736,7 +2736,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CompletionCallbacks:   completionCallbacks,
 		Links:                 links,
 		Priority:              previousExecutionInfo.Priority,
-		TimeSkippingConfig:    newRunTSConfig,
+		TimeSkippingConfig:    tsc,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2771,7 +2771,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedPinnedVersion:       inheritedPinnedVersion,
 		VersioningOverride:           pinnedOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
-		InitialSkippedDuration:       newRunInitialSkipped,
+		InitialSkippedDuration:       initialSkip,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -3178,11 +3178,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 	ms.executionInfo.Priority = event.Priority
 
-	// Seed time-skipping info when either a config is propagated or there is inherited
-	// virtual time to carry forward. A child that opted out of config propagation
-	// (DisableChildPropagation) still inherits its accumulated skip, arriving here with a
-	// nil config but a positive InitialSkippedDuration — so virtual time is always
-	// propagated. initTimeSkippingInfo tolerates a nil config (no fast-forward is installed).
 	if tsc, initialSkip := event.GetTimeSkippingConfig(), event.GetInitialSkippedDuration(); tsc != nil || initialSkip.AsDuration() > 0 {
 		ms.initTimeSkippingInfo(tsc, initialSkip, startEvent.GetEventId())
 	}
@@ -6353,14 +6348,13 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-
-	childTSConfig, childInitialSkipped := propagateTimeSkippingForChild(ms.executionInfo)
+	childTSC, childInitialSkip := propagateTimeSkippingToChild(ms.executionInfo)
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
-		childTSConfig,
-		childInitialSkipped,
+		childTSC,
+		childInitialSkip,
 	)
 	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(batchID, event)
 	if err != nil {
