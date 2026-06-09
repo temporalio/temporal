@@ -35,7 +35,6 @@ func (h *activityDispatchTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	return (TransitionStarted.Possible(activity) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
@@ -127,9 +126,22 @@ func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
-	_ *activitypb.ScheduleToCloseTimeoutTask,
+	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return TransitionTimedOut.Possible(activity), nil
+	if !TransitionTimedOut.Possible(activity) {
+		return false, nil
+	}
+	// If schedule-to-close was disabled via an options update, discard this task.
+	if activity.GetScheduleToCloseTimeout().AsDuration() <= 0 {
+		return false, nil
+	}
+	// Stamp check: discard tasks from before the most recent ScheduleToCloseTimeoutTask was
+	// scheduled (e.g. after a schedule-to-close extension or a disable+re-enable cycle).
+	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+	if task.GetStamp() != 0 && task.GetStamp() != activity.GetScheduleToCloseStamp() {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (h *scheduleToCloseTimeoutTaskHandler) Execute(
@@ -164,7 +176,9 @@ func (h *startToCloseTimeoutTaskHandler) Validate(
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
 	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
@@ -225,7 +239,9 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
 	// Execute function runs and we fail the attempt.
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.

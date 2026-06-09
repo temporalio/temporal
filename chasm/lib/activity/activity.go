@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -109,6 +112,19 @@ type RespondCancelledEvent struct {
 	Token   *tokenspb.Task
 }
 
+func (a *Activity) isTerminal() bool {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
+}
+
 // LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
@@ -160,6 +176,15 @@ func NewStandaloneActivity(
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
 			StartDelay:             request.GetStartDelay(),
+			OriginalOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              request.GetTaskQueue(),
+				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    request.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       request.GetHeartbeatTimeout(),
+				RetryPolicy:            request.GetRetryPolicy(),
+				Priority:               request.GetPriority(),
+			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -582,6 +607,187 @@ func (a *Activity) Terminate(
 	})
 }
 
+func (a *Activity) UpdateActivityExecutionOptions(
+	ctx chasm.MutableContext,
+	req *activitypb.UpdateActivityExecutionOptionsRequest,
+) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
+	default:
+	}
+
+	frontendReq := req.GetFrontendRequest()
+
+	if frontendReq.GetRestoreOriginal() {
+		ogOptions := a.GetOriginalOptions()
+		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
+		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
+		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
+		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.Priority = common.CloneProto(ogOptions.GetPriority())
+	} else {
+		if err := a.mergeActivityOptions(frontendReq); err != nil {
+			return nil, err
+		}
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+
+	// Recalculate the current retry interval based on the (possibly updated) retry policy.
+	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && attempt.GetCurrentRetryInterval() != nil {
+		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
+		attempt.CurrentRetryInterval = durationpb.New(newInterval)
+	}
+
+	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
+	// Increment the stamp so the previous task is invalidated by the Validate check.
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		a.ScheduleToCloseStamp++
+		deadline := a.GetScheduleTime().AsTime().Add(timeout)
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
+		)
+	}
+
+	attempt.Stamp++
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
+		// The old task was invalidated by the stamp increment above.
+		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
+			deadline := attempt.GetStartedTime().AsTime().Add(timeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: deadline},
+				&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+
+		if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
+			// The next heartbeat time is the max of (the last heartbeats recorded time and
+			// the current attempts started time) plus the heartbeat timeout
+			lastHb, _ := a.LastHeartbeat.TryGet(ctx)
+			lastHbTime := util.MaxTime(
+				lastHb.GetRecordedTime().AsTime(),
+				attempt.GetStartedTime().AsTime(),
+			).Add(hbTimeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{
+					ScheduledTime: lastHbTime,
+				},
+				&activitypb.HeartbeatTimeoutTask{
+					Stamp: attempt.GetStamp(),
+				},
+			)
+		}
+	}
+
+	// TODO(saa-ga): need to handle the StartDelay timer
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		// Re dispatch this activity
+		retryTime := attemptScheduleTimeForRetry(attempt)
+		var dispatchAttrs chasm.TaskAttributes
+		if retryTime != nil {
+			// in backoff, future retry time
+			dispatchAttrs.ScheduledTime = retryTime.AsTime()
+		}
+		ctx.AddTask(
+			a,
+			dispatchAttrs,
+			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		)
+
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			schedToStart := ctx.Now(a).Add(timeout)
+			if retryTime != nil {
+				schedToStart = retryTime.AsTime().Add(timeout)
+			}
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: schedToStart},
+				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+	}
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
+	if err != nil {
+		return nil, err
+	}
+	a.emitOnUpdateOptionsMetrics(metricsHandler)
+
+	return &activitypb.UpdateActivityExecutionOptionsResponse{
+		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
+			ActivityOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              a.GetTaskQueue(),
+				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+				RetryPolicy:            a.GetRetryPolicy(),
+				Priority:               a.GetPriority(),
+			},
+		},
+	}, nil
+}
+
+// mergeActivityOptions applies the field mask from the request to the activity state.
+// The structure mirrors the field-mask logic in service/history/api/updateactivityoptions/api.go
+func (a *Activity) mergeActivityOptions(
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) error {
+	updateFields := util.ParseFieldMask(req.GetUpdateMask())
+
+	// Build an ActivityOptions view of the current Activity state so we can use the shared merge function.
+	ao := &apiactivitypb.ActivityOptions{
+		TaskQueue:              a.TaskQueue,
+		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		StartToCloseTimeout:    a.StartToCloseTimeout,
+		HeartbeatTimeout:       a.HeartbeatTimeout,
+		Priority:               a.Priority,
+		RetryPolicy:            a.RetryPolicy,
+	}
+
+	if err := activityoptions.MergeActivityOptions(ao, req.GetActivityOptions(), updateFields); err != nil {
+		return err
+	}
+
+	// Re-normalize timeouts after the update so that relationships like
+	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
+	// This mirrors adjustActivityOptions for workflow-embedded activities.
+	if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
+		return err
+	}
+
+	// Write the merged and normalized options back to the Activity state fields.
+	a.TaskQueue = ao.TaskQueue
+	a.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
+	a.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
+	a.StartToCloseTimeout = ao.StartToCloseTimeout
+	a.HeartbeatTimeout = ao.HeartbeatTimeout
+	a.Priority = ao.Priority
+	a.RetryPolicy = ao.RetryPolicy
+
+	return nil
+}
+
 // getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activitypb.ActivityHeartbeatState {
@@ -610,8 +816,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// If in scheduled state, cancel immediately right after marking cancel requested
-	isCancelImmediately := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+	// SCHEDULED and PAUSED activities have no active worker token so cancel immediately.
+	// STARTED and CANCEL_REQUESTED activities wait for the worker to respond.
+	originalStatus := a.GetStatus()
+	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
+		originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
@@ -631,7 +840,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		err = TransitionCanceled.Apply(a, ctx, cancelEvent{
 			details:    details,
 			handler:    metricsHandler,
-			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, // if we're here the original status was scheduled
+			fromStatus: originalStatus,
 		})
 		if err != nil {
 			return nil, err
@@ -639,6 +848,257 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	}
 
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
+	*activitypb.PauseActivityExecutionResponse, error,
+) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
+	}
+	if a.isPaused() {
+		newReqID := req.GetFrontendRequest().GetRequestId()
+		existingReqID := a.LastPauseState.GetRequestId()
+		if newReqID != "" && existingReqID == newReqID {
+			return &activitypb.PauseActivityExecutionResponse{}, nil
+		}
+		return nil, serviceerror.NewFailedPrecondition("activity is already paused")
+	}
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityPausedScope)
+	if err != nil {
+		return nil, err
+	}
+
+	event := pauseEvent{req: req.GetFrontendRequest(), metricsHandler: metricsHandler}
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		if err := TransitionPaused.Apply(a, ctx, event); err != nil {
+			return nil, err
+		}
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		if err := TransitionPauseRequested.Apply(a, ctx, event); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewFailedPreconditionf("activity is in non-pausable state %v", a.GetStatus())
+	}
+	return &activitypb.PauseActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
+	*activitypb.UnpauseActivityExecutionResponse, error,
+) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+	if !a.isPaused() {
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUnpausedScope)
+	if err != nil {
+		return nil, err
+	}
+
+	event := unpauseEvent{req: req.GetFrontendRequest(), metricsHandler: metricsHandler}
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
+			return nil, err
+		}
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
+	}
+	a.emitOnUnpausedMetrics(metricsHandler)
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
+}
+
+// isPaused reports whether the activity is currently paused (waiting) or has a pending pause request
+// (worker still running).
+func (a *Activity) isPaused() bool {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *Activity) unpause(
+	ctx chasm.MutableContext,
+	event unpauseEvent,
+) {
+	attempt := a.LastAttempt.Get(ctx)
+	if event.req.GetResetAttempts() {
+		attempt.Count = 1
+	}
+	if event.req.GetResetHeartbeat() {
+		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
+	}
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	scheduleTime := ctx.Now(a)
+	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
+		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: scheduleTime},
+		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+}
+
+func (a *Activity) recordPauseState(
+	ctx chasm.MutableContext,
+	event pauseEvent,
+) {
+	a.LastPauseState = &activitypb.ActivityPauseState{
+		PauseTime: timestamppb.New(ctx.Now(a)),
+		Identity:  event.req.GetIdentity(),
+		Reason:    event.req.GetReason(),
+		RequestId: event.req.GetRequestId(),
+	}
+	a.emitOnPausedMetrics(event.metricsHandler)
+}
+
+func (a *Activity) clearHeartbeat(ctx chasm.MutableContext) {
+	if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+		hb.Details = nil
+		hb.RecordedTime = nil
+	}
+}
+
+func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count = 1
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	if event.req.GetResetHeartbeat() {
+		a.clearHeartbeat(ctx)
+	}
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: event.scheduleTime.Add(timeout)},
+			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+		)
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
+		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+	)
+	a.emitOnResetMetrics(event.handler)
+}
+
+// handleReset handles the activity execution reset.
+// For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
+// For STARTED activities: transitions to RESET_REQUESTED. The worker is notified via
+// ActivityReset=true on its next heartbeat response and continues to use its existing task token.
+// When the worker yields (failure or timeout with retries remaining), the activity transitions
+// back to SCHEDULED at attempt 1 via TransitionResetAttemptFailedToScheduled.
+// For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
+func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	keepPaused := frontendReq.GetKeepPaused()
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityResetScope)
+	if err != nil {
+		return nil, err
+	}
+
+	if frontendReq.GetRestoreOriginalOptions() {
+		ogOptions := a.GetOriginalOptions()
+		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
+		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
+		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
+		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.Priority = common.CloneProto(ogOptions.GetPriority())
+	}
+
+	scheduleTime := ctx.Now(a)
+	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+
+	switch a.Status {
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
+			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
+			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
+				req:            &workflowservice.UnpauseActivityExecutionRequest{},
+				metricsHandler: metricsHandler,
+			}); err != nil {
+				return nil, err
+			}
+		}
+		// Worker is still executing under its existing task token. Transition to RESET_REQUESTED
+		// so heartbeat/completion calls continue to authenticate; when the worker yields the
+		// activity will land back in SCHEDULED at attempt 1.
+		if frontendReq.GetResetHeartbeat() {
+			a.ResetHeartbeats = true
+		}
+		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
+		// yields the activity lands back in PAUSED rather than SCHEDULED.
+		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
+		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
+			req:          frontendReq,
+			scheduleTime: scheduleTime,
+			handler:      metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+		a.emitOnResetMetrics(metricsHandler)
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		if keepPaused {
+			// Reset counts but keep the activity paused.
+			attempt := a.LastAttempt.Get(ctx)
+			attempt.Count = 1
+			attempt.Stamp++
+			attempt.CurrentRetryInterval = nil
+			if frontendReq.GetResetHeartbeat() {
+				a.clearHeartbeat(ctx)
+			}
+			a.emitOnResetMetrics(metricsHandler)
+			return &activitypb.ResetActivityExecutionResponse{}, nil
+		}
+		fallthrough
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		if err := TransitionReset.Apply(a, ctx, resetEvent{
+			req:          frontendReq,
+			scheduleTime: scheduleTime,
+			handler:      metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	default:
+		// Terminal or unspecified state.
+		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
+	}
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -662,6 +1122,14 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableC
 	}
 
 	return nil
+}
+
+// applyFailedAttempt mutates activity state when a worker yields with retries remaining.
+func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count++
+	attempt.Stamp++
+	return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false)
 }
 
 // recordFailedAttempt records any failures resulting from a tried attempt, including worker application failures and
@@ -691,7 +1159,10 @@ func (a *Activity) recordFailedAttempt(
 }
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible.
+// if retry is not possible. If a reset request has been received then the retry transitions
+// through TransitionResetAttemptFailedToScheduled which applies the deferred reset (attempt count
+// goes back to 1), unless the reset was issued with keepPaused (ResetKeepPaused), in which case it
+// transitions through TransitionResetAttemptFailedToPaused and the activity stays paused.
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	overridingRetryInterval time.Duration,
@@ -701,14 +1172,26 @@ func (a *Activity) tryReschedule(
 	if !shouldRetry {
 		return false, nil
 	}
-	return true, TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
-		retryInterval: retryInterval,
-		failure:       failure,
-	})
+	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
+	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		// keepPaused=true on a paused activity (ResetKeepPaused) requires the yield to land in
+		// PAUSED rather than SCHEDULED so the activity stays paused until unpaused.
+		if a.ResetKeepPaused {
+			return true, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+		}
+		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	}
+	return true, TransitionRescheduled.Apply(a, ctx, event)
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
-	if !TransitionRescheduled.Possible(a) {
+	if !TransitionRescheduled.Possible(a) &&
+		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
+		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
+		!TransitionResetAttemptFailedToPaused.Possible(a) {
 		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
@@ -803,7 +1286,8 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(saa-preview): ActivityPaused, ActivityReset
+		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED || (a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED && a.ResetKeepPaused),
+		ActivityReset:   a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 	}, nil
 }
 
@@ -812,7 +1296,10 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
@@ -835,10 +1322,19 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		// RESET_REQUESTED surfaces as STARTED externally — the worker is still executing
+		// under its existing task token; the public PendingActivityState enum does not have
+		// a RESET_REQUESTED variant. The reset is surfaced to the worker via
+		// ActivityReset=true on its next heartbeat response.
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		return enumspb.PENDING_ACTIVITY_STATE_PAUSED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
@@ -852,7 +1348,6 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
-	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 
@@ -1070,7 +1565,9 @@ func (a *Activity) validateActivityTaskToken(
 	requestNamespaceID string,
 ) error {
 	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
@@ -1207,6 +1704,30 @@ func (a *Activity) emitOnTimedOutMetrics(
 	timeoutTag := metrics.StringTag("timeout_type", timeoutType.String())
 	metrics.ActivityTaskTimeout.With(handler).Record(1, timeoutTag)
 	metrics.ActivityTimeout.With(handler).Record(1, timeoutTag)
+}
+
+func (a *Activity) emitOnPausedMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityPause.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnUpdateOptionsMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityUpdateOptions.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnUnpausedMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityUnpause.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnResetMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityReset.With(handler).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
