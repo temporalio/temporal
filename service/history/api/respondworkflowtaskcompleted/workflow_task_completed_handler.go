@@ -378,6 +378,9 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	if historyEvent != nil && command.UserMetadata != nil {
 		historyEvent.UserMetadata = command.UserMetadata
 	}
+	if historyEvent != nil && len(command.EventGroupMarkers) > 0 {
+		historyEvent.EventGroupMarkers = command.EventGroupMarkers
+	}
 	return response, nil
 }
 
