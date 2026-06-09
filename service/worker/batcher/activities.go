@@ -39,6 +39,10 @@ import (
 const (
 	pageSize                 = 1000
 	statusRunningQueryFilter = "ExecutionStatus='Running'"
+
+	// defaultTaskTimeout bounds how long processing a single task may take so
+	// that one hung operation cannot block the task processor forever.
+	defaultTaskTimeout = 30 * time.Second
 )
 
 var (
@@ -420,6 +424,17 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 }
 
 // nolint:revive,cognitive-complexity
+// taskTimeoutContext derives a context bounded by defaultTaskTimeout for
+// processing a single task. If the parent context already has a deadline that
+// is sooner than defaultTaskTimeout, the parent context is returned unchanged
+// (with a no-op cancel) so we never extend an existing, shorter deadline.
+func taskTimeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= defaultTaskTimeout {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, defaultTaskTimeout)
+}
+
 func (a *activities) startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
@@ -446,10 +461,15 @@ func (a *activities) startTaskProcessor(
 				continue
 			}
 
+			// Bound the processing of each individual task so a single hung
+			// operation cannot block the processor indefinitely.
+			ctx, cancel := taskTimeoutContext(ctx)
+
 			// Handle admin batch operations
 			if batchOperation.AdminRequest != nil {
 				err = a.processAdminTask(ctx, batchOperation, task, limiter)
 				a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
+				cancel()
 				continue
 			}
 
@@ -618,6 +638,7 @@ func (a *activities) startTaskProcessor(
 				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
 			a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
+			cancel()
 		}
 	}
 }
