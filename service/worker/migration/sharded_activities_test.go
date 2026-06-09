@@ -268,11 +268,6 @@ func (s *activitiesSuite) TestReplicateBatch_Resume_SkipsInject() {
 // from the activity side.
 func (s *activitiesSuite) TestReplicateBatch_DisableVerification() {
 	env, _ := s.initEnv()
-	// No NewRemoteAdminClientWithTimeout expectation — the activity
-	// builds the client unconditionally even in inject-only mode, so we
-	// still need the factory to hand back something. Return without
-	// expecting any DMS calls on it.
-
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).
 		Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
 
