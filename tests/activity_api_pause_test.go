@@ -139,15 +139,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -158,10 +158,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				testIdentity := "test-identity"
 				testReason := "test-reason"
 				requestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, requestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, requestID))
 
 				// make sure activity is paused on server while running on worker
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -172,7 +172,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// unblock the activity
 				activityPausedCn <- struct{}{}
 				// make sure activity is paused on server and completed on the worker
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -181,18 +181,18 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				}, 5*time.Second, 500*time.Millisecond)
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 				s.True(description.PendingActivities[0].Paused)
 
 				// wait long enough for activity to retry if pause is not working
 				// Note: because activity is retried we expect the attempts to be incremented
 				err = util.InterruptibleSleep(ctx, 2*time.Second)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// make sure activity is not completed, and was not retried
 				description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 				s.True(description.PendingActivities[0].Paused)
 				s.Equal(int32(2), description.PendingActivities[0].Attempt)
@@ -204,12 +204,12 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_IncreaseAttemptsOnFailure", func(t *testing.T) {
@@ -269,15 +269,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -288,10 +288,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				testIdentity := "test-identity"
 				testReason := "test-reason"
 				testRequestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
 
 				// make sure activity is paused on server while running on worker
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -302,7 +302,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// End the activity
 				activityPausedCn <- struct{}{}
 
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.NotNil(t, description)
@@ -322,17 +322,17 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				shouldSucceed.Store(true)
 
 				// unpause the activity
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
 
 				// wait for activity to complete
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					require.Equal(t, int32(2), startedActivityCount.Load())
 				}, 5*time.Second, 100*time.Millisecond)
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_WhileWaiting", func(t *testing.T) {
@@ -382,15 +382,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -401,14 +401,14 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				testIdentity := "test-identity"
 				testReason := "test-reason"
 				testRequestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
 
 				// wait long enough for activity to retry if pause is not working
 				require.NoError(t, util.InterruptibleSleep(ctx, 2*time.Second))
 
 				// make sure activity is not completed, and was not retried
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 				s.True(description.PendingActivities[0].Paused)
 				s.Equal(int32(2), description.PendingActivities[0].Attempt)
@@ -418,17 +418,17 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
 
 				// wait for activity to complete
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					require.Equal(t, int32(2), startedActivityCount.Load())
 				}, 5*time.Second, 100*time.Millisecond)
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_WhileRetryNoWait", func(t *testing.T) {
@@ -478,15 +478,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -495,20 +495,20 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				// pause activity
 				testRequestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", "", "", testRequestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", "", "", testRequestID))
 
 				// unpause the activity
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
 
 				// wait for activity to complete. It should happen immediately since noWait is set
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					require.Equal(t, int32(2), startedActivityCount.Load())
 				}, 2*time.Second, 100*time.Millisecond)
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_WithReset", func(t *testing.T) {
@@ -560,15 +560,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start/fail few times
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -577,10 +577,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				// pause activity
 				testRequestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", "", "", testRequestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", "", "", testRequestID))
 
 				// wait for activity to be in paused state and waiting for retry
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -592,10 +592,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityWasReset = true
 
 				// unpause the activity with reset
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", true))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", true))
 
 				// wait for activity to be running
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.GetPendingActivities(), 1)
@@ -611,7 +611,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_WhilePaused", func(t *testing.T) {
@@ -660,15 +660,15 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowOptions := sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// wait for activity to start
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -679,10 +679,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				testIdentity := "test-identity"
 				testReason := "test-reason"
 				testRequestID := "test-request-id"
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", testIdentity, testReason, testRequestID))
 
 				// make sure activity is paused on server while running on worker
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -700,7 +700,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// unblock the activity
 				activityPausedCn <- struct{}{}
 				// make sure activity is paused on server and completed on the worker
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -709,18 +709,18 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				}, 5*time.Second, 500*time.Millisecond)
 
 				description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 				s.True(description.PendingActivities[0].Paused)
 
 				// wait long enough for activity to retry if pause is not working
 				// Note: because activity is retried we expect the attempts to be incremented
 				err = util.InterruptibleSleep(ctx, 2*time.Second)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// make sure activity is not completed, and was not retried
 				description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-				s.NoError(err)
+				require.NoError(t, err)
 				s.Len(description.PendingActivities, 1)
 				s.True(description.PendingActivities[0].Paused)
 				s.Equal(int32(2), description.PendingActivities[0].Attempt)
@@ -732,12 +732,12 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				s.NoError(api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
 
-				s.NoError(err)
+				require.NoError(t, err)
 			})
 
 			t.Run("TestActivityPauseApi_SameRequestID_IsIdempotent", func(t *testing.T) {
@@ -775,13 +775,13 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.SdkWorker().RegisterActivity(activityFunction)
 
 				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-					ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
 					TaskQueue: s.WorkerTaskQueue(),
 				}, workflowFn)
-				s.NoError(err)
+				require.NoError(t, err)
 
 				// Wait for the first attempt to fail and the activity to enter retry backoff (attempt 2).
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -789,9 +789,9 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				}, 5*time.Second, 100*time.Millisecond)
 
 				// First pause with an explicit request ID.
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
 
-				await.Require(s.Context(), s.T(), func(t *await.T) {
+				await.Require(s.Context(), t, func(t *await.T) {
 					description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(t, err)
 					require.Len(t, description.PendingActivities, 1)
@@ -799,7 +799,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				}, 5*time.Second, 100*time.Millisecond)
 
 				// Second pause with the same request ID — must succeed (idempotent no-op).
-				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
+				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
 			})
 
 			t.Run("TestActivityPauseUpdateOptionsResetUnpause", func(t *testing.T) {
@@ -855,7 +855,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				require.NoError(t, err)
 
 				// wait for activity to fail and enter retry backoff
-				await.Require(s.Context(), s.T(), func(c *await.T) {
+				await.Require(s.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
@@ -866,7 +866,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// step 1: pause
 				require.NoError(t, api.pause(ctx, s, wfID, "activity-id", "", "", ""))
 
-				await.Require(s.Context(), s.T(), func(c *await.T) {
+				await.Require(s.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
@@ -885,7 +885,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				})
 				require.NoError(t, err)
 
-				await.Require(s.Context(), s.T(), func(c *await.T) {
+				await.Require(s.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
@@ -901,7 +901,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				})
 				require.NoError(t, err)
 
-				await.Require(s.Context(), s.T(), func(c *await.T) {
+				await.Require(s.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
@@ -915,7 +915,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityWasReset.Store(true)
 				require.NoError(t, api.unpause(ctx, s, wfID, "activity-id", "", false))
 
-				await.Require(s.Context(), s.T(), func(c *await.T) {
+				await.Require(s.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
