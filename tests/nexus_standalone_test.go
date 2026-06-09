@@ -868,6 +868,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			Reason:      "test cancellation",
 		})
 		s.NoError(err)
 
@@ -892,7 +893,12 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Attempt:                1,
 			StateTransitionCount:   descResp.GetInfo().GetStateTransitionCount(),
 			StateSizeBytes:         descResp.GetInfo().GetStateSizeBytes(),
-		}, descResp.GetInfo(), protorequire.IgnoreFields("operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration"))
+		}, descResp.GetInfo(), protorequire.IgnoreFields("operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration", "cancellation_info"))
+		cancellationInfo := descResp.GetInfo().GetCancellationInfo()
+		s.NotNil(cancellationInfo)
+		s.NotEqual(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, cancellationInfo.GetState())
+		s.Equal(int32(1), cancellationInfo.GetAttempt())
+		s.Equal("test cancellation", cancellationInfo.GetReason())
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
