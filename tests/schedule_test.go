@@ -3886,27 +3886,30 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 }
 
 // testScheduleCountsVisibility asserts that the ScheduleRunningWorkflowCount and
-// ScheduleBufferedStartsCount search attributes are published to visibility. A
-// freshly-created, immediately-paused schedule has no running workflows and no
-// backlog, so both attributes must be present and zero.
+// ScheduleBufferedStartsCount search attributes are indexed in visibility with
+// live values. A schedule that fires every second under BUFFER_ONE, started with
+// a workflow that blocks, settles into one running workflow and one buffered
+// start queued behind it. The counts aren't echoed back in ListSchedules entries
+// yet, so we prove they work by querying on them.
 func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
-	opts := scheduleCommonOpts(t)
-	s := testcore.NewEnv(t, opts...)
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-counts-v2")
 	wid := testcore.RandomizeStr("sched-counts-wf")
 	wt := testcore.RandomizeStr("sched-counts-wt")
 
-	// Register a no-op workflow type in case a fire slips through before pause lands.
+	// A workflow that holds open so a fire stays running while later fires buffer.
 	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error { return nil },
+		func(ctx workflow.Context) error {
+			return workflow.Sleep(ctx, time.Hour)
+		},
 		workflow.RegisterOptions{Name: wt},
 	)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
+				{Interval: durationpb.New(1 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -3917,6 +3920,9 @@ func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
 					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 		},
 	}
 
@@ -3930,33 +3936,36 @@ func testScheduleCountsVisibility(t *testing.T, newContext contextFactory) {
 	})
 	require.NoError(t, err)
 
-	// Pause so the entry is stable and committed to visibility before we query it.
-	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-	})
-	require.NoError(t, err)
-
-	paused := func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetPaused()
+	// matchesQuery reports whether the schedule is returned when filtering on the
+	// given search-attribute query.
+	matchesQuery := func(query string) bool {
+		listResp, listErr := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 5,
+			Query:           query,
+		})
+		if listErr != nil {
+			t.Logf("DEBUG query %q err: %v", query, listErr)
+			return false
+		}
+		t.Logf("DEBUG query %q returned %d schedules", query, len(listResp.Schedules))
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == sid {
+				return true
+			}
+		}
+		return false
 	}
 
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, paused)
-	require.NotNil(t, entry)
-	fields := entry.GetSearchAttributes().GetIndexedFields()
+	// Starting the workflow and buffering the next fire takes a few seconds on top
+	// of visibility propagation, so allow 30s for each count to become queryable.
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
 
-	runningPl, ok := fields[chasmscheduler.ScheduleRunningWorkflowCountName]
-	require.True(t, ok, "schedule must publish %s", chasmscheduler.ScheduleRunningWorkflowCountName)
-	var running int64
-	require.NoError(t, payload.Decode(runningPl, &running))
-	require.Equal(t, int64(0), running)
-
-	bufferedPl, ok := fields[chasmscheduler.ScheduleBufferedStartsCountName]
-	require.True(t, ok, "schedule must publish %s", chasmscheduler.ScheduleBufferedStartsCountName)
-	var buffered int64
-	require.NoError(t, payload.Decode(bufferedPl, &buffered))
-	require.Equal(t, int64(0), buffered)
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
 }
