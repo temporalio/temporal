@@ -136,7 +136,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var invoker *Invoker
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
-	var callback *commonpb.Callback
+	var schedulerRef []byte
 	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
@@ -159,12 +159,13 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			lcs := s.LastCompletionResult.Get(ctx)
 			lastCompletionState = common.CloneProto(lcs)
 
-			// Set up the completion callback to handle workflow results.
-			cb, err := chasm.GenerateNexusCallback(ctx, s)
+			// Capture the scheduler's component ref so a per-start completion callback (carrying that
+			// start's request ID in its token) can be built outside the MS lock.
+			ref, err := ctx.Ref(s)
 			if err != nil {
 				return struct{}{}, err
 			}
-			callback = common.CloneProto(cb)
+			schedulerRef = ref
 
 			// Captured here for applyBackoff (runs outside this closure): BackoffTime
 			// must be framework-clock to match LastProcessedTime and task deadlines.
@@ -190,7 +191,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback, now))
+	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -308,7 +309,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	scheduler *Scheduler,
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 	now time.Time,
 ) (result executeResult) {
 	metricsWithTag := metricsHandler.WithTags(
@@ -339,7 +340,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
+			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, schedulerRef)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -567,7 +568,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
@@ -594,6 +595,14 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	var lcr []*commonpb.Payload
 	if lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
+	}
+	// Build the completion callback with this start's request ID packed into its token, so the
+	// completion is matched by a request ID that rides in the callback header and survives
+	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
+	// new run.
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	if err != nil {
+		return err
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
