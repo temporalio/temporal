@@ -10,14 +10,20 @@ import (
 )
 
 const (
-	OverdueNextActionTimeWorkflowID = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner"
-	OverdueNextActionTimeTaskQueue  = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner-taskqueue-0"
+	OverdueNextActionTimeWorkflowName = "schedule-invariants-overdue-next-action-time-scanner"
+	OverdueNextActionTimeActivityName = "scan-schedule-invariants-overdue-next-action-time"
+	OverdueNextActionTimeWorkflowID   = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner"
+	OverdueNextActionTimeTaskQueue    = "temporal-sys-schedule-invariants-overdue-next-action-time-scanner-taskqueue-0"
 
-	StuckOpenWorkflowID = "temporal-sys-schedule-invariants-stuck-open-scanner"
-	StuckOpenTaskQueue  = "temporal-sys-schedule-invariants-stuck-open-scanner-taskqueue-0"
+	StuckOpenWorkflowName = "schedule-invariants-stuck-open-scanner"
+	StuckOpenActivityName = "scan-schedule-invariants-stuck-open"
+	StuckOpenWorkflowID   = "temporal-sys-schedule-invariants-stuck-open-scanner"
+	StuckOpenTaskQueue    = "temporal-sys-schedule-invariants-stuck-open-scanner-taskqueue-0"
 
-	UnknownStateWorkflowID = "temporal-sys-schedule-invariants-unknown-state-scanner"
-	UnknownStateTaskQueue  = "temporal-sys-schedule-invariants-unknown-state-scanner-taskqueue-0"
+	UnknownStateWorkflowName = "schedule-invariants-unknown-state-scanner"
+	UnknownStateActivityName = "scan-schedule-invariants-unknown-state"
+	UnknownStateWorkflowID   = "temporal-sys-schedule-invariants-unknown-state-scanner"
+	UnknownStateTaskQueue    = "temporal-sys-schedule-invariants-unknown-state-scanner-taskqueue-0"
 
 	// activityStartToCloseTimeout is "effectively infinite" - the activity runs an
 	// internal scan ticker forever and is only ever expected to exit on transient
