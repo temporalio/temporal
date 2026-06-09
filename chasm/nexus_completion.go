@@ -22,25 +22,15 @@ type NexusCompletionHandler interface {
 	HandleNexusCompletion(ctx MutableContext, completion *persistencespb.ChasmNexusCompletion) error
 }
 
-// NexusCompletionHandlerComponent is a CHASM [Component] that also implements [NexusCompletionHandler].
-type NexusCompletionHandlerComponent interface {
-	Component
-	NexusCompletionHandler
-}
-
-// GenerateNexusCallback generates a Callback message indicating a CHASM component to receive Nexus operation completion
-// callbacks. Particularly useful for components that want to track a workflow start with StartWorkflowExecution.
-func GenerateNexusCallback(ctx Context, component NexusCompletionHandlerComponent) (*commonpb.Callback, error) {
-	ref, err := ctx.Ref(component)
+// GenerateNexusCallback builds a Nexus completion callback targeting the CHASM component identified by
+// serializedRef (obtained from Context.Ref). The request ID is packed into the callback token, so the
+// completion is matched by a request ID that rides in the callback header and survives
+// continue-as-new, rather than one read from mutable state.
+func GenerateNexusCallback(serializedRef []byte, requestID string) (*commonpb.Callback, error) {
+	token, err := packNexusCallbackToken(serializedRef, requestID)
 	if err != nil {
 		return nil, err
 	}
-
-	token, err := PackNexusCallbackToken(ref, "")
-	if err != nil {
-		return nil, err
-	}
-
 	return &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
@@ -51,10 +41,8 @@ func GenerateNexusCallback(ctx Context, component NexusCompletionHandlerComponen
 	}, nil
 }
 
-// PackNexusCallbackToken encodes a CHASM component ref and (optional) request ID into a callback
-// token. The request ID travels in the callback header, so it survives continue-as-new with the
-// callback itself - the delivering side reads it from the token rather than from any mutable state.
-func PackNexusCallbackToken(componentRef []byte, requestID string) (string, error) {
+// packNexusCallbackToken encodes a CHASM component ref and request ID into a callback token.
+func packNexusCallbackToken(componentRef []byte, requestID string) (string, error) {
 	b, err := proto.Marshal(&tokenspb.NexusOperationCompletion{
 		ComponentRef: componentRef,
 		RequestId:    requestID,
@@ -65,7 +53,7 @@ func PackNexusCallbackToken(componentRef []byte, requestID string) (string, erro
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// UnpackNexusCallbackToken decodes a callback token produced by PackNexusCallbackToken, returning the
+// UnpackNexusCallbackToken decodes a callback token produced by GenerateNexusCallback, returning the
 // component ref and request ID. For backward compatibility it also accepts the legacy format where the
 // token is the bare base64-encoded ChasmComponentRef (in which case the request ID is empty).
 func UnpackNexusCallbackToken(encoded string) (componentRef []byte, requestID string, err error) {
@@ -80,25 +68,4 @@ func UnpackNexusCallbackToken(encoded string) (componentRef []byte, requestID st
 	}
 	// Legacy format: the raw bytes are the ChasmComponentRef directly.
 	return raw, "", nil
-}
-
-// WithNexusCallbackRequestID returns a copy of the given CHASM Nexus callback with requestID packed
-// into its token, so the request ID is preserved across continue-as-new. Non-Nexus callbacks are
-// returned unchanged.
-func WithNexusCallbackRequestID(cb *commonpb.Callback, requestID string) (*commonpb.Callback, error) {
-	nexusCb := cb.GetNexus()
-	if nexusCb == nil {
-		return cb, nil
-	}
-	ref, _, err := UnpackNexusCallbackToken(nexusCb.GetHeader()[nexusCallbackTokenHeader])
-	if err != nil {
-		return nil, err
-	}
-	token, err := PackNexusCallbackToken(ref, requestID)
-	if err != nil {
-		return nil, err
-	}
-	out := proto.Clone(cb).(*commonpb.Callback) //nolint:revive // proto.Clone of *Callback is always *Callback
-	out.GetNexus().GetHeader()[nexusCallbackTokenHeader] = token
-	return out, nil
 }
