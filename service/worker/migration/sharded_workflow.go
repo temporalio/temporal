@@ -24,11 +24,17 @@ import (
 // eligibility. At cycle end, every remaining bucket flushes as
 // packed activities.
 //
-// If there are more pages, in-flight activities are cancelled (giving
-// them DrainGrace to drain), their drain payload arrives via the
-// activity return value, and the workflow CANs with NextPageToken +
-// ResumeShards in the carry-over. Otherwise it waits for activities
-// to finish naturally and returns nil.
+// In-flight activities are allowed to finish naturally at cycle end;
+// CycleDrainTimeout bounds the wait as a safety net against
+// pathological slow drains. On timer expiry in-flights are cancelled
+// and their drained execs feed the next cycle's carry-over as
+// ResumeShards. On lastErr the same drain happens, but the workflow
+// returns the error rather than CANing — the drained state surfaces
+// only via the status query's recovery bundle.
+//
+// If listing wasn't exhausted, the workflow CANs with NextPageToken
+// (plus any drained state from the timer-fired path). Otherwise it
+// returns nil.
 func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceReplicationParams) error {
 	// Page token at workflow entry — returned by the status query as
 	// PageTokenForRestart so tooling that already knows the legacy
@@ -241,10 +247,12 @@ type shardedWorkflowState struct {
 	// batchExecs tracks the input payload of each in-flight batch.
 	// Cleared on any nil-error return (drained execs are folded
 	// into drainPayload from the activity result; cleanly completed
-	// batches return an empty InFlight). Anything left at CAN time
+	// batches return an empty InFlight). Anything left at cycle end
 	// corresponds to a batch whose activity returned CanceledError
-	// with no result — i.e. the activity body never ran. Those
-	// execs are recovered into the next cycle's streaming buckets.
+	// with no result — i.e. the activity body never ran. On the CAN
+	// path those execs are recovered into the next cycle's streaming
+	// buckets; on the lastErr return path they surface via the status
+	// query's recovery bundle but aren't auto-dispatched.
 	batchExecs map[int64]BatchPayload
 
 	// pendingDispatches counts spawned dispatch coroutines that
@@ -263,6 +271,13 @@ type shardedWorkflowState struct {
 	// burning the rest of the population before returning the
 	// failure.
 	lastErr error
+
+	// cycleDrainTimedOut is set by the safety timer started after the
+	// page loop. drainBuckets and awaitInFlightCompletion both honour
+	// it so a pathological slow drain can't eat into the workflow's
+	// remaining history budget — on expiry the workflow falls into
+	// drainForCAN and ships unfinished work as carry-over.
+	cycleDrainTimedOut bool
 
 	nextBatchID int64
 
@@ -303,6 +318,9 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 	}
 	if params.IdleShardCost <= 0 {
 		params.IdleShardCost = defaultIdleShardCost
+	}
+	if params.CycleDrainTimeout <= 0 {
+		params.CycleDrainTimeout = defaultCycleDrainTimeout
 	}
 	if params.ListWorkflowsPageSize <= 0 {
 		params.ListWorkflowsPageSize = defaultShardedListPageSize
@@ -409,6 +427,11 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 		}
 	}
 
+	// Start the cycle drain safety timer; see defaultCycleDrainTimeout
+	// for the budget rationale.
+	cancelCycleTimer := s.startCycleDrainTimer(ctx)
+	defer cancelCycleTimer()
+
 	// Drain remaining buckets only when no error has latched — on
 	// error we deliberately stop scheduling new work and let the
 	// already-dispatched batches finish via awaitInFlightCompletion.
@@ -417,10 +440,10 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) error {
 	}
 
 	// Wait for in-flight activities. Cancels them when we already
-	// know we're failing or CAN-ing; on the clean success path
-	// (no error, no more pages) waits naturally so a healthy
-	// activity isn't cancelled into a CanceledError that masquerades
-	// as carry-over state.
+	// know we're failing or the cycle drain timer has expired;
+	// otherwise waits naturally so a healthy activity isn't
+	// cancelled into a CanceledError that masquerades as carry-over
+	// state.
 	s.awaitInFlightCompletion(ctx)
 
 	// Single exit decision. Recovery state has the same shape on
@@ -507,28 +530,39 @@ func (s *shardedWorkflowState) replicateBatch(ctx, activityParentCtx workflow.Co
 	return result, nil
 }
 
-// awaitInFlightCompletion drains in-flight batches before the workflow
-// exits. The strategy depends on what we already know:
-//
-//   - Error latched or more pages remain (we're going to fail or CAN
-//     either way): cancel immediately via drainForCAN, bounded by
-//     DrainGrace + IdleShardCost. No point waiting for activities
-//     that are going to be discarded.
-//   - Clean success path (no error, no more pages): wait for natural
-//     completion so a healthy activity's clean result isn't masked
-//     as a CanceledError. If an activity hits its ShardNoProgress
-//     backstop mid-wait, latch the error then cancel the rest fast
-//     rather than waiting on every shard's backstop too.
+// startCycleDrainTimer spawns a coroutine that sets cycleDrainTimedOut
+// after CycleDrainTimeout. Returned cancel func stops the timer on
+// natural exit. The flag is read by drainBuckets (stops spawning new
+// batches and exits) and awaitInFlightCompletion (exits its Await and
+// calls drainForCAN to cancel in-flight activities and collect their
+// drain payload for the next cycle's carry-over).
+func (s *shardedWorkflowState) startCycleDrainTimer(ctx workflow.Context) workflow.CancelFunc {
+	timerCtx, cancel := workflow.WithCancel(ctx)
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		if err := workflow.NewTimer(timerCtx, s.params.CycleDrainTimeout).Get(gCtx, nil); err == nil {
+			s.cycleDrainTimedOut = true
+		}
+	})
+	return cancel
+}
+
+// awaitInFlightCompletion waits for in-flight batches to complete.
+// On the clean path it just blocks until pendingDispatches drops to
+// zero — a healthy activity's result isn't masked as a CanceledError.
+// On lastErr or cycle-drain timeout it falls into drainForCAN, which
+// cancels the in-flight activities and collects their drain payload.
+// run() then either returns lastErr (drain payload surfaces only via
+// the status query) or CANs with the drained state as carry-over.
 func (s *shardedWorkflowState) awaitInFlightCompletion(ctx workflow.Context) {
 	if s.pendingDispatches == 0 {
 		return
 	}
-	if s.lastErr != nil || len(s.params.NextPageToken) > 0 {
+	if s.lastErr != nil {
 		s.drainForCAN(ctx)
 		return
 	}
 	_ = workflow.Await(ctx, func() bool {
-		return s.pendingDispatches == 0 || s.lastErr != nil
+		return s.pendingDispatches == 0 || s.lastErr != nil || s.cycleDrainTimedOut
 	})
 	if s.pendingDispatches > 0 {
 		s.drainForCAN(ctx)
@@ -577,7 +611,8 @@ func (s *shardedWorkflowState) collectResumeShardsForCarryover() []ResumeShard {
 // batches that returned CanceledError without running a body, and
 // listed-but-unpacked execs still sitting in s.buckets when the
 // workflow exited (either lastErr stopped the streaming packer or
-// drainBuckets bailed out on lastErr partway through).
+// drainBuckets bailed on lastErr / cycle drain timeout partway
+// through).
 func (s *shardedWorkflowState) collectRecoveredBucketsForCarryover() BatchPayload {
 	out := collectRecoveredBuckets(s.batchExecs)
 	if !s.bucketsEmpty() {
@@ -891,18 +926,20 @@ func runCount(byBID map[string][]RunEntry) int {
 	return n
 }
 
-// drainBuckets blocks until buckets are empty (success) or lastErr
-// trips (failure). Each pass packs everything currently dispatchable,
-// then awaits any change in pendingDispatches + shardInFlight so the
-// next pass can attempt shards just freed by signal-release.
+// drainBuckets blocks until buckets are empty (success), lastErr
+// trips (failure), or the cycle drain timer expires (CAN with
+// leftover buckets). Each pass packs everything currently
+// dispatchable, then awaits any change in pendingDispatches +
+// shardInFlight so the next pass can attempt shards just freed by
+// signal-release.
 func (s *shardedWorkflowState) drainBuckets(ctx workflow.Context) {
 	for {
-		if s.lastErr != nil {
+		if s.lastErr != nil || s.cycleDrainTimedOut {
 			return
 		}
 		for s.tryPackStreaming(ctx, true) { //nolint:revive
 		}
-		if s.bucketsEmpty() || s.lastErr != nil {
+		if s.bucketsEmpty() || s.lastErr != nil || s.cycleDrainTimedOut {
 			return
 		}
 		currentPending := s.pendingDispatches
@@ -930,14 +967,14 @@ func (s *shardedWorkflowState) failDrainBucketsStuck() {
 }
 
 // drainBucketsAwaitPredicate returns true when the drainBuckets loop
-// should wake up: lastErr tripped, a dispatch slot just freed, or a
-// new free shard is ready to pack. A "free shard" wake-up only counts
-// when there's also a dispatch slot to use it, otherwise the outer
-// loop would busy-spin on tryPackStreaming returning false against the
-// in-flight cap.
+// should wake up: lastErr tripped, cycle drain timer fired, a
+// dispatch slot just freed, or a new free shard is ready to pack. A
+// "free shard" wake-up only counts when there's also a dispatch slot
+// to use it, otherwise the outer loop would busy-spin on
+// tryPackStreaming returning false against the in-flight cap.
 func (s *shardedWorkflowState) drainBucketsAwaitPredicate(currentPending int) func() bool {
 	return func() bool {
-		if s.lastErr != nil {
+		if s.lastErr != nil || s.cycleDrainTimedOut {
 			return true
 		}
 		if s.pendingDispatches < currentPending {
@@ -957,13 +994,15 @@ func (s *shardedWorkflowState) drainBucketsAwaitPredicate(currentPending int) fu
 
 // drainForCAN cancels every in-flight batch and waits for them to
 // return AND for the ReleaseShards signal channel to be drained.
-// Activities honour cancellation by entering drain mode and returning
-// a result whose InFlight carries their still-unverified execs;
-// spawnBatch appends those entries to s.drainPayload. The signal
-// channel drain is so a final ReleaseShards fired by an activity just
-// before it returns doesn't get stranded mid-flight, which would
-// leave shardInFlight set for shards the activity already considers
-// complete.
+// Called on lastErr (terminates with error; drain payload exposed via
+// the status query) and on cycle drain timeout (CANs with drained
+// state as carry-over). Activities honour cancellation by entering
+// drain mode and returning a result whose InFlight carries their
+// still-unverified execs; spawnBatch appends those entries to
+// s.drainPayload. The signal channel drain is so a final ReleaseShards
+// fired by an activity just before it returns doesn't get stranded
+// mid-flight, which would leave shardInFlight set for shards the
+// activity already considers complete.
 //
 // Channel.Len() is safe here because handleReleaseSignals has no
 // yield points between Receive and the next blocking Receive, so
@@ -1047,8 +1086,10 @@ func (s *shardedWorkflowState) spawnBatch(
 			if temporal.IsCanceledError(err) {
 				// Cancel-before-start: the activity body never ran,
 				// so no result is available. Leaving batchExecs[batchID]
-				// intact lets the CAN-end recovery path re-bucket the
-				// execs as fresh inject+verify work next cycle.
+				// intact lets collectRecoveredBucketsForCarryover
+				// re-bucket the execs as fresh inject+verify work next
+				// cycle (only meaningful on the CAN path; on lastErr
+				// they surface via the status query only).
 				return
 			}
 			// Activity errored after partial verify — the SDK discards
@@ -1061,11 +1102,11 @@ func (s *shardedWorkflowState) spawnBatch(
 			return
 		}
 		// Activity body ran and returned cleanly — either a
-		// clean completion (empty InFlight) or a drained
-		// CAN-cancel (InFlight carries the still-unverified
-		// execs). CompletedShards is informational; the
-		// defer above clears heldByBatch + shardInFlight
-		// either way.
+		// clean completion (empty InFlight) or a drained cancel
+		// (InFlight carries the still-unverified execs; reached
+		// only on lastErr or cycle drain timeout). CompletedShards
+		// is informational; the defer above clears heldByBatch +
+		// shardInFlight either way.
 		if len(result.InFlight) > 0 {
 			s.drainPayload = append(s.drainPayload, result.InFlight...)
 		}

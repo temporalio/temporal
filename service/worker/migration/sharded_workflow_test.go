@@ -474,10 +474,10 @@ func TestSharded_ListingDoneAcrossCAN_SkipsPageLoop(t *testing.T) {
 }
 
 // TestSharded_CancelBeforeStart_NoLostExecs pins down recovery when
-// an activity is dispatched and the workflow CANs before the activity
-// body runs: the activity returns CanceledError with no result, and
-// the recovery path re-buckets the input execs into RecoveredBuckets
-// so the next cycle dispatches them as fresh inject+verify batches.
+// the cycle drain timer fires before any dispatched activity can run:
+// the activities return CanceledError with no result, and the recovery
+// path re-buckets the input execs into RecoveredBuckets so the next
+// cycle dispatches them as fresh inject+verify batches.
 func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
@@ -491,8 +491,8 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 			return &listWorkflowsResponse{}, nil
 		}
 		pageServed = true
-		// Trigger CAN as soon as this page is served so drainForCAN
-		// runs before any dispatched batches can complete. Hop to the
+		// Trigger CAN-suggested as soon as this page is served so the
+		// page loop bails and the cycle drain timer starts. Hop to the
 		// main loop goroutine — writing workflowInfo directly from the
 		// activity goroutine would race the workflow coroutine's read.
 		env.RegisterDelayedCallback(func() { env.SetContinueAsNewSuggested(true) }, 0)
@@ -522,6 +522,9 @@ func TestSharded_CancelBeforeStart_NoLostExecs(t *testing.T) {
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
 		TargetClusterName: "remote_cluster",
+		// Short cycle drain timeout so the test hits the timer-fired
+		// cancel path quickly rather than waiting the production default.
+		CycleDrainTimeout: time.Millisecond,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

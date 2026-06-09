@@ -45,9 +45,9 @@ const (
 	defaultShardNoProgress = 5 * time.Minute
 
 	// defaultDrainGrace is the wall-budget the activity gets after
-	// the workflow cancels it for CAN. Continues verifying until
-	// either the grace expires, the idle-cost trigger fires, or
-	// every exec verifies.
+	// the workflow cancels it (on lastErr or cycle drain timeout).
+	// Continues verifying until either the grace expires, the
+	// idle-cost trigger fires, or every exec verifies.
 	defaultDrainGrace = 15 * time.Second
 
 	// defaultIdleShardCost is the cumulative idle-time threshold
@@ -55,6 +55,16 @@ const (
 	// 3.3 s with 9 idle) at which the activity signal-releases its
 	// completed-but-not-yet-released shards mid-flight.
 	defaultIdleShardCost = 30 * time.Second
+
+	// defaultCycleDrainTimeout bounds the wall-clock the workflow
+	// will spend draining buckets + awaiting in-flight activities
+	// after the page loop stops. GetContinueAsNewSuggested trips at
+	// ~8% of the hard history cap so we have ~92% of the budget
+	// remaining when the page loop breaks; 10 minutes is generously
+	// inside that. Catches the "many shards making slow-but-real
+	// progress" case; a single stuck shard is already bounded by
+	// ShardNoProgress on the activity side.
+	defaultCycleDrainTimeout = 10 * time.Minute
 
 	// defaultPerBatchGenerateRPS is the per-batch inject-phase target.
 	// Sharded dispatches many concurrent batches and each builds its
@@ -223,6 +233,14 @@ type ShardedForceReplicationParams struct {
 	DrainGrace      time.Duration
 	IdleShardCost   time.Duration
 
+	// CycleDrainTimeout caps how long the workflow will spend after
+	// the page loop stops, draining buckets and waiting for in-flight
+	// activities to complete naturally. On expiry the workflow falls
+	// into drainForCAN — cancels in-flight batches, collects their
+	// drain payload, and CANs with the recovered state. Defaults to
+	// defaultCycleDrainTimeout.
+	CycleDrainTimeout time.Duration
+
 	TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
 
 	// PerBatchGenerateRPS is the inject-phase rate-limiter target inside
@@ -264,9 +282,11 @@ type ShardedForceReplicationParams struct {
 
 	// RecoveredBuckets carries execs whose dispatching activity returned
 	// a cancellation without returning a result — i.e., the activity
-	// body never ran (cancel-before-start race). They were dispatched
-	// but never injected, so the new cycle restores them into the
-	// streaming buckets to be dispatched as fresh inject+verify batches.
+	// body never ran, because cancellation (from lastErr or cycle drain
+	// timeout) reached it before the worker picked it up. They were
+	// dispatched but never injected, so the new cycle restores them
+	// into the streaming buckets to be dispatched as fresh inject+verify
+	// batches.
 	RecoveredBuckets BatchPayload
 
 	TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
