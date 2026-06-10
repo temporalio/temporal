@@ -39,6 +39,7 @@ func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRec
 	recordings := snap[metrics.WorkerCommandsSent.Name()]
 	require.Len(t, recordings, 1, "expected exactly 1 dispatch metric recording")
 	require.Equal(t, expectedOutcome, recordings[0].Tags["outcome"])
+	require.Equal(t, "test-namespace", recordings[0].Tags["namespace"])
 }
 
 func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
@@ -247,7 +248,7 @@ func TestHandleError_WorkerError_ReturnNil(t *testing.T) {
 	// Worker-returned errors (ApplicationError, CanceledError) are permanent.
 	workerErr := temporal.NewApplicationError("worker bug", "SomeType", nil)
 	task := testWorkerCommandsTask()
-	err := d.handleError(workerErr, task)
+	err := d.handleError(workerErr, task, "test-namespace")
 	require.NoError(t, err, "worker-returned errors are permanent and should be swallowed")
 
 	requireMetricValue(t, capture.Snapshot(), "worker_error")
@@ -265,7 +266,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 
 	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 	task := testWorkerCommandsTask()
-	err := d.handleError(handlerErr, task)
+	err := d.handleError(handlerErr, task, "test-namespace")
 	require.Error(t, err, "upstream timeout should be retried")
 
 	var he *nexus.HandlerError
@@ -287,7 +288,7 @@ func TestHandleError_NonRetryableHandlerError_ReturnNil(t *testing.T) {
 
 	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
 	task := testWorkerCommandsTask()
-	err := d.handleError(handlerErr, task)
+	err := d.handleError(handlerErr, task, "test-namespace")
 	require.NoError(t, err, "non-retryable handler errors should be swallowed")
 
 	requireMetricValue(t, capture.Snapshot(), "non_retryable_error")
@@ -305,7 +306,7 @@ func TestHandleError_OtherHandlerError_ReturnRetryable(t *testing.T) {
 
 	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "something broke")
 	task := testWorkerCommandsTask()
-	err := d.handleError(handlerErr, task)
+	err := d.handleError(handlerErr, task, "test-namespace")
 	require.Error(t, err, "transport errors should be retried")
 
 	requireMetricValue(t, capture.Snapshot(), "transport_error")
