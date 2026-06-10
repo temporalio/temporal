@@ -37,9 +37,10 @@ func testWorkerCommandsTask() *tasks.WorkerCommandsTask {
 func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRecording, expectedOutcome string) {
 	t.Helper()
 	recordings := snap[metrics.WorkerCommandsSent.Name()]
-	require.Len(t, recordings, 1, "expected exactly 1 dispatch metric recording")
+	require.Len(t, recordings, 1, "expected exactly 1 metric recording per command")
 	require.Equal(t, expectedOutcome, recordings[0].Tags["outcome"])
 	require.Equal(t, "test-namespace", recordings[0].Tags["namespace"])
+	require.Equal(t, "cancel_activity", recordings[0].Tags["command_type"])
 }
 
 func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
