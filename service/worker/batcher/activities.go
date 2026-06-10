@@ -193,7 +193,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
 	defer heartbeatTicker.Stop()
 
-	// concurrency is clamped to at least 1, so a zero configured value still starts a worker.
 	for range concurrency {
 		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
