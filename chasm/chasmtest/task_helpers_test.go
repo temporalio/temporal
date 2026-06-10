@@ -67,8 +67,8 @@ func TestExecutePureTaskRequiresPostExecutionInvalidation(t *testing.T) {
 	require.True(t, taskNotInvalidatedErr.IsTerminalTaskError())
 	require.Equal(t, "pure", taskNotInvalidatedErr.TaskKind)
 	require.Contains(t, taskNotInvalidatedErr.TaskType, "TestPayloadTTLPureTask")
-	require.Equal(t, attrs.ScheduledTime, taskNotInvalidatedErr.ScheduledTime)
-	require.False(t, taskNotInvalidatedErr.Immediate)
+	require.Equal(t, attrs, taskNotInvalidatedErr.TaskAttributes)
+	require.False(t, taskNotInvalidatedErr.TaskAttributes.IsImmediate())
 	require.False(t, taskDropped)
 }
 
