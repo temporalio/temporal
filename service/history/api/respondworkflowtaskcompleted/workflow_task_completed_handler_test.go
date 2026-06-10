@@ -196,6 +196,74 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.Equal(t, event.UserMetadata, command.UserMetadata)
 	})
 
+	// Verifies that event group markers attached to a command are passed through to the newly created event.
+	t.Run("Attach event group markers", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.EventGroupMarkers = []*sdkpb.EventGroupMarker{
+			{
+				Variant: &sdkpb.EventGroupMarker_Label_{
+					Label: &sdkpb.EventGroupMarker_Label{
+						Id: "explicit-marker-id",
+						Label: &commonpb.Payload{
+							Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+							Data:     []byte(`"payment"`),
+						},
+					},
+				},
+			},
+			{
+				Variant: &sdkpb.EventGroupMarker_InboundUpdate_{
+					InboundUpdate: &sdkpb.EventGroupMarker_InboundUpdate{
+						InboundUpdateId: "fire-update-1",
+					},
+				},
+			},
+		}
+
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Equal(t, command.EventGroupMarkers, event.EventGroupMarkers)
+	})
+
+	// Verifies that an empty or nil EventGroupMarkers slice does not result in any unintended
+	// field being set on the produced history event.
+	t.Run("No event group markers leaves field unset", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Nil(t, event.EventGroupMarkers)
+	})
+
 	// Verifies that the error is properly handled when event creation fails.
 	t.Run("Event creation failure", func(t *testing.T) {
 		var tc testconf

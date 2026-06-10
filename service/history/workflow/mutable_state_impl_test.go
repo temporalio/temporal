@@ -8094,7 +8094,7 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			mockEventsCache := events.NewMockCache(ctrl)
 			mockConfig := tests.NewDynamicConfig()
-			mockConfig.EnableCancelActivityWorkerCommand = dynamicconfig.GetBoolPropertyFn(tc.featureEnabled)
+			mockConfig.EnableCancelActivityWorkerCommand = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.featureEnabled)
 
 			mockShard := shard.NewTestContext(
 				ctrl,
