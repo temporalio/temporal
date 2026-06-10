@@ -101,9 +101,15 @@ func (c *Callback) loadInvocationArgs(
 		}, nil
 	}
 
+	// PROTOTYPE
+	// We really should be creating a new variant of Callback. But as a hack,
+	// we just overload the existing Nexus/HTTP callback, and use a special
+	// URL to indicate worker callbacks.
 	if callback.Url == nexus.DispatchWorkerCallbackURL {
 		return invokeWorkerCallback{
-			callback: callback,
+			callback:   callback,
+			completion: completion,
+			requestID:  c.RequestId,
 		}, nil
 	}
 

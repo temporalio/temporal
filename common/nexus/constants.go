@@ -10,3 +10,11 @@ const SystemEndpoint = "__temporal_system"
 
 // PROTOTYPE
 const DispatchWorkerCallbackURL = "temporal://system/dispatch-worker-callback"
+
+// PROTOTYPE
+// Keys of expected headers when worker callbacks are sent over gRPC APIs.
+const (
+	WorkerCallbackTargetNamespaceHeader = "target-namespace"
+	WorkerCallbackTargetActivityHeader  = "target-activity"
+	WorkerCallbackTargetTaskQueueHeader = "target-task-queue"
+)

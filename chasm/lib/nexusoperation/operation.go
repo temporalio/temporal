@@ -255,6 +255,8 @@ func (o *Operation) addCompletionCallbacks(
 		}
 		switch variant := cb.Variant.(type) {
 		case *commonpb.Callback_Nexus_:
+			// SECURITY TODO: Verify that any attached worker callbacks are targeting the same namespace
+			// as the incomming request. No spoofing allowed.
 			chasmCB.Variant = &callbackspb.Callback_Nexus_{
 				Nexus: &callbackspb.Callback_Nexus{
 					Url:    variant.Nexus.GetUrl(),

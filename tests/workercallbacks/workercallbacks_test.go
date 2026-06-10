@@ -137,22 +137,22 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 		// SDK, but we hand-craft it for this prototype.
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				// IDEA: Let's create a new kind of callback, to streamline "worker callbacks".
-				// All we really need is the caller-side activity name.
+				// TODO: Create a different variant of Callback, specific to worker callbacks.
 				Variant: &commonpb.Callback_Nexus_{
 					Nexus: &commonpb.Callback_Nexus{
 						Url: nexus.DispatchWorkerCallbackURL, // "temporal://system/dispatch-worker-callback"
 						Header: map[string]string{
-							// There are security problems arising from the Nexus operation's
-							// callback (which will be invoked in the handler's namespace) spawning
-							// standalone activities in the caller's namespace.
+							// SECURITY: This is not strictly required, but included for defence in depth.
 							//
-							// But we just need to validate and perform the registration BEFORE
-							// the Nexus operation is started. When the StartNexusOperation request
-							// is received, and it can be asserted that the target namespace
-							// matches the caller.
-							"target-namespace": callerNamespace,
-							"target-activity":  caller.OnAddOperationCompleteCallbackActivityName,
+							// The CHASM Callback is attached to the SANO component in the caller's namespace. The
+							// callback will be invoked when the SANO component is complete. (In the caller namespace,
+							// when the handler completes the Nexus operation.)
+							//
+							// We pass along the target namespace of the worker callback so we can double check again
+							// when the SAA is created.
+							nexus.WorkerCallbackTargetNamespaceHeader: callerNamespace,
+							nexus.WorkerCallbackTargetTaskQueueHeader: caller.CallerTaskQueue,
+							nexus.WorkerCallbackTargetActivityHeader:  caller.OnAddOperationCompleteCallbackActivityName,
 						},
 					},
 				},
