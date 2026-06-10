@@ -79,6 +79,12 @@ func FormatPinnedVersionNotInTaskQueueError(deploymentName, buildID, taskQueue s
 		deploymentName, buildID, ErrPinnedVersionNotInTaskQueueSubstring, taskQueue, tqType)
 }
 
+func IsPinnedVersionNotInTaskQueueError(err error) bool {
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	return errors.As(err, &failedPreconditionErr) &&
+		strings.Contains(err.Error(), ErrPinnedVersionNotInTaskQueueSubstring)
+}
+
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
 // ms.executionInfo.VersioningInfo.Version != ""), this will be `pinned:<version>`. The version used
@@ -716,6 +722,51 @@ func validateVersionAndGetReactivationEligibility(ctx context.Context,
 	return shouldSkipReactivation, revisionNumber, nil
 }
 
+func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride) error {
+	if override == nil {
+		return nil
+	}
+
+	if override.GetAutoUpgrade() { // v0.32
+		return nil
+	} else if p := override.GetPinned(); p != nil {
+		if p.GetVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+		}
+		// CONSIDER(Shivam): Reject unknown pinned override behavior values after aligning this validation across all VersioningOverride callers.
+		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+		}
+		return nil
+	}
+
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	switch override.GetBehavior() {
+	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+		if override.GetDeployment() != nil {
+			return ValidateDeployment(override.GetDeployment())
+		} else if override.GetPinnedVersion() != "" {
+			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
+			return err
+		} else {
+			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		if override.GetDeployment() != nil {
+			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+		if override.GetPinnedVersion() != "" {
+			return serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("override behavior is required")
+	default:
+		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
+	}
+	return nil
+}
+
 func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context,
 	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
@@ -723,19 +774,17 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 	tq string,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) (shouldSkipReactivation bool, revisionNumber int64, err error) {
+	if err := ValidateVersioningOverrideStructure(override); err != nil {
+		return false, 0, err
+	}
 	if override == nil {
 		return false, 0, nil
 	}
 
-	if override.GetAutoUpgrade() { // v0.32
+	// The following checks are for v0.32 protos of worker-versioning which may/may not require reactivation checks
+	if override.GetAutoUpgrade() {
 		return false, 0, nil
 	} else if p := override.GetPinned(); p != nil {
-		if p.GetVersion() == nil {
-			return false, 0, serviceerror.NewInvalidArgument("must provide version if override is pinned.")
-		}
-		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
-			return false, 0, serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
-		}
 		return validateVersionAndGetReactivationEligibility(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
@@ -743,30 +792,11 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 	switch override.GetBehavior() {
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
-			return false, 0, ValidateDeployment(override.GetDeployment())
+			return false, 0, nil
 		} else if override.GetPinnedVersion() != "" {
-			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			if err != nil {
-				return false, 0, err
-			}
-
 			return validateVersionAndGetReactivationEligibility(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
-
-		} else {
-			return false, 0, serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-		if override.GetDeployment() != nil {
-			return false, 0, serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
-		}
-		if override.GetPinnedVersion() != "" {
-			return false, 0, serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
-		}
-	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
-		return false, 0, serviceerror.NewInvalidArgument("override behavior is required")
-	default:
-		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
-		return false, 0, serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
 	}
 	return false, 0, nil
 }

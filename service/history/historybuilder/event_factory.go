@@ -871,6 +871,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			SearchAttributes:       payload.FilterNilSearchAttributes(command.SearchAttributes),
 			ParentClosePolicy:      command.GetParentClosePolicy(),
 			InheritBuildId:         command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			VersioningOverride:     worker_versioning.ConvertOverrideToV32(command.GetVersioningOverride()),
 			Priority:               command.Priority,
 			TimeSkippingConfig:     timeSkippingConfig,
 			InitialSkippedDuration: initialSkippedDuration,
