@@ -7,3 +7,6 @@ const SystemCallbackURL = "temporal://system"
 // SystemEndpoint is the reserved endpoint name for Temporal system operations.
 // Operation requests for this endpoint are routed internally within the history service.
 const SystemEndpoint = "__temporal_system"
+
+// PROTOTYPE
+const DispatchWorkerCallbackURL = "temporal://system/dispatch-worker-callback"

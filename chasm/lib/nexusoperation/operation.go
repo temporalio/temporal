@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -15,10 +16,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -98,6 +102,10 @@ type Operation struct {
 	Cancellation chasm.Field[*Cancellation]
 	Outcome      chasm.Field[*nexusoperationpb.OperationOutcome]
 	Visibility   chasm.Field[*chasm.Visibility]
+
+	// PROTOTYPE
+	// Completion Callbacks for the Nexus operation.
+	Callbacks chasm.Map[string, *callback.Callback]
 }
 
 // NewOperation creates a new Operation component with the given persisted state.
@@ -132,6 +140,18 @@ func newStandaloneOperation(
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
 		nil,
 	))
+
+	// PROTOTYPE
+	// Attach Callbacks to the CHASM component.
+	const maxCallbacks = 10
+	cbs := req.GetFrontendRequest().GetCompletionCallbacks()
+	if len(cbs) > 0 {
+		requestID := req.GetFrontendRequest().GetRequestId()
+		if err := op.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := TransitionScheduled.Apply(op, ctx, EventScheduled{}); err != nil {
 		return nil, err
 	}
@@ -198,6 +218,61 @@ func (o *Operation) RequestCancel(
 	return nil
 }
 
+// PROTOTYPE
+// Attach the Callbacks to this Nexus operation.
+// Cribbed from chasm/lib/activity/activity.go
+func (o *Operation) addCompletionCallbacks(
+	ctx chasm.MutableContext,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacks int,
+) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
+	if o.LifecycleState(ctx).IsClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed Nexus operation")
+	}
+
+	currentCount := len(o.Callbacks)
+	if len(completionCallbacks)+currentCount > maxCallbacks {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to a Nexus operation (%d callbacks already attached)",
+			maxCallbacks,
+			currentCount,
+		)
+	}
+
+	if o.Callbacks == nil {
+		o.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	registrationTime := timestamppb.New(ctx.Now(o))
+
+	for idx, cb := range completionCallbacks {
+		chasmCB := &callbackspb.Callback{
+			Links: cb.GetLinks(),
+		}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			chasmCB.Variant = &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		}
+
+		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		id := fmt.Sprintf("%s-%d", requestID, idx)
+		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		o.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+	}
+	return nil
+}
+
 // onStarted applies the started transition or delegates to the store if one is present.
 func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
@@ -251,6 +326,7 @@ func (o *Operation) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
+	log.Printf("Operation::HandleNexusCompletion for operation token %v", completion.OperationToken)
 	// Request ID lets us reject a stale or misrouted completion.
 	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
@@ -279,6 +355,43 @@ func (o *Operation) HandleNexusCompletion(
 	default:
 		return serviceerror.NewInvalidArgument("invalid completion outcome")
 	}
+}
+
+// PROTOTYPE
+// GetNexusCompletion implements the [CompletionProvider] interface, so child Callback components can be used
+// and will fetch the Nexus completion as needed when they get invoked.
+func (o *Operation) GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
+	log.Printf("Operation::GetNexusCompletion (presumably for invoking completion callbacks)\n")
+
+	// NOTE: This doesn't feel right. But we schedule the callbacks in the middle of the `TransitionSucceeded` transition.
+	// So the operation technically isn't in a terminal state yet.
+	// // Verify the operation has completed, and we actually have the outcome.
+	// if o.LifecycleState(ctx).IsClosed() {
+	// 	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed Nexus operation")
+	// }
+
+	outcome, ok := o.Outcome.TryGet(ctx)
+	if !ok {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed Nexus operation")
+	}
+
+	// Only success is supported for this hack.
+	if outcome.GetFailed() != nil {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewFailedPrecondition("NYI: Failure path not wired up")
+	}
+	successPayload := outcome.GetSuccessful().GetResult()
+
+	// HACK: Just stubbing out values for now.
+	completion := nexusrpc.CompleteOperationOptions{
+		Header:         nil,
+		OperationToken: "#yolo",
+		StartTime:      time.Now(),
+		CloseTime:      time.Now(),
+		Links:          []nexus.Link{},
+		Error:          nil,
+		Result:         successPayload,
+	}
+	return completion, nil
 }
 
 // loadStartArgs is a ReadComponent callback that loads the start arguments from the operation.

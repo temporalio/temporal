@@ -8,9 +8,11 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	operatorservicepb "go.temporal.io/api/operatorservice/v1"
@@ -129,6 +131,33 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 	callOpts := client.StartNexusOperationOptions{
 		ID:                     "add-100-to-100",
 		ScheduleToCloseTimeout: 5 * time.Second,
+
+		// PROTOTYPE
+		// Attach a completion callback to the Nexus operation. This would be done by the
+		// SDK, but we hand-craft it for this prototype.
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				// IDEA: Let's create a new kind of callback, to streamline "worker callbacks".
+				// All we really need is the caller-side activity name.
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: nexus.DispatchWorkerCallbackURL, // "temporal://system/dispatch-worker-callback"
+						Header: map[string]string{
+							// There are security problems arising from the Nexus operation's
+							// callback (which will be invoked in the handler's namespace) spawning
+							// standalone activities in the caller's namespace.
+							//
+							// But we just need to validate and perform the registration BEFORE
+							// the Nexus operation is started. When the StartNexusOperation request
+							// is received, and it can be asserted that the target namespace
+							// matches the caller.
+							"target-namespace": callerNamespace,
+							"target-activity":  caller.OnAddOperationCompleteCallbackActivityName,
+						},
+					},
+				},
+			},
+		},
 	}
 	callHandle, err := nexusClient.ExecuteOperation(ctx, handler.AddOperationName, callInput, callOpts)
 	s.NoError(err, "calling Nexus operation")

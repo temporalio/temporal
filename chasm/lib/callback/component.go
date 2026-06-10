@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -99,6 +100,13 @@ func (c *Callback) loadInvocationArgs(
 			requestID:  c.RequestId,
 		}, nil
 	}
+
+	if callback.Url == nexus.DispatchWorkerCallbackURL {
+		return invokeWorkerCallback{
+			callback: callback,
+		}, nil
+	}
+
 	return invocableOutbound{
 		callback:   callback,
 		completion: completion,

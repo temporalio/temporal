@@ -1,11 +1,13 @@
 package nexusoperation
 
 import (
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -190,6 +192,16 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 
 		o.emitOnSucceededMetrics(ctx, closeTime)
+
+		// PROTOTYPE
+		// Invoke comletion callbacks now we are in a terminal state.
+		//
+		// The Callback's get their payloads via the parent pointer to this *Operation, and
+		// its implementation of the [CompletionSource] interface.
+		if err := callback.ScheduleStandbyCallbacks(ctx, o.Callbacks); err != nil {
+			return fmt.Errorf("scheduling completion callbacks: %w", err)
+		}
+
 		// Terminal state - no tasks to emit.
 		return nil
 	},

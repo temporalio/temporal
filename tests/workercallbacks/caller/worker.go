@@ -17,7 +17,7 @@ func NewWorker(c client.Client) (worker.Worker, error) {
 	// registering an Activity handler for the SAA that are created to track
 	// worker callbacks.
 	w.RegisterActivityWithOptions(
-		onNexusOpCompleteActivity,
+		onAddOperationCompleteCallbackActivity,
 		activity.RegisterOptions{
 			Name: "onNexusOpCompleteActivity",
 		})
