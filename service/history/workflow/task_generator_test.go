@@ -1451,7 +1451,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					Enabled:     true,
 					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				FastForward: &persistencespb.FastForwardInfo{
+				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    false,
@@ -1466,7 +1466,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					Enabled:     true,
 					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				FastForward: &persistencespb.FastForwardInfo{
+				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    true,
@@ -1480,7 +1480,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					Enabled:     false,
 					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				FastForward: &persistencespb.FastForwardInfo{
+				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    false,

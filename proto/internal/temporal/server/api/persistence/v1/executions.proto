@@ -330,8 +330,8 @@ message TimeSkippingInfo {
   // Total skipped duration for the current workflow execution run, including any
   ./* inherited skipped duration carried over from a preceding execution that started this run. */google.protobuf.Duration accumulated_skipped_duration = 2;
 
-  // The current fast-forward for time skipping.
-  FastForwardInfo fast_forward = 4;
+  // The current fast-forward info for time skipping.
+  FastForwardInfo fast_forward_info = 4;
 }
 
 message FastForwardInfo {

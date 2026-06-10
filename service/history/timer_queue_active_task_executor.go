@@ -954,7 +954,7 @@ func fastForwardTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeS
 	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		return false
 	}
-	fastForward := tsi.GetFastForward()
+	fastForward := tsi.GetFastForwardInfo()
 	if fastForward == nil || fastForward.GetTargetTime() == nil || fastForward.GetSourceEventId() == 0 || fastForward.GetHasReached() {
 		return false
 	}
