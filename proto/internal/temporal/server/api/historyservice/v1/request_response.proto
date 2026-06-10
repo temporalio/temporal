@@ -104,12 +104,10 @@ message StartWorkflowExecutionRequest {
   // directly from the started event. Written onto the new run's
   // WorkflowExecutionStartedEvent.
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
-
-  // If a workflow execution is started by a previous execution (parent-child workflow or continue-as-new)
-  // that has already skipped some time, the accumulated skipped duration from that execution
-  // can be passed to the new workflow execution through this field.
-  google.protobuf.Duration initial_skipped_duration = 18;
+  reserved 18;
+  temporal.api.workflow.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
 }
+
 
 message StartWorkflowExecutionResponse {
   string run_id = 1;
