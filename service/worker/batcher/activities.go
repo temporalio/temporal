@@ -117,15 +117,8 @@ func (p *page) done() bool {
 	return p.successCount+p.errorCount == len(p.executionInfos)
 }
 
-// recordCompletedPages accumulates stats for every page that is now fully done — the given
-// page and, transitively, all earlier ones — and advances the heartbeat resume point to just
-// past the last fully-done page, i.e. the oldest page that is NOT yet done.
-//
-// The resume point must not run ahead of completion. Pages are fetched ahead as soon as the
-// current page is fully *submitted* (not *done*), so advancing PageToken at fetch time would
-// let a restart resume past still-in-flight pages and silently skip them. Advancing only
-// through the contiguous fully-done prefix here guarantees a restart re-fetches the oldest
-// incomplete page; already-counted pages are not re-fetched, so stats are not double-counted.
+// recordCompletedPages records stats for each page that is now fully done and advances the
+// heartbeat resume point to the oldest page that is not yet done.
 func recordCompletedPages(hbd *HeartBeatDetails, resultPage *page) {
 	for pg := resultPage; pg != nil && pg.done(); pg = pg.next {
 		hbd.SuccessCount += pg.successCount
@@ -200,9 +193,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
 	defer heartbeatTicker.Stop()
 
-	// Start worker processors. Use the clamped `concurrency` (min 1), not config.concurrency:
-	// if the dynamic config resolves concurrency to 0, no workers would start and the activity
-	// would wait forever.
+	// concurrency is clamped to at least 1, so a zero configured value still starts a worker.
 	for range concurrency {
 		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
@@ -246,10 +237,8 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			p = nextPage
 		}
 
-		// Only offer work to the pool while the current page still has unsubmitted
-		// executions; otherwise disable this case with a nil channel so the loop does not
-		// spin submitting empty tasks (which would also push submittedCount past the page size)
-		// while waiting for in-flight tasks and earlier pages to finish.
+		// Disable this send case (nil channel) once the page is fully submitted, so the loop
+		// waits on results instead of offering empty tasks.
 		var submitCh chan task
 		var nextTask task
 		if p.submittedCount < len(p.executionInfos) {
@@ -697,15 +686,8 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	}
 }
 
-// processTaskWithRetries runs a task's operation, retrying retryable failures in place on
-// this worker goroutine, and sends exactly one response on respCh.
-//
-// Retries are deliberately NOT re-queued onto taskCh: the worker goroutines are the only
-// consumers of taskCh, so under a burst of retryable errors they would all block on the
-// re-enqueue send with the buffer full and no consumer left to drain it -> the activity
-// wedges (it keeps heartbeating but makes no progress). Emitting exactly one response per
-// dispatched task also guarantees a page can always reach completion, instead of a single
-// never-acknowledged task wedging the whole batch.
+// processTaskWithRetries runs the task's operation, retrying retryable failures in place on
+// this goroutine, and sends exactly one response on respCh per task.
 func (a *activities) processTaskWithRetries(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
@@ -736,19 +718,14 @@ func (a *activities) processTaskWithRetries(
 		break
 	}
 
-	// Emit exactly one response per task. Guard the send with ctx so the worker does not
-	// block here if the coordinator loop has already exited.
+	// Send one response per task; stop early if the context is cancelled.
 	select {
 	case respCh <- taskResponse{err: err, page: task.page}:
 	case <-ctx.Done():
 	}
 }
 
-// isRetryableTaskError reports whether a failed task should be retried. A task is retryable
-// unless its error is explicitly non-retryable:
-//  1. an ApplicationError marked NonRetryable,
-//  2. an operation-specific non-retryable error, or
-//  3. an error listed in the batch's NonRetryableErrors.
+// isRetryableTaskError reports whether a failed task's error permits a retry.
 func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInput) bool {
 	var appErr *temporal.ApplicationError
 	return !((errors.As(err, &appErr) && appErr.NonRetryable()) ||

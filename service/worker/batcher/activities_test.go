@@ -678,12 +678,9 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	s.NoError(resp.err)
 }
 
-// TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that when an operation keeps
-// failing with a retryable error, the worker retries it in place (on its own goroutine) and
-// emits exactly one response per task, instead of re-queuing the task onto taskCh.
-// Re-queuing deadlocked the pool: the worker goroutines are the only consumers of taskCh, so
-// a burst of retryable errors made them all block on the re-enqueue send with the buffer full
-// and no drainer left, leaving the activity heartbeating but stuck with no progress.
+// TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that repeated retryable
+// failures are retried in place and each task still yields exactly one response, so the
+// worker pool keeps making progress.
 func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -746,11 +743,8 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	}
 }
 
-// TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies that the heartbeat
-// resume point (PageToken/CurrentPage) only advances across the contiguous fully-done prefix
-// of pages and never past a still-in-flight earlier page. Pages are fetched ahead once
-// submitted (not done), so a resume point that ran ahead of completion would skip in-flight
-// pages on restart and silently drop their workflows.
+// TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies the resume point only
+// advances across the contiguous run of completed pages, never past a page still in flight.
 func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompletePage() {
 	mkPage := func(num, size int, next string) *page {
 		return &page{
@@ -794,11 +788,8 @@ func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompleteP
 	s.Equal(1, hbd.ErrorCount)   // p1:1
 }
 
-// TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages drives the full coordinator
-// loop end to end with a mock visibility client (multi-page) and a fake worker pool. It
-// guards that the coordinator fetches every page, submits and accounts for every workflow
-// exactly once, the empty-task submit guard prevents a spin/hang once a page is fully
-// submitted, and the activity completes with the correct counts.
+// TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages drives the coordinator over
+// several pages and checks every workflow is processed exactly once and the activity completes.
 func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages() {
 	type pageSpec struct {
 		size       int
@@ -829,8 +820,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 		}, nil).Once()
 	}
 
-	// Fake worker pool: drain taskCh and report success for every real task. A broken
-	// empty-task guard would surface here as the activity never completing.
+	// Fake worker pool: drain taskCh and report success for every real task.
 	var processed int64
 	fakeWorker := func(
 		ctx context.Context,
