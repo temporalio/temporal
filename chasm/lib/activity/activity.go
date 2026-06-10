@@ -187,13 +187,6 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
-func NewEmbeddedActivity(
-	ctx chasm.MutableContext,
-	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
-}
-
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
 	// Get latest component ref and unmarshal into proto ref
 	componentRef, err := ctx.Ref(a)
