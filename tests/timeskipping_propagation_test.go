@@ -352,7 +352,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 		tsc := attrs.GetTimeSkippingConfig()
 		s.NotNil(tsc)
 		s.True(tsc.GetEnabled())
-		s.approxDuration(time.Hour, attrs.GetInitialSkippedDuration().AsDuration())
+		s.approxDuration(time.Hour, attrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
 	}
 }
 
@@ -510,14 +510,14 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	s.Len(gInit, 1)
 	gInitAttrs := gInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	s.NotNil(gInitAttrs.GetTimeSkippingConfig())
-	s.approxDuration(time.Hour, gInitAttrs.GetInitialSkippedDuration().AsDuration())
+	s.approxDuration(time.Hour, gInitAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
 
 	pRunID := pMS.State.ExecutionState.RunId
 	pInit := s.initiatedChildEvents(ctx, env, pWFID, pRunID)
 	s.Len(pInit, 1)
 	pInitAttrs := pInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	s.NotNil(pInitAttrs.GetTimeSkippingConfig())
-	s.approxDuration(3*time.Hour, pInitAttrs.GetInitialSkippedDuration().AsDuration(),
+	s.approxDuration(3*time.Hour, pInitAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
 }
 
@@ -1569,7 +1569,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 	s.NotNil(run1TSI)
 	s.True(run1TSI.GetConfig().GetEnabled(),
 		"run 1 hands the config over still enabled — it consumed only 2h of the 3h budget")
-	s.False(run1TSI.GetFastForward().GetHasReached(),
+	s.False(run1TSI.GetFastForwardInfo().GetHasReached(),
 		"run 1 must not have reached the fast-forward target")
 	s.approxDuration(2*time.Hour, run1TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"run 1 skipped 2h for t1 before continue-as-new")
@@ -1580,7 +1580,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 	s.NotNil(run2TSI, "run 2 should have TimeSkippingInfo propagated from run 1")
 	s.False(run2TSI.GetConfig().GetEnabled(),
 		"the chain's budget is exhausted in run 2 → time skipping disabled")
-	s.True(run2TSI.GetFastForward().GetHasReached(),
+	s.True(run2TSI.GetFastForwardInfo().GetHasReached(),
 		"run 2 reached the fast-forward target inherited from the chain")
 	s.approxDuration(3*time.Hour, run2TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"chain total: run 1 contributed 2h, run 2 only the remaining 1h — the budget caps the chain, not each run")
