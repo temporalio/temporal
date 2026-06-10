@@ -1202,8 +1202,9 @@ var (
 		"nexus_task_requests",
 		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)
-	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
-	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
+	SyncThrottlePerTaskQueueCounter   = NewCounterDef("sync_throttle_count")
+	BufferThrottlePerTaskQueueCounter = NewCounterDef("buffer_throttle_count")
+	// TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
@@ -1243,6 +1244,10 @@ var (
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
+	)
+	DroppedTasksCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
 	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
@@ -1344,21 +1349,22 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 
-	VisibilityArchiverArchiveNonRetryableErrorCount     = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount        = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                       = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                        = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                          = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                           = NewCounterDef("scavenger_skips")
-	ScheduleInvariantsScannerOverdueNextActionTimeCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
-	ScheduleInvariantsScannerStuckOpenCount             = NewCounterDef("schedule_invariants_scanner_stuck_open")
-	ScheduleInvariantsScannerUnknownStateCount          = NewCounterDef("schedule_invariants_scanner_unknown_state")
-	ScheduleInvariantsScannerErrorCount                 = NewCounterDef("schedule_invariants_scanner_errors")
-	ExecutionsOutstandingCount                          = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                    = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                    = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                       = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                    = NewCounterDef("add_search_attributes_failures")
+	VisibilityArchiverArchiveNonRetryableErrorCount           = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount              = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                             = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                              = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                                = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                                 = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount       = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_cap_hit")
+	ScheduleInvariantsScannerStuckOpenCount                   = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount                = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                       = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                                = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                             = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                          = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(

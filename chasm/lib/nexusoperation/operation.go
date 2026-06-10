@@ -549,6 +549,18 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		Identity:     requestData.GetIdentity(),
 	}
 
+	if cancellation, ok := o.Cancellation.TryGet(ctx); ok {
+		info.CancellationInfo = &nexuspb.NexusOperationExecutionCancellationInfo{
+			RequestedTime:           cancellation.RequestedTime,
+			State:                   CancellationAPIState(cancellation.Status),
+			Attempt:                 cancellation.Attempt,
+			LastAttemptCompleteTime: cancellation.LastAttemptCompleteTime,
+			LastAttemptFailure:      cancellation.LastAttemptFailure,
+			NextAttemptScheduleTime: cancellation.NextAttemptScheduleTime,
+			Reason:                  cancellation.Reason,
+		}
+	}
+
 	if o.ScheduledTime != nil {
 		if o.ScheduleToCloseTimeout != nil {
 			info.ExpirationTime = timestamppb.New(o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration()))

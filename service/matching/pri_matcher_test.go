@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
@@ -191,4 +193,89 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		require.True(t, task.isStarted(), "task should be a started (forwarded) task")
 		require.Equal(t, taskToken, task.started.workflowTaskInfo.TaskToken)
 	})
+}
+
+// TestValidatorDrop_EmitsTasksDropped verifies the emission site (not just the
+// getDroppedTaskExpiryReasonTag helper): when the root-partition validator rejects
+// a backlog task, tasks_dropped fires once with the right reason tag — expired_memory
+// for a time-expired task, expired_invalid for one that only failed validation.
+func (s *PriMatcherSuite) TestValidatorDrop_EmitsTasksDropped() {
+	cases := []struct {
+		name       string
+		expiryTime *timestamppb.Timestamp
+		wantReason string
+	}{
+		{"ExpiredMemory", timestamppb.New(time.Now().Add(-time.Hour)), metrics.DroppedTaskReasonExpiredMemoryTag.Value},
+		{"Invalid", nil, metrics.DroppedTaskReasonInvalidTag.Value},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			cfg := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+				NewConfig(dynamicconfig.NewNoopCollection()),
+				"nsname",
+			)
+			partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
+				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				RootPartition()
+
+			// Validator rejects every task it sees, forcing the drop path.
+			mockValidator := NewMocktaskValidator(s.controller)
+			mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
+
+			capture := metricstest.NewCaptureHandler()
+			c := capture.StartCapture()
+			defer capture.StopCapture(c)
+
+			rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			tm := newPriTaskMatcher(
+				ctx,
+				cfg,
+				partition,
+				nil, // nil forwarder = root partition -> validateTasksOnRoot path
+				nil,
+				mockValidator,
+				s.logger,
+				capture,
+				rateLimitManager,
+				func() {},
+			)
+			tm.Start()
+			defer tm.Stop()
+
+			completionCalled := make(chan taskResponse, 1)
+			task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+				TaskId: 1,
+				Data: &persistencespb.TaskInfo{
+					CreateTime: timestamppb.Now(),
+					ExpiryTime: tc.expiryTime,
+				},
+			}, func(_ *internalTask, res taskResponse) {
+				completionCalled <- res
+			})
+
+			task.resetMatcherState()
+			_ = tm.AddTask(task)
+
+			select {
+			case res := <-completionCalled:
+				s.Require().NoError(res.err()) // task is dropped, not reprocessed
+			case <-time.After(2 * time.Second):
+				s.Fail("timed out waiting for validator to drop task")
+			}
+
+			// The tasks_dropped emission lands just after the task is finished, so poll.
+			await.RequireTrue(s.T(), func() bool {
+				return len(c.Snapshot()[metrics.DroppedTasksCounter.Name()]) == 1
+			}, 2*time.Second, 10*time.Millisecond)
+
+			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
+			s.Require().Len(recordings, 1)
+			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+		})
+	}
 }

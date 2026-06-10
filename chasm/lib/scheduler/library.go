@@ -66,6 +66,8 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 				executionStatusSearchAttribute,
 				scheduleNextActionTimeSearchAttribute,
 				scheduleIdleCloseTimeSearchAttribute,
+				scheduleRunningWorkflowCountSearchAttribute,
+				scheduleBufferedStartsCountSearchAttribute,
 			),
 			// Exposes Tweakables to scheduler components via the CHASM context
 			// (see tweakablesFromContext).
