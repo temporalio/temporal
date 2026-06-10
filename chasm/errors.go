@@ -3,7 +3,8 @@ package chasm
 import (
 	"fmt"
 	"strings"
-	"time"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
 type ExecutionAlreadyStartedError struct {
@@ -34,15 +35,7 @@ type TaskNotInvalidatedError struct {
 	TaskKind string
 	TaskInfo string
 
-	TaskType             string
-	TaskTypeID           uint32
-	Archetype            string
-	ArchetypeID          ArchetypeID
-	ComponentPath        []string
-	EncodedComponentPath string
-	ScheduledTime        time.Time
-	Destination          string
-	Immediate            bool
+	TaskNotInvalidatedDetails
 }
 
 func NewTaskNotInvalidatedError(
@@ -64,9 +57,7 @@ type TaskNotInvalidatedDetails struct {
 	ArchetypeID          ArchetypeID
 	ComponentPath        []string
 	EncodedComponentPath string
-	ScheduledTime        time.Time
-	Destination          string
-	Immediate            bool
+	TaskAttributes       TaskAttributes
 }
 
 // NewTaskNotInvalidatedErrorWithDetails returns an error with logical task
@@ -76,72 +67,52 @@ func NewTaskNotInvalidatedErrorWithDetails(
 	details TaskNotInvalidatedDetails,
 ) *TaskNotInvalidatedError {
 	return &TaskNotInvalidatedError{
-		TaskKind:             taskKind,
-		TaskType:             details.TaskType,
-		TaskTypeID:           details.TaskTypeID,
-		Archetype:            details.Archetype,
-		ArchetypeID:          details.ArchetypeID,
-		ComponentPath:        details.ComponentPath,
-		EncodedComponentPath: details.EncodedComponentPath,
-		ScheduledTime:        details.ScheduledTime,
-		Destination:          details.Destination,
-		Immediate:            details.Immediate,
+		TaskKind:                  taskKind,
+		TaskNotInvalidatedDetails: details,
 	}
 }
 
 func (e *TaskNotInvalidatedError) Error() string {
-	return fmt.Sprintf(
-		"CHASM %s task remained valid after successful execution: %s",
-		e.TaskKind,
-		e.buildLogicalTaskReport(),
-	)
+	msg := fmt.Sprintf("CHASM %s task remained valid after successful execution", e.TaskKind)
+	if e.TaskInfo != "" {
+		return fmt.Sprintf("%s: %s", msg, e.TaskInfo)
+	}
+	return msg
 }
 
-func (e *TaskNotInvalidatedError) buildLogicalTaskReport() string {
-	if e.TaskInfo != "" && e.TaskType == "" {
-		return e.TaskInfo
-	}
-
-	var b strings.Builder
-	b.WriteString("LogicalTask{")
-	wroteField := false
-	writeField := func(name string, value any) {
-		if wroteField {
-			b.WriteString(", ")
-		}
-		fmt.Fprintf(&b, "%s: %v", name, value)
-		wroteField = true
+func (e *TaskNotInvalidatedError) LogTags() []tag.Tag {
+	tags := []tag.Tag{
+		tag.String("chasm-task-kind", e.TaskKind),
 	}
 
 	if e.TaskType != "" {
-		writeField("Type", e.TaskType)
+		tags = append(tags, tag.String("chasm-task-type", e.TaskType))
 	}
 	if e.TaskTypeID != 0 {
-		writeField("TypeID", e.TaskTypeID)
+		tags = append(tags, tag.UInt32("chasm-task-type-id", e.TaskTypeID))
 	}
 	if e.Archetype != "" {
-		writeField("Archetype", e.Archetype)
+		tags = append(tags, tag.Archetype(e.Archetype))
 	}
 	if e.ArchetypeID != 0 {
-		writeField("ArchetypeID", e.ArchetypeID)
+		tags = append(tags, tag.ArchetypeID(uint32(e.ArchetypeID)))
 	}
 	if e.ComponentPath != nil {
-		writeField("Path", formatTaskNotInvalidatedPath(e.ComponentPath))
+		tags = append(tags, tag.String("chasm-component-path", formatTaskNotInvalidatedPath(e.ComponentPath)))
 	}
 	if e.EncodedComponentPath != "" {
-		writeField("EncodedPath", e.EncodedComponentPath)
+		tags = append(tags, tag.String("chasm-encoded-component-path", e.EncodedComponentPath))
 	}
-	if !e.ScheduledTime.IsZero() {
-		writeField("ScheduledTime", e.ScheduledTime.Format(time.RFC3339Nano))
+	if !e.TaskAttributes.ScheduledTime.IsZero() {
+		tags = append(tags, tag.Time("chasm-task-scheduled-time", e.TaskAttributes.ScheduledTime))
 	}
-	if e.Destination != "" {
-		writeField("Destination", e.Destination)
+	if e.TaskAttributes.Destination != "" {
+		tags = append(tags, tag.String("chasm-task-destination", e.TaskAttributes.Destination))
 	}
-	if e.Immediate {
-		writeField("Immediate", true)
+	if e.TaskAttributes.IsImmediate() {
+		tags = append(tags, tag.Bool("chasm-task-immediate", true))
 	}
-	b.WriteString("}")
-	return b.String()
+	return tags
 }
 
 func formatTaskNotInvalidatedPath(
