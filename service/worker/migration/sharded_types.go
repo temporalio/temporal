@@ -143,7 +143,9 @@ type BatchPayload map[int32]map[string][]RunEntry
 // totalRuns counts runs across all (shard, BID) groups.
 func (p BatchPayload) totalRuns() int {
 	n := 0
+	//workflowcheck:ignore (summation is order-independent)
 	for _, byBID := range p {
+		//workflowcheck:ignore (summation is order-independent)
 		for _, runs := range byBID {
 			n += len(runs)
 		}
@@ -155,6 +157,7 @@ func (p BatchPayload) totalRuns() int {
 // activity-side flatten a deterministic iteration order for replays.
 func (p BatchPayload) sortedShards() []int32 {
 	out := make([]int32, 0, len(p))
+	//workflowcheck:ignore (output is sorted before any observable use)
 	for sh := range p {
 		out = append(out, sh)
 	}
@@ -184,6 +187,7 @@ func (p BatchPayload) flatten() []*shardedExecutionInfo {
 	for _, sh := range p.sortedShards() {
 		byBID := p[sh]
 		bids := make([]string, 0, len(byBID))
+		//workflowcheck:ignore (bids is sorted before use)
 		for bid := range byBID {
 			bids = append(bids, bid)
 		}
@@ -204,12 +208,17 @@ func (p BatchPayload) flatten() []*shardedExecutionInfo {
 	return out
 }
 
-// merge folds src into p.
+// merge folds src into p. Callers guarantee disjoint (shard, BID) keys
+// between src and any prior merges into p — in-flight batches hold
+// disjoint shard claims and listed-but-unpacked buckets share no shard
+// with batchExecs — so per-key appends never interleave across iterations.
 func (p BatchPayload) merge(src BatchPayload) {
+	//workflowcheck:ignore (writes are to disjoint keys; order-independent)
 	for sh, byBID := range src {
 		if p[sh] == nil {
 			p[sh] = map[string][]RunEntry{}
 		}
+		//workflowcheck:ignore (writes are to disjoint keys; order-independent)
 		for bid, runs := range byBID {
 			p[sh][bid] = append(p[sh][bid], runs...)
 		}

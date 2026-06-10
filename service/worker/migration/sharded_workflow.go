@@ -360,7 +360,9 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 	// the prior cycle so the streaming packer picks them up
 	// alongside any new pages.
 	s.buckets.merge(params.RecoveredBuckets)
+	//workflowcheck:ignore (per-shard sum is order-independent)
 	for sh, byBID := range params.RecoveredBuckets {
+		//workflowcheck:ignore (per-shard sum is order-independent)
 		for _, runs := range byBID {
 			s.bucketCounts[sh] += len(runs)
 		}
@@ -663,6 +665,10 @@ func collectRecoveredBuckets(batchExecs map[int64]BatchPayload) BatchPayload {
 		return nil
 	}
 	out := BatchPayload{}
+	// In-flight batches hold disjoint shard claims, so merging two
+	// batchExecs entries never targets the same (shard, BID) key —
+	// iteration order does not affect the final BatchPayload.
+	//workflowcheck:ignore (writes are to disjoint keys; order-independent)
 	for _, bp := range batchExecs {
 		out.merge(bp)
 	}
@@ -693,6 +699,7 @@ func (s *shardedWorkflowState) takeFromBucket(shard int32, n int) map[string][]R
 		return nil
 	}
 	bids := make([]string, 0, len(byBID))
+	//workflowcheck:ignore (bids is sorted before use)
 	for bid := range byBID {
 		bids = append(bids, bid)
 	}
@@ -867,6 +874,7 @@ func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 			s.params.ResumeShards = unpackResumeBatches(batches[i:])
 			return
 		}
+		//workflowcheck:ignore (setting a set of flags is order-independent)
 		for sh := range batch.payload {
 			s.shardInFlight[sh] = true
 		}
@@ -902,10 +910,13 @@ func (s *shardedWorkflowState) packResumeBatchPlan(entries []ResumeShard) []resu
 // unpackResumeBatches reverses packResumeBatchPlan, turning planned
 // batches back into a flat ResumeShard slice. Used when the dispatch
 // loop aborts on lastErr so the undispatched remainder can be carried
-// into the recovery bundle / next CAN cycle.
+// into the recovery bundle / next CAN cycle. The output is sorted by
+// shard ID so the slice flowing into the CAN args is deterministic
+// across replays.
 func unpackResumeBatches(batches []resumeBatch) []ResumeShard {
 	var out []ResumeShard
 	for _, b := range batches {
+		//workflowcheck:ignore (output is sorted below before any observable use)
 		for sh, execs := range b.payload {
 			out = append(out, ResumeShard{
 				Shard:              sh,
@@ -914,12 +925,16 @@ func unpackResumeBatches(batches []resumeBatch) []ResumeShard {
 			})
 		}
 	}
+	slices.SortFunc(out, func(a, b ResumeShard) int {
+		return int(a.Shard - b.Shard)
+	})
 	return out
 }
 
 // runCount sums runs across BIDs in a single shard's payload entry.
 func runCount(byBID map[string][]RunEntry) int {
 	n := 0
+	//workflowcheck:ignore (summation is order-independent)
 	for _, runs := range byBID {
 		n += len(runs)
 	}
@@ -958,6 +973,7 @@ func (s *shardedWorkflowState) drainBuckets(ctx workflow.Context) {
 // through run().
 func (s *shardedWorkflowState) failDrainBucketsStuck() {
 	remaining := 0
+	//workflowcheck:ignore (summation is order-independent)
 	for _, n := range s.bucketCounts {
 		remaining += n
 	}
@@ -983,6 +999,7 @@ func (s *shardedWorkflowState) drainBucketsAwaitPredicate(currentPending int) fu
 		if !s.dispatchSlotAvailable() {
 			return false
 		}
+		//workflowcheck:ignore (existence check; iteration order does not affect result)
 		for sh, n := range s.bucketCounts {
 			if n > 0 && !s.shardInFlight[sh] {
 				return true
@@ -1062,6 +1079,7 @@ func (s *shardedWorkflowState) spawnBatch(
 	}
 
 	held := make(map[int32]bool, len(payload))
+	//workflowcheck:ignore (building a set of flags is order-independent)
 	for sh := range payload {
 		held[sh] = true
 	}
@@ -1076,6 +1094,7 @@ func (s *shardedWorkflowState) spawnBatch(
 			// shards have already been cleared from shardInFlight
 			// by handleReleaseSignals and may by now belong to a
 			// subsequent batch's claim.
+			//workflowcheck:ignore (deletes are commutative; order-independent)
 			for sh := range s.heldByBatch[batchID] {
 				delete(s.shardInFlight, sh)
 			}
@@ -1164,6 +1183,7 @@ func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool
 // bucketsEmpty reports whether every shard's bucket is empty. Reads
 // from the sidecar count map so it's O(#shards), not O(#runs).
 func (s *shardedWorkflowState) bucketsEmpty() bool {
+	//workflowcheck:ignore (existence check; iteration order does not affect result)
 	for _, n := range s.bucketCounts {
 		if n > 0 {
 			return false
@@ -1191,6 +1211,7 @@ func (s *shardedWorkflowState) bucketsEmpty() bool {
 // wall-clock.
 func (s *shardedWorkflowState) shardIDsByPackPriority(relax bool) []int32 {
 	out := make([]int32, 0, len(s.bucketCounts))
+	//workflowcheck:ignore (output is sorted below before any observable use)
 	for sh, n := range s.bucketCounts {
 		if n == 0 || s.shardInFlight[sh] {
 			continue
