@@ -698,7 +698,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 //     (no cron, attempt == 1).
 //  4. The latest task's VisibilityTimestamp is ≈ wallStart, not wallStart + 1h.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithTaskQueueRecorder())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
@@ -897,7 +897,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 // If any of the four principles regresses, at least one of assertions 4–8 will
 // fail.
 func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithTaskQueueRecorder())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 

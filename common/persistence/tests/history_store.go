@@ -18,6 +18,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -66,6 +67,7 @@ func NewHistoryEventsSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
+			testhooks.TestHooks{},
 		),
 		serializer: serializer,
 		logger:     logger,

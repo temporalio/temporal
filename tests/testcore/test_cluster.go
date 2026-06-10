@@ -91,6 +91,7 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
+		EnableTaskQueueRecorder         bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -355,6 +356,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		EnableTaskQueueRecorder:          clusterConfig.EnableTaskQueueRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -601,7 +603,7 @@ func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 
 // ExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
-	return tc.host.GetExecutionManager()
+	return tc.host.executionManager
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.

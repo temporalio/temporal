@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -74,6 +75,7 @@ func NewExecutionMutableStateSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
+			testhooks.TestHooks{},
 		),
 		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 		Logger:            logger,

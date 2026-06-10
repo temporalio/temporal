@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -173,6 +174,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				nil,
 				func() bool { return false },
 				func() bool { return false },
+				testhooks.TestHooks{},
 			)
 			shardManager, _ := factory.NewShardManager()
 			executionManager, _ := factory.NewExecutionManager()

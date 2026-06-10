@@ -24,6 +24,7 @@ var (
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
+	HistoryTasksWritten                      = newKey[func(int32, int64, string, string, map[historytasks.Category][]historytasks.Task), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )
