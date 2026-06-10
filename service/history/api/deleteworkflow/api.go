@@ -55,7 +55,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: request.WorkflowExecution.GetWorkflowId()}) == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 			// If workflow execution is running and in active cluster.
 			if err := api.UpdateWorkflowWithNew(
 				shardContext,
