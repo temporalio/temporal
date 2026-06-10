@@ -9,8 +9,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// propagateTimeSkippingToNextRun propagates both time skipping config and state to the next run in the chain.
-// The config is deep-cloned so the next run can mutate it without affecting the source.
+// propagateTimeSkippingToNextRun propagates both time skipping config and state to the next run in
+// the chain (CaN, retry, cron). The config is deep-cloned so the next run can mutate it without
+// affecting the source.
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {

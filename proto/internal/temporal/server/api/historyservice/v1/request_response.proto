@@ -108,7 +108,6 @@ message StartWorkflowExecutionRequest {
   temporal.api.workflow.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
 }
 
-
 message StartWorkflowExecutionResponse {
   string run_id = 1;
   temporal.server.api.clock.v1.VectorClock clock = 2;

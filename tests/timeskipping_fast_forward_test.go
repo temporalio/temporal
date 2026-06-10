@@ -120,7 +120,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	s.Eventually(func() bool {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		ff := tsi.GetFastForward()
+		ff := tsi.GetFastForwardInfo()
 		return ff != nil && ff.GetHasReached()
 	}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while activity is in-flight (B3 path)")
 
@@ -171,7 +171,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	ff := tsi.GetFastForward()
+	ff := tsi.GetFastForwardInfo()
 	s.NotNil(ff)
 	s.True(ff.GetHasReached())
 }
@@ -266,7 +266,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	s.AwaitTruef(func() bool {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		ff := tsi.GetFastForward()
+		ff := tsi.GetFastForwardInfo()
 		return ff != nil && ff.GetHasReached()
 	}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while paused")
 
@@ -333,7 +333,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled(), "Config.Enabled must be false after fastForward reached")
-	ff := tsi.GetFastForward()
+	ff := tsi.GetFastForwardInfo()
 	s.NotNil(ff)
 	s.True(ff.GetHasReached(), "HasReached must be true after fastForward timer fired")
 }
@@ -381,7 +381,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
 	s.InDelta(float64(fastForward), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
-	ff := tsi.GetFastForward()
+	ff := tsi.GetFastForwardInfo()
 	s.NotNil(ff)
 	s.True(ff.GetHasReached())
 

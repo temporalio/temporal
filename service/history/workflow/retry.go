@@ -303,7 +303,7 @@ func SetupNewWorkflowForRetryOrCron(
 		VersioningOverride:       pinnedOverride,
 	}
 
-	tsc, initialSkip := propagateTimeSkippingToNextRun(previousExecutionInfo)
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
 	createRequest.TimeSkippingConfig = tsc
 
 	attempt := int32(1)
@@ -339,9 +339,8 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 		// For retries, pass through the declined value from the started event directly.
 		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
-		// Carry the previous run's in-flight accumulated skip forward — same semantics as
-		// TimeSkippingConfig above (continuation, not a point-in-history snapshot).
-		InitialSkippedDuration: initialSkip,
+		// Carry the previous run's accumulated skip and fast-forward target forward.
+		TimeSkippingStatePropagation: stateProp,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

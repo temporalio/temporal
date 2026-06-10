@@ -1095,7 +1095,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// VisibilityTimestamp tracks the new accumulated skip.
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi.GetConfig().GetEnabled() {
-		fastForward := tsi.GetFastForward()
+		fastForward := tsi.GetFastForwardInfo()
 		if fastForward != nil && !fastForward.GetHasReached() {
 			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
 				// TaskID is set by shard
