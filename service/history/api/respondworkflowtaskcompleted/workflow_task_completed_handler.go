@@ -610,6 +610,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	if err != nil {
 		return nil, err
 	}
+	ai.StartedClock = shardClock
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),
