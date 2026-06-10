@@ -4003,3 +4003,88 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
 		v2Sid, query)
 }
+
+// TestScheduleCountsVisibility asserts that the CHASM scheduler's
+// ScheduleRunningWorkflowCount and ScheduleBufferedStartsCount search attributes
+// are published to visibility and queryable through the frontend ListSchedules
+// API. A schedule that fires every second under BUFFER_ONE, started with a
+// workflow that blocks, settles into one running workflow with one fire buffered
+// behind it. The counts aren't surfaced on the list entry, so we assert via the
+// query rather than by reading the entry's SAs.
+func TestScheduleCountsVisibility(t *testing.T) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	newContext := chasmContextFactory
+
+	sid := testcore.RandomizeStr("sched-counts-v2")
+	wid := testcore.RandomizeStr("sched-counts-wf")
+	wt := testcore.RandomizeStr("sched-counts-wt")
+
+	// A workflow that holds open so a fire stays running while later fires buffer.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			return workflow.Sleep(ctx, time.Hour)
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// matchesQuery reports whether the schedule is returned when filtering on the
+	// given search-attribute query.
+	matchesQuery := func(query string) bool {
+		listResp, listErr := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 5,
+			Query:           query,
+		})
+		if listErr != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == sid {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Starting the workflow and buffering the next fire takes a few seconds on top
+	// of visibility propagation, so allow 30s for each count to become queryable.
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
+
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
+}
