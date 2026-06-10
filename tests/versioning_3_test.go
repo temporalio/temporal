@@ -101,6 +101,11 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1000),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("v3").WithBuildID("b")
+		}),
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
@@ -6060,7 +6065,8 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv := env.Tv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	revision := int64(1)

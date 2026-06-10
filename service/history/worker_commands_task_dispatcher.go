@@ -77,6 +77,7 @@ func (d *workerCommandsTaskDispatcher) execute(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
 	attempt int,
+	namespaceName string,
 ) error {
 	if attempt > workerCommandsMaxTaskAttempt {
 		d.logger.Info("Worker commands task exceeded max attempts, dropping",
@@ -89,8 +90,9 @@ func (d *workerCommandsTaskDispatcher) execute(
 		return nil
 	}
 
-	if !d.config.EnableCancelActivityWorkerCommand() {
+	if !d.config.EnableCancelActivityWorkerCommand(namespaceName) {
 		d.logger.Info("Worker commands feature disabled, dropping task",
+			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(task.WorkflowID),
 			tag.WorkflowRunID(task.RunID),
 			tag.NewStringTag("control_queue", task.Destination),

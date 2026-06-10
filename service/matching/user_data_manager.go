@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination user_data_manager_mock.go
+
 package matching
 
 import (

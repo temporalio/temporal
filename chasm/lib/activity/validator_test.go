@@ -46,6 +46,12 @@ var (
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
 	}
+	defaultMaxLinksPerRequest = func(ns string) int {
+		return 10
+	}
+	defaultLinkMaxSize = func(ns string) int {
+		return 4000
+	}
 )
 
 func TestValidateSuccess(t *testing.T) {
