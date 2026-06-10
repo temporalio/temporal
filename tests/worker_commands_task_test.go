@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -646,7 +648,7 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 		WorkflowExecutionTimeout: durationpb.New(60 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
 	})
-	env.NoError(err)
+	require.NoError(t, err)
 
 	// Poll and complete first workflow task - schedule an eager activity.
 	// WorkerControlTaskQueue is set on the WFT completion request (not the activity poll)
@@ -673,7 +675,7 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 			}, nil
 		},
 	)
-	env.NoError(err)
+	require.NoError(t, err)
 	env.NotEmpty(wftResp.GetActivityTasks(), "Expected eager activity task in WFT completion response")
 	eagerActivityTaskToken := wftResp.GetActivityTasks()[0].TaskToken
 	env.NotEmpty(eagerActivityTaskToken, "Expected task token from eager activity")
@@ -687,7 +689,7 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 			RunId:      startResp.RunId,
 		},
 	})
-	env.NoError(err)
+	require.NoError(t, err)
 
 	// Poll and complete the workflow task with RequestCancelActivityTask command.
 	_, err = poller.PollAndHandleWorkflowTask(tv,
@@ -712,13 +714,13 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 				},
 			}, nil
 		})
-	env.NoError(err)
+	require.NoError(t, err)
 	t.Log("Workflow task completed with RequestCancelActivityTask command")
 
 	// Poll Nexus control queue - cancel command should be dispatched because
 	// StartedClock is set for the eager activity.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	env.Eventually(func() bool {
+	await.RequireTruef(t, func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -741,7 +743,7 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	err = payload.Decode(startOp.Payload, &executeReq)
-	env.NoError(err)
+	require.NoError(t, err)
 	env.Len(executeReq.Commands, 1)
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
 	env.NotNil(cancelCmd, "Expected CancelActivity command")
