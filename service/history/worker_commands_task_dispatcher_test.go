@@ -44,27 +44,27 @@ func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRec
 func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return false },
+			EnableCancelActivityWorkerCommand: func(string) bool { return false },
 		},
 		logger: log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1 /* attempt */)
+	err := d.execute(context.Background(), task, 1 /* attempt */, "test-namespace")
 	require.NoError(t, err, "task should be silently dropped when feature flag is off")
 }
 
 func TestExecute_EmptyCommands_DropsTask(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		logger: log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
 	task.Commands = nil
-	err := d.execute(context.Background(), task, 1 /* attempt */)
+	err := d.execute(context.Background(), task, 1 /* attempt */, "test-namespace")
 	require.NoError(t, err, "task with no commands should be dropped")
 }
 
@@ -75,14 +75,14 @@ func TestExecute_ExceedsMaxAttempts_DropsTask(t *testing.T) {
 
 	d := &workerCommandsTaskDispatcher{
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, workerCommandsMaxTaskAttempt+1)
+	err := d.execute(context.Background(), task, workerCommandsMaxTaskAttempt+1, "test-namespace")
 	require.NoError(t, err, "task should be dropped when max attempts exceeded")
 
 	requireMetricValue(t, capture.Snapshot(), "max_attempts_exceeded")
@@ -98,7 +98,7 @@ func TestExecute_AtMaxAttempt_StillExecutes(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -120,7 +120,7 @@ func TestExecute_AtMaxAttempt_StillExecutes(t *testing.T) {
 		}, nil)
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, workerCommandsMaxTaskAttempt)
+	err := d.execute(context.Background(), task, workerCommandsMaxTaskAttempt, "test-namespace")
 	require.NoError(t, err, "task at exactly max attempt should still execute")
 
 	requireMetricValue(t, capture.Snapshot(), "success")
@@ -136,7 +136,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -162,7 +162,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 		})
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1 /* attempt */)
+	err := d.execute(context.Background(), task, 1 /* attempt */, "test-namespace")
 	require.NoError(t, err)
 
 	require.NotNil(t, capturedReq)
@@ -183,7 +183,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -193,7 +193,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 		nil, errors.New("connection refused"))
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1 /* attempt */)
+	err := d.execute(context.Background(), task, 1 /* attempt */, "test-namespace")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "connection refused")
 
@@ -210,7 +210,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	d := &workerCommandsTaskDispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func() bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -224,7 +224,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 		}, nil)
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1 /* attempt */)
+	err := d.execute(context.Background(), task, 1 /* attempt */, "test-namespace")
 	require.Error(t, err)
 
 	var he *nexus.HandlerError
