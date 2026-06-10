@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,6 +18,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -788,6 +792,99 @@ func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompleteP
 	s.Equal(3, hbd.CurrentPage)
 	s.Equal(4, hbd.SuccessCount) // p1:1 + p2:2 + p3:1
 	s.Equal(1, hbd.ErrorCount)   // p1:1
+}
+
+// TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages drives the full coordinator
+// loop end to end with a mock visibility client (multi-page) and a fake worker pool. It
+// guards that the coordinator fetches every page, submits and accounts for every workflow
+// exactly once, the empty-task submit guard prevents a spin/hang once a page is fully
+// submitted, and the activity completes with the correct counts.
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages() {
+	type pageSpec struct {
+		size       int
+		fetchToken string // NextPageToken used to fetch this page
+		nextToken  string // NextPageToken this page returns
+	}
+	pages := []pageSpec{
+		{size: 5, fetchToken: "", nextToken: "p2"},
+		{size: 5, fetchToken: "p2", nextToken: "p3"},
+		{size: 3, fetchToken: "p3", nextToken: ""},
+	}
+	const total = 13
+
+	mockSdk := &mocks.Client{}
+	for i, pg := range pages {
+		execs := make([]*workflowpb.WorkflowExecutionInfo, pg.size)
+		for j := range execs {
+			execs[j] = &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: fmt.Sprintf("p%d-wf%d", i, j)},
+			}
+		}
+		fetchToken := pg.fetchToken
+		mockSdk.On("ListWorkflow", mock.Anything, mock.MatchedBy(func(r *workflowservice.ListWorkflowExecutionsRequest) bool {
+			return string(r.NextPageToken) == fetchToken
+		})).Return(&workflowservice.ListWorkflowExecutionsResponse{
+			Executions:    execs,
+			NextPageToken: []byte(pg.nextToken),
+		}, nil).Once()
+	}
+
+	// Fake worker pool: drain taskCh and report success for every real task. A broken
+	// empty-task guard would surface here as the activity never completing.
+	var processed int64
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ sdkclient.Client,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-taskCh:
+				if t.executionInfo == nil {
+					continue
+				}
+				atomic.AddInt64(&processed, 1)
+				select {
+				case respCh <- taskResponse{err: nil, page: t.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		adjustedQuery: "ExecutionStatus = 'Completed'",
+		concurrency:   3,
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	// Run inside an activity environment so the coordinator's RecordHeartbeat call is valid.
+	env := s.NewTestActivityEnvironment()
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, mockSdk, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.NoError(err)
+
+	var hbd HeartBeatDetails
+	s.NoError(encoded.Get(&hbd))
+	s.Equal(total, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
+	s.Equal(int64(total), atomic.LoadInt64(&processed))
+	mockSdk.AssertExpectations(s.T())
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
