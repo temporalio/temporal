@@ -1350,6 +1350,16 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
+	MatchingUserDataFetchFaultLatency = NewGlobalDurationSetting(
+		"matching.faultInjection.userDataFetchLatency",
+		0,
+		`MatchingUserDataFetchFaultLatency injects latency before each user-data fetch from the parent partition, delaying versioning-data propagation. For chaos/flake testing; 0 disables it.`,
+	)
+	MatchingUserDataFetchFaultErrorRate = NewGlobalFloatSetting(
+		"matching.faultInjection.userDataFetchErrorRate",
+		0,
+		`MatchingUserDataFetchFaultErrorRate is the probability (0..1) that a user-data fetch from the parent partition fails with a transient retryable error. For chaos/flake testing; 0 disables it.`,
+	)
 	MatchingGetUserDataRefresh = NewGlobalDurationSetting(
 		"matching.getUserDataRefresh",
 		5*time.Minute,
