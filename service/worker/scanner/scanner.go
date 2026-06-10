@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/service/worker/scanner/scheduleinvariants"
@@ -75,15 +74,9 @@ type (
 		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 
-		// Schedule-invariants scanners. Each runs as an independent cron workflow; all three
-		// require advanced (Elasticsearch) visibility to be configured (otherwise they're skipped).
-		ScheduleInvariantsScannerOverdueNextActionTimeEnabled      dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerStuckOpenEnabled                  dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerUnknownStateEnabled               dynamicconfig.BoolPropertyFn
-		ScheduleInvariantsScannerOverdueNextActionTimeTolerance    dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerVisibilityRPS                     dynamicconfig.FloatPropertyFn
-		ScheduleInvariantsScannerScanInterval                      dynamicconfig.DurationPropertyFn
-		ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier dynamicconfig.IntPropertyFn
+		// ScheduleInvariantsScannerOptions configures the schedule-invariants scanners. Each
+		// invariant check runs as an independent cron workflow.
+		ScheduleInvariantsScannerOptions dynamicconfig.TypedPropertyFn[dynamicconfig.ScheduleInvariantsScannerParams]
 	}
 
 	// scannerContext is the context object that gets
@@ -222,28 +215,20 @@ func (s *Scanner) Start() error {
 		}
 	}
 
-	scheduleInvariantsAnyEnabled := s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() ||
-		s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() ||
-		s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled()
-	if scheduleInvariantsAnyEnabled && !s.context.visibilityManager.HasStoreName(elasticsearch.PersistenceName) {
-		s.context.logger.Info("schedule-invariants scanners are enabled but advanced (Elasticsearch) visibility is not configured; skipping")
-	} else if scheduleInvariantsAnyEnabled {
+	siOpts := s.context.cfg.ScheduleInvariantsScannerOptions()
+	if siOpts.OverdueNextActionTimeEnabled || siOpts.StuckOpenEnabled || siOpts.UnknownStateEnabled {
 		scheduleActivities := scheduleinvariants.NewActivities(
 			s.context.logger,
 			s.context.metricsHandler,
-			s.context.metadataManager,
 			s.context.visibilityManager,
 			s.context.namespaceRegistry,
 			s.context.sdkClientFactory,
 			s.context.currentClusterName,
 			clock.NewRealTimeSource(),
-			s.context.cfg.ScheduleInvariantsScannerVisibilityRPS,
-			s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeTolerance,
-			s.context.cfg.ScheduleInvariantsScannerScanInterval,
-			s.context.cfg.ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier,
+			s.context.cfg.ScheduleInvariantsScannerOptions,
 		)
 
-		if s.context.cfg.ScheduleInvariantsScannerOverdueNextActionTimeEnabled() {
+		if siOpts.OverdueNextActionTimeEnabled {
 			s.wg.Add(1)
 			go s.startWorkflowWithRetry(ctx, scheduleinvariants.OverdueNextActionTimeWFStartOptions, scheduleinvariants.OverdueNextActionTimeWorkflowName)
 
@@ -257,7 +242,7 @@ func (s *Scanner) Start() error {
 			}
 		}
 
-		if s.context.cfg.ScheduleInvariantsScannerStuckOpenEnabled() {
+		if siOpts.StuckOpenEnabled {
 			s.wg.Add(1)
 			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StuckOpenWFStartOptions, scheduleinvariants.StuckOpenWorkflowName)
 
@@ -270,7 +255,7 @@ func (s *Scanner) Start() error {
 			}
 		}
 
-		if s.context.cfg.ScheduleInvariantsScannerUnknownStateEnabled() {
+		if siOpts.UnknownStateEnabled {
 			s.wg.Add(1)
 			go s.startWorkflowWithRetry(ctx, scheduleinvariants.UnknownStateWFStartOptions, scheduleinvariants.UnknownStateWorkflowName)
 
@@ -309,6 +294,9 @@ func (s *Scanner) Stop() {
 	s.wg.Wait()
 }
 
+// startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the
+// scanner shuts down. workflowType may be either a registered type-name string or the
+// workflow function itself (registered under its Go function name).
 func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...any) {
 	defer s.wg.Done()
 

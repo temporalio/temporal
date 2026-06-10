@@ -214,6 +214,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -271,6 +272,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 			task.finish(nil, false)
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -696,13 +698,6 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
-}
-
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
 }
 
 func (p *waitingPoller) minPriority() priorityKey {
