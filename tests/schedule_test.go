@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -94,7 +96,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
 	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
+	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -822,6 +824,127 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+}
+
+// testScheduledWorkflowContinueAsNewCompletion validates that the CHASM scheduler observes the
+// completion of a scheduled workflow that continues-as-new before completing. The scheduler matches
+// completions by the request ID on the Nexus completion callback it attaches at start; if that ID is
+// lost across continue-as-new the completion is silently dropped, so with a buffering overlap policy
+// the scheduler believes the action is still running and never starts the buffered actions.
+//
+// It asserts the schedule records several COMPLETED actions (the buffer only drains as completions
+// are observed) and that the completion callback is written intact into both the original and the
+// continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
+func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-can-completion")
+	wid := testcore.RandomizeStr("sched-can-completion-wf")
+	wt := testcore.RandomizeStr("sched-can-completion-wt")
+
+	// Continue-as-new once, then complete: the completion is delivered from the continued run,
+	// exercising completion-callback propagation across continue-as-new.
+	workflowFn := func(ctx workflow.Context) error {
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			return workflow.NewContinueAsNewError(ctx, wt)
+		}
+		return nil
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		// BUFFER_ALL gates each start on the previous action completing. If a completion is dropped
+		// because request ID is not carried over on continue-as-newthe scheduler believes the action
+		// is still running and the buffered actions never start, so only the first action ever completes.
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	require.NoError(t, err)
+
+	// getCompletionCallback returns the Nexus completion callback the scheduler attached, found in the
+	// run's WorkflowExecutionStarted event.
+	getCompletionCallback := func(events []*historypb.HistoryEvent) *commonpb.Callback {
+		for _, e := range events {
+			for _, cb := range e.GetWorkflowExecutionStartedEventAttributes().GetCompletionCallbacks() {
+				if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+					return cb
+				}
+			}
+		}
+		return nil
+	}
+
+	// The scheduler only starts the next buffered action after observing the previous one complete,
+	// so it records multiple COMPLETED actions only if continue-as-new completions are delivered. With
+	// the bug it stalls after the first. (StartWorkflowStatus is set solely from the completion
+	// callback the scheduler records, not from visibility.)
+	const wantCompleted = 3
+	var completedWFID string
+	s.Eventually(func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		completed := 0
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				completed++
+				completedWFID = a.GetStartWorkflowResult().GetWorkflowId()
+			}
+		}
+		return completed >= wantCompleted
+	}, 15*time.Second, 200*time.Millisecond,
+		"scheduler should record %d completed actions", wantCompleted)
+
+	// Verify the completion callback was written into both runs of a completed action: the
+	// continued-as-new run (latest) and the original run it continued from. The header (callback
+	// token) must be identical, confirming the callback was propagated intact across continue-as-new.
+	s.NotEmpty(completedWFID)
+	canHist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: completedWFID})
+	canCB := getCompletionCallback(canHist)
+	s.NotNil(canCB, "continued-as-new run must carry the completion callback")
+
+	var continuedFromRunID string
+	for _, e := range canHist {
+		if a := e.GetWorkflowExecutionStartedEventAttributes(); a != nil {
+			continuedFromRunID = a.GetContinuedExecutionRunId()
+			break
+		}
+	}
+	s.NotEmpty(continuedFromRunID, "completed action should have continued-as-new")
+
+	origHist := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: completedWFID, RunId: continuedFromRunID})
+	origCB := getCompletionCallback(origHist)
+	s.NotNil(origCB, "original run must carry the completion callback")
+	s.Equal(origCB.GetNexus().GetHeader(), canCB.GetNexus().GetHeader(), "completion callback must be propagated intact across continue-as-new")
 }
 
 func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
@@ -3799,9 +3922,10 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 		"paused-window calendar entry must not be replayed on unpause")
 }
 
-// testScheduleNextActionTimeVisibility asserts that the
-// TemporalScheduleNextActionTime search attribute is published to visibility.
-func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
+// TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
+// ScheduleNextActionTime search attribute is published to visibility and is
+// queryable through the frontend ListSchedules API.
+func TestScheduleNextActionTimeVisibility(t *testing.T) {
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
@@ -3809,9 +3933,9 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	wid := testcore.RandomizeStr("sched-next-action-wf")
 	wt := testcore.RandomizeStr("sched-next-action-wt")
 
-	// Register a no-op workflow type. We pause both schedules immediately after
-	// creation so spawned actions shouldn't run, but registering avoids worker
-	// noise if a fire slips through before pause lands.
+	// Register a no-op workflow type so a stray fire doesn't generate worker
+	// noise. The schedule is never paused: we want its next action time to stay
+	// populated so it remains queryable.
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error { return nil },
 		workflow.RegisterOptions{Name: wt},
@@ -3836,6 +3960,7 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 		}
 	}
 
+	newContext := chasmContextFactory
 	v2Ctx := newContext(s.Context())
 	createTime := time.Now()
 
@@ -3848,37 +3973,118 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	})
 	s.NoError(err)
 
-	// Pause so FutureActionTimes is stable, and so that any SA the
-	// implementation intends to publish has been committed to visibility by
-	// the time the entry comes back paused.
-	for _, p := range []struct {
-		ctx context.Context
-		sid string
-	}{{v2Ctx, v2Sid}} {
-		_, err := s.FrontendClient().PatchSchedule(p.ctx, &workflowservice.PatchScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: p.sid,
-			Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
-			Identity:   "test",
-			RequestId:  uuid.NewString(),
+	// The CHASM scheduler publishes its next action time to visibility as the
+	// ScheduleNextActionTime search attribute. The schedule fires on an hourly
+	// interval, so its next action time is always in the future; a query for
+	// ScheduleNextActionTime > createTime must therefore eventually return this
+	// schedule. (The SA is indexed/queryable but not surfaced on the list entry,
+	// so we assert via the query rather than by reading the entry's SAs.)
+	query := fmt.Sprintf(`%s > "%s"`,
+		chasmscheduler.ScheduleNextActionTimeName,
+		createTime.UTC().Format(time.RFC3339Nano),
+	)
+
+	require.Eventually(t, func() bool {
+		listResp, err := s.FrontendClient().ListSchedules(v2Ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 100,
+			Query:           query,
 		})
-		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == v2Sid {
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 1*time.Second,
+		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
+		v2Sid, query)
+}
+
+// TestScheduleCountsVisibility asserts that the CHASM scheduler's
+// ScheduleRunningWorkflowCount and ScheduleBufferedStartsCount search attributes
+// are published to visibility and queryable through the frontend ListSchedules
+// API. A schedule that fires every second under BUFFER_ONE, started with a
+// workflow that blocks, settles into one running workflow with one fire buffered
+// behind it. The counts aren't surfaced on the list entry, so we assert via the
+// query rather than by reading the entry's SAs.
+func TestScheduleCountsVisibility(t *testing.T) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	newContext := chasmContextFactory
+
+	sid := testcore.RandomizeStr("sched-counts-v2")
+	wid := testcore.RandomizeStr("sched-counts-wf")
+	wt := testcore.RandomizeStr("sched-counts-wt")
+
+	// A workflow that holds open so a fire stays running while later fires buffer.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			return workflow.Sleep(ctx, time.Hour)
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+		},
 	}
 
-	paused := func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetPaused()
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// matchesQuery reports whether the schedule is returned when filtering on the
+	// given search-attribute query.
+	matchesQuery := func(query string) bool {
+		listResp, listErr := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 5,
+			Query:           query,
+		})
+		if listErr != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == sid {
+				return true
+			}
+		}
+		return false
 	}
 
-	// V2: TemporalScheduleNextActionTime must be present and decode to a
-	// timestamp at or after the create time.
-	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
-	s.NotNil(v2Entry)
-	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
+	// Starting the workflow and buffering the next fire takes a few seconds on top
+	// of visibility propagation, so allow 30s for each count to become queryable.
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
 
-	var v2Next time.Time
-	s.NoError(payload.Decode(v2Pl, &v2Next))
-	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
-	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
-	s.True(v2Next.After(createTime.Add(-time.Second)),
-		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
 }

@@ -74,6 +74,7 @@ type (
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
+		PartitionScalerFactory        PartitionScalerFactory
 	}
 )
 
@@ -117,6 +118,7 @@ func NewHandler(
 			params.RateLimiter,
 			params.Serializer,
 			params.TaskHookFactories,
+			params.PartitionScalerFactory,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,

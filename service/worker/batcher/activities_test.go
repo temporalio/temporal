@@ -49,6 +49,45 @@ func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
 
+func (s *activitiesSuite) TestTaskTimeoutContext() {
+	s.Run("no parent deadline applies default timeout", func() {
+		ctx, cancel := taskTimeoutContext(context.Background())
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("longer parent deadline is shortened to default timeout", func() {
+		parent, parentCancel := context.WithTimeout(context.Background(), defaultTaskTimeout+time.Hour)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("shorter parent deadline is preserved", func() {
+		shorter := defaultTaskTimeout - 5*time.Second
+		parent, parentCancel := context.WithTimeout(context.Background(), shorter)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		// The parent context is returned unchanged so we never extend an
+		// existing, shorter deadline.
+		s.Equal(parent, ctx)
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(shorter, time.Until(deadline), float64(time.Second))
+	})
+}
+
 const NumTotalEvents = 10
 
 // Pattern contains either c or f representing completed or failed task.
@@ -451,7 +490,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	// Expect RefreshWorkflowTasks to be called with correct parameters
 	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -497,7 +536,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	expectedErr := errors.New("refresh failed")
 	// Use gomock.Any() for context since it's modified with CallerTypePreemptable header
@@ -617,7 +656,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	taskCh := make(chan task, 1)
 	respCh := make(chan taskResponse, 1)
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	// The signal must be executed with the worker's trusted namespace, not the user-supplied one.
 	s.mockFrontendClient.EXPECT().
@@ -657,7 +696,7 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 		},
 	}
 
-	limiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 })
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)

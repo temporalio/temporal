@@ -90,6 +90,46 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateMultiMax:         1.0,
 }
 
+// ScheduleInvariantsScannerParams configures the schedule-invariants scanners. The three
+// invariant checks are independently toggleable but otherwise share their timing and
+// rate-limiting knobs, so they're grouped into a single struct-valued dynamic config.
+type ScheduleInvariantsScannerParams struct {
+	// OverdueNextActionTimeEnabled enables flagging schedules whose TemporalScheduleNextActionTime
+	// lies further in the past than OverdueNextActionTimeTolerance.
+	OverdueNextActionTimeEnabled bool
+	// StuckOpenEnabled enables flagging schedules that appear stuck open long after their CloseTime.
+	StuckOpenEnabled bool
+	// UnknownStateEnabled enables flagging running, unpaused schedules with no
+	// TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known
+	// to be backfilled on legacy schedules.
+	UnknownStateEnabled bool
+	// OverdueNextActionTimeTolerance is how far in the past TemporalScheduleNextActionTime must be
+	// before the schedule is flagged.
+	OverdueNextActionTimeTolerance time.Duration
+	// OverdueNextActionTimeMaxChecksPerNamespace bounds how many overdue schedules the
+	// overdue scanner will DescribeSchedule per namespace per scan pass. Schedules beyond
+	// the cap are left unchecked for that pass, so a large backlog can't hammer the frontend.
+	OverdueNextActionTimeMaxChecksPerNamespace int
+	// VisibilityRPS rate-limits visibility calls from the schedule-invariants scanner.
+	VisibilityRPS float64
+	// ScanInterval is how often each schedule-invariants scanner activity kicks off a fresh scan pass.
+	ScanInterval time.Duration
+	// StuckOpenIdleTimeBufferMultiplier multiplies the configured schedule IdleTime to set how far
+	// past a schedule's idle-close deadline it must be before the stuck-open scanner flags it.
+	StuckOpenIdleTimeBufferMultiplier int
+}
+
+var DefaultScheduleInvariantsScannerParams = ScheduleInvariantsScannerParams{
+	OverdueNextActionTimeEnabled:               false,
+	StuckOpenEnabled:                           false,
+	UnknownStateEnabled:                        false,
+	OverdueNextActionTimeTolerance:             10 * time.Minute,
+	OverdueNextActionTimeMaxChecksPerNamespace: 100,
+	VisibilityRPS:                              1.0,
+	ScanInterval:                               15 * time.Minute,
+	StuckOpenIdleTimeBufferMultiplier:          2,
+}
+
 type CircuitBreakerSettings struct {
 	// MaxRequests: Maximum number of requests allowed to pass through when
 	// it is in half-open state (default 1).
@@ -127,4 +167,22 @@ type PartitionScaleAllowedDrift struct {
 	// Allowing more means fewer retries, allowing less means more accurate load balancing.
 	Delta int32
 	Ratio float32
+}
+
+type PartitionScaleManagerSettings struct {
+	// MaxRate limits scale change frequency.
+	MaxRate float32
+	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
+	// reload.)
+	BatchSize int32
+	// BackgroundInterval is the interval for background work:
+	// - send signals to the scaler even if not a full batch of tasks has been received yet
+	// - check drained partition state
+	BackgroundInterval time.Duration
+	// DrainBufferTime is how long to wait until after scaling down before we can consider
+	// draining queues. It's needed because there's a tiny window where tasks may be written
+	// after a scale down, since draining state is only checked at the start of an RPC. This
+	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
+	// that query/nexus tasks will be processed without interruption even after scale down.
+	DrainBufferTime time.Duration
 }

@@ -414,6 +414,7 @@ func (wh *WorkflowHandler) Start() {
 
 			if ns.IsGlobalNamespace() &&
 				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+				//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
 				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
@@ -5051,10 +5052,22 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
 
+		// On the CHASM path the scheduler publishes search attributes (e.g.
+		// ScheduleNextActionTime) registered on the Scheduler archetype rather
+		// than as namespace search attributes. Supply that mapper so queries can
+		// filter on them; without it the validator rejects them as unknown.
+		var chasmMapper *chasm.VisibilitySearchAttributesMapper
+		if chasmEnabled {
+			if rc, ok := wh.registry.ComponentByID(chasm.SchedulerArchetypeID); ok {
+				chasmMapper = rc.SearchAttributesMapper()
+			}
+		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
+			chasmMapper,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 		); err != nil {

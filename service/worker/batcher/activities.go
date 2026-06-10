@@ -39,17 +39,24 @@ import (
 const (
 	pageSize                 = 1000
 	statusRunningQueryFilter = "ExecutionStatus='Running'"
+
+	// defaultTaskTimeout bounds how long processing a single task may take so
+	// that one hung operation cannot block the task processor forever.
+	defaultTaskTimeout = 30 * time.Second
 )
 
 var (
 	errNamespaceMismatch = errors.New("namespace mismatch")
+
+	batchQuotaRequest = quotas.Request{
+		Token: 1,
+	}
 )
 
 // batchProcessorConfig holds the configuration for batch processing
 type batchProcessorConfig struct {
 	namespace         string
 	adjustedQuery     string
-	rps               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -60,7 +67,7 @@ type batchWorkerProcessor func(
 	ctx context.Context,
 	taskCh chan task,
 	respCh chan taskResponse,
-	rateLimiter quotas.RateLimiter,
+	rateLimiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -158,14 +165,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
 	startWorkerProcessor batchWorkerProcessor,
+	rateLimiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	hbd HeartBeatDetails,
 ) (HeartBeatDetails, error) {
-	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-		return float64(config.rps(config.namespace))
-	})
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
 
@@ -319,6 +324,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
 
+	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
+	rateLimiter := quotas.RequestRateLimiter(a.AdminBatcherRateLimiter)
+
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
@@ -327,6 +335,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
+		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			return float64(a.rps(ns))
+		}))
 	}
 
 	if startOver {
@@ -353,7 +364,6 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	config := batchProcessorConfig{
 		namespace:         ns,
 		adjustedQuery:     visibilityQuery,
-		rps:               a.rps,
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
 		initialExecutions: executions,
@@ -364,7 +374,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		ctx context.Context,
 		taskCh chan task,
 		respCh chan taskResponse,
-		rateLimiter quotas.RateLimiter,
+		rateLimiter quotas.RequestRateLimiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
@@ -373,7 +383,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
-	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
+	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
 }
 
 func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
@@ -413,14 +423,24 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 	return concurrency
 }
 
-// nolint:revive,cognitive-complexity
+// taskTimeoutContext derives a context bounded by defaultTaskTimeout for
+// processing a single task. If the parent context already has a deadline that
+// is sooner than defaultTaskTimeout, the parent context is returned unchanged
+// (with a no-op cancel) so we never extend an existing, shorter deadline.
+func taskTimeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= defaultTaskTimeout {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, defaultTaskTimeout)
+}
+
 func (a *activities) startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
 	taskCh chan task,
 	respCh chan taskResponse,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
@@ -434,186 +454,211 @@ func (a *activities) startTaskProcessor(
 			if isDone(ctx) {
 				return
 			}
-			var err error
 
 			if task.executionInfo == nil {
 				continue
 			}
 
-			// Handle admin batch operations
-			if batchOperation.AdminRequest != nil {
-				err = a.processAdminTask(ctx, batchOperation, task, limiter)
-				a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
-				continue
-			}
-
-			switch operation := batchOperation.Request.Operation.(type) {
-			case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						return sdkClient.TerminateWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId, batchOperation.Request.Reason)
-					})
-			case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						return sdkClient.CancelWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId)
-					})
-			case *workflowservice.StartBatchOperationRequest_SignalOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						_, err = frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Namespace:         namespace,
-							WorkflowExecution: executionInfo.Execution,
-							SignalName:        operation.SignalOperation.GetSignal(),
-							Input:             operation.SignalOperation.GetInput(),
-							Identity:          operation.SignalOperation.GetIdentity(),
-						})
-						return err
-					})
-			case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-							Namespace:         namespace,
-							WorkflowExecution: executionInfo.Execution,
-						})
-						return err
-					})
-			case *workflowservice.StartBatchOperationRequest_ResetOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						var eventId int64
-						var err error
-						//nolint:staticcheck // SA1019: worker versioning v0.31
-						var resetReapplyType enumspb.ResetReapplyType
-						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
-						if operation.ResetOperation.Options != nil {
-							// Using ResetOptions
-							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
-							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
-							//nolint:staticcheck // SA1019: worker versioning v0.31
-							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
-							//nolint:staticcheck // SA1019: worker versioning v0.31
-							resetReapplyExcludeTypes = operation.ResetOperation.Options.ResetReapplyExcludeTypes
-						} else {
-							// Old fields
-							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
-							//nolint:staticcheck // SA1019: worker versioning v0.31
-							resetReapplyType = operation.ResetOperation.ResetReapplyType
-						}
-						if err != nil {
-							return err
-						}
-						_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-							Namespace:                 namespace,
-							WorkflowExecution:         executionInfo.Execution,
-							Reason:                    batchOperation.Request.Reason,
-							RequestId:                 uuid.NewString(),
-							WorkflowTaskFinishEventId: eventId,
-							ResetReapplyType:          resetReapplyType,
-							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
-							PostResetOperations:       operation.ResetOperation.PostResetOperations,
-							Identity:                  operation.ResetOperation.Identity,
-						})
-						return err
-					})
-			case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						unpauseRequest := &workflowservice.UnpauseActivityRequest{
-							Namespace:      namespace,
-							Execution:      executionInfo.Execution,
-							Identity:       operation.UnpauseActivitiesOperation.Identity,
-							ResetAttempts:  operation.UnpauseActivitiesOperation.ResetAttempts,
-							ResetHeartbeat: operation.UnpauseActivitiesOperation.ResetHeartbeat,
-							Jitter:         operation.UnpauseActivitiesOperation.Jitter,
-						}
-
-						switch ao := operation.UnpauseActivitiesOperation.GetActivity().(type) {
-						case *batchpb.BatchOperationUnpauseActivities_Type:
-							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_Type{
-								Type: ao.Type,
-							}
-						case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
-						default:
-							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity()))
-						}
-
-						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
-						return err
-					})
-
-			case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						var err error
-						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-							Namespace:                namespace,
-							WorkflowExecution:        executionInfo.Execution,
-							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
-							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
-							Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
-						})
-						return err
-					})
-			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						resetRequest := &workflowservice.ResetActivityRequest{
-							Namespace:              namespace,
-							Execution:              executionInfo.Execution,
-							Identity:               operation.ResetActivitiesOperation.Identity,
-							ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
-							Jitter:                 operation.ResetActivitiesOperation.Jitter,
-							KeepPaused:             operation.ResetActivitiesOperation.KeepPaused,
-							RestoreOriginalOptions: operation.ResetActivitiesOperation.RestoreOriginalOptions,
-						}
-
-						switch ao := operation.ResetActivitiesOperation.GetActivity().(type) {
-						case *batchpb.BatchOperationResetActivities_Type:
-							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: ao.Type}
-						case *batchpb.BatchOperationResetActivities_MatchAll:
-							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
-						default:
-							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity()))
-						}
-
-						_, err = frontendClient.ResetActivity(ctx, resetRequest)
-						return err
-					})
-			case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-				err = processTask(ctx, limiter, task,
-					func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-							Namespace:       namespace,
-							Execution:       executionInfo.Execution,
-							UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
-							RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
-							Identity:        operation.UpdateActivityOptionsOperation.Identity,
-						}
-
-						switch ao := operation.UpdateActivityOptionsOperation.GetActivity().(type) {
-						case *batchpb.BatchOperationUpdateActivityOptions_Type:
-							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: ao.Type}
-						case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
-							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
-						default:
-							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UpdateActivityOptionsOperation.GetActivity()))
-						}
-
-						updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
-						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
-						return err
-					})
-			default:
-				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
-			}
-			a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
+			a.processSingleTask(ctx, batchOperation, namespace, task, taskCh, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
 		}
 	}
+}
+
+// processSingleTask processes a single batch task, bounding its execution with a
+// per-task timeout so that one hung operation cannot block the task processor.
+// nolint:revive,cognitive-complexity
+func (a *activities) processSingleTask(
+	ctx context.Context,
+	batchOperation *batchspb.BatchOperationInput,
+	namespace string,
+	task task,
+	taskCh chan task,
+	respCh chan taskResponse,
+	limiter quotas.RequestRateLimiter,
+	sdkClient sdkclient.Client,
+	frontendClient workflowservice.WorkflowServiceClient,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) {
+	var err error
+
+	// Bound the processing of each individual task so a single hung operation
+	// cannot block the processor indefinitely.
+	ctx, cancel := taskTimeoutContext(ctx)
+	defer cancel()
+
+	// Handle admin batch operations
+	if batchOperation.AdminRequest != nil {
+		err = a.processAdminTask(ctx, batchOperation, task, limiter)
+		a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
+		return
+	}
+
+	switch operation := batchOperation.Request.Operation.(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				return sdkClient.TerminateWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId, batchOperation.Request.Reason)
+			})
+	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				return sdkClient.CancelWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId)
+			})
+	case *workflowservice.StartBatchOperationRequest_SignalOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err = frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					SignalName:        operation.SignalOperation.GetSignal(),
+					Input:             operation.SignalOperation.GetInput(),
+					Identity:          operation.SignalOperation.GetIdentity(),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				var eventID int64
+				var err error
+				//nolint:staticcheck // SA1019: worker versioning v0.31
+				var resetReapplyType enumspb.ResetReapplyType
+				var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
+				if operation.ResetOperation.Options != nil {
+					// Using ResetOptions
+					// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
+					//nolint:staticcheck // SA1019: worker versioning v0.31
+					eventID, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
+					//nolint:staticcheck // SA1019: worker versioning v0.31
+					resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
+					//nolint:staticcheck // SA1019: worker versioning v0.31
+					resetReapplyExcludeTypes = operation.ResetOperation.Options.ResetReapplyExcludeTypes
+				} else {
+					// Old fields
+					//nolint:staticcheck // SA1019: worker versioning v0.31
+					eventID, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
+					//nolint:staticcheck // SA1019: worker versioning v0.31
+					resetReapplyType = operation.ResetOperation.ResetReapplyType
+				}
+				if err != nil {
+					return err
+				}
+				_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+					Namespace:                 namespace,
+					WorkflowExecution:         executionInfo.Execution,
+					Reason:                    batchOperation.Request.Reason,
+					RequestId:                 uuid.NewString(),
+					WorkflowTaskFinishEventId: eventID,
+					ResetReapplyType:          resetReapplyType,
+					ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
+					PostResetOperations:       operation.ResetOperation.PostResetOperations,
+					Identity:                  operation.ResetOperation.Identity,
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				unpauseRequest := &workflowservice.UnpauseActivityRequest{
+					Namespace:      namespace,
+					Execution:      executionInfo.Execution,
+					Identity:       operation.UnpauseActivitiesOperation.Identity,
+					ResetAttempts:  operation.UnpauseActivitiesOperation.ResetAttempts,
+					ResetHeartbeat: operation.UnpauseActivitiesOperation.ResetHeartbeat,
+					Jitter:         operation.UnpauseActivitiesOperation.Jitter,
+				}
+
+				switch ao := operation.UnpauseActivitiesOperation.GetActivity().(type) {
+				case *batchpb.BatchOperationUnpauseActivities_Type:
+					unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_Type{
+						Type: ao.Type,
+					}
+				case *batchpb.BatchOperationUnpauseActivities_MatchAll:
+					unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
+				default:
+					return fmt.Errorf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity())
+				}
+
+				_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
+				return err
+			})
+
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				var err error
+				_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+					Namespace:                namespace,
+					WorkflowExecution:        executionInfo.Execution,
+					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
+					Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				resetRequest := &workflowservice.ResetActivityRequest{
+					Namespace:              namespace,
+					Execution:              executionInfo.Execution,
+					Identity:               operation.ResetActivitiesOperation.Identity,
+					ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
+					Jitter:                 operation.ResetActivitiesOperation.Jitter,
+					KeepPaused:             operation.ResetActivitiesOperation.KeepPaused,
+					RestoreOriginalOptions: operation.ResetActivitiesOperation.RestoreOriginalOptions,
+				}
+
+				switch ao := operation.ResetActivitiesOperation.GetActivity().(type) {
+				case *batchpb.BatchOperationResetActivities_Type:
+					resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: ao.Type}
+				case *batchpb.BatchOperationResetActivities_MatchAll:
+					resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
+				default:
+					return fmt.Errorf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity())
+				}
+
+				_, err = frontendClient.ResetActivity(ctx, resetRequest)
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+					Namespace:       namespace,
+					Execution:       executionInfo.Execution,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
+					RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
+					Identity:        operation.UpdateActivityOptionsOperation.Identity,
+				}
+
+				switch ao := operation.UpdateActivityOptionsOperation.GetActivity().(type) {
+				case *batchpb.BatchOperationUpdateActivityOptions_Type:
+					updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: ao.Type}
+				case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
+					updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
+				default:
+					return fmt.Errorf("unknown activity type: %v", operation.UpdateActivityOptionsOperation.GetActivity())
+				}
+
+				updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
+				_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
+				return err
+			})
+	default:
+		err = fmt.Errorf("unknown batch type: %v", batchOperation.BatchType)
+	}
+	a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
 }
 
 // isNonRetryableError determines if an error should not be retried based on the operation type
@@ -673,7 +718,7 @@ func (a *activities) processAdminTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 ) error {
 	adminReq := batchOperation.AdminRequest
 	switch adminReq.Operation.(type) {
@@ -701,11 +746,11 @@ func (a *activities) processAdminTask(
 
 func processTask(
 	ctx context.Context,
-	limiter quotas.RateLimiter,
+	limiter quotas.RequestRateLimiter,
 	task task,
 	procFn func(*workflowpb.WorkflowExecutionInfo) error,
 ) error {
-	err := limiter.Wait(ctx)
+	err := limiter.Wait(ctx, batchQuotaRequest)
 	if err != nil {
 		return err
 	}
