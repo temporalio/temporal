@@ -121,17 +121,14 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if opts == nil {
 		return "", fmt.Errorf("no routing directive specified on %s", m.Desc.FullName())
 	}
-	if opts.Random && (opts.NamespaceId != "" || opts.BusinessId != "") {
+	if opts.Random && (opts.NamespaceId != "" || len(opts.BusinessId) != 0) {
 		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
 	if opts.Random {
 		return "shardID := int32(rand.Intn(int(c.numShards)) + 1)", nil
 	}
-	if opts.BusinessId == "" {
+	if len(opts.BusinessId) == 0 {
 		return "", fmt.Errorf("business_id directive empty on %s", m.Desc.FullName())
-	}
-	if opts.Random {
-		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
 
 	namespaceIDField := opts.NamespaceId
@@ -143,12 +140,28 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to resolve namespace_id field path %q: %w", namespaceIDField, err)
 	}
-	businessIDFieldGetter, err := goFieldPath(m, opts.BusinessId)
+
+	primaryFieldGetter, err := goFieldPath(m, opts.BusinessId[0])
 	if err != nil {
-		return "", fmt.Errorf("unable to resolve business_id field path %q: %w", opts.BusinessId, err)
+		return "", fmt.Errorf("unable to resolve business_id field path %q: %w", opts.BusinessId[0], err)
 	}
 
-	return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, businessIDFieldGetter), nil
+	if len(opts.BusinessId) == 1 {
+		return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, primaryFieldGetter), nil
+	}
+
+	// Multiple business_id fields: use the first non-empty value as the routing key.
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "businessID := request%s\n", primaryFieldGetter)
+	for _, bid := range opts.BusinessId[1:] {
+		fallbackGetter, err := goFieldPath(m, bid)
+		if err != nil {
+			return "", fmt.Errorf("unable to resolve business_id field path %q: %w", bid, err)
+		}
+		fmt.Fprintf(&sb, "if businessID == \"\" { businessID = request%s }\n", fallbackGetter)
+	}
+	fmt.Fprintf(&sb, "shardID := common.WorkflowIDToHistoryShard(request%s, businessID, c.numShards)", namespaceIDFieldGetter)
+	return sb.String(), nil
 }
 
 func goFieldPath(m *protogen.Method, path string) (string, error) {

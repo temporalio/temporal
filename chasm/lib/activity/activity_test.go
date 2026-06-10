@@ -12,6 +12,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -249,6 +251,110 @@ func TestActivityTerminate(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 			}
+		})
+	}
+}
+
+func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	const (
+		namespaceID = "test-namespace-id"
+		activityID  = "test-activity-id"
+		runID       = "test-run-id"
+		attempt     = int32(1)
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name            string
+		status          activitypb.ActivityExecutionStatus
+		resetKeepPaused bool
+		wantPaused      bool
+		wantReset       bool
+		wantCancel      bool
+	}{
+		{
+			name:   "no pause or reset returns zero flags",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		{
+			// Regression guard: reset must propagate to the next heartbeat response
+			// immediately so the worker can abort the in-flight attempt; previously
+			// reset was withheld until the next retry.
+			name:      "RESET_REQUESTED status propagates ActivityReset on next heartbeat",
+			status:    activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			wantReset: true,
+		},
+		{
+			name:       "PAUSE_REQUESTED status propagates ActivityPaused",
+			status:     activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			wantPaused: true,
+		},
+		{
+			// A reset issued with keepPaused on a paused activity sets ResetKeepPaused; the worker
+			// must be told it is both paused and being reset.
+			name:            "reset with keep-paused propagates both paused and reset",
+			status:          activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			resetKeepPaused: true,
+			wantPaused:      true,
+			wantReset:       true,
+		},
+		{
+			name:       "cancel requested status propagates CancelRequested",
+			status:     activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			wantCancel: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return testTime },
+					HandleExecutionKey: func() chasm.ExecutionKey {
+						return chasm.ExecutionKey{
+							NamespaceID: namespaceID,
+							BusinessID:  activityID,
+							RunID:       runID,
+						}
+					},
+				},
+			}
+
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:           tc.status,
+					HeartbeatTimeout: durationpb.New(0),
+					ResetKeepPaused:  tc.resetKeepPaused,
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
+			}
+
+			token := &tokenspb.Task{
+				NamespaceId:  namespaceID,
+				Attempt:      attempt,
+				ComponentRef: componentRef,
+			}
+			req := &historyservice.RecordActivityTaskHeartbeatRequest{
+				NamespaceId:      namespaceID,
+				HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{},
+			}
+
+			resp, err := act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token:   token,
+				Request: req,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantPaused, resp.ActivityPaused, "ActivityPaused")
+			require.Equal(t, tc.wantReset, resp.ActivityReset, "ActivityReset")
+			require.Equal(t, tc.wantCancel, resp.CancelRequested, "CancelRequested")
 		})
 	}
 }
