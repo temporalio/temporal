@@ -50,9 +50,9 @@ func (s *WorkflowResetWithChildSuite) newTestEnv(opts ...testcore.TestOption) *t
 	env := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowWithChildren)
 	env.SdkWorker().RegisterWorkflow(s.workflowWithWaitingChild)
-	env.SdkWorker().RegisterWorkflow(child)
+	env.SdkWorker().RegisterWorkflow(s.child)
 	env.SdkWorker().RegisterWorkflow(s.waitingChild)
-	env.SdkWorker().RegisterActivity(simpleActivity)
+	env.SdkWorker().RegisterActivity(s.simpleActivity)
 	return env
 }
 
@@ -720,7 +720,7 @@ func (s *WorkflowResetWithChildSuite) workflowWithChildren(ctx workflow.Context,
 	}
 	childCtx := workflow.WithChildOptions(ctx, opt)
 	var result string
-	err := workflow.ExecuteChildWorkflow(childCtx, child, "hello child-1").Get(ctx, &result)
+	err := workflow.ExecuteChildWorkflow(childCtx, s.child, "hello child-1").Get(ctx, &result)
 	if err != nil {
 		return "", err
 	}
@@ -730,7 +730,7 @@ func (s *WorkflowResetWithChildSuite) workflowWithChildren(ctx workflow.Context,
 	}
 	childCtx = workflow.WithChildOptions(ctx, opt)
 	var result2 string
-	err = workflow.ExecuteChildWorkflow(childCtx, child, "hello child-2").Get(ctx, &result2)
+	err = workflow.ExecuteChildWorkflow(childCtx, s.child, "hello child-2").Get(ctx, &result2)
 	if err != nil {
 		return "", err
 	}
@@ -740,7 +740,7 @@ func (s *WorkflowResetWithChildSuite) workflowWithChildren(ctx workflow.Context,
 	}
 	childCtx = workflow.WithChildOptions(ctx, opt)
 	var result3 string
-	err = workflow.ExecuteChildWorkflow(childCtx, child, "hello child-2").Get(ctx, &result3)
+	err = workflow.ExecuteChildWorkflow(childCtx, s.child, "hello child-2").Get(ctx, &result3)
 	if err != nil {
 		return "", err
 	}
@@ -767,10 +767,10 @@ func (s *WorkflowResetWithChildSuite) workflowWithWaitingChild(ctx workflow.Cont
 	return result, err
 }
 
-func child(ctx workflow.Context, arg string, mustFail bool) (string, error) {
+func (s *WorkflowResetWithChildSuite) child(ctx workflow.Context, arg string, mustFail bool) (string, error) {
 	var result string
 	ctx = workflow.WithActivityOptions(ctx, defaultActivityOptions())
-	err := workflow.ExecuteActivity(ctx, simpleActivity, arg).Get(ctx, &result)
+	err := workflow.ExecuteActivity(ctx, s.simpleActivity, arg).Get(ctx, &result)
 	return result, err
 }
 
@@ -881,7 +881,7 @@ func (s *WorkflowResetWithChildSuite) verifyReusePolicyIsSetForAllChild(env *tes
 	}
 }
 
-func simpleActivity(ctx context.Context) error {
+func (s *WorkflowResetWithChildSuite) simpleActivity(ctx context.Context) error {
 	return nil
 }
 
