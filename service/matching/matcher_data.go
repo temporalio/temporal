@@ -1,12 +1,13 @@
 package matching
 
 import (
+	"cmp"
 	"container/heap"
 	"context"
-	"slices"
 	"sync"
 	"time"
 
+	"github.com/tidwall/btype"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -115,120 +116,82 @@ func (p *pollerPQ) Pop() any {
 	return poller
 }
 
-type taskPQ struct {
-	heap []*internalTask
+// taskBTree is a priority-ordered collection of tasks backed by a B-tree.
+type taskBTree struct {
+	tree btype.Table[*internalTask]
 
 	// ages holds task create time for tasks from merged local backlogs (not forwarded).
 	// note that matcherData may get tasks from multiple versioned backlogs due to
 	// versioning redirection.
 	ages backlogAgeTracker
+
+	seq int64 // insertion counter; see btreeSeq on internalTask
 }
 
-func (t *taskPQ) Add(task *internalTask) {
-	heap.Push(t, task)
-}
-
-func (t *taskPQ) Remove(task *internalTask) {
-	heap.Remove(t, task.matchHeapIndex)
-}
-
-// implements heap.Interface
-func (t *taskPQ) Len() int {
-	return len(t.heap)
-}
-
-// implements heap.Interface, do not call directly
-func (t *taskPQ) Less(i int, j int) bool {
-	// Overall priority key will eventually look something like:
-	// - ready time: to sort all ready tasks ahead of others, or else find the earliest ready task
-	// - effective priority key: to sort tasks by priority (including poll forwarder flag)
-	// - fairness key pass: to arrange tasks fairly by key
-	// - ordering key: to sort tasks by ordering key
-	// - task id: last resort comparison
-
-	a, b := t.heap[i], t.heap[j]
-
-	// TODO(pri): ready time is not task-specific yet, we only have whole-queue, so we don't
-	// need to consider this here yet.
-	// // ready time
-	// aready, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
-	// if aready < bready {
-	// 	return true
-	// } else if aready > bready {
-	// 	return false
-	// }
-
-	// use effective priority
-	if a.effectivePriority < b.effectivePriority {
-		return true
-	} else if a.effectivePriority > b.effectivePriority {
-		return false
+func taskBTreeCompare(a, b *internalTask) int {
+	if c := cmp.Compare(a.effectivePriority, b.effectivePriority); c != 0 {
+		return c
 	}
-
-	// Note: sync match tasks have a fixed negative id.
-	// Query tasks will get 0 here.
-	var alevel, blevel fairLevel
-	if a.event != nil && a.event.AllocatedTaskInfo != nil {
-		alevel = fairLevelFromAllocatedTask(a.event.AllocatedTaskInfo)
+	if a.btreeFairLevel.less(b.btreeFairLevel) {
+		return -1
 	}
-	if b.event != nil && b.event.AllocatedTaskInfo != nil {
-		blevel = fairLevelFromAllocatedTask(b.event.AllocatedTaskInfo)
+	if b.btreeFairLevel.less(a.btreeFairLevel) {
+		return 1
 	}
-	return alevel.less(blevel)
+	return cmp.Compare(a.btreeSeq, b.btreeSeq)
 }
 
-// implements heap.Interface, do not call directly
-func (t *taskPQ) Swap(i int, j int) {
-	t.heap[i], t.heap[j] = t.heap[j], t.heap[i]
-	t.heap[i].matchHeapIndex = i
-	t.heap[j].matchHeapIndex = j
+func newTaskBTree() taskBTree {
+	return taskBTree{
+		tree: *btype.NewTableOptions(btype.TableOptions[*internalTask]{
+			Compare: taskBTreeCompare,
+		}),
+		ages: newBacklogAgeTracker(),
+	}
 }
 
-// implements heap.Interface, do not call directly
-func (t *taskPQ) Push(x any) {
-	task := x.(*internalTask) // nolint:revive
-	task.matchHeapIndex = len(t.heap)
-	t.heap = append(t.heap, task)
-
+func (b *taskBTree) Add(task *internalTask) {
+	b.seq++
+	task.btreeSeq = b.seq
+	if task.event != nil {
+		task.btreeFairLevel = fairLevel{pass: task.event.GetTaskPass(), id: task.event.GetTaskId()}
+	}
+	task.matchHeapIndex = 0 // non-negative: signals "in queue"
+	b.tree.Insert(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-		t.ages.record(task.event.Data.CreateTime, 1)
+		b.ages.record(task.event.Data.CreateTime, 1)
 	}
 }
 
-// implements heap.Interface, do not call directly
-func (t *taskPQ) Pop() any {
-	last := len(t.heap) - 1
-	task := t.heap[last]
-	t.heap = t.heap[:last]
+func (b *taskBTree) Remove(task *internalTask) {
+	b.tree.Delete(task)
 	task.matchHeapIndex = invalidHeapIndex
-
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-		t.ages.record(task.event.Data.CreateTime, -1)
+		b.ages.record(task.event.Data.CreateTime, -1)
 	}
-
-	return task
 }
 
-// Calls pred on each task. If it returns true, call post on the task and remove it
-// from the queue, otherwise keep it.
-// pred and post must not make any other calls on taskPQ until ForEachTask returns!
-func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
-	t.heap = slices.DeleteFunc(t.heap, func(task *internalTask) bool {
-		if task.isPollForwarder() || !pred(task) {
-			return false
+func (b *taskBTree) Len() int {
+	return b.tree.Len()
+}
+
+// ForEachTask calls pred on each non-forwarder task. If pred returns true, calls post
+// and removes the task. pred and post must not call back into taskBTree.
+func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
+	var toRemove []*internalTask
+	for task := range b.tree.All() {
+		if !task.isPollForwarder() && pred(task) {
+			toRemove = append(toRemove, task)
 		}
-		task.matchHeapIndex = invalidHeapIndex - 1 // maintain heap/index invariant
+	}
+	for _, task := range toRemove {
+		b.tree.Delete(task)
+		task.matchHeapIndex = invalidHeapIndex
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-			t.ages.record(task.event.Data.CreateTime, -1)
+			b.ages.record(task.event.Data.CreateTime, -1)
 		}
 		post(task)
-		return true
-	})
-	// re-establish heap
-	for i, task := range t.heap {
-		task.matchHeapIndex = i
 	}
-	heap.Init(t)
 }
 
 type matcherData struct {
@@ -246,7 +209,7 @@ type matcherData struct {
 	// waiting pollers and tasks
 	// invariant: all pollers and tasks in these data structures have matchResult == nil
 	pollers pollerPQ
-	tasks   taskPQ
+	tasks   taskBTree
 
 	lastPoller time.Time // most recent poll start time
 
@@ -260,9 +223,7 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		timeSource:       timeSource,
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
-		tasks: taskPQ{
-			ages: newBacklogAgeTracker(),
-		},
+		tasks:            newTaskBTree(),
 	}
 }
 
@@ -422,7 +383,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	reprocess := make([]*internalTask, 0, len(d.tasks.heap))
+	reprocess := make([]*internalTask, 0, d.tasks.Len())
 	d.tasks.ForEachTask(
 		pred,
 		func(task *internalTask) {
@@ -435,42 +396,50 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
+// matchPollerForTask returns the first poller compatible with task, or nil.
+// call with lock held
+func (d *matcherData) matchPollerForTask(task *internalTask, allowForwarding bool) *waitingPoller {
+	for _, poller := range d.pollers.heap {
+		if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
+			// query-only poll only matches with query (but can match poll forwarder)
+			continue
+		}
+		if task.isPollForwarder() && poller.forwardCtx == nil {
+			// poll forwarder only matches polls that have a forwardCtx
+			continue
+		}
+		if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
+			// task forwarder only matches when forwarding is allowed
+			continue
+		}
+		if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
+			// validator (root only) only matches local backlog tasks
+			continue
+		}
+		if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
+			// Note the ">" above: "min" priority is a numeric max.
+			// Also note: this condition will be false for draining tasks since we artifically boost
+			// their priority above "1". that's inaccurate but it's just a temporary situation.
+			continue
+		}
+		return poller
+	}
+	return nil
+}
+
 // findMatch should return the highest priority task+poller match even if the per-task rate
 // limit doesn't allow the task to be matched yet.
 // call with lock held
-// nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
-	// TODO(pri): optimize so it's not O(d*n) worst case
-	// TODO(pri): this iterates over heap as slice, which isn't quite correct, but okay for now
-	for _, task := range d.tasks.heap {
+	for task := range d.tasks.tree.All() {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
 			continue
 		}
-
-		for _, poller := range d.pollers.heap {
-			// can't match cases:
-			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
-				// query-only poll only matches with query (but can match poll forwarder)
-				continue
-			} else if task.isPollForwarder() && poller.forwardCtx == nil {
-				// poll forwarder only matches polls that have a forwardCtx
-				continue
-			} else if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
-				// task forwarder only matches when forwarding is allowed
-				continue
-			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-				// validator (root only) only matches local backlog tasks
-				continue
-			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
-				// Note the ">" above: "min" priority is a numeric max.
-				// Also note: this condition will be false for draining tasks since we artifically boost
-				// their priority above "1". that's inaccurate but it's just a temporary situation.
-				continue
-			}
-
-			return task, poller
+		matched := d.matchPollerForTask(task, allowForwarding)
+		if matched != nil {
+			return task, matched
 		}
 	}
 	return nil, nil
@@ -512,9 +481,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 // call with lock held. Returns true if a match was found but blocked by rate limiting.
 func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	allowForwarding := d.canForward && d.allowForwarding()
-
 	now := d.timeSource.Now().UnixNano()
-	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
 
 	for {
 		// search for highest priority match
@@ -532,7 +499,6 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 			return true // not ready yet, timer will call match later
 		}
 
-		// ready to signal match
 		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 
