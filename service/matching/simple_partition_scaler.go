@@ -87,7 +87,10 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 
 	// update add target based on rates
-	addTarget := s.updateAddTarget(cfg, int(state.AddTarget))
+	addTarget, fullInterval := s.updateAddTarget(cfg, int(state.AddTarget))
+	if !fullInterval {
+		return PartitionScalerDecision{NoChange: true}
+	}
 	state.AddTarget = int32(addTarget)
 
 	totalTarget := addTarget
@@ -111,9 +114,14 @@ func (*simplePartitionScaler) Stop() {
 func (s *simplePartitionScaler) updateAddTarget(
 	cfg dynamicconfig.SimplePartitionScalerSettings,
 	target int,
-) int {
+) (int, bool) {
+	// TODO(dp): we should return some information about which window made the change and put
+	// a log of those in the scale state
 	for _, down := range cfg.Downs {
-		rate := s.getTracker(down.Window).rate()
+		rate, full := s.getTracker(down.Window).rateAndFull()
+		if !full {
+			return 0, false
+		}
 		// decrease target so that each partition is ~= target rate
 		target = max(1, min(
 			target,
@@ -122,7 +130,10 @@ func (s *simplePartitionScaler) updateAddTarget(
 	}
 
 	for _, up := range cfg.Ups {
-		rate := s.getTracker(up.Window).rate()
+		rate, full := s.getTracker(up.Window).rateAndFull()
+		if !full {
+			return 0, false
+		}
 		// increase target so that each partition is ~= target rate
 		target = max(
 			target,
@@ -131,5 +142,5 @@ func (s *simplePartitionScaler) updateAddTarget(
 		)
 	}
 
-	return target
+	return target, true
 }
