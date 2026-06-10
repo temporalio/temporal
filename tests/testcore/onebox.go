@@ -72,8 +72,6 @@ type (
 	TemporalImpl struct {
 		fxApps []*fx.App
 
-		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
-		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
 		chasmEngine               chasm.Engine
@@ -331,10 +329,6 @@ func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
 
-func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
-	return c.namespaceRegistries
-}
-
 func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
 		return nil, fmt.Errorf("expected exactly one host for chasm engine, got %d", numHistoryHosts)
@@ -440,7 +434,6 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -541,7 +534,6 @@ func (c *TemporalImpl) startHistory() {
 			logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
@@ -599,7 +591,6 @@ func (c *TemporalImpl) startMatching() {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
@@ -668,7 +659,6 @@ func (c *TemporalImpl) startWorker() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}

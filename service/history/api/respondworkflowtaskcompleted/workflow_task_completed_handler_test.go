@@ -105,6 +105,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			"active",
 			func() time.Duration { return 1 * time.Hour },
 			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,
 			logger,
 			namespace.NewDefaultReplicationResolverFactory(),
