@@ -1800,7 +1800,7 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		WorkflowID:        request.Execution.GetWorkflowId(),
 		RunID:             request.Execution.GetRunId(),
 		TaskID:            math.MaxInt64,
-		CloseTime:         new(request.WorkflowCloseTime.AsTime()),
+		CloseTime:         util.Ptr(request.WorkflowCloseTime.AsTime()),
 		StartTime:         request.WorkflowStartTime.AsTime(),
 		IsRetentionDelete: false,
 	})
