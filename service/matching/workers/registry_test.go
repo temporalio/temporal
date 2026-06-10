@@ -625,6 +625,18 @@ func TestRegistryImpl_CountWorkersExcludesSystemWorkers(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(3), count)
 	})
+
+	t.Run("with query filter", func(t *testing.T) {
+		count, err := r.CountWorkers("ns1", "TaskQueue='my-queue'", false)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
+	})
+
+	t.Run("with query matching no workers", func(t *testing.T) {
+		count, err := r.CountWorkers("ns1", "WorkerInstanceKey='nonexistent'", false)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), count)
+	})
 }
 
 func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {
