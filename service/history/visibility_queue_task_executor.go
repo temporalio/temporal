@@ -367,8 +367,8 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return errNoChasmMutableState
 	}
 
-	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || !valid {
+	isTaskInTree, isValidByComponent, err := validateChasmSideEffectTask(ctx, mutableState, task)
+	if err != nil || !isTaskInTree || !isValidByComponent {
 		return err
 	}
 

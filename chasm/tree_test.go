@@ -3940,23 +3940,26 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 
 	// Succeed validation as valid.
 	expectValidate((*TestComponent)(nil), true, nil)
-	isValid, err := root.ValidateSideEffectTask(ctx, chasmTask)
-	s.True(isValid)
+	isTaskInTree, isValidByComponent, err := root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
 
-	// Succeed validation as invalid.
+	// Task is in tree but component says invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
-	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
-	s.False(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
 
-	// Fail validation.
+	// Component validator returns an error — task was found in the tree, but validation failed.
 	expectedErr := errors.New("validation failed")
 	expectValidate((*TestComponent)(nil), false, expectedErr)
-	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
-	s.False(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.ErrorIs(expectedErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -3976,20 +3979,22 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		Info:                childTaskInfo,
 	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
-	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	s.True(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
 
-	// Succeed validation as invalid since parent is closed.
+	// Component access check fails (parent closed) — task is structurally in the tree but
+	// isValidByComponent=false because the access rule rejects it.
 	mutableCtx := NewMutableContext(ctx, root)
 	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
 	s.NoError(err)
 	rootComponent.(*TestComponent).Complete(mutableCtx)
-	// Note there's also no mock for task validator here in this case.
-	// Access rule is checked first.
-	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	s.False(isValid)
+	// Note there's also no mock for the task validator here; the access rule is checked first.
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }

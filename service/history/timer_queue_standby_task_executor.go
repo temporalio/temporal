@@ -172,12 +172,17 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		_, err := validateChasmSideEffectTask(ctx, ms, task)
+		isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
 		if err != nil {
 			return nil, err
 		}
+		if !isTaskInTree {
+			// Replication has removed the logical task — drop the physical task.
+			return nil, nil
+		}
 
-		// Retry even if locally invalid; wait for replication from active to remove the task.
+		// Task still exists in the tree; retry until the active cluster executes
+		// and replicates the resulting state change.
 		return ms.ChasmTree(), nil
 	}
 

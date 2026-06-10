@@ -186,12 +186,17 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	_, err = validateChasmSideEffectTask(ctx, ms, task)
+	isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
 	if err != nil {
 		return err
 	}
+	if !isTaskInTree {
+		// Replication has removed the logical task — drop the physical task.
+		return nil
+	}
 
-	// Retry even if locally invalid; wait for replication from active to remove the task.
+	// Task still exists in the tree; retry until the active cluster executes
+	// and replicates the resulting state change.
 	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
 	if !e.Now().After(discardTime) {
