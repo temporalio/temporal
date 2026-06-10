@@ -271,7 +271,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTasks(closeTasks...)
 
-	return nil
+	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
+	return r.mutableState.GenerateActivityCancelCommandsForClose()
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.
@@ -583,7 +584,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
-	if !r.config.EnableCancelActivityWorkerCommand() {
+	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
 		return nil
 	}
 
@@ -1046,6 +1047,11 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	}
 
 	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
+	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
+	// because time skipping pauses when there is in-flight work. Activity retry
+	// timers are the exception: an activity in retry backoff does not block skipping,
+	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
+
 	// (1) user timers — regenerate one task per pending user timer. User timers
 	// are only one of the task types that may need regeneration, so continue to
 	// the timeout timers below even when none are pending.
@@ -1130,5 +1136,19 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			})
 		}
 	}
+	// (5) activity retry backoff timers — no time comparison here. Regen runs after
+	// the skip transaction has advanced virtual now past the next-attempt time, so any
+	// now-relative check would wrongly exclude the activity whose timer needs re-stamping.
+	// The structural check (not started, has retry policy, attempt > 1) is sufficient:
+	// the idle gate already ensures every pending activity is a failed retry when we get here.
+	for _, ai := range r.mutableState.GetPendingActivityInfos() {
+		if activityPendingRetry(ai) {
+			if err := r.GenerateActivityRetryTasks(ai); err != nil {
+				return err
+			}
+		}
+	}
+
+	// todo@time-skipping: ChasmTaskPure is not supported yet.
 	return nil
 }

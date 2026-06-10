@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -11,6 +12,31 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 )
+
+func TestWorkersPerProcessMetric(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	emitter := &workerMetricsEmitter{
+		handler: captureHandler,
+		config:  WorkerMetricsConfig{},
+	}
+
+	nsID := namespace.ID("ns-id")
+	nsName := namespace.Name("ns-name")
+
+	emitter.emit(nsID, nsName, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "w1"},
+		{WorkerInstanceKey: "w2"},
+		{WorkerInstanceKey: "w3"},
+	})
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.WorkerRegistryWorkersPerProcess.Name()]
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(3), recordings[0].Value)
+}
 
 func TestPollerAutoscalingMetrics(t *testing.T) {
 	captureHandler := metricstest.NewCaptureHandler()

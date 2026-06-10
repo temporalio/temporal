@@ -861,7 +861,7 @@ func taskBaseMetricTagsWithoutArchetype(
 	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err == nil {
 		namespaceTag = metrics.NamespaceTag(ns.Name().String())
-		isActive = ns.ActiveInCluster(currentClusterName)
+		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
 	}
 
 	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)

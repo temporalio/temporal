@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"strconv"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -215,6 +214,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -272,6 +272,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 			task.finish(nil, false)
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -533,7 +534,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
 	)
 }
@@ -607,6 +608,7 @@ func (tm *priTaskMatcher) poll(
 	start := time.Now()
 	pollWasForwarded := false
 	var priority int32
+	pollResult := "failed"
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
@@ -614,8 +616,9 @@ func (tm *priTaskMatcher) poll(
 			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
-				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
+				metrics.ForwardedTag(pollWasForwarded),
 				metrics.MatchingTaskPriorityTag(priority),
+				metrics.PollResultTag(pollResult),
 			)
 		}
 	}()
@@ -636,11 +639,13 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	if res == nil {
+		pollResult = "timeout"
 		return nil, errNoTasks // only possible for MatchPollerImmediately
 	} else if res.ctxErr != nil {
 		if res.ctxErrIdx == 0 {
 			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
+		pollResult = "timeout"
 		return nil, errNoTasks
 	}
 
@@ -651,6 +656,7 @@ func (tm *priTaskMatcher) poll(
 	task := res.task
 	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
+	pollResult = "dispatch"
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
@@ -692,13 +698,6 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
-}
-
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
 }
 
 func (p *waitingPoller) minPriority() priorityKey {

@@ -378,6 +378,9 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	if historyEvent != nil && command.UserMetadata != nil {
 		historyEvent.UserMetadata = command.UserMetadata
 	}
+	if historyEvent != nil && len(command.EventGroupMarkers) > 0 {
+		historyEvent.EventGroupMarkers = command.EventGroupMarkers
+	}
 	return response, nil
 }
 
@@ -698,9 +701,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		} else if ai.WorkerControlTaskQueue != "" {
 			if ai.StartedClock == nil {
-				// StartedClock may be nil for activities started before this feature was deployed.
+				// StartedClock is nil when the activity is not currently running on a worker
+				// (e.g., in retry backoff, or started before this feature was deployed).
 				// Skip cancel command; the activity will time out normally.
-				handler.logger.Info("Skipping worker cancel command: activity missing StartedClock (pre-deploy)",
+				handler.logger.Info("Skipping worker cancel command: activity not currently started",
 					tag.WorkflowNamespaceID(handler.mutableState.GetWorkflowKey().NamespaceID),
 					tag.WorkflowID(handler.mutableState.GetWorkflowKey().WorkflowID),
 					tag.WorkflowRunID(handler.mutableState.GetWorkflowKey().RunID),
@@ -1118,7 +1122,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
-		handler.workflowTaskCompletedID,
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,

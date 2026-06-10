@@ -21,6 +21,9 @@ on:
       DOCKERHUB_TOKEN:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   validate-inputs:
     runs-on: ubuntu-latest
@@ -30,7 +33,7 @@ jobs:
     steps:
       - name: Validate input tags
         id: validate
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           SOURCE_TAG: ${{ inputs.source-tag }}
           TARGET_TAGS: ${{ inputs.target-tags }}
@@ -94,7 +97,7 @@ jobs:
           sudo mv crane /usr/local/bin/
 
       - name: Promote image
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
           TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}

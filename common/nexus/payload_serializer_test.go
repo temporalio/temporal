@@ -124,6 +124,17 @@ func TestNexusPayloadSerializer(t *testing.T) {
 			header: nexus.Header{"type": "application/x-temporal-payload"},
 		},
 		{
+			name: "json/plain with non-standard metadata field",
+			inputPayload: &commonpb.Payload{
+				Data: []byte(`"data"`),
+				Metadata: map[string][]byte{
+					"encoding":     []byte("json/plain"),
+					"non-standard": []byte("value"),
+				},
+			},
+			header: nexus.Header{"type": "application/x-temporal-payload"},
+		},
+		{
 			name: "nexus content with non-standard header",
 			inputPayload: &commonpb.Payload{
 				Metadata: map[string][]byte{

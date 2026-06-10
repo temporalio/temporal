@@ -28,6 +28,7 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -46,6 +47,7 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	taskExpireStage                                = "task_expire_stage"
+	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -315,6 +317,22 @@ func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
 }
 
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
+}
+
+const (
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
+)
+
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {
@@ -551,6 +569,17 @@ func ToUnversionedTag(version string) Tag {
 var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
 var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
 var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
+
+// Closed enum of reasons used with DroppedTasksCounter.
+// new failure modes should be added here rather than passed as ad-hoc strings.
+var (
+	DroppedTaskReasonNotFoundTag      = Tag{Key: reason, Value: "not_found"}
+	DroppedTaskReasonInternalTag      = Tag{Key: reason, Value: "internal_error"}
+	DroppedTaskReasonDataLossTag      = Tag{Key: reason, Value: "data_loss"}
+	DroppedTaskReasonExpiredReadTag   = Tag{Key: reason, Value: "expired_read"}
+	DroppedTaskReasonExpiredMemoryTag = Tag{Key: reason, Value: "expired_memory"}
+	DroppedTaskReasonInvalidTag       = Tag{Key: reason, Value: "invalid"}
+)
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {

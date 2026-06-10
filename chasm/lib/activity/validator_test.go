@@ -46,6 +46,12 @@ var (
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
 	}
+	defaultMaxLinksPerRequest = func(ns string) int {
+		return 10
+	}
+	defaultLinkMaxSize = func(ns string) int {
+		return 4000
+	}
 )
 
 func TestValidateSuccess(t *testing.T) {
@@ -313,7 +319,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 }
 
 func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
-	t.Run("Allow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Allow PerNSWorkerTaskQueue TaskQueue on the same TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -332,7 +338,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue from non-internal TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),

@@ -125,6 +125,52 @@ func (x *NexusCancellationParentData) GetRequestedEventId() int64 {
 	return 0
 }
 
+// IncomingSignalData records the event associated with a signal's request ID, which allows
+// DescribeWorkflow to resolve RequestIDRef signal backlinks.
+type IncomingSignalData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IncomingSignalData) Reset() {
+	*x = IncomingSignalData{}
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IncomingSignalData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IncomingSignalData) ProtoMessage() {}
+
+func (x *IncomingSignalData) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IncomingSignalData.ProtoReflect.Descriptor instead.
+func (*IncomingSignalData) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IncomingSignalData) GetEventId() int64 {
+	if x != nil {
+		return x.EventId
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
@@ -134,7 +180,9 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" 
 	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x122\n" +
 	"\x15scheduled_event_token\x18\x02 \x01(\fR\x13scheduledEventToken\"K\n" +
 	"\x1bNexusCancellationParentData\x12,\n" +
-	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
+	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventId\"/\n" +
+	"\x12IncomingSignalData\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescOnce sync.Once
@@ -148,10 +196,11 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_goTypes = []any{
 	(*NexusOperationParentData)(nil),    // 0: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentData
 	(*NexusCancellationParentData)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentData
+	(*IncomingSignalData)(nil),          // 2: temporal.server.chasm.lib.workflow.proto.v1.IncomingSignalData
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -172,7 +221,7 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc), len(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

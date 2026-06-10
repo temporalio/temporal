@@ -1,6 +1,9 @@
 package cinotify
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // Conclusion represents the conclusion status of a workflow run or job
 type Conclusion string
@@ -63,6 +66,13 @@ type WorkflowRunSummary struct {
 	URL          string        `json:"url"`
 }
 
+func (r WorkflowRunSummary) shortSHA() string {
+	if len(r.HeadSHA) > 7 {
+		return r.HeadSHA[:7]
+	}
+	return r.HeadSHA
+}
+
 // DigestReport aggregates success metrics for a time period
 type DigestReport struct {
 	Branch                string
@@ -79,4 +89,21 @@ type DigestReport struct {
 	Under25MinutesPercent float64
 	Under30MinutesPercent float64
 	Runs                  []WorkflowRunSummary
+}
+
+func (r *DigestReport) slowestRuns(limit int) []WorkflowRunSummary {
+	if limit <= 0 {
+		return nil
+	}
+
+	sorted := make([]WorkflowRunSummary, 0, len(r.Runs))
+	for _, run := range r.Runs {
+		if run.Duration > 0 {
+			sorted = append(sorted, run)
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Duration > sorted[j].Duration
+	})
+	return sorted[:min(limit, len(sorted))]
 }

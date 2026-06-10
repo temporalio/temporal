@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -18,6 +19,8 @@ type Generator struct {
 	*schedulerpb.GeneratorState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 // NewGenerator returns an initialized Generator component, which should
@@ -34,6 +37,7 @@ func NewGenerator(ctx chasm.MutableContext) *Generator {
 func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.GeneratorState) *Generator {
 	generator := &Generator{
 		GeneratorState: state,
+		EventLog:       chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	return generator
 }
@@ -46,6 +50,8 @@ func (g *Generator) Generate(ctx chasm.MutableContext) {
 
 // scheduleTask schedules a GeneratorTask at the given time.
 func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	g.EventLog.Get(ctx).LogEvent(ctx,
+		fmt.Sprintf("scheduled generatorTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
 	}, &schedulerpb.GeneratorTask{})
