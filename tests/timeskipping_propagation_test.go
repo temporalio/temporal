@@ -1,41 +1,41 @@
 // Tests in this file exercise how TimeSkippingConfig and AccumulatedSkippedDuration
-// cross workflow boundaries. Each test pins one of three inheritance semantics.
+// cross workflow boundaries. Each test pins one of two inheritance semantics.
 //
-// Group 1 — Inherit both from the current execution (same-lineage continuations).
+// Group 1 — Chain of runs (continue-as-new, retry, cron).
 //
-//	Continue-as-new, retry, and cron: each new run is a technical continuation of the
-//	same logical run, so the current config (including FastForward) AND the previous
-//	run's in-flight accumulated skipped duration are both inherited. DisableChildPropagation
-//	is ignored — it gates only child propagation. The FastForward is shared across
-//	the lineage: it caps the SUM of inherited skip + new-run skip, not each separately
-//	(an heir that inherits 1h of a 3h budget may skip only 2h more).
+//	Each new run is a technical continuation of the same logical workflow, so the
+//	current config (including FastForward) AND the previous run's in-flight accumulated
+//	skipped duration are both inherited. DisableChildPropagation is ignored — it gates
+//	only child propagation. The FastForward is shared across the chain: it caps the SUM
+//	of inherited skip + new-run skip, not each run separately (an heir that inherits 1h
+//	of a 3h budget may skip only 2h more, and consuming the remainder disables time
+//	skipping for the chain).
 //
-//	Child workflows: virtual time must not rewind, so a child always inherits the parent's
-//	accumulated skip. Two child-specific rules differ from continuations: FastForward is
-//	never propagated (the fast-forward does not cascade into children), and config propagation
-//	(Enabled) is gated by DisableChildPropagation.
+//	Reset also produces a run in the chain, with a replay-based mechanism: it replays
+//	history to the reset point and then reapplies WorkflowExecutionOptionsUpdated
+//	events unconditionally (no ResetReapplyExcludeType can suppress them), so the reset
+//	run catches up to the original run's config.
+//
+//	Covered by:
+//	  - TestTSPInCaN
+//	  - TestTSPInRetry
+//	  - TestTSPInCron
+//	  - TestTSPInReset
+//
+// Group 2 — Child workflows.
+//
+//	A child is a separate execution, not a chain member. Virtual time must not rewind,
+//	so when propagation is on the child inherits the parent's accumulated skip — but
+//	only the Enabled flag of the config: FastForward never cascades into children.
+//	DisableChildPropagation turns propagation off entirely; the child then gets no
+//	TimeSkippingInfo at all (neither config nor virtual time).
 //
 //	Covered by:
 //	  - TestTSPInChildWf_Basic
 //	  - TestTSPInChildWf_TwoChildren
 //	  - TestTSPInChildWf_ThreeGenerations
-//	  - TestTSPInCaN
-//	  - TestTSPInRetry
-//	  - TestTSPInCron
-//
-// Group 2 — Inherit from a specific point, then catch up on config changes.
-//
-//	Reset: retains the current TimeSkippingConfig at reset time. Reset replays all
-//	events up to the reset point (giving the new run the config as-of that point),
-//	then reapplies any WorkflowExecutionOptionsUpdated events that occurred between
-//	the reset point and the original run's terminal state. Reapply is unconditional
-//	— there is no ResetReapplyExcludeType value that can suppress OPTIONS_UPDATED.
-//	AccumulatedSkippedDuration on the reset run starts from the event #1
-//	InitialSkippedDuration (a specific point in history); original-run in-flight skip is
-//	not carried forward.
-//
-//	Covered by:
-//	  - TestTSPInReset
+//	  - TestTSPInChildWf_AdmissionTimestampsShifted
+//	  - TestTSPInChildWf_PropagationDisabled
 package tests
 
 import (
@@ -86,7 +86,9 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 // from where the parent left off.
 //
 // Scenario:
-//   - Parent starts with TimeSkippingConfig{Enabled: true}.
+//   - Parent starts with TimeSkippingConfig{Enabled: true, FastForward: 3h}. The
+//     fast-forward never cascades into children: the child's config carries Enabled
+//     only, and the child's own skipping is uncapped.
 //   - Parent issues StartTimer(t1, 1h). Parent is idle on t1 → server skips 1h.
 //     After skip: parent.AccumulatedSkippedDuration = 1h.
 //   - t1 fires. Parent issues StartChildWorkflow(child) and StartTimer(t2, 1h).
@@ -103,12 +105,14 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //   - t2 fires. Parent completes.
 //
 // End-state assertions:
-//   - parent.AccumulatedSkippedDuration == 2h.
-//   - child.TimeSkippingInfo.Config.Enabled == true (propagated).
-//   - child.AccumulatedSkippedDuration == 4h (1h inherited + 3h own from tc).
+//   - parent.AccumulatedSkippedDuration == 2h, within its own 3h FastForward budget.
+//   - child.TimeSkippingInfo.Config.Enabled == true (propagated), FastForward unset.
+//   - child.AccumulatedSkippedDuration == 4h (1h inherited + 3h own from tc) — exceeding
+//     the parent's 3h FastForward, which is possible only because the budget did not
+//     cascade into the child.
 //   - The parent's StartChildWorkflowExecutionInitiated event carries
-//     TimeSkippingConfig{Enabled=true} and InitialSkippedDuration=1h (the pre-apply
-//     snapshots; the wire form the transfer task consumes).
+//     TimeSkippingConfig{Enabled=true} with no FastForward, and InitialSkippedDuration=1h
+//     (the pre-apply snapshots; the wire form the transfer task consumes).
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	env := testcore.NewEnv(s.T())
@@ -131,7 +135,12 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		// FastForward never cascades into children; the parent's 2h of own skipping
+		// stays under this budget so the parent's flow is unaffected by it.
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(3 * time.Hour)},
+		},
 	})
 	s.NoError(err)
 	parentRunID := parentStart.RunId
@@ -189,6 +198,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, parentMS.State.ExecutionState.State)
 	parentTSI := parentMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(parentTSI)
+	s.Equal(3*time.Hour, parentTSI.GetConfig().GetMaxElapsedDuration().AsDuration(),
+		"parent keeps its own MaxElapsedDuration; child propagation must not mutate it")
 	s.approxDuration(2*time.Hour, parentTSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"parent should accumulate 1h (t1) + 1h (t2 after child) = 2h")
 
@@ -200,8 +211,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	childCfg := childTSI.GetConfig()
 	s.NotNil(childCfg)
 	s.True(childCfg.GetEnabled(), "child TSC.Enabled propagated from parent")
+	s.Nil(childCfg.GetMaxElapsedDuration(), "MaxElapsedDuration never cascades into children")
 	s.approxDuration(4*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"child AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + child's own skip for tc (3h) = 4h")
+		"child AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + child's own skip for tc (3h) = 4h — exceeding the parent's 3h FastForward, possible only because the budget did not cascade")
 
 	// The parent's StartChildWorkflowExecutionInitiated event must carry the propagated
 	// TimeSkippingConfig and InitialSkippedDuration — these are what the transfer task
@@ -212,6 +224,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	initTSC := initAttrs.GetTimeSkippingConfig()
 	s.NotNil(initTSC, "initiated event should carry TimeSkippingConfig snapshot")
 	s.True(initTSC.GetEnabled(), "snapshot mirrors parent's Enabled flag")
+	s.Nil(initTSC.GetMaxElapsedDuration(), "initiated-event snapshot excludes the parent's MaxElapsedDuration")
 	s.approxDuration(time.Hour, initAttrs.GetInitialSkippedDuration().AsDuration(),
 		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
 }
@@ -1206,8 +1219,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 // continue-as-new.
 //
 // Scenario:
-//   - Start a top-level workflow with TimeSkippingConfig{Enabled: true} and
-//     RetryPolicy{MaximumAttempts: 2}. Event #1's InitialSkippedDuration is unset.
+//   - Start a top-level workflow with TimeSkippingConfig{Enabled: true, FastForward: 4h}
+//     and RetryPolicy{MaximumAttempts: 2}. Event #1's InitialSkippedDuration is unset.
 //   - Attempt 1 issues StartTimer(t1, 1h). Idle → server skips 1h → attempt1.Accum = 1h.
 //   - Attempt 1 issues FailWorkflowExecution with a bare (retryable) Failure.
 //   - Server schedules retry. Attempt 2 (retry run) starts with InitialSkippedDuration=1h
@@ -1217,9 +1230,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 //
 // End-state assertions:
 //   - Attempt 1: status=FAILED, Config.Enabled=true, Accum=1h.
-//   - Attempt 2: status=COMPLETED, Config.Enabled=true, Accum=3h (1h inherited + own 2h).
-//   - Attempt 2's WorkflowExecutionStarted carries the current TSC snapshot (Enabled=true)
-//     with InitialSkippedDuration≈1h and references attempt 1 as ContinuedExecutionRunId.
+//   - Attempt 2: status=COMPLETED, Config.Enabled=true, FastForward=4h inherited
+//     (the chain shares one budget), Accum=3h (1h inherited + own 2h) within that budget.
+//   - Attempt 2's WorkflowExecutionStarted carries the current TSC snapshot (Enabled=true,
+//     FastForward=4h) with InitialSkippedDuration≈1h and references attempt 1 as
+//     ContinuedExecutionRunId.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
@@ -1240,7 +1255,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 		TaskQueue:           tq,
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		// FastForward is part of the inherited config: it caps the whole chain of attempts.
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(4 * time.Hour)},
+		},
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(time.Second),
 			BackoffCoefficient: 1.0,
@@ -1295,8 +1314,12 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	attempt2Cfg := attempt2TSI.GetConfig()
 	s.NotNil(attempt2Cfg)
 	s.True(attempt2Cfg.GetEnabled(), "attempt 2 TSC.Enabled propagated from attempt 1's current config")
+	s.Equal(4*time.Hour, attempt2Cfg.GetMaxElapsedDuration().AsDuration(),
+		"attempt 2 inherits MaxElapsedDuration verbatim — the budget caps the whole chain, not each attempt")
 	s.approxDuration(3*time.Hour, attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"attempt 2 carries attempt 1's 1h in-flight skip forward plus its own 2h from t2 = 3h")
+	s.LessOrEqual(attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(), 4*time.Hour,
+		"cap-total: the chain's accumulated skip stays within the shared MaxElapsedDuration budget")
 
 	// Attempt 2's WorkflowExecutionStarted must carry the same TSC snapshot as attempt 1's event #1.
 	hist2, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -1314,6 +1337,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	startedTSC := startedAttr.GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "attempt 2's WorkflowExecutionStarted must carry the TSC snapshot")
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors attempt 1's current config")
+	s.Equal(4*time.Hour, startedTSC.GetMaxElapsedDuration().AsDuration(),
+		"started event carries the inherited MaxElapsedDuration — the snapshot of attempt 1's current config")
 	s.approxDuration(time.Hour, startedAttr.GetInitialSkippedDuration().AsDuration(),
 		"started event InitialSkippedDuration carries attempt 1's in-flight accumulated skip (1h) at retry time")
 }
@@ -1453,3 +1478,148 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.InDelta(float64(50*time.Minute), float64(startedAttr.GetInitialSkippedDuration().AsDuration()), float64(90*time.Second),
 		"started event InitialSkippedDuration carries run 1's in-flight accumulated skip at cron-rollover time")
 }
+
+// TestTSPInCaN verifies end-to-end that one FastForward budget caps
+// the whole chain of runs: a continuation inherits the budget already consumed by its
+// predecessor, may only skip the remainder, and consuming it disables time skipping.
+//
+// initTimeSkippingInfo applies the full-cap anchor on a new run: the fast-forward target
+// is now + (FastForward - inherited AccumulatedSkippedDuration). Run 2 therefore boots
+// with only 1h of the 3h budget left, even though it never skipped anything itself.
+//
+// Scenario:
+//   - Run 1 starts with TimeSkippingConfig{Enabled: true, FastForward: 3h}.
+//   - Run 1 issues StartTimer(t1, 2h). Idle → skips 2h (budget not reached) →
+//     run1.Accum = 2h. t1 fires; run 1 continues-as-new.
+//   - Run 2 boots with Config{Enabled, FastForward=3h} and Accum seeded to 2h →
+//     remaining budget 1h.
+//   - Run 2's first WFT completes with no commands. Run 2 is idle with the fast-forward
+//     target as its only skip candidate → skips the remaining 1h, reaches the target,
+//     and time skipping is disabled (DisabledAfterFastForward=true). run2.Accum = 3h —
+//     the full chain budget, of which run 2 itself contributed only 1h.
+//
+// End-state assertions:
+//   - run1: CONTINUED_AS_NEW, Config.Enabled=true at CaN time (budget not reached),
+//     FastForward not reached, Accum ≈ 2h.
+//   - run2: Config.Enabled=false, FastForward.HasReached=true, Accum ≈ 3h.
+//   - run2 history has exactly one transition, carrying DisabledAfterFastForward=true.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	wfType := tv.WorkflowType()
+	wfID := tv.WorkflowID()
+	tq := tv.TaskQueue()
+
+	startWall := time.Now()
+
+	start1, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          wfID,
+		WorkflowType:        wfType,
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(3 * time.Hour)},
+		},
+	})
+	s.NoError(err)
+	run1ID := start1.RunId
+
+	state := 0
+	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case state == 0:
+			state = 1
+			return cmdsResponse(timerCmd("t1", 2*time.Hour)), nil
+		case state == 1 && fired["t1"]:
+			state = 2
+			return cmdsResponse(continueAsNewCmd(wfType, tq)), nil
+		}
+		// Run 2's WFTs: no commands — run 2 idles so the fast-forward target is its
+		// only skip candidate.
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	// Drive run 1 to CONTINUED_AS_NEW.
+	s.drivePollsUntilRunNotRunning(ctx, env, tv, handler, wfID, run1ID, 20)
+
+	run2MS := s.getMutableStateByID(ctx, env, wfID)
+	run2ID := run2MS.State.ExecutionState.RunId
+	s.NotEqual(run1ID, run2ID, "CaN should have created a new run")
+
+	// Serve run 2's first WFT with an empty response; its close-tx skips the remaining
+	// budget and disables time skipping synchronously.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
+	s.NoError(err)
+
+	elapsed := time.Since(startWall)
+	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than 3h of virtual time", elapsed)
+
+	// ---- Run 1: consumed 2h of the budget but never reached it ----
+	run1MS := s.getMutableState(env, wfID, run1ID)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, run1MS.State.ExecutionState.Status)
+	run1TSI := run1MS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(run1TSI)
+	s.True(run1TSI.GetConfig().GetEnabled(),
+		"run 1 hands the config over still enabled — it consumed only 2h of the 3h budget")
+	s.False(run1TSI.GetFastForward().GetHasReached(),
+		"run 1 must not have reached the fast-forward target")
+	s.approxDuration(2*time.Hour, run1TSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"run 1 skipped 2h for t1 before continue-as-new")
+
+	// ---- Run 2: inherits 2h consumed, skips only the remaining 1h, then disables ----
+	run2MS = s.getMutableState(env, wfID, run2ID)
+	run2TSI := run2MS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(run2TSI, "run 2 should have TimeSkippingInfo propagated from run 1")
+	s.False(run2TSI.GetConfig().GetEnabled(),
+		"the chain's budget is exhausted in run 2 → time skipping disabled")
+	s.True(run2TSI.GetFastForward().GetHasReached(),
+		"run 2 reached the fast-forward target inherited from the chain")
+	s.approxDuration(3*time.Hour, run2TSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"chain total: run 1 contributed 2h, run 2 only the remaining 1h — the budget caps the chain, not each run")
+
+	// Run 2's history carries exactly one transition: the cap-hit skip+disable.
+	hist2 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID})
+	var transitions []*historypb.HistoryEvent
+	for _, e := range hist2 {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+			transitions = append(transitions, e)
+		}
+	}
+	s.Len(transitions, 1, "run 2 skips exactly once: the remaining budget")
+	if len(transitions) == 1 {
+		attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+		s.True(attrs.GetDisabledAfterBound(),
+			"run 2's only transition is the fast-forward disable")
+	}
+
+	// Run 2 is idle and RUNNING with skipping disabled; stop it.
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID},
+		Reason:            "test cleanup",
+	})
+}
+
+// (TestTSPInChildWf_PropagationDisabled removed: DisableChildPropagation is not yet in the API)
+//
+// Scenario:
+//   - Parent starts with TimeSkippingConfig{Enabled: true, DisableChildPropagation: true}.
+//   - Parent issues StartTimer(t1, 1h) → idle → skips 1h → parent.Accum = 1h.
+//   - t1 fires. Parent issues StartChild(child) + StartTimer(t2, 1h). The child gets no
+//     time skipping, so its own timer is wall-short: child issues StartTimer(tc, 2s),
+//     waits it out in real time, completes.
+//   - Child completed → parent idle on t2 → skips 1h → t2 fires → parent completes.
+//
+// End-state assertions:
+//   - parent.Accum == 2h; parent config retains Enabled + DisableChildPropagation.
+//   - child MS has NO TimeSkippingInfo.
+//   - initiated event: TimeSkippingConfig == nil, InitialSkippedDuration == 0.
+//   - child's start time is wall time, NOT shifted by the parent's 1h skip.
