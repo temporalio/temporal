@@ -1546,8 +1546,8 @@ default as namespace cardinality can be high and this requires a metrics collect
 		},
 		`Settings for partition scale manager.`,
 	)
-	MatchingSimplePartitionScaler = NewTaskQueueTypedSetting(
-		"matching.simplePartitionScaler",
+	MatchingPartitionScaler = NewTaskQueueTypedSetting(
+		"matching.partitionScaler",
 		SimplePartitionScalerSettings{},
 		`Settings for simple partition scaler.`,
 	)
