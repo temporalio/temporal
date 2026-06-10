@@ -36,15 +36,6 @@ func (r dropReason) tag() metrics.Tag {
 	}
 }
 
-// getInvalidTaskTag returns the tasks_expired stage tag for a task being dropped
-// due to in-memory expiry or validation failure.
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
-}
-
 // getDroppedTaskExpiryReason returns the drop reason for a task being dropped due to
 // in-memory expiry or validation failure.
 func getDroppedTaskExpiryReason(task *internalTask) dropReason {
