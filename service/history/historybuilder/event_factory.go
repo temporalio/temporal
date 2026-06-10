@@ -85,7 +85,6 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
 		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
-		InitialSkippedDuration:       request.GetInitialSkippedDuration(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
