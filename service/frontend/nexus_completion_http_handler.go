@@ -17,7 +17,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -35,7 +34,6 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -136,19 +134,13 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
-	// Determine the target namespace, workflow, and run ID from the completion token.
-	targetNamespaceID := completion.GetNamespaceId()
-	targetBusinessID := completion.GetWorkflowId()
-	targetRunID := completion.GetRunId()
-	if len(completion.GetComponentRef()) > 0 {
-		ref := &persistencespb.ChasmComponentRef{}
-		if err := proto.Unmarshal(completion.GetComponentRef(), ref); err != nil {
-			h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-		}
-		targetNamespaceID = ref.GetNamespaceId()
-		targetBusinessID = ref.GetBusinessId()
-		targetRunID = ref.GetRunId()
+	// Determine the target namespace, workflow, and run ID from the completion token. The CHASM
+	// ComponentRef is canonical when present; otherwise the top-level HSM fields are used. Shared
+	// with the system-callback router via commonnexus.CompletionTarget so the two can't drift.
+	targetNamespaceID, targetBusinessID, targetRunID, err := commonnexus.CompletionTarget(completion)
+	if err != nil {
+		h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(targetNamespaceID))
@@ -216,30 +208,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	var links []*commonpb.Link
-	for _, nexusLink := range r.Links {
-		switch nexusLink.Type {
-		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-			if err != nil {
-				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-				// so ignoring the error for now; we will revisit how to handle these errors later.
-				h.Logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-					tag.Error(err),
-				)
-				continue
-			}
-			links = append(links, &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: link,
-				},
-			})
-		default:
-			// If the link data type is unsupported, just ignore it for now.
-			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
-		}
-	}
+	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, h.Logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive

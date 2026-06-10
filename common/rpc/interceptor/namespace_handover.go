@@ -26,13 +26,14 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceHandoverInterceptor)(nil).Interce
 type (
 	// NamespaceHandoverInterceptor handles the namespace in handover replication state
 	NamespaceHandoverInterceptor struct {
-		namespaceRegistry      namespace.Registry
-		timeSource             clock.TimeSource
-		enabledForNS           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
-		metricsHandler         metrics.Handler
-		logger                 log.Logger
-		requestErrorHandler    ErrorHandler
+		namespaceRegistry                      namespace.Registry
+		timeSource                             clock.TimeSource
+		enabledForNS                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
+		metricsHandler                         metrics.Handler
+		logger                                 log.Logger
+		requestErrorHandler                    ErrorHandler
+		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 )
 
@@ -43,16 +44,23 @@ func NewNamespaceHandoverInterceptor(
 	logger log.Logger,
 	timeSource clock.TimeSource,
 	requestErrorHandler ErrorHandler,
+	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceHandoverInterceptor {
 
+	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
+	for _, m := range additionalAllowedMethodsDuringHandover {
+		additional[m] = struct{}{}
+	}
+
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
-		nsCacheRefreshInterval: dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
-		namespaceRegistry:      namespaceRegistry,
-		metricsHandler:         metricsHandler,
-		logger:                 logger,
-		timeSource:             timeSource,
-		requestErrorHandler:    requestErrorHandler,
+		enabledForNS:                           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
+		nsCacheRefreshInterval:                 dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
+		namespaceRegistry:                      namespaceRegistry,
+		metricsHandler:                         metricsHandler,
+		logger:                                 logger,
+		timeSource:                             timeSource,
+		requestErrorHandler:                    requestErrorHandler,
+		additionalAllowedMethodsDuringHandover: additional,
 	}
 }
 
@@ -112,6 +120,9 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	methodName string,
 ) (waitTime *time.Duration, retErr error) {
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
+		return nil, nil
+	}
+	if _, ok := i.additionalAllowedMethodsDuringHandover[methodName]; ok {
 		return nil, nil
 	}
 

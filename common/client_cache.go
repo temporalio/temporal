@@ -2,6 +2,9 @@ package common
 
 import (
 	"sync"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -11,6 +14,9 @@ type (
 		GetClientForKey(key string, index int) (any, error)
 		GetClientForClientKey(clientKey string) (any, error)
 		GetAllClients() ([]any, error)
+		// Evict removes the cached entry for the given key and runs its
+		// release fn.
+		Evict(clientKey string)
 	}
 
 	keyResolver interface {
@@ -18,14 +24,22 @@ type (
 		GetAllAddresses() ([]string, error)
 	}
 
-	clientProvider func(string) (any, error)
+	// The returned release fn (if non-nil) is invoked when the entry is evicted.
+	clientProvider func(clientKey string) (any, func() error, error)
+
+	cachedEntry struct {
+		client  any
+		release func() error
+	}
 
 	clientCacheImpl struct {
 		keyResolver    keyResolver
 		clientProvider clientProvider
 
 		cacheLock sync.RWMutex
-		clients   map[string]any
+		clients   map[string]cachedEntry
+
+		logger log.Logger
 	}
 )
 
@@ -33,13 +47,15 @@ type (
 func NewClientCache(
 	keyResolver keyResolver,
 	clientProvider clientProvider,
+	logger log.Logger,
 ) ClientCache {
 
 	return &clientCacheImpl{
 		keyResolver:    keyResolver,
 		clientProvider: clientProvider,
 
-		clients: make(map[string]any),
+		clients: make(map[string]cachedEntry),
+		logger:  logger,
 	}
 }
 
@@ -57,25 +73,25 @@ func (c *clientCacheImpl) GetClientForKey(key string, index int) (any, error) {
 
 func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 	c.cacheLock.RLock()
-	client, ok := c.clients[clientKey]
+	entry, ok := c.clients[clientKey]
 	c.cacheLock.RUnlock()
 	if ok {
-		return client, nil
+		return entry.client, nil
 	}
 
 	c.cacheLock.Lock()
 	defer c.cacheLock.Unlock()
 
-	client, ok = c.clients[clientKey]
+	entry, ok = c.clients[clientKey]
 	if ok {
-		return client, nil
+		return entry.client, nil
 	}
 
-	client, err := c.clientProvider(clientKey)
+	client, release, err := c.clientProvider(clientKey)
 	if err != nil {
 		return nil, err
 	}
-	c.clients[clientKey] = client
+	c.clients[clientKey] = cachedEntry{client: client, release: release}
 	return client, nil
 }
 
@@ -94,4 +110,19 @@ func (c *clientCacheImpl) GetAllClients() ([]any, error) {
 	}
 
 	return result, nil
+}
+
+func (c *clientCacheImpl) Evict(clientKey string) {
+	c.cacheLock.Lock()
+	entry, ok := c.clients[clientKey]
+	if ok {
+		delete(c.clients, clientKey)
+	}
+	c.cacheLock.Unlock()
+
+	if ok && entry.release != nil {
+		if err := entry.release(); err != nil {
+			c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
+		}
+	}
 }

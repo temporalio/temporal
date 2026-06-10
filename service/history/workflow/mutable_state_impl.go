@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -408,6 +409,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 		s.metricsHandler,
+		s.config.MaximumEventBatchSizeInBytes,
 	)
 	s.taskGenerator = GetTaskGeneratorProvider().NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
@@ -526,6 +528,7 @@ func NewMutableStateFromDB(
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
+		mutableState.config.MaximumEventBatchSizeInBytes,
 	)
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -1155,6 +1158,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	return nil
@@ -2094,12 +2098,17 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
-	if payloadSize := request.Details.Size(); payloadSize > 0 {
+	payloadSize := request.Details.Size()
+	if payloadSize > 0 {
 		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
 			int64(payloadSize),
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
+	ms.metricsHandler.Counter(metrics.ActivityHeartbeatCount.Name()).Record(1,
+		metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.StringTag("has_details", strconv.FormatBool(payloadSize > 0)))
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -2700,6 +2709,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 			}
 		}
 	}
+	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
 	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
 
@@ -2757,7 +2767,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedBuildId:             inheritedBuildId,
 		InheritedPinnedVersion:       inheritedPinnedVersion,
 		VersioningOverride:           pinnedOverride,
-		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
+		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		InitialSkippedDuration:       newRunInitialSkipped,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
@@ -2813,11 +2823,17 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 }
 
 // computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
-// pass to the next run at continue-as-new time:
+// pass to the next run when it inherits PINNED behavior:
 //   - If the current run was signaled about a target change (last_notified is set),
 //     that becomes the declined value (the SDK saw it and chose not to upgrade).
 //   - Otherwise, preserve the existing declined value from a prior CaN chain.
-func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+func computeDeclinedTargetVersionUpgrade(
+	info *persistencespb.WorkflowExecutionInfo,
+	inheritPinnedVersion bool,
+) *historypb.DeclinedTargetVersionUpgrade {
+	if !inheritPinnedVersion {
+		return nil
+	}
 	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
 		return &historypb.DeclinedTargetVersionUpgrade{
 			DeploymentVersion: lastNotified.GetDeploymentVersion(),
@@ -3501,11 +3517,10 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
-	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter,
-		suggestContinueAsNewReasons, targetWorkerDeploymentVersionChanged)
+		suggestContinueAsNewReasons)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -4197,8 +4212,8 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
-	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
+	event, batchID := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
+	ai, err := ms.ApplyActivityTaskScheduledEvent(batchID, event)
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := ms.taskGenerator.GenerateActivityTasks(
@@ -4212,7 +4227,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ActivityInfo, error) {
 
@@ -4224,7 +4239,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	ai := &persistencespb.ActivityInfo{
 		Version:                 event.GetVersion(),
 		ScheduledEventId:        scheduledEventID,
-		ScheduledEventBatchId:   firstEventID,
+		ScheduledEventBatchId:   batchID,
 		ScheduledTime:           event.GetEventTime(),
 		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
@@ -4657,7 +4672,7 @@ func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCo
 // GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
 // in-flight activities that have a worker control queue.
 func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
-	if !ms.config.EnableCancelActivityWorkerCommand() {
+	if !ms.config.EnableCancelActivityWorkerCommand(ms.namespaceEntry.Name().String()) {
 		return nil
 	}
 
@@ -4826,8 +4841,8 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
-	if err := ms.ApplyWorkflowExecutionCompletedEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
+	if err := ms.ApplyWorkflowExecutionCompletedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -4842,7 +4857,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4851,7 +4866,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -4886,7 +4901,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4895,7 +4910,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -4911,7 +4926,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
-	firstEventID int64,
 	retryState enumspb.RetryState,
 	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
@@ -4920,8 +4934,8 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
-	if err := ms.ApplyWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
+	if err := ms.ApplyWorkflowExecutionTimedoutEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -4936,7 +4950,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4945,7 +4959,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5005,8 +5019,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, command)
-	if err := ms.ApplyWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionCanceledEvent(workflowTaskCompletedEventID, command)
+	if err := ms.ApplyWorkflowExecutionCanceledEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -5021,7 +5035,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -5030,7 +5044,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5049,8 +5063,8 @@ func (ms *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEv
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	rci, err := ms.ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, cancelRequestID)
+	event, batchID := ms.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
+	rci, err := ms.ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(batchID, event, cancelRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5064,7 +5078,7 @@ func (ms *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEv
 }
 
 func (ms *MutableStateImpl) ApplyRequestCancelExternalWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 	cancelRequestID string,
 ) (*persistencespb.RequestCancelInfo, error) {
@@ -5072,7 +5086,7 @@ func (ms *MutableStateImpl) ApplyRequestCancelExternalWorkflowExecutionInitiated
 	initiatedEventID := event.GetEventId()
 	rci := &persistencespb.RequestCancelInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		InitiatedEventId:      initiatedEventID,
 		CancelRequestId:       cancelRequestID,
 	}
@@ -5184,8 +5198,8 @@ func (ms *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	si, err := ms.ApplySignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, signalRequestID)
+	event, batchID := ms.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
+	si, err := ms.ApplySignalExternalWorkflowExecutionInitiatedEvent(batchID, event, signalRequestID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5199,7 +5213,7 @@ func (ms *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplySignalExternalWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 	signalRequestID string,
 ) (*persistencespb.SignalInfo, error) {
@@ -5207,7 +5221,7 @@ func (ms *MutableStateImpl) ApplySignalExternalWorkflowExecutionInitiatedEvent(
 	initiatedEventID := event.GetEventId()
 	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		InitiatedEventId:      initiatedEventID,
 		RequestId:             signalRequestID,
 	}
@@ -5526,7 +5540,6 @@ func (ms *MutableStateImpl) AddRecordMarkerEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
@@ -5538,8 +5551,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
-	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
+	if err := ms.ApplyWorkflowExecutionTerminatedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -6062,7 +6075,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6071,7 +6084,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -6168,7 +6181,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 
 func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	ctx context.Context,
-	firstEventID int64,
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
@@ -6209,7 +6221,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		}
 	}
 
-	continueAsNewEvent := ms.hBuilder.AddContinuedAsNewEvent(
+	continueAsNewEvent, batchID := ms.hBuilder.AddContinuedAsNewEvent(
 		workflowTaskCompletedEventID,
 		newRunID,
 		command,
@@ -6262,7 +6274,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if err = ms.ApplyWorkflowExecutionContinuedAsNewEvent(
-		firstEventID,
+		batchID,
 		continueAsNewEvent,
 	); err != nil {
 		return nil, nil, err
@@ -6305,7 +6317,7 @@ func rolloverAutoResetPointsWithExpiringTime(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
-	firstEventID int64,
+	batchID int64,
 	continueAsNewEvent *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6314,7 +6326,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -6335,14 +6347,14 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	}
 
 	childTSConfig, childInitialSkipped := snapshotTimeSkippingInfo(ms.executionInfo)
-	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
 		childTSConfig,
 		childInitialSkipped,
 	)
-	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
+	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(batchID, event)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -6361,7 +6373,7 @@ func (ms *MutableStateImpl) generateChildWorkflowRequestID(event *historypb.Hist
 }
 
 func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ChildExecutionInfo, error) {
 	initiatedEventID := event.GetEventId()
@@ -6369,7 +6381,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 	ci := &persistencespb.ChildExecutionInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventId:      initiatedEventID,
-		InitiatedEventBatchId: firstEventID,
+		InitiatedEventBatchId: batchID,
 		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
 		CreateRequestId:       ms.generateChildWorkflowRequestID(event),
@@ -8350,6 +8362,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
+		ms.config.MaximumEventBatchSizeInBytes,
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
@@ -9423,12 +9436,11 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
-			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
-			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
-			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                              incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,
+			SuggestContinueAsNew:        incoming.WorkflowTaskSuggestContinueAsNew,
+			SuggestContinueAsNewReasons: incoming.WorkflowTaskSuggestContinueAsNewReasons,
+			HistorySizeBytes:            incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                     incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter:      incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
 		workflowTaskVersionUpdated = true
 	}
@@ -10032,9 +10044,8 @@ func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
 			EventID:             currentEventID,
 		})
 	default:
-		// Non-elapsed bound types (e.g. MaxSkippedDuration) don't emit a
-		// wake-up task and must not leave a stale CurrentElapsedDurationBound
-		// from a previous elapsed-bound config.
+		// Non-elapsed bound types don't emit a wake-up task and must not leave a
+		// stale CurrentElapsedDurationBound from a previous elapsed-bound config.
 		tsi.CurrentElapsedDurationBound = nil
 	}
 }
@@ -10171,14 +10182,13 @@ func (d timeSkippingTransition) isValid() bool {
 	return !d.targetTime.IsZero() || d.disabledAfterBound
 }
 
-// calculateTimeSkippingTransition calculates the transition state which includes two fields:
-// 1. targetTime: the time to skip to
-// 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
-// right now the time points considered for target time are:
-// - the first expiry time of the pending user timers
-// - the workflow execution retry backoff
-// - the current elapsed duration bound of the time skipping config
-// - the activity retry backoff
+// calculateTimeSkippingTransition determines the next skip target.
+// Candidates (in collection order): pending user timers, activity retry backoffs,
+// workflow start-with-delay/CaN/retry backoff, and the MaxElapsed bound.
+// The run/execution timeout is NOT a standalone candidate — it only applies as
+// a cap: if any candidate wins, the skip target is clamped to min(target,
+// runExpiry, execExpiry). This ensures we never advance virtual time past the
+// workflow timeout, even when a user timer or bound would otherwise overshoot.
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
@@ -10218,36 +10228,29 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	}
 
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	bound := info.GetConfig().GetBound()
-	if bound == nil {
-		return transition, nil
+	if bound := info.GetConfig().GetBound(); bound != nil {
+		switch bound.(type) {
+		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+			if info.GetCurrentElapsedDurationBound() == nil {
+				return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+			}
+			advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
+		default:
+			return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+		}
 	}
 
-	switch b := bound.(type) {
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if info.GetCurrentElapsedDurationBound() == nil {
-			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+	// Cap any skip target at the run/execution timeout: never advance virtual time past
+	// them. Timeouts alone do not create a skip target — only existing candidates
+	// (timers, backoffs, bound) do. This also handles the case where a user timer fires
+	// past the workflow timeout: we cap the skip so the timeout fires on schedule.
+	if !transition.targetTime.IsZero() {
+		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
 		}
-		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-		// MaxSkippedDuration enforces its cap lazily: no wake-up task is emitted, and the
-		// remaining-skip candidate is consulted on every MS mutation. The cap can therefore
-		// only be observed at-or-below the limit on the next transition — accumulated >
-		// maxSkipped never persists past a single transaction.
-		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
-		maxSkipped := b.MaxSkippedDuration.AsDuration()
-		if accumulated > maxSkipped {
-			return timeSkippingTransition{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
+		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
 		}
-		if accumulated == maxSkipped {
-			// Cap exactly hit — emit a "disable, no skip" transition. Going through
-			// advance(ms.Now(), true) would set targetTime to now and trigger a no-op
-			// regen pass downstream.
-			return timeSkippingTransition{disabledAfterBound: true}, nil
-		}
-		advance(ms.Now().Add(maxSkipped-accumulated), true)
-	default:
-		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
 	return transition, nil
 }
