@@ -322,13 +322,14 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 		s.Require().Equal(int64(0), resp.GetCount())
 	}
 
-	// Count with invalid query returns error
+	// Count with unknown field in query matches nothing (no error)
 	{
-		_, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
 			Namespace: s.Namespace().String(),
 			Query:     "InvalidField='foo'",
 		})
-		s.Require().Error(err)
+		s.Require().NoError(err)
+		s.Require().Equal(int64(0), resp.GetCount())
 	}
 }
 
