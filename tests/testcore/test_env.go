@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -435,13 +434,6 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 
 		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-		}
-
-		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(interceptor.Unary()),
-				grpc.WithStreamInterceptor(interceptor.Stream()),
-			}
 		}
 
 		var err error
