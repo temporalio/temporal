@@ -160,8 +160,9 @@ type SimplePartitionScalerSettings struct {
 	// Interval is used to calculate a target number of partitions. Ups may move the actual
 	// partition target higher, Downs may move it lower. Ups take priority.
 	//
-	// Note the TargetRate for Downs should be _higher_ than for Ups to leave a deadband in the
-	// middle for hysteresis (avoid changing too often).
+	// Note the TargetRate for Downs should be lower than for Ups to leave a deadband in the
+	// middle for hysteresis (avoid changing when the rate fluctuates above and below a
+	// threshold).
 	Downs []SimplePartitionScalerThreshold
 	Ups   []SimplePartitionScalerThreshold
 
