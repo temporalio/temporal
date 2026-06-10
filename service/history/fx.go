@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
@@ -99,6 +100,25 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		chasmRegistry *chasm.Registry,
+		testHooks testhooks.TestHooks,
+	) {
+		hook, ok := testhooks.Get(
+			testHooks,
+			testhooks.HistoryChasmRuntimeProvider,
+			testhooks.GlobalScope,
+		)
+		if !ok {
+			return
+		}
+
+		hook(func() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry) {
+			return chasmEngine, chasmVisibilityManager, chasmRegistry
+		})
+	}),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,

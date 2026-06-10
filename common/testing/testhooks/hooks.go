@@ -6,6 +6,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
@@ -24,6 +25,7 @@ var (
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
+	HistoryChasmRuntimeProvider              = newKey[func(func() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry)), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )

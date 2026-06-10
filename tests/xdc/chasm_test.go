@@ -14,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -34,7 +35,8 @@ const (
 type ChasmSuite struct {
 	xdcBaseSuite
 
-	chasmContext context.Context
+	chasmContext  context.Context
+	chasmRegistry *chasm.Registry
 }
 
 func TestChasmSuite(t *testing.T) {
@@ -54,20 +56,27 @@ func (s *ChasmSuite) SetupSuite() {
 		dynamicconfig.NamespaceMinRetentionGlobal.Key():      1 * time.Second,
 	}
 	s.setupSuite()
+
+	for _, cluster := range s.clusters {
+		_, _, chasmRegistry, err := cluster.Host().ChasmRuntime()
+		s.Require().NoError(err)
+		s.Require().NotNil(chasmRegistry)
+		s.Require().NoError(chasmRegistry.Register(tests.Library))
+	}
 }
 
 func (s *ChasmSuite) SetupTest() {
 	s.setupTest()
 
-	chasmEngine, err := s.clusters[0].Host().ChasmEngine()
+	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := s.clusters[0].Host().ChasmRuntime()
 	s.Require().NoError(err)
 	s.Require().NotNil(chasmEngine)
-
-	chasmVisibilityMgr := s.clusters[0].Host().ChasmVisibilityManager()
 	s.Require().NotNil(chasmVisibilityMgr)
+	s.Require().NotNil(chasmRegistry)
 
 	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
 	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
+	s.chasmRegistry = chasmRegistry
 }
 
 func (s *ChasmSuite) TearDownSuite() {
@@ -82,7 +91,6 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	})
 	s.NoError(err)
 	nsID := nsResp.NamespaceInfo.GetId()
-
 	tv := testvars.New(s.T())
 	storeID := tv.Any().String()
 
@@ -100,24 +108,20 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
-	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
-		Namespace: nsName,
+	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
+		NamespaceId: nsID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(archetypeID),
 	}
-	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -134,7 +138,7 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 
 	// Active cluster should fully delete the execution.
 	s.Eventually(func() bool {
-		_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return errors.As(err, new(*serviceerror.NotFound))
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -142,7 +146,7 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	// the DeleteExecutionTask itself; it will be cleaned up by the retention timer.
 	// Verify the execution is terminated on the standby.
 	s.Eventually(func() bool {
-		resp, err := s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		resp, err := s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		if err != nil {
 			// Execution may already be gone if replication of delete happened.
 			return errors.As(err, new(*serviceerror.NotFound))
@@ -177,25 +181,21 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
-	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
-		Namespace: nsName,
+	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
+		NamespaceId: nsID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(archetypeID),
 	}
-	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
 	s.Eventually(func() bool {
 		// Wait for it to be replicated to the standby cluster
-		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -235,7 +235,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
 		s.Eventually(func() bool {
 			// Wait for replication, retention period, and retention timer task processing.
-			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			_, err = cluster.HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 			return errors.As(err, new(*serviceerror.NotFound))
 		}, 10*time.Second, 100*time.Millisecond)
 	}
@@ -283,15 +283,20 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 	s.NotEmpty(startResp.GetRunId())
 
 	// Wait for replication to cluster 1 (standby).
-	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := nsResp.NamespaceInfo.GetId()
+	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
+		NamespaceId: nsID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityID,
 		},
-		Archetype: activity.Archetype,
+		ArchetypeId: uint32(activity.ArchetypeID),
 	}
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -406,22 +411,18 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
-	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
-		Namespace: nsName,
+	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
+		NamespaceId: nsID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(archetypeID),
 	}
 
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -439,7 +440,7 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	// Verify Chasm deletion on both clusters.
 	for _, cluster := range s.clusters {
 		s.Eventually(func() bool {
-			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			_, err = cluster.HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 			return errors.As(err, new(*serviceerror.NotFound))
 		}, 10*time.Second, 100*time.Millisecond)
 	}

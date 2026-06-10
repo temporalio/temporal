@@ -65,12 +65,12 @@ func (s *ChasmTestSuite) SetupSuite() {
 		}),
 	)
 
-	chasmEngine, err := s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
+	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := s.FunctionalTestBase.GetTestCluster().Host().ChasmRuntime()
 	s.Require().NoError(err)
 	s.Require().NotNil(chasmEngine)
-
-	chasmVisibilityMgr := s.GetTestCluster().Host().ChasmVisibilityManager()
 	s.Require().NotNil(chasmVisibilityMgr)
+	s.Require().NotNil(chasmRegistry)
+	s.Require().NoError(chasmRegistry.Register(tests.Library))
 
 	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
 	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
