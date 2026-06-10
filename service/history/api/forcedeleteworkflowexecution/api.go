@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,6 +56,8 @@ func Invoke(
 
 	var warnings []string
 	var branchTokens [][]byte
+	var closeTime *time.Time
+	var startTime time.Time
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -83,6 +86,8 @@ func Invoke(
 				branchTokens = append(branchTokens, branchToken)
 			}
 		}
+		closeTime = util.Ptr(executionInfo.GetCloseTime().AsTime())
+		startTime = executionInfo.GetStartTime().AsTime()
 	}
 
 	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
@@ -125,8 +130,8 @@ func Invoke(
 		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       execution.GetRunId(),
 		TaskID:      math.MaxInt64,
-		CloseTime:   util.Ptr(resp.State.ExecutionInfo.CloseTime.AsTime()),
-		StartTime:   resp.State.ExecutionInfo.StartTime.AsTime(),
+		CloseTime:   closeTime,
+		StartTime:   startTime,
 	}); err != nil {
 		return nil, err
 	}
