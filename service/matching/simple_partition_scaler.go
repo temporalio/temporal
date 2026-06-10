@@ -11,6 +11,9 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// number of buckets used for task tracker
+const simplePartitionScalerTrackerBuckets = 10
+
 type scalerFactoryCfg = dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.SimplePartitionScalerSettings]
 type scalerCfg = dynamicconfig.TypedPropertyFn[dynamicconfig.SimplePartitionScalerSettings]
 
