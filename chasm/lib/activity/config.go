@@ -45,8 +45,9 @@ type Config struct {
 	BlobSizeLimitError          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
-	EnableCallbacks             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	Enabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	Enabled                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
@@ -62,8 +63,9 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BlobSizeLimitWarn:           dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:  dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
-		EnableCallbacks:             EnableCallbacks.Get(dc),
-		Enabled:                     Enabled.Get(dc),
+		EnableCallbacks:                  EnableCallbacks.Get(dc),
+		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
+		Enabled:                          Enabled.Get(dc),
 		LongPollBuffer:              LongPollBuffer.Get(dc),
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),

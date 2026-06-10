@@ -26,3 +26,7 @@ message HeartbeatTimeoutTask {
   // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
   int32 stamp = 1;
 }
+
+// CancelCommandDispatchTask is a side-effect task that dispatches a cancel command to the worker
+// via the Nexus worker commands control queue.
+message CancelCommandDispatchTask {}

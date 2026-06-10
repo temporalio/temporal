@@ -149,6 +149,7 @@ var TransitionStarted = chasm.NewTransition(
 		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 		attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 		attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+		attempt.WorkerControlTaskQueue = request.GetPollRequest().GetWorkerControlTaskQueue()
 		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 				BuildId:        versionDirective.GetBuildId(),
