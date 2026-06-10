@@ -65,6 +65,14 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 		return PartitionScalerDecision{NewTarget: int(cfg.Fixed)}
 	}
 
+	// init trackers in use
+	for _, down := range cfg.Downs {
+		_ = s.getTracker(down.Window)
+	}
+	for _, up := range cfg.Ups {
+		_ = s.getTracker(up.Window)
+	}
+
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
 	for _, t := range s.trackers {
