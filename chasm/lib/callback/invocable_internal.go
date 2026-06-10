@@ -3,6 +3,7 @@ package callback
 import (
 	"context"
 	"fmt"
+	golog "log"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -27,6 +28,9 @@ import (
 // internalErr and a reference-id. An opaque error containing the reference-id is
 // returned. Intended to be used to hide internal errors from end users.
 func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
+	// HACK for debugging
+	golog.Printf("logInternalError: %s: %v\n", internalMsg, internalErr)
+
 	referenceID := uuid.NewString()
 	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)

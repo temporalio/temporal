@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/chasm"
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -79,6 +80,13 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+
+	// PROTOTYPE
+	// ActivityClient is the shard-routing client for the standalone activity service, used by
+	// worker callbacks to dispatch an SAA. Optional: it is only provided in the history fx graph
+	// (where side-effect tasks run); it is nil in the worker, and in the frontend it resolves to
+	// the layered client from activity.FrontendModule.
+	ActivityClient activitypb.ActivityServiceClient `optional:"true"`
 }
 
 type invocationTaskHandler struct {
@@ -90,6 +98,7 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	activityClient     activitypb.ActivityServiceClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -101,6 +110,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		activityClient:     opts.ActivityClient,
 	}
 }
 

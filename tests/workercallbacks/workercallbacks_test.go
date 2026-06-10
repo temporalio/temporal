@@ -63,6 +63,9 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 	env := s.newEnv()
 	ctx := s.Context()
 
+	// Reset the worker-callback invocation counter so we can assert it fires below.
+	caller.ResetTimesCalled()
+
 	const (
 		handlerNamespace = "handler-ns"
 		callerNamespace  = "caller-ns"
@@ -132,6 +135,12 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 		ID:                     "add-100-to-100",
 		ScheduleToCloseTimeout: 5 * time.Second,
 
+		// IDEA: How to hook up result mappers to transform the output.
+		// ResultMappers: []*commonpb.Callback{
+		// 	mapResult1,
+		// 	mapResult2,
+		// },
+
 		// PROTOTYPE
 		// Attach a completion callback to the Nexus operation. This would be done by the
 		// SDK, but we hand-craft it for this prototype.
@@ -142,6 +151,8 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 					Nexus: &commonpb.Callback_Nexus{
 						Url: nexus.DispatchWorkerCallbackURL, // "temporal://system/dispatch-worker-callback"
 						Header: map[string]string{
+							// TODO: Specify the callback activity's ID. Accept duplicate/conflict ID policies.
+
 							// SECURITY: This is not strictly required, but included for defence in depth.
 							//
 							// The CHASM Callback is attached to the SANO component in the caller's namespace. The
@@ -159,6 +170,7 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 			},
 		},
 	}
+
 	callHandle, err := nexusClient.ExecuteOperation(ctx, handler.AddOperationName, callInput, callOpts)
 	s.NoError(err, "calling Nexus operation")
 
@@ -169,4 +181,16 @@ func (s *WorkerCallbacksSuite) TestBasicExample() {
 	// Confirm the result is correct.
 	s.Equal(int8(-56), callOutput.Sum)
 	s.True(callOutput.Overflow)
+
+	// The Nexus operation has completed, which triggers the worker callback: a standalone activity
+	// dispatched onto the caller's task queue that runs onAddOperationCompleteCallbackActivity.
+	// Wait for it to be invoked.
+	s.Eventually(func() bool {
+		return caller.TimesCalled() >= 1
+	}, 30*time.Second, 200*time.Millisecond, "worker-callback activity was never invoked")
+
+	// With StartToClose/RetryPolicy set on the dispatched activity, it should run exactly once.
+	// Give any erroneous retries a brief window to show up, then assert we didn't loop.
+	time.Sleep(2 * time.Second)
+	s.Equal(1, caller.TimesCalled(), "worker-callback activity ran more than once (unexpected retries)")
 }

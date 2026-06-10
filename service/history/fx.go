@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -104,6 +105,11 @@ var Module = fx.Options(
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	// The standalone-activity routing ("layered") client, so worker callbacks (callback.Module,
+	// below) can dispatch an SAA to whichever history host owns the target shard. Provided here
+	// rather than in callback.Module because callback.Module is also loaded in the frontend (where
+	// activity.FrontendModule already provides this client) and the worker (which doesn't need it).
+	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	scheduler.Module,
 	callback.Module,
 	chasmnexus.Module,
