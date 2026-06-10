@@ -690,7 +690,7 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 func (a *activities) processTaskWithRetries(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
-	namespace string,
+	ns string,
 	task task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
@@ -701,7 +701,7 @@ func (a *activities) processTaskWithRetries(
 ) {
 	var err error
 	for {
-		err = a.processSingleTask(ctx, batchOperation, namespace, task, limiter, sdkClient, frontendClient, logger)
+		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, sdkClient, frontendClient, logger)
 		if err == nil {
 			metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
 			break
@@ -727,9 +727,10 @@ func (a *activities) processTaskWithRetries(
 // isRetryableTaskError reports whether a failed task's error permits a retry.
 func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInput) bool {
 	var appErr *temporal.ApplicationError
-	return !((errors.As(err, &appErr) && appErr.NonRetryable()) ||
+	nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) ||
 		isNonRetryableError(err, batchOperation.BatchType) ||
-		slices.Contains(batchOperation.NonRetryableErrors, err.Error()))
+		slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+	return !nonRetryable
 }
 
 func (a *activities) processAdminTask(

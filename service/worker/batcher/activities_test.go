@@ -722,7 +722,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 
 	// Feed tasks from a separate goroutine so the test can drain responses concurrently.
 	go func() {
-		for i := 0; i < numTasks; i++ {
+		for i := range numTasks {
 			p := &page{
 				executionInfos: []*workflowpb.WorkflowExecutionInfo{
 					{Execution: &commonpb.WorkflowExecution{WorkflowId: fmt.Sprintf("wf-%d", i), RunId: "run"}},
@@ -733,10 +733,10 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	}()
 
 	// Every task must produce exactly one error response; the activity must not deadlock.
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		select {
 		case resp := <-respCh:
-			s.Error(resp.err)
+			s.Require().Error(resp.err)
 		case <-time.After(10 * time.Second):
 			s.FailNow("timed out waiting for task response: worker is deadlocked")
 		}
