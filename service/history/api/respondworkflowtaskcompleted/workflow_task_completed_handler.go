@@ -1187,6 +1187,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		return nil, err
 	}
 
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+	}
+
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {

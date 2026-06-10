@@ -1019,6 +1019,114 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 	}
 }
 
+func TestValidateVersioningOverrideStructure(t *testing.T) {
+	testVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	tests := []struct {
+		name          string
+		override      *workflowpb.VersioningOverride
+		errorContains string
+	}{
+		{
+			name: "nil override",
+		},
+		{
+			name: "v0.32 auto-upgrade",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			},
+		},
+		{
+			name: "v0.32 pinned",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+		},
+		{
+			name: "v0.32 pinned missing version",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					},
+				},
+			},
+			errorContains: "must provide version if override is pinned",
+		},
+		{
+			name: "v0.32 pinned missing behavior",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Version: testVersion,
+					},
+				},
+			},
+			errorContains: "must specify pinned override behavior if override is pinned",
+		},
+		{
+			name: "v0.32 one-time",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: testVersion,
+					},
+				},
+			},
+		},
+		{
+			name: "v0.32 one-time missing target version",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{},
+				},
+			},
+			errorContains: "must provide target deployment version if override is one-time",
+		},
+		{
+			name: "v0.31 pinned version",
+			override: &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+				PinnedVersion: "test-deployment.test-build-id",
+			},
+		},
+		{
+			name: "v0.31 pinned invalid version",
+			override: &workflowpb.VersioningOverride{
+				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+				PinnedVersion: "invalid",
+			},
+			errorContains: "invalid version string",
+		},
+		{
+			name: "v0.31 unspecified",
+			override: &workflowpb.VersioningOverride{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+			},
+			errorContains: "override behavior is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateVersioningOverrideStructure(tt.override)
+			if tt.errorContains != "" {
+				require.ErrorContains(t, err, tt.errorContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
 	testTaskQueue := "test-task-queue"
