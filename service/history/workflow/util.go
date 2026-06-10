@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func failWorkflowTask(
@@ -74,34 +75,26 @@ func TimeoutWorkflow(
 	continuedRunID string,
 ) error {
 
-	// Check TerminateWorkflow comment bellow.
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		wtFailedEvent, err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		)
-		if err != nil {
+		); err != nil {
 			return err
-		}
-		if wtFailedEvent != nil {
-			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
-		eventBatchFirstEventID,
 		retryState,
 		continuedRunID,
 	)
 	return err
 }
 
-// TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
-// batch ID. Do not use for situations where the WorkflowExecutionTerminated
-// event must fall within an existing event batch (for example, if you've already
-// failed a workflow task via `failWorkflowTask` and have an event batch ID).
+// TerminateWorkflow writes a WorkflowExecutionTerminated event. If a workflow
+// task is currently started it is failed first, and then the terminate event
+// is added.
 func TerminateWorkflow(
 	mutableState historyi.MutableState,
 	terminateReason string,
@@ -111,38 +104,23 @@ func TerminateWorkflow(
 	links []*commonpb.Link,
 ) error {
 
-	// Terminate workflow is written as a separate batch and might result in more than one event
-	// if there is started WT which needs to be failed before.
-	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
-	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
-	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
-	// WTFailed event wasn't created (because there were no WT or WT was transient),
-	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
-	eventBatchFirstEventID := mutableState.GetNextEventID()
-
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		wtFailedEvent, err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		)
-		if err != nil {
+		); err != nil {
 			return err
-		}
-		if wtFailedEvent != nil {
-			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
 		terminateReason,
 		terminateDetails,
 		terminateIdentity,
 		deleteAfterTerminate,
 		links,
 	)
-
 	return err
 }
 
@@ -348,4 +326,8 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 		}
 	}
 	return res, nil
+}
+
+func timeNotSet(ts *timestamppb.Timestamp) bool {
+	return ts == nil || ts.AsTime().IsZero()
 }

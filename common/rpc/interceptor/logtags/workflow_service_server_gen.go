@@ -268,6 +268,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.PauseActivityResponse:
 		return nil
+	case *workflowservice.PauseActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PauseActivityExecutionResponse:
+		return nil
 	case *workflowservice.PauseWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
@@ -375,6 +383,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.ResetActivityResponse:
+		return nil
+	case *workflowservice.ResetActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.ResetActivityExecutionResponse:
 		return nil
 	case *workflowservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -554,12 +570,28 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.UnpauseActivityResponse:
 		return nil
+	case *workflowservice.UnpauseActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UnpauseActivityExecutionResponse:
+		return nil
 	case *workflowservice.UnpauseWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.UnpauseWorkflowExecutionResponse:
+		return nil
+	case *workflowservice.UpdateActivityExecutionOptionsRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UpdateActivityExecutionOptionsResponse:
 		return nil
 	case *workflowservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{

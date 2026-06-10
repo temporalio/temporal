@@ -29,6 +29,7 @@ type ReplicationResolver interface {
 	IsGlobalNamespace() bool
 	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
+	ReplicationConfig() *persistencespb.NamespaceReplicationConfig
 
 	// Mutation methods for modifying resolver state
 	SetGlobalFlag(isGlobal bool)
@@ -104,6 +105,10 @@ func (r *defaultReplicationResolver) FailoverVersion(businessID string) int64 {
 
 func (r *defaultReplicationResolver) FailoverNotificationVersion() int64 {
 	return r.failoverNotificationVersion
+}
+
+func (r *defaultReplicationResolver) ReplicationConfig() *persistencespb.NamespaceReplicationConfig {
+	return r.replicationConfig
 }
 
 func (r *defaultReplicationResolver) SetGlobalFlag(isGlobal bool) {

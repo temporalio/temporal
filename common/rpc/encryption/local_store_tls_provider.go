@@ -4,6 +4,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"path"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,8 +64,8 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.
 	}
 
 	remoteClusterClientCertProvider := make(map[string]CertProvider)
-	for hostname, groupTLS := range tlsConfig.RemoteClusters {
-		remoteClusterClientCertProvider[hostname] = certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
+	for key, groupTLS := range tlsConfig.RemoteClusters {
+		remoteClusterClientCertProvider[key] = certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
 	}
 
 	provider := &localStoreTlsProvider{
@@ -139,16 +142,16 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 }
 
 func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
-	groupTLS, ok := s.settings.RemoteClusters[hostname]
+	key, ok := matchRemoteClusterKey(hostname, s.settings.RemoteClusters)
 	if !ok {
 		return nil, nil
 	}
-
+	groupTLS := s.settings.RemoteClusters[key]
 	return s.getOrCreateRemoteClusterClientConfig(
 		hostname,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(
-				s.remoteClusterClientCertProvider[hostname],
+				s.remoteClusterClientCertProvider[key],
 				groupTLS.Client.ServerName,
 				groupTLS.Server.RequireClientAuth,
 				false,
@@ -474,4 +477,31 @@ func isSystemWorker(tls *config.RootTLS) bool {
 	return tls.SystemWorker.CertData != "" || tls.SystemWorker.CertFile != "" ||
 		len(tls.SystemWorker.Client.RootCAData) > 0 || len(tls.SystemWorker.Client.RootCAFiles) > 0 ||
 		tls.SystemWorker.Client.ForceTLS
+}
+
+// matchRemoteClusterKey checks exact matches, then finds the match with the most non-wildcard characters
+func matchRemoteClusterKey[V any](hostname string, m map[string]V) (string, bool) {
+	if _, ok := m[hostname]; ok && !strings.Contains(hostname, "*") {
+		return hostname, true
+	}
+	var wildcards []string
+	for k := range m {
+		if strings.Contains(k, "*") {
+			wildcards = append(wildcards, k)
+		}
+	}
+	sort.Slice(wildcards, func(i, j int) bool {
+		li := len(wildcards[i]) - strings.Count(wildcards[i], "*")
+		lj := len(wildcards[j]) - strings.Count(wildcards[j], "*")
+		if li != lj {
+			return li > lj
+		}
+		return wildcards[i] < wildcards[j]
+	})
+	for _, k := range wildcards {
+		if matched, err := path.Match(k, hostname); err == nil && matched {
+			return k, true
+		}
+	}
+	return "", false
 }

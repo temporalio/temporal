@@ -84,7 +84,6 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
@@ -124,6 +123,21 @@ func Invoke(
 	return ret, nil
 }
 
+func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig) error {
+	if !cfg.GetEnabled() {
+		if cfg.GetBound() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		}
+		return nil
+	}
+	if b, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
+		if b.MaxElapsedDuration.AsDuration() < 0 {
+			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
+		}
+	}
+	return nil
+}
+
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
 // and applies the changes to the mutable state. Returns the merged options and a boolean indicating if there were any changes.
 func MergeAndApply(
@@ -152,7 +166,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig())
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -249,15 +263,6 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
 		}
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
-	}
-
-	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxSkippedDuration(),
-		}
 	}
 
 	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {

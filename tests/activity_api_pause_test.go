@@ -62,7 +62,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
 		if startedActivityCount.Load() == 1 {
-			env.WaitForChannel(ctx, activityPausedCn)
+			env.WaitForChannel(activityPausedCn)
 			return "", activityErr
 		}
 		return "done!", nil
@@ -115,7 +115,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unblock the activity
-	env.SendToChannel(ctx, activityPausedCn)
+	env.SendToChannel(activityPausedCn)
 	// make sure activity is paused on server and completed on the worker
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -208,7 +208,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
 		if startedActivityCount.Load() == 1 {
-			env.WaitForChannel(ctx, activityPausedCn)
+			env.WaitForChannel(activityPausedCn)
 			return "", activityErr
 		}
 		if shouldSucceed.Load() {
@@ -264,7 +264,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// End the activity
-	env.SendToChannel(ctx, activityPausedCn)
+	env.SendToChannel(activityPausedCn)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -559,7 +559,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 			activityErr := errors.New("bad-luck-please-retry")
 			return "", activityErr
 		}
-		env.WaitForChannel(ctx, activityCompleteCn)
+		env.WaitForChannel(activityCompleteCn)
 		return "done!", nil
 	}
 
@@ -632,7 +632,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	env.SendToChannel(ctx, activityCompleteCn)
+	env.SendToChannel(activityCompleteCn)
 
 	// wait for workflow to finish
 	var out string

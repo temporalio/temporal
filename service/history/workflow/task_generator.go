@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -272,7 +271,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTasks(closeTasks...)
 
-	return nil
+	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
+	return r.mutableState.GenerateActivityCancelCommandsForClose()
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.
@@ -584,7 +584,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
-	if !r.config.EnableCancelActivityWorkerCommand() {
+	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
 		return nil
 	}
 
@@ -1042,15 +1042,15 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		return nil
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	if accumulatedSkippedDuration == 0 {
+	if accumulatedSkippedDuration <= 0 {
 		return nil
 	}
 
-	// timertasks that are not stale should be regenerated when time skipping transition happens:
-	// since time skipping transition only happens when there is no in-flight work,
-	// the only timers that are not stale can only be the following types:
-	// (1) next user timer
-	// (2) execution and run timeout timers
+	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
+	// WorkflowTask and HSM(only nexusoperations) timer tasks won't be regenerated
+	// because time skipping pauses when there is in-flight work. Activity retry
+	// timers are the exception: an activity in retry backoff does not block skipping,
+	// so its retry timer must be re-stamped against the new accumulated skip (see (5)).
 
 	// (1) user timers — regenerate one task per pending user timer. User timers
 	// are only one of the task types that may need regeneration, so continue to
@@ -1090,9 +1090,65 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			Version:             startVersion,
 		})
 	}
-	return nil
-}
 
-func timeNotSet(ts *timestamppb.Timestamp) bool {
-	return ts == nil || ts.AsTime().IsZero()
+	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
+	// VisibilityTimestamp tracks the new accumulated skip.
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetConfig().GetEnabled() {
+		boundInfo := tsi.GetCurrentElapsedDurationBound()
+		if boundInfo != nil && !boundInfo.GetHasReached() {
+			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
+				EventID:             boundInfo.GetSourceEventId(),
+			})
+		}
+	}
+
+	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
+	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
+	// no backoff has no real timer to regenerate.
+	if !r.mutableState.HadOrHasWorkflowTask() {
+		ei := r.mutableState.GetExecutionInfo()
+		executionTime := ei.GetExecutionTime().AsTime()
+		startTime := ei.GetStartTime().AsTime()
+		if executionTime.After(startTime) {
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			var backOffType enumsspb.WorkflowBackoffType
+			if ei.CronSchedule != "" {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
+			} else if ei.Attempt > 1 {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
+			} else {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: executionTime,
+				Version:             startVersion,
+				WorkflowBackoffType: backOffType,
+			})
+		}
+	}
+	// (5) activity retry backoff timers — no time comparison here. Regen runs after
+	// the skip transaction has advanced virtual now past the next-attempt time, so any
+	// now-relative check would wrongly exclude the activity whose timer needs re-stamping.
+	// The structural check (not started, has retry policy, attempt > 1) is sufficient:
+	// the idle gate already ensures every pending activity is a failed retry when we get here.
+	for _, ai := range r.mutableState.GetPendingActivityInfos() {
+		if activityPendingRetry(ai) {
+			if err := r.GenerateActivityRetryTasks(ai); err != nil {
+				return err
+			}
+		}
+	}
+
+	// todo@time-skipping: ChasmTaskPure is not supported yet.
+	return nil
 }

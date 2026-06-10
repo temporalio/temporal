@@ -9,6 +9,20 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
+// SyncMatchOutcome describes the outcome of a sync match attempt from the hook's perspective.
+type SyncMatchOutcome int
+
+const (
+	// Default zero value; should not be used explicitly.
+	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
+	// The task was not sync-matched. Catch-all for reasons not covered by more specific outcomes.
+	SyncMatchOutcomeNotMatched
+	// The task was sync-matched successfully.
+	SyncMatchOutcomeSuccess
+	// A poller was available but rate limiting blocked the match.
+	SyncMatchOutcomeRateLimited
+)
+
 type (
 	// TaskQueuePartition is a simplified version of tqid.Partition that removes details
 	// the hooks should not concern themselves with
@@ -25,7 +39,8 @@ type (
 	}
 	TaskAddHookDetails struct {
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
-		IsSyncMatch       bool
+		IsSyncMatch       bool // Deprecated: use SyncMatchOutcome instead.
+		SyncMatchOutcome  SyncMatchOutcome
 	}
 
 	TaskHookFactory interface {

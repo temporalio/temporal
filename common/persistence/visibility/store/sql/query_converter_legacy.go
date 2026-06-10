@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -487,10 +486,6 @@ func (c *QueryConverterLegacy) convertValueExpr(
 		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
-		}
-
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		switch v := value.(type) {

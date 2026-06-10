@@ -11,7 +11,9 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -42,7 +44,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -76,6 +78,7 @@ var Module = fx.Options(
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(interceptor.NewRoutingKeyExtractor),
@@ -126,6 +129,9 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
+	chasmscheduler.Module,
+	chasmworkflow.Module,
+	callback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -216,6 +222,7 @@ func GrpcServerOptionsProvider(
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
+	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -269,7 +276,7 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		interceptor.ServiceErrorInterceptor,
+		serviceErrorInterceptor.Intercept,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
 		// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
 		businessIDInterceptor.Intercept,
@@ -340,6 +347,14 @@ func ConfigProvider(
 	)
 }
 
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+	)
+}
+
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
 }
@@ -395,21 +410,28 @@ func BusinessIDInterceptorProvider(
 	)
 }
 
+type NamespaceHandoverInterceptorParams struct {
+	fx.In
+	DynamicConfig                          *dynamicconfig.Collection
+	NamespaceRegistry                      namespace.Registry
+	Logger                                 log.Logger
+	MetricsHandler                         metrics.Handler
+	TimeSource                             clock.TimeSource
+	RequestErrorHandler                    *interceptor.RequestErrorHandler
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceHandoverInterceptorProvider(
-	dc *dynamicconfig.Collection,
-	namespaceCache namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-	requestErrorHandler *interceptor.RequestErrorHandler,
+	params NamespaceHandoverInterceptorParams,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
-		dc,
-		namespaceCache,
-		metricsHandler,
-		logger,
-		timeSource,
-		requestErrorHandler,
+		params.DynamicConfig,
+		params.NamespaceRegistry,
+		params.MetricsHandler,
+		params.Logger,
+		params.TimeSource,
+		params.RequestErrorHandler,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 
@@ -481,8 +503,12 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
-	return interceptor.NewContextMetadataInterceptor(false, logger)
+func ContextMetadataInterceptorProvider(
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) *interceptor.ContextMetadataInterceptor {
+	setTrailer := dynamicconfig.FrontendContextMetadataSetTrailer.Get(dc)()
+	return interceptor.NewContextMetadataInterceptor(setTrailer, logger)
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
@@ -565,7 +591,14 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, configs.PollTaskAPISet, serviceConfig.PollWaitForNamespaceRateLimitToken, metricsHandler)
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		namespaceRateLimiter,
+		map[string]int{}, // no token overrides
+		configs.PollTaskAPISet,
+		serviceConfig.PollWaitForNamespaceRateLimitToken,
+		metricsHandler,
+	)
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -775,6 +808,7 @@ func NamespaceDLQHandlerProvider(
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -782,6 +816,7 @@ func NamespaceDLQHandlerProvider(
 		namespaceDataMerger,
 		namespaceAdmitter,
 		logger,
+		testHooks,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,
@@ -824,26 +859,18 @@ func OperatorHandlerProvider(
 }
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
-// so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
-// TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
-// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
+// so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
 	return callback.NewValidator(
 		callback.MaxPerExecution.Get(dc),
 		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		func(ns string) callback.AddressMatchRules {
-			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
-			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
-			for i, r := range hsmRules.Rules {
-				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
-			}
-			return callback.AddressMatchRules{Rules: chasmRules}
-		},
+		callback.AllowedAddresses.Get(dc),
 	)
 }
 
 func HandlerProvider(
+	dc *dynamicconfig.Collection,
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
@@ -869,6 +896,7 @@ func HandlerProvider(
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	saValidator *searchattribute.Validator,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
@@ -906,6 +934,7 @@ func HandlerProvider(
 		namespaceRegistry,
 		saMapperProvider,
 		saProvider,
+		saValidator,
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
@@ -918,6 +947,11 @@ func HandlerProvider(
 		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
+		chasmworkflow.NewValidator(
+			chasmworkflow.NewConfig(dc),
+			saMapperProvider,
+			saValidator,
+		),
 	)
 	return wfHandler
 }

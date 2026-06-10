@@ -92,8 +92,16 @@ func Invoke(
 		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
+	swr := signalWithStartRequest.SignalWithStartRequest
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
 		RunId:   runID,
 		Started: started,
+		SignalLink: api.GenerateRequestIDRefLink(
+			swr.GetNamespace(),
+			swr.GetWorkflowId(),
+			runID,
+			swr.GetRequestId(),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		),
 	}, nil
 }

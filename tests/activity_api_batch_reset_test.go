@@ -32,6 +32,7 @@ func TestActivityAPIBatchResetClientTestSuite(t *testing.T) {
 func newBatchResetEnv(t *testing.T) *testcore.TestEnv {
 	return testcore.NewEnv(
 		t,
+		testcore.WithWorkerService("batch operations"),
 		// These tests intentionally start multiple batch operations in the same namespace.
 		// The default per-namespace limit is 1, so raise it to the functional test limit.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),

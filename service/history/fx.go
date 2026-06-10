@@ -8,8 +8,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -55,8 +57,10 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
+
 	shard.Module,
 	events.Module,
 	cache.Module,
@@ -64,6 +68,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -86,6 +91,7 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
@@ -98,12 +104,19 @@ var Module = fx.Options(
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	scheduler.Module,
+	callback.Module,
 	chasmnexus.Module,
-	chasmnexusworkflow.Module,
+	chasmworkflow.Module,
+	chasmworkflow.HistoryHandlerModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func ServiceResolverProvider(
@@ -193,6 +206,14 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
 	)
 }
 

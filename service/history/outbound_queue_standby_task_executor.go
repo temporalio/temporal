@@ -166,10 +166,9 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 			"standby task executor returned retryable error",
 			err,
 		)
-		return err
 	}
 
-	return nil
+	return err
 }
 
 func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(

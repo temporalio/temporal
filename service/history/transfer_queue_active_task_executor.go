@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -55,6 +56,7 @@ type (
 		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
 		versionCache            worker_versioning.VersionMembershipAndReactivationStatusCache
+		testHooks               testhooks.TestHooks
 	}
 )
 
@@ -70,6 +72,7 @@ func newTransferQueueActiveTaskExecutor(
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
+	testHooks testhooks.TestHooks,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -94,6 +97,7 @@ func newTransferQueueActiveTaskExecutor(
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 		versionCache: versionCache,
+		testHooks:    testHooks,
 	}
 }
 
@@ -102,6 +106,28 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
+
+	// Tests use this hook to intercept tasks.
+	if hook, ok := testhooks.Get(
+		t.testHooks,
+		testhooks.HistoryTransferTaskInterceptor,
+		namespace.ID(task.GetNamespaceID()),
+	); ok {
+		var response queues.ExecuteResponse
+		hook(task, func() {
+			response = t.execute(ctx, executable, task)
+		})
+		return response
+	}
+
+	return t.execute(ctx, executable, task)
+}
+
+func (t *transferQueueActiveTaskExecutor) execute(
+	ctx context.Context,
+	executable queues.Executable,
+	task tasks.Task,
+) queues.ExecuteResponse {
 	taskType := queues.GetActiveTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -663,6 +689,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	if targetNamespaceEntry == nil {
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -682,6 +713,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// handle workflow signal itself
 	if task.NamespaceID == targetNamespaceID.String() && task.WorkflowID == attributes.GetWorkflowExecution().GetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND.String()),
+			metrics.StringTag("source", "local_check"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -708,7 +744,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// Check to see if the error is non-transient, in which case add SignalFailed
 		// event and complete transfer task by returning nil error.
 		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-			// for retryable error just return
+			// Transient errors are retried by the task framework; don't emit the failure metric here.
 			return err
 		}
 		var failedCause enumspb.SignalExternalWorkflowExecutionFailedCause
@@ -721,8 +757,21 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
 			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ServiceErrorType(err), tag.Error(err))
+			metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+				1,
+				metrics.FailureTag(enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED.String()),
+				metrics.StringTag("source", "remote_call"),
+			)
 			return err
 		}
+		// Metric is emitted when the failure cause is detected, before recording the
+		// SignalExternalWorkflowExecutionFailed history event. If the event fails to
+		// commit, the task will be retried and the metric emitted again.
+		metrics.SignalExternalWorkflowExecutionFailures.With(t.metricHandler).Record(
+			1,
+			metrics.FailureTag(failedCause.String()),
+			metrics.StringTag("source", "remote_call"),
+		)
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,

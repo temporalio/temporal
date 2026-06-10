@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -577,9 +576,6 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		value, err := c.parseSQLVal(e, saName, saFieldName, saType)
 		if err != nil {
 			return nil, err
-		}
-		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 		return value, nil
 	case sqlparser.BoolVal:

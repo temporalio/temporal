@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestTrailerToContextMetadataInterceptor(t *testing.T) {
@@ -415,4 +417,133 @@ func TestLogMetadataPropagationStatus(t *testing.T) {
 			logMetadataPropagationStatus(ctx, "/test.Service/Method", tc.trailerMetadata, tc.propagatedMetadata, throttledLogger)
 		})
 	}
+}
+
+func TestExtractMetadataFromTrailer_PrefersProtoKey(t *testing.T) {
+	// Proto key contains "proto-workflow" while legacy keys contain "legacy-workflow".
+	// Reader should prefer the proto key.
+	protoMsg := &contextpropagationspb.ContextMetadata{
+		Entries: map[string]string{
+			contextutil.MetadataKeyWorkflowType:      "proto-workflow",
+			contextutil.MetadataKeyWorkflowTaskQueue: "proto-queue",
+		},
+	}
+	protoBytes, err := proto.Marshal(protoMsg)
+	require.NoError(t, err)
+
+	trailer := metadata.MD{
+		protoTrailerKey: []string{string(protoBytes)},
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowType:      []string{"legacy-workflow"},
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowTaskQueue: []string{"legacy-queue"},
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, propagatedMeta := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), func() float64 { return 1.0 }))
+
+	require.Equal(t, "proto-workflow", trailerMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "proto-queue", trailerMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+	require.Equal(t, "proto-workflow", propagatedMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "proto-queue", propagatedMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+
+	// Verify context was set with proto values.
+	val, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	require.True(t, ok)
+	require.Equal(t, "proto-workflow", val)
+}
+
+func TestExtractMetadataFromTrailer_FallsBackToLegacy(t *testing.T) {
+	// No proto key present; reader should fall back to legacy format.
+	trailer := metadata.MD{
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowType:      []string{"legacy-workflow"},
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowTaskQueue: []string{"legacy-queue"},
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, propagatedMeta := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), func() float64 { return 1.0 }))
+
+	require.Equal(t, "legacy-workflow", trailerMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "legacy-queue", trailerMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+	require.Equal(t, "legacy-workflow", propagatedMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "legacy-queue", propagatedMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+}
+
+func TestExtractMetadataFromTrailer_ProtoRoundTrip(t *testing.T) {
+	// Build trailer pairs using the writer, then read them back using the reader.
+	allMetadata := map[string]any{
+		contextutil.MetadataKeyWorkflowType:      "test-workflow",
+		contextutil.MetadataKeyWorkflowTaskQueue: "test-queue",
+		"custom-key":                             "custom-value",
+	}
+
+	cmi := NewContextMetadataInterceptor(true, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	pairs := cmi.buildTrailerPairs(allMetadata)
+	trailer := metadata.Pairs(pairs...)
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, propagatedMeta := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), func() float64 { return 1.0 }))
+
+	require.Equal(t, "test-workflow", trailerMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "test-queue", trailerMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+	require.Equal(t, "custom-value", trailerMeta["custom-key"])
+	require.Equal(t, trailerMeta, propagatedMeta)
+}
+
+func TestExtractMetadataFromTrailer_EmptyProtoMetadata(t *testing.T) {
+	protoMsg := &contextpropagationspb.ContextMetadata{
+		Entries: map[string]string{},
+	}
+	protoBytes, err := proto.Marshal(protoMsg)
+	require.NoError(t, err)
+
+	trailer := metadata.MD{
+		protoTrailerKey: []string{string(protoBytes)},
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, propagatedMeta := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), func() float64 { return 1.0 }))
+
+	require.Empty(t, trailerMeta)
+	require.Empty(t, propagatedMeta)
+}
+
+func TestExtractMetadataFromTrailer_InvalidProtoFallsBackToLegacy(t *testing.T) {
+	// Invalid proto bytes should cause fallback to legacy format.
+	trailer := metadata.MD{
+		protoTrailerKey: []string{"this-is-not-valid-proto"},
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowType:      []string{"legacy-workflow"},
+		trailerKeyPrefix + contextutil.MetadataKeyWorkflowTaskQueue: []string{"legacy-queue"},
+	}
+
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	tl.Expect(testlogger.Warn, "TrailerToContextMetadataInterceptor: Failed to unmarshal proto trailer, falling back to legacy")
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, propagatedMeta := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(tl, func() float64 { return 1.0 }))
+
+	require.Equal(t, "legacy-workflow", trailerMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "legacy-queue", trailerMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+	require.Equal(t, "legacy-workflow", propagatedMeta[contextutil.MetadataKeyWorkflowType])
+	require.Equal(t, "legacy-queue", propagatedMeta[contextutil.MetadataKeyWorkflowTaskQueue])
+}
+
+func TestExtractMetadataFromTrailer_ControlCharsInProto(t *testing.T) {
+	protoMsg := &contextpropagationspb.ContextMetadata{
+		Entries: map[string]string{
+			contextutil.MetadataKeyWorkflowType: "workflow\nwith\x00control\rchars",
+		},
+	}
+	protoBytes, err := proto.Marshal(protoMsg)
+	require.NoError(t, err)
+
+	trailer := metadata.MD{
+		protoTrailerKey: []string{string(protoBytes)},
+	}
+
+	ctx := contextutil.WithMetadataContext(t.Context())
+	trailerMeta, _ := extractMetadataFromTrailer(ctx, trailer, log.NewThrottledLogger(testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), func() float64 { return 1.0 }))
+
+	require.Equal(t, "workflow\nwith\x00control\rchars", trailerMeta[contextutil.MetadataKeyWorkflowType])
+
+	val, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	require.True(t, ok)
+	require.Equal(t, "workflow\nwith\x00control\rchars", val)
 }

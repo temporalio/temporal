@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
@@ -1117,15 +1118,17 @@ func (s *PartitionManagerTestSuite) TestHasAnyPollerAfter() {
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-100 * time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
@@ -1134,14 +1137,15 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Unversioned() {
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-500 * time.Microsecond)))
-	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-500*time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.True(s.partitionMgr.HasAnyPollerAfter(time.Now().Add(-10 * time.Millisecond)))
+	s.True(s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter("", time.Now().Add(-10*time.Millisecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
@@ -1151,13 +1155,14 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 	// one version-set poller
 	bid := "bid"
 	s.pollWithIdentity("v", bid, true, false)
-	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
-	time.Sleep(time.Millisecond)
-	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.True(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond)))
+	await.RequireTrue(s.T(), func() bool {
+		return !s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond))
+	}, 20*time.Millisecond, time.Millisecond)
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, true)
-	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-100*time.Microsecond)))
+	s.False(s.partitionMgr.HasPollerAfter(bid, time.Now().Add(-10*time.Millisecond)))
 }
 
 func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
@@ -1350,7 +1355,7 @@ type capturingTaskMatchHook struct {
 type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
-	IsSyncMatch       bool
+	SyncMatchOutcome  hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1370,9 +1375,9 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName: h.taskQueueName,
-		TaskQueueType: h.taskQueueType,
-		IsSyncMatch:   event.IsSyncMatch,
+		TaskQueueName:    h.taskQueueName,
+		TaskQueueType:    h.taskQueueType,
+		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1610,7 +1615,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.True(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeSuccess, calls[0].SyncMatchOutcome)
 	s.Nil(calls[0].DeploymentVersion)
 }
 
@@ -1634,7 +1639,74 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.False(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
+	if !s.newMatcher {
+		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
+	}
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// Set rate limit to zero RPS — this blocks all sync matches due to rate limiting.
+	pm.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	pm.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Set up a waiting poller so sync match would succeed if not rate-limited.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	// AddTask should fall through to spool because rate limiting blocked sync match.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeRateLimited, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// No rate limiting configured — task should spool normally without rate limit flag.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNotInvoked() {
@@ -1687,14 +1759,11 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 
 	// Drain the poller goroutine and verify it received the task.
 	var pr pollResult
-	s.Require().Eventually(func() bool {
-		select {
-		case pr = <-pollDone:
-			return true
-		default:
-			return false
-		}
-	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case pr = <-pollDone:
+	case <-time.After(5 * time.Second):
+		s.Require().Fail("timed out waiting for poll result")
+	}
 	s.Require().NoError(pr.err)
 	s.Require().NotNil(pr.task)
 
@@ -1744,14 +1813,15 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 
 	s.Len(hook1.getCalls(), 1)
 	s.Len(hook2.getCalls(), 1)
-	s.False(hook1.getCalls()[0].IsSyncMatch)
-	s.False(hook2.getCalls()[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook1.getCalls()[0].SyncMatchOutcome)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data     *persistencespb.VersionedTaskQueueUserData
-	onChange UserDataOnChangeFunc
+	data      *persistencespb.VersionedTaskQueueUserData
+	onChange  UserDataOnChangeFunc
+	scaleInfo *taskqueuespb.PartitionScaleInfo
 }
 
 func (m *mockUserDataManager) Start() {
@@ -1797,6 +1867,18 @@ func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Cont
 
 func (m *mockUserDataManager) LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64) {
 	panic("unused")
+}
+
+func (m *mockUserDataManager) SetPartitionScale(scaleInfo *taskqueuespb.PartitionScaleInfo) {
+	m.Lock()
+	defer m.Unlock()
+	m.scaleInfo = scaleInfo
+}
+
+func (m *mockUserDataManager) PartitionScale() *taskqueuespb.PartitionScaleInfo {
+	m.Lock()
+	defer m.Unlock()
+	return m.scaleInfo
 }
 
 func (m *mockUserDataManager) updateVersioningData(data *persistencespb.VersioningData) {

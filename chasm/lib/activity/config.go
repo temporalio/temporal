@@ -1,9 +1,8 @@
 package activity
 
 import (
-	"time"
-
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -17,13 +16,13 @@ var (
 
 	LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 		"activity.longPollTimeout",
-		20*time.Second,
+		common.DefaultLongPollTimeout,
 		`Timeout for activity long-poll requests.`,
 	)
 
 	LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
 		"activity.longPollBuffer",
-		time.Second,
+		common.DefaultLongPollBuffer,
 		`A buffer used to adjust the activity long-poll timeouts.
  Specifically, activity long-poll requests are timed out at a time which leaves at least the buffer's duration
  remaining before the caller's deadline, if permitted by the caller's deadline.`,
@@ -64,4 +63,13 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
+}
+
+// linkValidatorProvider builds the linkValidator from dynamic config.
+func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
+	return newLinkValidator(
+		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+		dynamicconfig.MaxLinksPerComponent.Get(dc),
+		dynamicconfig.FrontendLinkMaxSize.Get(dc),
+	)
 }

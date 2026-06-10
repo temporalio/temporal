@@ -2,6 +2,9 @@ package authorization
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"testing"
 
@@ -20,7 +23,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
 const (
@@ -768,6 +773,83 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_InvalidToken() {
 	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
 	s.Error(err)
 	s.False(handlerCalled)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_AudiencePassedToClaimMapper() {
+	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
+	mockAudienceMapper.EXPECT().Audience(gomock.Any(), nil, nil).Return("stream-audience")
+
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		mockAudienceMapper,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	inCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer some-token"))
+	expectedAuthInfo := &AuthInfo{AuthToken: "Bearer some-token", Audience: "stream-audience"}
+	s.mockClaimMapper.EXPECT().GetClaims(expectedAuthInfo).Return(&Claims{System: RoleAdmin}, nil)
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	streamHandler := func(srv any, stream grpc.ServerStream) error { return nil }
+	ss := &mockServerStream{ctx: inCtx}
+	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWithoutToken() {
+	// mTLS-only streams must not invoke the audience mapper; existing custom impls may not nil-check req/info.
+	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
+
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		mockAudienceMapper,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	cert := &x509.Certificate{Subject: pkix.Name{CommonName: "client"}}
+	tlsInfo := credentials.TLSInfo{State: tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{cert}}}}
+	inCtx := peer.NewContext(ctx, &peer.Peer{AuthInfo: tlsInfo})
+
+	s.mockClaimMapper.EXPECT().GetClaims(gomock.Any()).DoAndReturn(func(authInfo *AuthInfo) (*Claims, error) {
+		s.Empty(authInfo.AuthToken)
+		s.Empty(authInfo.Audience)
+		s.NotNil(authInfo.TLSSubject)
+		return &Claims{System: RoleAdmin}, nil
+	})
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	streamHandler := func(srv any, stream grpc.ServerStream) error { return nil }
+	ss := &mockServerStream{ctx: inCtx}
+	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {

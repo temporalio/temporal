@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -109,6 +110,7 @@ type (
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		dcRedirectionPolicy              config.DCRedirectionPolicy
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -123,6 +125,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		tokenProvider             auth.TokenProvider
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -171,6 +174,7 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		DCRedirectionPolicy              config.DCRedirectionPolicy
 		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -179,6 +183,7 @@ type (
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider            auth.TokenProvider
 	}
 
 	listenHostPort string
@@ -186,11 +191,6 @@ type (
 )
 
 const NamespaceCacheRefreshInterval = time.Second
-
-var chasmFxOptions = fx.Options(
-	temporal.ChasmLibraryOptions,
-	chasmtests.Module,
-)
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
@@ -216,6 +216,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		dcRedirectionPolicy:              params.DCRedirectionPolicy,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -226,6 +227,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		tokenProvider:                    params.TokenProvider,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -378,7 +380,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
@@ -429,7 +431,8 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &schedulerClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -526,7 +529,8 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
 			fx.Populate(&c.chasmVisibilityMgr),
@@ -586,7 +590,8 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -653,7 +658,8 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasmFxOptions,
+			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -748,6 +754,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 				},
 			},
 		},
+		DCRedirectionPolicy: c.dcRedirectionPolicy,
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -761,6 +768,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 				RPC: config.RPC{},
 			},
 		},
+		DCRedirectionPolicy: config.DCRedirectionPolicy{},
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -803,7 +811,7 @@ func (c *TemporalImpl) newRPCFactory(
 			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
 		)
 	}
-	// Add replication stream recorder interceptor
+	// Add replication stream recorder injector
 	if c.replicationStreamRecorder != nil {
 		options = append(options,
 			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
@@ -829,8 +837,9 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
-		map[primitives.ServiceName][]grpc.DialOption{},
+		resource.PerServiceDialOptionsProvider(logger),
 		monitor,
+		c.tokenProvider,
 	), nil
 }
 
@@ -946,6 +955,20 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 	} else if err = json.Unmarshal(b, &newCfg); err != nil {
 		panic("copy persistence config: " + err.Error())
 	}
+
+	// Preserve fault injection injectors after the JSON copy.
+	for name, dataStore := range cfg.DataStores {
+		if dataStore.FaultInjection == nil {
+			continue
+		}
+		newDataStore := newCfg.DataStores[name]
+		if newDataStore.FaultInjection == nil {
+			newDataStore.FaultInjection = &config.FaultInjection{}
+		}
+		newDataStore.FaultInjection.Injector = dataStore.FaultInjection.Injector
+		newCfg.DataStores[name] = newDataStore
+	}
+
 	return newCfg
 }
 
