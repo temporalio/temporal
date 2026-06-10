@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -35,7 +34,7 @@ func (s *simplePartitionScalerFactory) New(
 type simplePartitionScaler struct {
 	cfg      scalerCfg
 	ts       clock.TimeSource
-	trackers sync.Map // time.Duration -> *taskTracker
+	trackers map[time.Duration]*taskTracker
 }
 
 func newSimplePartitionScaler(cfg scalerCfg, ts clock.TimeSource) *simplePartitionScaler {
@@ -46,12 +45,12 @@ func newSimplePartitionScaler(cfg scalerCfg, ts clock.TimeSource) *simplePartiti
 }
 
 func (s *simplePartitionScaler) getTracker(interval time.Duration) *taskTracker {
-	if t, _ := s.trackers.Load(interval); t != nil {
-		return t.(*taskTracker) //nolint:revive
+	if t, ok := s.trackers[interval]; ok {
+		return t
 	}
-	newT := newTaskTracker(s.ts, interval/10, interval)
-	t, _ := s.trackers.LoadOrStore(interval, newT)
-	return t.(*taskTracker)
+	t := newTaskTracker(s.ts, interval/simplePartitionScalerTrackerBuckets, interval)
+	s.trackers[interval] = t
+	return t
 }
 
 func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScalerDecision {
@@ -65,10 +64,9 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 
 	// TODO(dp): optimization: use one tracker and query it for different intervals.
 	// TODO(dp): clean up trackers that are unused after config change.
-	s.trackers.Range(func(_, t any) bool {
-		t.(*taskTracker).inc(in.NumTasks)
-		return true
-	})
+	for _, t := range s.trackers {
+		t.inc(in.NumTasks)
+	}
 
 	// unmarshal our state
 	var state persistencespb.SimplePartitionScalerState
