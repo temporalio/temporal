@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -33,6 +34,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func logTagValues(tags []tag.Tag) map[string]any {
+	values := make(map[string]any, len(tags))
+	for _, logTag := range tags {
+		values[logTag.Key()] = logTag.Value()
+	}
+	return values
+}
 
 type (
 	nodeSuite struct {
@@ -3291,7 +3300,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidatio
 
 	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+		Data: []byte("root-task-payload"),
 	}
 	mutableContext.AddTask(testComponent, taskAttributes, pureTask)
 
@@ -3311,8 +3320,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidatio
 
 	_, err = root.CloseTransaction()
 	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
-	s.ErrorContains(err, "LogicalTask{Type: "+testPureTaskFQN)
-	s.ErrorContains(err, "Path: ,")
+	s.NotContains(err.Error(), "LogicalTask{")
 	var taskNotInvalidatedErr *TaskNotInvalidatedError
 	s.ErrorAs(err, &taskNotInvalidatedErr)
 	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
@@ -3322,8 +3330,10 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidatio
 	s.Equal(testComponentTypeID, taskNotInvalidatedErr.ArchetypeID)
 	s.Empty(taskNotInvalidatedErr.ComponentPath)
 	s.Empty(taskNotInvalidatedErr.EncodedComponentPath)
-	s.True(taskNotInvalidatedErr.Immediate)
-	s.True(taskNotInvalidatedErr.ScheduledTime.IsZero())
+	s.True(taskNotInvalidatedErr.TaskAttributes.IsImmediate())
+	s.True(taskNotInvalidatedErr.TaskAttributes.ScheduledTime.IsZero())
+	s.Contains(logTagValues(taskNotInvalidatedErr.LogTags()), "chasm-task-type")
+	s.Equal(testPureTaskFQN, logTagValues(taskNotInvalidatedErr.LogTags())["chasm-task-type"])
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -3593,8 +3603,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
-	s.ErrorContains(err, "LogicalTask{Type: "+testPureTaskFQN)
-	s.ErrorContains(err, "Path: ,")
+	s.NotContains(err.Error(), "LogicalTask{")
 	var taskNotInvalidatedErr *TaskNotInvalidatedError
 	s.ErrorAs(err, &taskNotInvalidatedErr)
 	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
@@ -3604,8 +3613,13 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.Equal(testComponentTypeID, taskNotInvalidatedErr.ArchetypeID)
 	s.Empty(taskNotInvalidatedErr.ComponentPath)
 	s.Empty(taskNotInvalidatedErr.EncodedComponentPath)
-	s.Equal(taskAttributes.ScheduledTime, taskNotInvalidatedErr.ScheduledTime)
-	s.False(taskNotInvalidatedErr.Immediate)
+	s.Equal(taskAttributes.ScheduledTime, taskNotInvalidatedErr.TaskAttributes.ScheduledTime)
+	s.False(taskNotInvalidatedErr.TaskAttributes.IsImmediate())
+	logTags := logTagValues(taskNotInvalidatedErr.LogTags())
+	s.Equal(testPureTaskFQN, logTags["chasm-task-type"])
+	s.Equal(testPureTaskTypeID, logTags["chasm-task-type-id"])
+	s.Empty(logTags["chasm-component-path"])
+	s.Equal(taskAttributes.ScheduledTime, logTags["chasm-task-scheduled-time"])
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	// Succeed execution, but post-execution validation errors.

@@ -3320,9 +3320,7 @@ func (n *Node) ExecutePureTask(
 			ArchetypeID:          archetypeID,
 			ComponentPath:        n.path(),
 			EncodedComponentPath: encodedPath,
-			ScheduledTime:        taskAttributes.ScheduledTime,
-			Destination:          taskAttributes.Destination,
-			Immediate:            taskAttributes.IsImmediate(),
+			TaskAttributes:       taskAttributes,
 		})
 	}
 

@@ -380,14 +380,14 @@ func (h *InvokerProcessBufferTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
+	lastProcessedTime := invoker.GetLastProcessedTime()
 	if attrs.IsImmediate() {
-		lastProcessedTime := invoker.GetLastProcessedTime()
 		return lastProcessedTime == nil ||
 			(lastProcessedTime.GetSeconds() == 0 && lastProcessedTime.GetNanos() == 0) ||
 			lastProcessedTime.AsTime().Before(ctx.Now(invoker)), nil
 	}
 	return validateTaskHighWaterMark(
-		invoker.GetLastProcessedTime(),
+		lastProcessedTime,
 		attrs.ScheduledTime,
 	)
 }
