@@ -48,8 +48,6 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -378,11 +376,6 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
-		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
-	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -433,13 +426,6 @@ func (s *FunctionalTestBase) setupSdk() {
 
 	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-	}
-
-	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
 	}
 
 	var err error
@@ -499,7 +485,6 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
-	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
