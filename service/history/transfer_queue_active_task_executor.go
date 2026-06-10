@@ -957,17 +957,17 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	var inheritedBuildId string
+	var inheritedBuildID string
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	var inheritedVersioningOverride *workflowpb.VersioningOverride
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
 	// If a VersioningOverride is present at child workflow start, it takes precedence over inherited information.
 	if versioningOverride == nil {
-		if attributes.InheritBuildId && mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		if attributes.InheritBuildId && mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { //nolint:staticcheck // SA1019: worker versioning v0.2
 			// Do not set inheritedBuildId for v3 wfs.
 			// setting inheritedBuildId of the child wf to the assignedBuildId of the parent
-			inheritedBuildId = mutableState.GetAssignedBuildId()
-			if inheritedBuildId == "" {
+			inheritedBuildID = mutableState.GetAssignedBuildId()
+			if inheritedBuildID == "" {
 				// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
 				// [cleanup-old-wv]
 				// Copy version stamp to new workflow only if:
@@ -1014,25 +1014,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
 
 		// Only set inherited auto upgrade info if source deployment version and revision number are not nil
-		if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-			if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-					SourceDeploymentVersion:                sourceDeploymentVersion,
-					SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
-					ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
-				}
+		if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 &&
+			mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				SourceDeploymentVersion:                sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+				ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
+			}
 
-				newTQ := attributes.GetTaskQueue().GetName()
-				if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
+			newTQ := attributes.GetTaskQueue().GetName()
+			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
+				inheritedAutoUpgradeInfo = nil
+			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				if err != nil {
+					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				}
+				if !TQInSourceDeploymentVersion {
 					inheritedAutoUpgradeInfo = nil
-				} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-					TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
-					if err != nil {
-						return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
-					}
-					if !TQInSourceDeploymentVersion {
-						inheritedAutoUpgradeInfo = nil
-					}
 				}
 			}
 		}
@@ -1102,7 +1101,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		attributes,
 		sourceVersionStamp,
 		rootExecutionInfo,
-		inheritedBuildId,
+		inheritedBuildID,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
 		inheritedVersioningOverride,

@@ -833,6 +833,7 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 			return validateVersionAndGetReactivationEligibility(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
 		}
 	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+	default:
 	}
 	return false, 0, nil
 }

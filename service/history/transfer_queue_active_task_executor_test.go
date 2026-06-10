@@ -2046,12 +2046,12 @@ func (s *transferQueueActiveTaskExecutorSuite) validateUpdateExecutionRequestWit
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) validateUpdateExecutionRequestWithStartChildFailedEvent(
-	childInitiatedEventId int64,
+	childInitiatedEventID int64,
 	expectedFailedCause enumspb.StartChildWorkflowExecutionFailedCause,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) {
 	s.Len(request.UpdateWorkflowMutation.DeleteChildExecutionInfos, 1)
-	_, ok := request.UpdateWorkflowMutation.DeleteChildExecutionInfos[childInitiatedEventId]
+	_, ok := request.UpdateWorkflowMutation.DeleteChildExecutionInfos[childInitiatedEventID]
 	s.True(ok)
 
 	numFailedEvent := 0
