@@ -210,10 +210,6 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
 			task.finish(nil, false)
-			var invalidTaskTag = getInvalidTaskTag(task)
-
-			// consider this task expired while processing.
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks
@@ -270,8 +266,6 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
-			var invalidStageTag = getInvalidTaskTag(task)
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
 			recordDroppedTask(tm.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 
 			// Stay alive as long as we're invalidating tasks

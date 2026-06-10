@@ -22,18 +22,6 @@ func backlogTaskWithExpiry(t *testing.T, expiry *timestamppb.Timestamp) *interna
 	}, func(*internalTask, taskResponse) {})
 }
 
-func TestGetInvalidTaskTag(t *testing.T) {
-	t.Run("expired -> memory stage", func(t *testing.T) {
-		task := backlogTaskWithExpiry(t, timestamppb.New(time.Now().Add(-time.Minute)))
-		require.Equal(t, metrics.TaskExpireStageMemoryTag, getInvalidTaskTag(task))
-	})
-
-	t.Run("not expired -> invalid", func(t *testing.T) {
-		task := backlogTaskWithExpiry(t, nil)
-		require.Equal(t, metrics.TaskInvalidTag, getInvalidTaskTag(task))
-	})
-}
-
 func TestGetDroppedTaskExpiryReasonTag(t *testing.T) {
 	t.Run("expired -> expired_memory", func(t *testing.T) {
 		task := backlogTaskWithExpiry(t, timestamppb.New(time.Now().Add(-time.Minute)))
