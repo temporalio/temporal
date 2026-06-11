@@ -102,10 +102,8 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		token  []byte
 		err    error
 	}
-	longPollStarted := make(chan struct{})
 	historyPageCh := make(chan historyPage, 1)
 	go func(token []byte) {
-		close(longPollStarted)
 		response, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -122,7 +120,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		}
 		historyPageCh <- historyPage{events: response.History.Events, token: response.NextPageToken}
 	}(token)
-	<-longPollStarted
 
 	_, scheduleActivityErr := workflowPoller.HandleTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
@@ -373,10 +370,8 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		token []byte
 		err   error
 	}
-	longPollStarted := make(chan struct{})
 	rawHistoryPageCh := make(chan rawHistoryPage, 1)
 	go func(token []byte) {
-		close(longPollStarted)
 		response, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -393,7 +388,6 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		}
 		rawHistoryPageCh <- rawHistoryPage{blobs: response.RawHistory, token: response.NextPageToken}
 	}(token)
-	<-longPollStarted
 
 	_, scheduleActivityErr := poller.PollAndHandleWorkflowTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
