@@ -6340,13 +6340,13 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	childTSC, childStateProp := propagateTimeSkippingToChild(ms.executionInfo)
+	childTSC, childTSStateProp := propagateTimeSkippingToChild(ms.executionInfo)
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
 		childTSC,
-		childStateProp,
+		childTSStateProp,
 	)
 	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(batchID, event)
 	if err != nil {
