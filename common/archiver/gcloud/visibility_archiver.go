@@ -23,6 +23,7 @@ const (
 	errEncodeVisibilityRecord = "failed to encode visibility record"
 	indexKeyStartTimeout      = "startTimeout"
 	indexKeyCloseTimeout      = "closeTimeout"
+	indexKeyWorkflowID        = "workflowID"
 	timeoutInSeconds          = 5
 )
 
@@ -124,6 +125,12 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
+	filename = constructVisibilityWorkflowIDIndexFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyWorkflowID, request.CloseTime.AsTime())
+	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
+		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
+		return errRetryable
+	}
+
 	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
@@ -197,6 +204,10 @@ func (v *visibilityArchiver) query(
 			request.parsedQuery.startTime,
 			*request.parsedQuery.searchPrecision,
 		)
+	}
+
+	if request.parsedQuery.workflowID != nil {
+		prefix = constructWorkflowIdBasedSearchKey(request.namespaceID, request.parsedQuery)
 	}
 
 	return v.queryPrefix(ctx, uri, request, saTypeMap, prefix)

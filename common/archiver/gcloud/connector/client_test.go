@@ -280,6 +280,163 @@ func (s *clientSuite) TestQueryWithFilter() {
 	s.Equal(strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
 }
 
+// TestQueryWithFilters_Pagination verifies pagination correctness for QueryWithFilters
+// across all meaningful combinations of page size, offset, filters, and result counts.
+func (s *clientSuite) TestQueryWithFilters_Pagination() {
+	ctx := context.Background()
+
+	// Helper to build a mock iterator from a slice of names.
+	// Each call to Next() returns the next item and the final call returns iterator.Done.
+	makeIter := func(names []string) *connector.MockObjectIteratorWrapper {
+		it := connector.NewMockObjectIteratorWrapper(s.controller)
+		call := 0
+		it.EXPECT().Next().DoAndReturn(func() (*storage.ObjectAttrs, error) {
+			if call < len(names) {
+				a := &storage.ObjectAttrs{Name: names[call]}
+				call++
+				return a, nil
+			}
+			return nil, iterator.Done
+		}).AnyTimes()
+		return it
+	}
+
+	// Helper to build a fresh storageWrapper+bucket mock wired to a given iterator.
+	makeWrapper := func(it *connector.MockObjectIteratorWrapper) connector.Client {
+		mockStorage := connector.NewMockGcloudStorageClient(s.controller)
+		mockBucket := connector.NewMockBucketHandleWrapper(s.controller)
+		mockStorage.EXPECT().Bucket("my-bucket-cad").Return(mockBucket)
+		mockBucket.EXPECT().Objects(ctx, gomock.Any()).Return(it)
+		w, _ := connector.NewClientWithParams(mockStorage)
+		return w
+	}
+
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+
+	matchAll := connector.Precondition(func(subject interface{}) bool { return true })
+	matchNone := connector.Precondition(func(subject interface{}) bool { return false })
+	files3 := []string{"file_a.visibility", "file_b.visibility", "file_c.visibility"}
+
+	type result struct {
+		files     []string
+		completed bool
+		nextPos   int
+	}
+
+	testCases := []struct {
+		name     string
+		rawItems []string
+		pageSize int
+		offset   int
+		filters  []connector.Precondition
+		want     result
+	}{
+		{
+			// Fewer results than page size: iterator ends before page is full → completed.
+			name:     "NoFilter_FewerResultsThanPageSize",
+			rawItems: files3[:2],
+			pageSize: 5,
+			offset:   0,
+			filters:  nil,
+			want:     result{files: []string{"file_a.visibility", "file_b.visibility"}, completed: true, nextPos: 2},
+		},
+		{
+			// Results exactly equal to page size and then iterator ends.
+			// This is the original bug: must return completed=false so the caller
+			// generates a NextPageToken — there may be more records at the next offset.
+			name:     "NoFilter_ResultsExactlyPageSize_IteratorEndsSimultaneously",
+			rawItems: files3[:2],
+			pageSize: 2,
+			offset:   0,
+			filters:  nil,
+			want:     result{files: []string{"file_a.visibility", "file_b.visibility"}, completed: false, nextPos: 2},
+		},
+		{
+			// More results than page size: iterator still has items after page is full.
+			name:     "NoFilter_MoreResultsThanPageSize",
+			rawItems: files3,
+			pageSize: 2,
+			offset:   0,
+			filters:  nil,
+			want:     result{files: []string{"file_a.visibility", "file_b.visibility"}, completed: false, nextPos: 2},
+		},
+		{
+			// Second page via offset: skip first 2 items, return the remaining 1.
+			name:     "NoFilter_WithOffset_SecondPage",
+			rawItems: files3,
+			pageSize: 2,
+			offset:   2,
+			filters:  nil,
+			want:     result{files: []string{"file_c.visibility"}, completed: true, nextPos: 3},
+		},
+		{
+			// Filter matches fewer items than page size → exhausted, completed.
+			name:     "WithFilter_FewerMatchesThanPageSize",
+			rawItems: files3,
+			pageSize: 5,
+			offset:   0,
+			filters:  []connector.Precondition{func(subject interface{}) bool { return subject.(string) == "file_a.visibility" }},
+			want:     result{files: []string{"file_a.visibility"}, completed: true, nextPos: 1},
+		},
+		{
+			// Filter matches exactly page-size items and then iterator returns Done.
+			// This is the NEW bug case: even though iterator is done after the last match,
+			// we must return completed=false because the caller cannot know there are no
+			// more matching records without fetching another page.
+			name:     "WithFilter_MatchesExactlyPageSize_IteratorEndsSimultaneously",
+			rawItems: files3[:2],
+			pageSize: 2,
+			offset:   0,
+			filters:  []connector.Precondition{matchAll},
+			want:     result{files: []string{"file_a.visibility", "file_b.visibility"}, completed: false, nextPos: 2},
+		},
+		{
+			// Filter skips some items; remaining matches exceed page size.
+			name:     "WithFilter_MoreMatchesThanPageSize",
+			rawItems: files3,
+			pageSize: 2,
+			offset:   0,
+			filters: []connector.Precondition{func(subject interface{}) bool {
+				return subject.(string) != "file_b.visibility" // skip b, match a and c
+			}},
+			want: result{files: []string{"file_a.visibility", "file_c.visibility"}, completed: false, nextPos: 2},
+		},
+		{
+			// No filters, pageSize=0 (unlimited): returns all items, always completed.
+			name:     "NoFilter_UnlimitedPageSize",
+			rawItems: files3,
+			pageSize: 0,
+			offset:   0,
+			filters:  nil,
+			want:     result{files: files3, completed: true, nextPos: 3},
+		},
+		{
+			// All items filtered out: empty result set, completed.
+			name:     "WithFilter_NoMatches",
+			rawItems: files3,
+			pageSize: 5,
+			offset:   0,
+			filters:  []connector.Precondition{matchNone},
+			want:     result{files: []string{}, completed: true, nextPos: 0},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			it := makeIter(tc.rawItems)
+			w := makeWrapper(it)
+
+			gotFiles, gotCompleted, gotPos, gotErr := w.QueryWithFilters(ctx, URI, "", tc.pageSize, tc.offset, tc.filters)
+
+			s.Require().NoError(gotErr, "unexpected error")
+			s.Equal(tc.want.completed, gotCompleted, "completed flag mismatch")
+			s.Equal(tc.want.nextPos, gotPos, "cursor position mismatch")
+			s.Equal(tc.want.files, gotFiles, "returned filenames mismatch")
+		})
+	}
+}
+
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 	return func(subject any) bool {
 
