@@ -161,25 +161,22 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
 	deploymentName := testcore.RandomizeStr("deployment")
 	tqName := "tq-" + common.GenerateRandomString(5)
 	currentBuildID := "v1"
 
 	// Register this version in the task queue
-	pollerCtx, cancelPoller := context.WithCancel(testcore.NewContext())
-	env.createVersionsInTaskQueue(pollerCtx, tqName, deploymentName, currentBuildID)
+	pollerCtx, cancelPoller := context.WithCancel(s.Context())
+	s.createVersionsInTaskQueue(env, pollerCtx, tqName, deploymentName, currentBuildID)
 
 	// Set current version only (no ramping)
-	env.setCurrentVersion(deploymentName, currentBuildID)
+	s.setCurrentVersion(env, deploymentName, currentBuildID)
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoller()
 
 	// Enqueue unversioned backlog
 	unversionedWorkflowCount := 10 * env.partitionCount
-	env.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
+	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
@@ -189,13 +186,9 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// DescribeWorkerDeploymentVersion: current version should also show the full backlog for this task queue.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -205,9 +198,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 		)
 
 		// DescribeTaskQueue Legacy Mode: Since the task queue is part of the current version, the legacy mode should report the total backlog count.
-		env.requireLegacyTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireLegacyTaskQueueStatsRelaxed(env,
 			"DescribeTaskQueue[legacy]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -217,7 +208,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 
 	// The backlog count for the activity task queue should be equal to the number of activities scheduled since the activity task queue is part of the current version.
 	activitesToSchedule := 10 * env.partitionCount
-	env.completeWorkflowTasksAndScheduleActivities(tqName, deploymentName, currentBuildID, activitesToSchedule)
+	s.completeWorkflowTasksAndScheduleActivities(env, tqName, deploymentName, currentBuildID, activitesToSchedule)
 
 	// Verify activity add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
@@ -227,14 +218,10 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// Since the activity task queue is part of the current version,
 		// the DescribeWorkerDeploymentVersion should report the backlog count for the activity task queue.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY, // Querying the activity task queue to validate the backlogged activities
@@ -244,9 +231,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 		)
 
 		// DescribeTaskQueue Legacy Mode: Since the activity task queue is part of the current version, the legacy mode should report the total backlog count.
-		env.requireLegacyTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireLegacyTaskQueueStatsRelaxed(env,
 			"DescribeTaskQueue[legacy][activity]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -269,20 +254,20 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	rampingBuildID := "v2"
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, rampingBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, currentBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, rampingBuildID)
 	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
 
 	// Set ramping version to 30%
 	rampPercentage := 30
-	env.setRampingVersion(deploymentName, rampingBuildID, rampPercentage)
+	s.setRampingVersion(env, deploymentName, rampingBuildID, rampPercentage)
 
 	// Set current version
-	env.setCurrentVersion(deploymentName, currentBuildID)
+	s.setCurrentVersion(env, deploymentName, currentBuildID)
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
-	env.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
+	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
@@ -303,14 +288,10 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion for the current and ramping versions.
 	// - DescribeTaskQueue Legacy Mode for the current and ramping versions.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// DescribeWorkerDeploymentVersion: current version should also show only 70% of the unversioned backlog for this task queue
 		// as a ramping version, with ramp set to 30%, exists and absorbs 30% of the unversioned backlog.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -320,9 +301,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 		)
 
 		// DescribeWorkerDeploymentVersion: ramping version should show the remaining 30% of the unversioned backlog for this task queue
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[ramping][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -331,9 +310,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 			rampingExpectation,
 		)
 		// Since the task queue is part of both the current and ramping versions, the legacy mode should report the total backlog count.
-		env.requireLegacyTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireLegacyTaskQueueStatsRelaxed(env,
 			"DescribeTaskQueue[legacy][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -343,7 +320,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 
 	// Here, since the activity task queue is present both in the current and in the ramping version, the backlog count would differ depending on the version described.
 	// Poll with BOTH buildIDs in parallel to drain all workflow tasks (hash distribution splits them between current and ramping)
-	env.pollWorkflowTasksAndScheduleActivitiesParallel(
+	s.pollWorkflowTasksAndScheduleActivitiesParallel(env,
 		workflowTasksAndActivitiesPollerParams{
 			tqName:             tqName,
 			deploymentName:     deploymentName,
@@ -385,13 +362,9 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// Validate current version activity stats
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities][current-version]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -401,9 +374,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 		)
 
 		// Validate ramping version activity stats
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities][ramping-version]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -428,18 +399,18 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	currentBuildID := "v1"
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, currentBuildID)
 	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
 
 	// Set current version.
-	env.setCurrentVersion(deploymentName, currentBuildID)
+	s.setCurrentVersion(env, deploymentName, currentBuildID)
 
 	rampPercentage := 20
-	env.setRampingVersion(deploymentName, "", rampPercentage)
+	s.setRampingVersion(env, deploymentName, "", rampPercentage)
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
-	env.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
+	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
@@ -453,14 +424,10 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// There is no way right now for a user to query stats of the "unversioned" version. All we can do in this case
 		// is to query the current version's stats and see that it is attributed 80% of the unversioned backlog.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[current][workflow][ramping-to-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -470,9 +437,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 		)
 
 		// Since the task queue is part of both the current and ramping versions, the legacy mode should report the total backlog count.
-		env.requireLegacyTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireLegacyTaskQueueStatsRelaxed(env,
 			"DescribeTaskQueue[legacy][workflow][ramping-to-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -494,19 +459,19 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	rampingBuildID := "v2"
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, rampingBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, rampingBuildID)
 	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
 
 	// Set current to unversioned (nil current version).
-	env.setCurrentVersion(deploymentName, "")
+	s.setCurrentVersion(env, deploymentName, "")
 
 	// Set ramping to a versioned deployment.
 	rampPercentage := 30
-	env.setRampingVersion(deploymentName, rampingBuildID, rampPercentage)
+	s.setRampingVersion(env, deploymentName, rampingBuildID, rampPercentage)
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
-	env.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
+	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
 
 	// Verify workflow add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
@@ -520,14 +485,10 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// We can't query "unversioned" as a WorkerDeploymentVersion, but we can validate that the ramping version
 		// is attributed its ramp share of the unversioned backlog.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[ramping][workflow][current-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -537,9 +498,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 		)
 
 		// Legacy mode should continue to report the total backlog for the task queue.
-		env.requireLegacyTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireLegacyTaskQueueStatsRelaxed(env,
 			"DescribeTaskQueue[legacy][workflow][current-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -550,9 +509,6 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 
 func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
 	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -561,24 +517,24 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	currentBuildID := "v1"
 	inactiveBuildID := "v2"
 
-	pollCtx, cancelPoll := context.WithCancel(testcore.NewContext())
+	pollCtx, cancelPoll := context.WithCancel(s.Context())
 
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
-	env.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, inactiveBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, currentBuildID)
+	s.createVersionsInTaskQueue(env, pollCtx, tqName, deploymentName, inactiveBuildID)
 
 	// Set current version
-	env.setCurrentVersion(deploymentName, currentBuildID)
+	s.setCurrentVersion(env, deploymentName, currentBuildID)
 
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoll()
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflows := 10 * env.partitionCount
-	env.startUnversionedWorkflows(unversionedWorkflows, tqName)
+	s.startUnversionedWorkflows(env, unversionedWorkflows, tqName)
 
 	// Enqueue pinned workflows.
 	pinnedWorkflows := 10 * env.partitionCount
-	env.startPinnedWorkflows(pinnedWorkflows, tqName, deploymentName, inactiveBuildID)
+	s.startPinnedWorkflows(env, pinnedWorkflows, tqName, deploymentName, inactiveBuildID)
 
 	// Verify workflow add rate
 	env.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
@@ -595,13 +551,9 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion
 	// - DescribeTaskQueue Legacy Mode
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// DescribeWorkerDeploymentVersion: current version should should show 100% of the unversioned backlog for this task queue
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -611,9 +563,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 		)
 
 		// DescribeWorkerDeploymentVersion: inactive version should only show the pinned workflows that are scheduled on it.
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[inactive][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -624,7 +574,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Polling the workflow tasks and scheduling activities
-	env.pollWorkflowTasksAndScheduleActivitiesParallel(
+	s.pollWorkflowTasksAndScheduleActivitiesParallel(env,
 		workflowTasksAndActivitiesPollerParams{
 			tqName:             tqName,
 			deploymentName:     deploymentName,
@@ -667,13 +617,9 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
-
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
 		// The activity task queue of the current version should have the backlog count for the activities that were scheduled
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[current][activity]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -683,9 +629,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 		)
 
 		// The workflow task queue of the current version should be empty since activities were scheduled
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -695,9 +639,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 		)
 
 		// The workflow task queue of the inactive version should be empty since activities were scheduled
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[inactive][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -707,9 +649,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 		)
 
 		// The activity task queue of the inactive version should have the backlog count for the activities that were scheduled
-		env.requireWDVTaskQueueStatsRelaxed(
-			ctx,
-			a,
+		s.requireWDVTaskQueueStatsRelaxed(env,
 			"DescribeWorkerDeploymentVersion[inactive][activity]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -760,9 +700,8 @@ func newTaskQueueStatsContext(
 // requireWDVTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition ramping scenarios.
 // The production code intentionally uses math.Ceil for both ramping and current percentage
 // calculations across partitions, which can result in slight over-counting.
-func (s *taskQueueStatsContext) requireWDVTaskQueueStatsRelaxed(
-	ctx context.Context,
-	a *require.Assertions,
+func (s *TaskQueueStatsVersionSuite) requireWDVTaskQueueStatsRelaxed(
+	env *taskQueueStatsContext,
 	label string,
 	tqName string,
 	tqType enumspb.TaskQueueType,
@@ -770,37 +709,36 @@ func (s *taskQueueStatsContext) requireWDVTaskQueueStatsRelaxed(
 	buildID string,
 	expectation taskQueueExpectations,
 ) {
-	stats, found, err := s.describeWDVTaskQueueStats(ctx, tqName, tqType, deploymentName, buildID)
-	a.NoError(err)
-	a.True(found, "expected %s task queue %s in DescribeWorkerDeploymentVersion response", tqType, tqName)
-	a.NotNil(stats, "expected %s task queue %s to have stats in DescribeWorkerDeploymentVersion response", tqType, tqName)
+	stats, found, err := env.describeWDVTaskQueueStats(s.Context(), tqName, tqType, deploymentName, buildID)
+	s.NoError(err)
+	s.True(found, "expected %s task queue %s in DescribeWorkerDeploymentVersion response", tqType, tqName)
+	s.NotNil(stats, "expected %s task queue %s to have stats in DescribeWorkerDeploymentVersion response", tqType, tqName)
 
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
-	expectation.MaxExtraTasks = s.partitionCount
-	validateTaskQueueStats(label, a, stats, expectation)
+	expectation.MaxExtraTasks = env.partitionCount
+	validateTaskQueueStats(label, s.Assertions, stats, expectation)
 }
 
 // requireLegacyTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition scenarios.
 // The production code intentionally uses math.Ceil for both ramping and current percentage calculations across partitions,
 // which can result in slight over-counting.
-func (s *taskQueueStatsContext) requireLegacyTaskQueueStatsRelaxed(
-	ctx context.Context,
-	a *require.Assertions,
+func (s *TaskQueueStatsVersionSuite) requireLegacyTaskQueueStatsRelaxed(
+	env *taskQueueStatsContext,
 	label string,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
 ) {
-	stats, found, err := s.describeLegacyTaskQueueStats(ctx, tqName, tqType)
-	a.NoError(err)
-	a.True(found, "expected %s task queue %s in DescribeTaskQueue response", tqType, tqName)
-	a.NotNil(stats, "expected %s task queue %s to have stats in DescribeTaskQueue response", tqType, tqName)
+	stats, found, err := env.describeLegacyTaskQueueStats(s.Context(), tqName, tqType)
+	s.NoError(err)
+	s.True(found, "expected %s task queue %s in DescribeTaskQueue response", tqType, tqName)
+	s.NotNil(stats, "expected %s task queue %s to have stats in DescribeTaskQueue response", tqType, tqName)
 
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
-	expectation.MaxExtraTasks = s.partitionCount
-	validateTaskQueueStats(label, a, stats, expectation)
+	expectation.MaxExtraTasks = env.partitionCount
+	validateTaskQueueStats(label, s.Assertions, stats, expectation)
 }
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
@@ -888,11 +826,11 @@ func (s *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(sets in
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 }
 
-func (s *taskQueueStatsContext) startUnversionedWorkflows(count int, tqName string) {
+func (s *TaskQueueStatsVersionSuite) startUnversionedWorkflows(env *taskQueueStatsContext, count int, tqName string) {
 	wt := "functional-workflow-current-absorbs-unversioned"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             s.Namespace().String(),
+		Namespace:             env.Namespace().String(),
 		WorkflowType:          workflowType,
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
@@ -903,17 +841,17 @@ func (s *taskQueueStatsContext) startUnversionedWorkflows(count int, tqName stri
 
 	for range count {
 		request.WorkflowId = uuid.NewString() // starting "count" different Unversioned workflows.
-		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-		require.NoError(s.T(), err)
+		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
 	}
 }
 
-func (s *taskQueueStatsContext) startPinnedWorkflows(count int, tqName string, deploymentName string, buildID string) {
+func (s *TaskQueueStatsVersionSuite) startPinnedWorkflows(env *taskQueueStatsContext, count int, tqName string, deploymentName string, buildID string) {
 	wt := "functional-workflow-pinned"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             s.Namespace().String(),
+		Namespace:             env.Namespace().String(),
 		WorkflowType:          workflowType,
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
@@ -934,18 +872,18 @@ func (s *taskQueueStatsContext) startPinnedWorkflows(count int, tqName string, d
 	}
 	for range count {
 		request.WorkflowId = uuid.NewString() // starting "n" different Pinned workflows.
-		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-		require.NoError(s.T(), err)
+		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
 	}
 }
 
-func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivitiesParallel(params ...workflowTasksAndActivitiesPollerParams) {
+func (s *TaskQueueStatsVersionSuite) pollWorkflowTasksAndScheduleActivitiesParallel(env *taskQueueStatsContext, params ...workflowTasksAndActivitiesPollerParams) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(params))
 
 	for _, p := range params {
 		wg.Go(func() {
-			_, err := s.pollWorkflowTasksAndScheduleActivities(p)
+			_, err := s.pollWorkflowTasksAndScheduleActivities(env, p)
 			errCh <- err
 		})
 	}
@@ -953,18 +891,18 @@ func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivitiesParallel(p
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
-		require.NoError(s.T(), err)
+		s.NoError(err)
 	}
 }
 
-func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivities(params workflowTasksAndActivitiesPollerParams) (int, error) {
+func (s *TaskQueueStatsVersionSuite) pollWorkflowTasksAndScheduleActivities(env *taskQueueStatsContext, params workflowTasksAndActivitiesPollerParams) (int, error) {
 	deploymentOpts := createDeploymentOptions(params.deploymentName, params.buildID)
 
 	scheduled := 0
 	emptyPollCount := 0
 	for i := 0; i < params.maxToSchedule; {
-		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         s.Namespace().String(),
+		resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         env.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: params.tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          params.identity,
 			DeploymentOptions: deploymentOpts,
@@ -985,7 +923,7 @@ func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivities(params wo
 		emptyPollCount = 0
 
 		respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
+			Namespace: env.Namespace().String(),
 			TaskToken: resp.TaskToken,
 			Commands: []*commandpb.Command{
 				{
@@ -1004,7 +942,7 @@ func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivities(params wo
 			VersioningBehavior: params.versioningBehavior,
 			DeploymentOptions:  deploymentOpts,
 		}
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), respondReq)
 		if err != nil {
 			return scheduled, err
 		}
@@ -1016,7 +954,8 @@ func (s *taskQueueStatsContext) pollWorkflowTasksAndScheduleActivities(params wo
 	return scheduled, nil
 }
 
-func (s *taskQueueStatsContext) completeWorkflowTasksAndScheduleActivities(
+func (s *TaskQueueStatsVersionSuite) completeWorkflowTasksAndScheduleActivities(
+	env *taskQueueStatsContext,
 	tqName string,
 	deploymentName string,
 	buildID string,
@@ -1025,13 +964,13 @@ func (s *taskQueueStatsContext) completeWorkflowTasksAndScheduleActivities(
 	deploymentOpts := createDeploymentOptions(deploymentName, buildID)
 
 	for i := 0; i < activityCount; {
-		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         s.Namespace().String(),
+		resp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         env.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "current-version-worker",
 			DeploymentOptions: deploymentOpts,
 		})
-		require.NoError(s.T(), err)
+		s.NoError(err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			fmt.Println("Empty poll! Continuing...")
 			continue
@@ -1040,7 +979,7 @@ func (s *taskQueueStatsContext) completeWorkflowTasksAndScheduleActivities(
 		// Note: Scheduling activities with no VersioningBehaviour only for the purpose of this test so that we can validate
 		// if unversioned activity tasks are considered part of the backlog for the activity task queue in a current version.
 		respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
+			Namespace: env.Namespace().String(),
 			TaskToken: resp.TaskToken,
 			Commands: []*commandpb.Command{
 				{
@@ -1060,37 +999,37 @@ func (s *taskQueueStatsContext) completeWorkflowTasksAndScheduleActivities(
 			DeploymentOptions:  deploymentOpts,
 		}
 
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
-		require.NoError(s.T(), err)
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), respondReq)
+		s.NoError(err)
 		i++
 	}
 }
 
 // TODO (Shivam): We may have to wait for the propagation status to show completed if we are using async workflows here.
-func (s *taskQueueStatsContext) setCurrentVersion(deploymentName, buildID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (s *TaskQueueStatsVersionSuite) setCurrentVersion(env *taskQueueStatsContext, deploymentName, buildID string) {
+	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-		Namespace:      s.Namespace().String(),
+	_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 }
 
 // TODO (Shivam): We may have to wait for the propagation status to show completed if we are using async workflows here.
-func (s *taskQueueStatsContext) setRampingVersion(deploymentName, buildID string, rampPercentage int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (s *TaskQueueStatsVersionSuite) setRampingVersion(env *taskQueueStatsContext, deploymentName, buildID string, rampPercentage int) {
+	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
-		Namespace:      s.Namespace().String(),
+	_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 		Percentage:     float32(rampPercentage),
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 }
 
 func (s *taskQueueStatsContext) describeWDVTaskQueueStats(
@@ -1187,10 +1126,10 @@ func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
 	return total
 }
 
-func (s *taskQueueStatsContext) createVersionsInTaskQueue(ctx context.Context, tqName string, deploymentName string, buildID string) {
+func (s *TaskQueueStatsVersionSuite) createVersionsInTaskQueue(env *taskQueueStatsContext, ctx context.Context, tqName string, deploymentName string, buildID string) {
 	go func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         s.Namespace().String(),
+		_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         env.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
 			DeploymentOptions: createDeploymentOptions(deploymentName, buildID),
@@ -1198,8 +1137,8 @@ func (s *taskQueueStatsContext) createVersionsInTaskQueue(ctx context.Context, t
 	}()
 
 	go func() {
-		_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace:         s.Namespace().String(),
+		_, _ = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace:         env.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
 			DeploymentOptions: createDeploymentOptions(deploymentName, buildID),
@@ -1207,17 +1146,16 @@ func (s *taskQueueStatsContext) createVersionsInTaskQueue(ctx context.Context, t
 	}()
 
 	// Wait for the version to be created.
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
-		a := require.New(c)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
+	s.Await(func(s *TaskQueueStatsVersionSuite) {
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: env.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
 		})
-		a.NoError(err)
-		a.NotNil(resp)
+		s.NoError(err)
+		s.NotNil(resp)
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
