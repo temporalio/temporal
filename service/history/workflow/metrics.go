@@ -1,10 +1,12 @@
 package workflow
 
 import (
+	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -34,10 +36,16 @@ func emitWorkflowHistoryStats(
 
 func emitMutableStateStatus(
 	metricsHandler metrics.Handler,
+	chasmRegistry *chasm.Registry,
+	archetypeID chasm.ArchetypeID,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
+	}
+
+	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, archetypeID); ok {
+		metricsHandler = metricsHandler.WithTags(archetypeTag)
 	}
 
 	batchHandler := metricsHandler.StartBatch("mutable_state_status")
@@ -75,6 +83,26 @@ func emitMutableStateStatus(
 	for category, taskCount := range stats.TaskCountByCategory {
 		metrics.TaskCount.With(batchHandler).Record(int64(taskCount), metrics.TaskCategoryTag(category))
 	}
+}
+
+func getArchetypeMetricTag(
+	chasmRegistry *chasm.Registry,
+	archetypeID chasm.ArchetypeID,
+) (metrics.Tag, bool) {
+	switch archetypeID {
+	case chasm.UnspecifiedArchetypeID:
+		return metrics.ArchetypeTag(""), true
+	case chasm.WorkflowArchetypeID:
+		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
+	}
+
+	if chasmRegistry == nil {
+		return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
+	}
+	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
+		return metrics.ArchetypeTag(name), true
+	}
+	return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
 }
 
 func emitWorkflowCompletionStats(
