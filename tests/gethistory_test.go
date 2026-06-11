@@ -152,6 +152,8 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	})
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeWorkflowErr))
 	s.NoError(completeWorkflowErr)
+
+	// Fetch history with long polling.
 	for token != nil {
 		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
 		allEvents = append(allEvents, events...)
@@ -461,7 +463,6 @@ func (s *RawHistorySuite) TestGetHistoryReverse() {
 		return nil
 	}
 
-	activityID := env.Tv().ActivityID()
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 2,
@@ -471,7 +472,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse() {
 		}
 
 		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             activityID,
+			ActivityID:             env.Tv().ActivityID(),
 			ScheduleToStartTimeout: 2 * time.Second,
 			StartToCloseTimeout:    2 * time.Second,
 			RetryPolicy:            activityRetryPolicy,
@@ -525,7 +526,6 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	activityID := env.Tv().ActivityID()
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 2,
@@ -535,7 +535,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 		}
 
 		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             activityID,
+			ActivityID:             env.Tv().ActivityID(),
 			ScheduleToStartTimeout: 2 * time.Second,
 			StartToCloseTimeout:    2 * time.Second,
 			RetryPolicy:            activityRetryPolicy,
@@ -559,9 +559,8 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 	env.SdkWorker().RegisterActivity(activityFn)
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	workflowID := env.Tv().WorkflowID()
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                 workflowID,
+		ID:                 env.Tv().WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}, workflowFn)
@@ -586,7 +585,7 @@ func (s *RawHistorySuite) TestGetHistoryReverse_MultipleBranches() {
 	s.NoError(err)
 
 	resetRunId := rweResponse.GetRunId()
-	resetWorkflowRun := env.SdkClient().GetWorkflow(s.Context(), workflowID, resetRunId)
+	resetWorkflowRun := env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resetRunId)
 	err = resetWorkflowRun.Get(s.Context(), nil)
 	s.NoError(err)
 
