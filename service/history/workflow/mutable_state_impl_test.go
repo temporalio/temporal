@@ -4212,6 +4212,7 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			s.NoError(err)
 
 			gotAttrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+
 			// forever nil
 			gotFastForward := gotAttrs.GetTimeSkippingStatePropagation().GetFastForwardTargetTime()
 			s.Nil(gotFastForward)
