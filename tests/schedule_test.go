@@ -100,6 +100,7 @@ func TestScheduleCHASM(t *testing.T) {
 }
 
 func TestScheduleV1(t *testing.T) {
+	testcore.UseSuiteScopedCluster(t, "reuse V1 scheduler worker-service clusters")
 	runSharedScheduleTests(t, v1ContextFactory)
 
 	// V1-only tests

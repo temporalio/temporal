@@ -2,7 +2,9 @@ package testcore
 
 import (
 	"os"
+	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,6 +12,8 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 )
+
+const suiteDedicatedWorkerClusterMinEnvCount = 8
 
 var testClusterRouter *clusterRouter
 
@@ -42,6 +46,7 @@ func init() {
 	testClusterRouter = &clusterRouter{
 		shared:    newClusterPool(sharedSize, false, maxLeases),
 		dedicated: newClusterPool(dedicatedSize, true, maxLeases),
+		suites:    &suiteRegistry{},
 	}
 }
 
@@ -152,55 +157,32 @@ func (s *clusterPoolSlot) release() {
 	s.activeLeases--
 }
 
+func (s *clusterPoolSlot) tearDown(t *testing.T) {
+	s.Lock()
+	defer s.Unlock()
+	s.tearDownLocked(t)
+}
+
 func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	if s.cluster == nil {
 		return
 	}
 	if err := s.cluster.tearDownTestCluster(); err != nil {
-		t.Logf("Failed to tear down cluster %d: %v", s.idx, err)
+		if s.idx < 0 {
+			t.Logf("Failed to tear down suite-scoped cluster: %v", err)
+		} else {
+			t.Logf("Failed to tear down cluster %d: %v", s.idx, err)
+		}
 	}
 	s.cluster = nil
 	s.leaseCount = 0
 }
 
-// clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
+// clusterRouter routes tests to shared/dedicated [clusterPool] or suite-scoped clusters.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	suiteScoped sync.Map
-}
-
-// suiteScopedCluster owns one lazily created legacy suite cluster.
-type suiteScopedCluster struct {
-	once    sync.Once
-	cluster *FunctionalTestBase
-}
-
-// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
-// The cluster is created on first use and torn down when `t` completes.
-//
-// Deprecated: this only exists for backwards-compatibility with legacy sequential
-// suite execution.
-func UseSuiteScopedCluster(t *testing.T) {
-	t.Helper()
-	rootName, _, _ := strings.Cut(t.Name(), "/")
-	if t.Name() != rootName {
-		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
-	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-
-	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
-		if ok {
-			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-			if suiteCluster.cluster != nil {
-				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
-					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
-				}
-			}
-		}
-		testClusterRouter.suiteScoped.Delete(rootName)
-	})
+	shared    *clusterPool
+	dedicated *clusterPool
+	suites    *suiteRegistry
 }
 
 func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
@@ -209,11 +191,13 @@ func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dyna
 			tb.RegisterTest(t)
 		}
 	}()
+	if !dedicated && len(dynamicConfig) == 0 {
+		if cluster := p.getSuiteScoped(t, clusterOpts); cluster != nil {
+			return cluster
+		}
+	}
 	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		return p.getDedicated(t, dynamicConfig, clusterOpts)
-	}
-	if cluster := p.getSuiteScoped(t); cluster != nil {
-		return cluster
 	}
 	return p.getShared(t)
 }
@@ -224,22 +208,10 @@ func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	})
 }
 
-func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
-	rootName, _, _ := strings.Cut(t.Name(), "/")
-	if _, ok := p.suiteScoped.Load(rootName); !ok {
-		return nil
-	}
-
-	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, nil, true, []TestClusterOption{withWorkerService(true)})
+func (p *clusterRouter) getSuiteScoped(t *testing.T, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	return p.suites.get(t, rootTestName(t), clusterOpts, func(clusterOpts []TestClusterOption) *FunctionalTestBase {
+		return p.createCluster(t, nil, true, clusterOpts)
 	})
-	suiteCluster.cluster.SetT(t)
-	return suiteCluster.cluster
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
@@ -281,4 +253,183 @@ func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamiccon
 	tbase.setupCluster(opts...)
 
 	return tbase
+}
+
+func (p *clusterRouter) canUseSuiteScopedCluster(t *testing.T, dedicated bool) bool {
+	return !dedicated && p.suites.registered(rootTestName(t))
+}
+
+func (p *clusterRouter) useSuiteScopedCluster(t *testing.T, reason string) {
+	t.Helper()
+	rootName := rootTestName(t)
+	p.suites.register(t, rootName, reason)
+
+	t.Cleanup(func() {
+		p.suites.cleanup(t, rootName)
+	})
+}
+
+func (p *clusterRouter) recordEnvUsage(t *testing.T, workerServiceReason string, suiteShareableDedicated bool) {
+	t.Helper()
+	rootName := rootTestName(t)
+	p.suites.recordUsage(t, rootName, workerServiceReason, suiteShareableDedicated)
+}
+
+type suiteClusterUsage struct {
+	mu                     sync.Mutex
+	envCount               int
+	workerDedicatedCount   int
+	workerDedicatedReasons []string
+}
+
+type suiteScopedClusterConfig struct {
+	clusterOpts []TestClusterOption
+	params      TestClusterParams
+}
+
+type suiteScopedCluster struct {
+	slot   *clusterPoolSlot
+	config suiteScopedClusterConfig
+}
+
+type suiteState struct {
+	reason   string
+	mu       sync.Mutex
+	clusters []*suiteScopedCluster
+}
+
+func newSuiteScopedClusterConfig(clusterOpts []TestClusterOption) suiteScopedClusterConfig {
+	opts := []TestClusterOption{withWorkerService(false), WithSharedCluster()}
+	opts = append(opts, clusterOpts...)
+
+	return suiteScopedClusterConfig{
+		clusterOpts: slices.Clone(clusterOpts),
+		params:      ApplyTestClusterOptions(opts),
+	}
+}
+
+func (c suiteScopedClusterConfig) matches(other suiteScopedClusterConfig) bool {
+	return reflect.DeepEqual(c.params, other.params)
+}
+
+// UseSuiteScopedCluster makes NewEnv reuse suite-owned clusters for shareable
+// cluster configs under `t`. The reason documents why the suite should pool
+// those clusters instead of using the shared pool or one-off dedicated clusters.
+func UseSuiteScopedCluster(t *testing.T, reason string) {
+	t.Helper()
+	testClusterRouter.useSuiteScopedCluster(t, reason)
+}
+
+type suiteRegistry struct {
+	suites sync.Map
+	usage  sync.Map
+}
+
+func (s *suiteRegistry) register(t *testing.T, rootName string, reason string) {
+	t.Helper()
+	if t.Name() != rootName {
+		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
+	}
+	if reason == "" {
+		t.Fatal("UseSuiteScopedCluster requires a reason")
+	}
+	stateAny, loaded := s.suites.LoadOrStore(rootName, &suiteState{reason: reason})
+	if !loaded {
+		return
+	}
+	state := stateAny.(*suiteState)
+	if state.reason != reason {
+		t.Fatalf("suite-scoped cluster reason for %q differs from the registered reason", rootName)
+	}
+}
+
+func (s *suiteRegistry) get(
+	t *testing.T,
+	rootName string,
+	clusterOpts []TestClusterOption,
+	createCluster func([]TestClusterOption) *FunctionalTestBase,
+) *FunctionalTestBase {
+	stateAny, ok := s.suites.Load(rootName)
+	if !ok {
+		return nil
+	}
+	state := stateAny.(*suiteState)
+	suiteCluster := state.getCluster(clusterOpts)
+	cluster := suiteCluster.slot.acquire(t, func() *FunctionalTestBase {
+		return createCluster(suiteCluster.config.clusterOpts)
+	})
+	t.Cleanup(suiteCluster.slot.release)
+	return cluster
+}
+
+func (s *suiteRegistry) registered(rootName string) bool {
+	_, ok := s.suites.Load(rootName)
+	return ok
+}
+
+func (s *suiteRegistry) cleanup(t *testing.T, rootName string) {
+	stateAny, ok := s.suites.Load(rootName)
+	if ok {
+		state := stateAny.(*suiteState)
+		state.mu.Lock()
+		clusters := slices.Clone(state.clusters)
+		state.mu.Unlock()
+		for _, suiteCluster := range clusters {
+			suiteCluster.slot.tearDown(t)
+		}
+	}
+	s.suites.Delete(rootName)
+	s.usage.Delete(rootName)
+}
+
+func (s *suiteState) getCluster(clusterOpts []TestClusterOption) *suiteScopedCluster {
+	config := newSuiteScopedClusterConfig(clusterOpts)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, cluster := range s.clusters {
+		if cluster.config.matches(config) {
+			return cluster
+		}
+	}
+	cluster := &suiteScopedCluster{
+		slot:   &clusterPoolSlot{idx: -1},
+		config: config,
+	}
+	s.clusters = append(s.clusters, cluster)
+	return cluster
+}
+
+func (s *suiteRegistry) recordUsage(t *testing.T, rootName string, workerServiceReason string, suiteShareableDedicated bool) {
+	t.Helper()
+	usageAny, _ := s.usage.LoadOrStore(rootName, &suiteClusterUsage{})
+	usage := usageAny.(*suiteClusterUsage)
+	usage.mu.Lock()
+	defer usage.mu.Unlock()
+
+	usage.envCount++
+	if workerServiceReason != "" && suiteShareableDedicated {
+		usage.workerDedicatedCount++
+		usage.workerDedicatedReasons = append(usage.workerDedicatedReasons, workerServiceReason)
+	}
+
+	// Check for too many dedicated worker clusters.
+	if tooManyDedicatedWorkerClusters(usage.envCount, usage.workerDedicatedCount) {
+		t.Fatalf(
+			"suite %s created %d worker-service dedicated clusters across %d test envs (reasons: %s); if those clusters can be suite-owned, use testcore.UseSuiteScopedCluster(t, \"reason\")",
+			rootName,
+			usage.workerDedicatedCount,
+			usage.envCount,
+			strings.Join(usage.workerDedicatedReasons, "; "),
+		)
+	}
+}
+
+func tooManyDedicatedWorkerClusters(envCount int, workerDedicatedCount int) bool {
+	return envCount >= suiteDedicatedWorkerClusterMinEnvCount &&
+		workerDedicatedCount*2 > envCount
+}
+
+func rootTestName(t *testing.T) string {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	return rootName
 }
