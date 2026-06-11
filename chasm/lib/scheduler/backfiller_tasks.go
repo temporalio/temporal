@@ -50,7 +50,13 @@ func (b *BackfillerTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	if attrs.IsImmediate() {
+		return backfiller.GetAttempt() == 0, nil
+	}
+	return validateTaskHighWaterMark(
+		backfiller.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (b *BackfillerTaskHandler) Execute(

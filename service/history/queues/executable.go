@@ -74,6 +74,12 @@ type (
 	MaybeTerminalTaskError interface {
 		IsTerminalTaskError() bool
 	}
+
+	// TaskErrorLogTags are optional tags provided by task processing errors.
+	// They are emitted on logs only and must not be converted into metric tags.
+	TaskErrorLogTags interface {
+		LogTags() []tag.Tag
+	}
 )
 
 var (
@@ -86,6 +92,14 @@ var (
 	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
+
+func taskErrorLogTags(err error) []tag.Tag {
+	var tagged TaskErrorLogTags
+	if errors.As(err, &tagged) {
+		return tagged.LogTags()
+	}
+	return nil
+}
 
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
@@ -540,14 +554,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.chasmMetricsHandler).Record(1)
-	logger := log.With(e.logger,
+	logTags := []tag.Tag{
 		tag.Error(err),
 		tag.ErrorType(err),
 		tag.Attempt(int32(e.attempt.Load())),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
 		tag.String("task-category", e.GetCategory().Name()),
-	)
+	}
+	logTags = append(logTags, taskErrorLogTags(err)...)
+	logger := log.With(e.logger, logTags...)
 	if e.attempt.Load() > taskCriticalLogMetricAttempts {
 		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
@@ -561,12 +577,18 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		metrics.TaskCorruptionCounter.With(e.chasmMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
-			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", append([]tag.Tag{
+				tag.Error(err),
+				tag.ErrorType(err),
+			}, taskErrorLogTags(err)...)...)
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 			metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
-		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
+		e.logger.Error("Dropping task due to terminal error", append([]tag.Tag{
+			tag.Error(err),
+			tag.ErrorType(err),
+		}, taskErrorLogTags(err)...)...)
 		return nil
 	}
 
@@ -574,7 +596,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
-			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+			append([]tag.Tag{
+				tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+				tag.Error(err),
+			}, taskErrorLogTags(err)...)...)
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
 		metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
@@ -599,8 +624,10 @@ func (e *executableImpl) matchDLQErrorPattern(err error) error {
 	e.logger.Error(
 		fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
 			dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
-		tag.Error(err),
-		tag.ErrorType(err))
+		append([]tag.Tag{
+			tag.Error(err),
+			tag.ErrorType(err),
+		}, taskErrorLogTags(err)...)...)
 	e.terminalFailureCause = err
 	metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)

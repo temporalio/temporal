@@ -375,12 +375,21 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 }
 
 func (h *InvokerProcessBufferTaskHandler) Validate(
-	_ chasm.Context,
+	ctx chasm.Context,
 	invoker *Invoker,
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
+	if attrs.IsImmediate() {
+		lastProcessedTime := invoker.GetLastProcessedTime()
+		return lastProcessedTime == nil ||
+			(lastProcessedTime.GetSeconds() == 0 && lastProcessedTime.GetNanos() == 0) ||
+			lastProcessedTime.AsTime().Before(ctx.Now(invoker)), nil
+	}
+	return validateTaskHighWaterMark(
+		invoker.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (h *InvokerProcessBufferTaskHandler) Execute(

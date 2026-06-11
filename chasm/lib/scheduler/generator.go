@@ -45,6 +45,7 @@ func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.Generato
 // Generate immediately kicks off a new GeneratorTask. Used after updating the
 // schedule specification.
 func (g *Generator) Generate(ctx chasm.MutableContext) {
+	g.FutureActionTimes = nil
 	g.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
 }
 
