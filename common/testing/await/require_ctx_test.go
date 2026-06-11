@@ -478,6 +478,7 @@ func newRecordingTB() *recordingTB {
 
 func (r *recordingTB) Helper()      {}
 func (r *recordingTB) Failed() bool { return r.failed.Load() }
+func (r *recordingTB) Name() string { return "recordingTB" }
 func (r *recordingTB) Logf(format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
