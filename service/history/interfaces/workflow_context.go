@@ -33,6 +33,11 @@ type (
 
 		IsDirty() bool
 
+		// RefreshCacheSize recomputes this context's cached size estimate for
+		// size-based cache limits. It reads lock-guarded state, so it must be
+		// called under the workflow lock.
+		RefreshCacheSize()
+
 		RefreshTasks(ctx context.Context, shardContext ShardContext) error
 
 		ReapplyEvents(
