@@ -45,11 +45,24 @@ const (
 )
 
 type attempt struct {
-	runner           *runner
-	number           int
-	exitErr          *exec.ExitError
-	junitReport      *junitReport
-	coverProfilePath string
+	runner            *runner
+	number            int
+	retryFailureCount int
+	exitErr           *exec.ExitError
+	junitReport       *junitReport
+	coverProfilePath  string
+}
+
+func (a *attempt) label() string {
+	if a.retryFailureCount > 0 {
+		return fmt.Sprintf(
+			"attempt %d of %d (retrying %d failed test(s) from previous attempt)",
+			a.number,
+			a.runner.maxAttempts,
+			a.retryFailureCount,
+		)
+	}
+	return fmt.Sprintf("attempt %d of %d (full test set)", a.number, a.runner.maxAttempts)
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
@@ -60,8 +73,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 			args[i] = junitReportFlag + a.junitReport.path
 		}
 	}
-	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
+	log.Printf("starting test %s: %v %v",
+		a.label(), a.runner.gotestsumPath, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
@@ -326,8 +339,11 @@ func (r *runner) writeCurrentReport() {
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
 	var totalTimeoutFired bool
+	var retryFailureCount int
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
+		currentAttempt.retryFailureCount = retryFailureCount
+		retryFailureCount = 0
 
 		// Run tests.
 		stdout, err := currentAttempt.run(ctx, args)
@@ -352,7 +368,10 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			}
-			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
+			// Surface the timeout as a synthetic failure so it appears in the
+			// merged JUnit (and therefore in the test summary). Without this, a
+			// timeout that killed gotestsum mid-run produced an empty JUnit and
+			// hid every test that hadn't been reported yet — silent green CI.
 			currentAttempt.junitReport.appendSyntheticFailure(
 				"testrunner.TotalTimeout",
 				failureTypeTimeout,
@@ -404,6 +423,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				len(failures), fullRerunThreshold)
 			continue
 		}
+		retryFailureCount = len(failures)
 		args = stripRunFromArgs(args)
 		for i, failure := range failures {
 			failures[i] = goTestNameToRunFlagRegexp(failure)
@@ -444,7 +464,10 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
 		os.Exit(currentAttempt.exitErr.ExitCode())
 	}
-	// Without a non-zero exit, a total-timeout makes CI silently green.
+	// Surface the total-timeout as a non-zero exit. Previously this fell through
+	// to an implicit zero exit, which let CI report green even though gotestsum
+	// was killed before all tests could run (and any failures in the unreported
+	// tail were silently dropped).
 	if totalTimeoutFired {
 		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
 		os.Exit(1)
