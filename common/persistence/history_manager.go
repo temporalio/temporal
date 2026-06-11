@@ -418,7 +418,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
-	if len(request.History.Data) == 0 {
+	if request.History == nil || len(request.History.Data) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
