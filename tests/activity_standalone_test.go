@@ -110,6 +110,7 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
+	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.StartDelayEnabled, nsValues(true))
 	return env
 }
@@ -6844,5 +6845,52 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
+	env := s.newTestEnv()
+	t := s.T()
+
+	// Override EnableCallbacks back to false to simulate a namespace where the feature is off.
+	nsValues := []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false},
+	}
+	env.GetTestCluster().OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues)
+
+	cb := []*commonpb.Callback{{
+		Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb"}},
+	}}
+
+	t.Run("StartWithCallbacksFails", func(t *testing.T) {
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: cb,
+		})
+		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
+	})
+
+	t.Run("OnConflictAttachCallbacksFails", func(t *testing.T) {
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: cb,
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions:   &commonpb.OnConflictOptions{AttachCompletionCallbacks: true},
+		})
+		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
 	})
 }
