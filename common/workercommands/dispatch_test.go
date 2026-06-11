@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -18,8 +19,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
-
-	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 )
 
 func testCommands() []*workerpb.WorkerCommand {
