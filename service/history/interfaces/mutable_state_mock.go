@@ -678,18 +678,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride, unsetVersioningOverride bool, attachRequestID string, attachCompletionCallbacks []*common.Callback, links []*common.Link, identity string, priority *common.Priority, timeSkippingConfig *common.TimeSkippingConfig, workflowUpdateOptions []*history.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride, unsetVersioningOverride bool, attachRequestID string, attachCompletionCallbacks []*common.Callback, links []*common.Link, identity string, priority *common.Priority, timeSkippingConfig *common.TimeSkippingConfig, timeSkippingConfigUpdated bool, workflowUpdateOptions []*history.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, workflowUpdateOptions)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, timeSkippingConfigUpdated, workflowUpdateOptions)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, workflowUpdateOptions any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, timeSkippingConfigUpdated, workflowUpdateOptions any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, workflowUpdateOptions)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, timeSkippingConfigUpdated, workflowUpdateOptions)
 }
 
 // AddWorkflowExecutionPausedEvent mocks base method.
