@@ -253,6 +253,86 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 	}
 }
 
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	worker1Key := s.tv.WorkerIdentity()
+	worker2Key := s.tv.WorkerIdentity() + "_2"
+	sysWorkerKey := s.tv.WorkerIdentity() + "_sys"
+	sharedTaskQueue := s.tv.TaskQueue().Name
+	otherTaskQueue := s.tv.WithTaskQueueNumber(2).TaskQueue().Name
+
+	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: worker1Key,
+				TaskQueue:         sharedTaskQueue,
+			},
+			{
+				WorkerInstanceKey: worker2Key,
+				TaskQueue:         otherTaskQueue,
+			},
+			{
+				WorkerInstanceKey: sysWorkerKey,
+				TaskQueue:         "temporal-sys-per-ns-tq",
+			},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(hbResp)
+
+	// Count all user workers (excludes system workers by default)
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace: s.Namespace().String(),
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(2), resp.GetCount())
+	}
+
+	// Count all workers including system workers
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace:            s.Namespace().String(),
+			IncludeSystemWorkers: true,
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(3), resp.GetCount())
+	}
+
+	// Count with query filter
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue),
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(1), resp.GetCount())
+	}
+
+	// Count with query that matches no workers
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "WorkerInstanceKey='nonexistent'",
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(0), resp.GetCount())
+	}
+
+	// Count with unknown field in query matches nothing (no error)
+	{
+		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "InvalidField='foo'",
+		})
+		s.Require().NoError(err)
+		s.Require().Equal(int64(0), resp.GetCount())
+	}
+}
+
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -164,7 +164,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var invoker *Invoker
 	var scheduler *Scheduler
 	var lastCompletionState *schedulerpb.LastCompletionResult
-	var callback *commonpb.Callback
+	var schedulerRef []byte
 	var now time.Time
 
 	// Read and deep copy returned components, since we'll continue to access them
@@ -187,12 +187,13 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			lcs := s.LastCompletionResult.Get(ctx)
 			lastCompletionState = common.CloneProto(lcs)
 
-			// Set up the completion callback to handle workflow results.
-			cb, err := chasm.GenerateNexusCallback(ctx, s)
+			// Capture the scheduler's component ref so a per-start completion callback (carrying that
+			// start's request ID in its token) can be built outside the MS lock.
+			ref, err := ctx.Ref(s)
 			if err != nil {
 				return struct{}{}, err
 			}
-			callback = common.CloneProto(cb)
+			schedulerRef = ref
 
 			// Captured here for applyBackoff (runs outside this closure): BackoffTime
 			// must be framework-clock to match LastProcessedTime and task deadlines.
@@ -219,7 +220,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
 	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback, now))
+	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -340,7 +341,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 	scheduler *Scheduler,
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 	now time.Time,
 ) (result executeResult) {
 	metricsWithTag := metricsHandler.WithTags(
@@ -371,7 +372,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
+			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, schedulerRef)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -434,6 +435,8 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 		Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
 		Record(1, metrics.OutcomeTag(outcomeFired))
 
+	invoker.EventLog.Get(ctx).LogEvent(ctx, "processBufferTask executed")
+
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
@@ -444,10 +447,25 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	result := h.processBuffer(ctx, invoker, scheduler)
 
 	// Update Scheduler metadata.
+	var totalMissedCatchup int64
+	for _, count := range result.missedCatchupByActionRunning {
+		totalMissedCatchup += count
+	}
 	scheduler.recordActionResult(&schedulerActionResult{
 		overlapSkipped:      result.overlapSkipped,
-		missedCatchupWindow: result.missedCatchupWindow,
+		missedCatchupWindow: totalMissedCatchup,
 	})
+	for overlapPolicy, count := range result.overlapSkippedByPolicy {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleOverlapPolicyTag, overlapPolicy.String()),
+		).Counter(metrics.ScheduleOverlapSkipped.Name()).Record(count)
+	}
+	for actionRunning, count := range result.missedCatchupByActionRunning {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
+			metrics.StringTag(metrics.ScheduleActionRunningTag, fmt.Sprintf("%t", actionRunning)),
+		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(count)
+	}
 
 	// Update internal state and create new tasks.
 	invoker.recordProcessBufferResult(ctx, &result)
@@ -465,6 +483,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 ) (result processBufferResult) {
 	runningWorkflows := invoker.runningWorkflowExecutions()
 	isRunning := len(runningWorkflows) > 0
+	result.missedCatchupByActionRunning = make(map[bool]int64)
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
@@ -489,6 +508,7 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 
 	// Update result metrics.
 	result.overlapSkipped = action.OverlapSkipped
+	result.overlapSkippedByPolicy = action.OverlapSkippedByPolicy
 
 	// Add starting workflows to result, trim others. Catchup-window expiry is
 	// checked before useScheduledAction so that a start past its catchup
@@ -496,8 +516,22 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
 	for _, start := range readyStarts {
-		if ctx.Now(invoker).After(h.startWorkflowDeadline(ctx, scheduler, start)) {
-			result.missedCatchupWindow++
+		deadline := h.startWorkflowDeadline(ctx, scheduler, start)
+		if ctx.Now(invoker).After(deadline) {
+			// Action was buffered in time but expired before execution
+			// (e.g., due to overlap deferral, retries, or system delay).
+			// Only emit the metric if the schedule would have run this
+			// start -- skip paused or action-exhausted schedules.
+			if start.Manual || scheduler.useScheduledAction(false) {
+				// Determine if a running action contributed: either one is still
+				// running, or the previous action's CloseTime (stored in DesiredTime)
+				// was already past this start's deadline.
+				// Note: if no prior action completed, DesiredTime is zero-valued,
+				// so After(deadline) is false, correctly yielding actionRunning=false.
+				actionRunning := isRunning ||
+					start.GetDesiredTime().AsTime().After(deadline)
+				result.missedCatchupByActionRunning[actionRunning]++
+			}
 			result.discardStarts = append(result.discardStarts, start)
 			droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedMissedCatchup))
 			continue
@@ -582,7 +616,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
@@ -609,6 +643,14 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	var lcr []*commonpb.Payload
 	if lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
+	}
+	// Build the completion callback with this start's request ID packed into its token, so the
+	// completion is matched by a request ID that rides in the callback header and survives
+	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
+	// new run.
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	if err != nil {
+		return err
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
@@ -654,6 +696,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(desiredTime.AsTime()))
+		// Record total delay from original schedule time, including any overlap policy wait.
+		metricsHandler.
+			Timer(metrics.ScheduleActionE2EDelay.Name()).
+			Record(actualStartTime.Sub(start.ActualTime.AsTime()))
 	}
 	return nil
 }

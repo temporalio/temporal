@@ -181,11 +181,6 @@ func NewStandaloneActivity(
 			return nil, err
 		}
 	}
-	if len(request.GetLinks()) > 0 {
-		if err := ctx.SetRequestLinks(activity, request.GetRequestId(), request.GetLinks()); err != nil {
-			return nil, err
-		}
-	}
 
 	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
 
@@ -413,9 +408,17 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
 	}
 
+	key := ctx.ExecutionKey()
+	backLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
+		Namespace:  ctx.NamespaceEntry().Name().String(),
+		ActivityId: key.BusinessID,
+		RunId:      key.RunID,
+	})
+
 	opts := nexusrpc.CompleteOperationOptions{
 		StartTime: a.GetScheduleTime().AsTime(),
 		CloseTime: ctx.ExecutionInfo().CloseTime,
+		Links:     []nexus.Link{backLink},
 	}
 
 	outcome := a.Outcome.Get(ctx)
@@ -903,6 +906,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		ScheduleTime:            a.GetScheduleTime(),
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
+		StartDelay:              a.GetStartDelay(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
 		StateTransitionCount:    executionInfo.StateTransitionCount,

@@ -82,6 +82,8 @@ func (b *BackfillerTaskHandler) Execute(
 
 	invoker := scheduler.Invoker.Get(ctx)
 
+	backfiller.EventLog.Get(ctx).LogEvent(ctx, "backfillerTask executed")
+
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
 	tweakables := b.config.Tweakables(scheduler.Namespace)
