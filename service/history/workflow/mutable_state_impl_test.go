@@ -7969,6 +7969,26 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 	}
 }
 
+func (s *mutableStateSuite) TestAddWorkflowExecutionOptionsUpdatedEvent_NilTimeSkippingConfig() {
+	existingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+
+	s.Run("no existing TSI", func() {
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+		_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, nil)
+		s.NoError(err)
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("existing TSI", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: existingConfig}
+		_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, nil)
+		s.NoError(err)
+		s.True(proto.Equal(existingConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+}
+
 func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	t.Parallel()
 

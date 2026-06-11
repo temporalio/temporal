@@ -123,6 +123,16 @@ func Invoke(
 	return ret, nil
 }
 
+// UpdateSideEffectOptions is used to track which WorkflowOptions have side effects,
+// and cannot be detected simply by proto.Equal.
+type UpdateSideEffectOptions struct {
+	timeSkippingConfig bool
+}
+
+func (u UpdateSideEffectOptions) hasChanges() bool {
+	return u.timeSkippingConfig
+}
+
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
 // and applies the changes to the mutable state. Returns the merged options and a boolean indicating if there were any changes.
 func MergeAndApply(
@@ -132,7 +142,7 @@ func MergeAndApply(
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
-	mergedOpts, err := mergeWorkflowExecutionOptions(
+	mergedOpts, sideEffects, err := mergeWorkflowExecutionOptions(
 		getOptionsFromMutableState(ms),
 		opts,
 		updateMask,
@@ -141,17 +151,15 @@ func MergeAndApply(
 		return nil, false, serviceerror.NewInvalidArgumentf("error applying update_options: %v", err)
 	}
 
-	// If there is no mutable state change at all, return with no new history event and Noop=true
-	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
+	// sideEffects.hasChanges() forces hasChanges=true for bound renewals where proto.Equal sees no difference.
+	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms)) || sideEffects.hasChanges()
 	if !hasChanges {
 		return mergedOpts, false, nil
 	}
 
-	unsetOverride := false
-	if mergedOpts.GetVersioningOverride() == nil {
-		unsetOverride = true
-	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
+	unsetOverride := mergedOpts.GetVersioningOverride() == nil
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
+		mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -180,30 +188,32 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	return opts
 }
 
-// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct and returns
+// the side-effect options for fields that produce side effects when applied (see UpdateSideEffectOptions).
 func mergeWorkflowExecutionOptions(
 	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
-) (*workflowpb.WorkflowExecutionOptions, error) {
+) (*workflowpb.WorkflowExecutionOptions, UpdateSideEffectOptions, error) {
 	_, err := fieldmaskpb.New(mergeInto, updateMask.GetPaths()...)
 	if err != nil { // errors if any paths are not valid for the struct we are merging into
-		return nil, err
+		return nil, UpdateSideEffectOptions{}, err
 	}
 	updateFields := util.ParseFieldMask(updateMask)
+
 	if _, ok := updateFields["versioningOverride"]; ok {
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
 		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, UpdateSideEffectOptions{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.behavior"]; ok {
 		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, UpdateSideEffectOptions{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
@@ -235,11 +245,22 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
 	}
 
-	// ==== Time Skipping Config
-	// nil means "no change" — only update if the caller provided an explicit value.
+	// ==== Time Skipping Config (has side effects when applied)
+	var originalTsc *workflowpb.TimeSkippingConfig
+	if tsc := mergeInto.GetTimeSkippingConfig(); tsc != nil {
+		if cloned, ok := proto.Clone(tsc).(*workflowpb.TimeSkippingConfig); ok {
+			originalTsc = cloned
+		}
+	}
+
+	// getting the new TSC config
+	var boundInMask bool
 	if _, ok := updateFields["timeSkippingConfig"]; ok {
 		if mergeFrom.GetTimeSkippingConfig() != nil {
 			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		}
+		if mergeFrom.GetTimeSkippingConfig().GetBound() != nil {
+			boundInMask = true
 		}
 	}
 
@@ -257,7 +278,16 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
 			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
 		}
+		boundInMask = true
 	}
 
-	return mergeInto, nil
+	var sideEffects UpdateSideEffectOptions
+	// either bound is used or the config contents are changed
+	if boundInMask || (!proto.Equal(mergeInto.GetTimeSkippingConfig(), originalTsc)) {
+		sideEffects.timeSkippingConfig = true
+	} else {
+		sideEffects.timeSkippingConfig = false
+		mergeInto.TimeSkippingConfig = nil
+	}
+	return mergeInto, sideEffects, nil
 }
