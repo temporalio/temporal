@@ -3398,6 +3398,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	var unimplementedErr *serviceerror.Unimplemented
+	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
@@ -3415,6 +3416,12 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=true and dynamic config enabled is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: false, Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true, Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Second * -10)}}, s.testNamespace), &invalidArgumentErr)
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
