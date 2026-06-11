@@ -338,6 +338,7 @@ type (
 		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
+		// It returns a nil mutation for native CHASM executions when the transaction has no durable changes to persist.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.

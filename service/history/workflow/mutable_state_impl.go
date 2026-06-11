@@ -7481,6 +7481,13 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	if result.skipPersistence {
+		if err := ms.cleanupTransaction(); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, nil
+	}
+
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:  ms.executionInfo,
 		ExecutionState: ms.executionState,
@@ -7606,6 +7613,7 @@ type closeTransactionResult struct {
 	workflowEventsSeq  []*persistence.WorkflowEvents
 	bufferEvents       []*historypb.HistoryEvent
 	clearBuffer        bool
+	skipPersistence    bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
 }
@@ -7742,6 +7750,18 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	if ms.closeTransactionShouldSkipPersistence(
+		isStateDirty,
+		workflowEventsSeq,
+		bufferEvents,
+		clearBuffer,
+		chasmNodesMutation,
+	) {
+		return closeTransactionResult{
+			skipPersistence: true,
+		}, nil
+	}
+
 	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.timeSource.Now())
 
@@ -7765,6 +7785,98 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(
+	isStateDirty bool,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+	bufferEvents []*historypb.HistoryEvent,
+	clearBuffer bool,
+	chasmNodesMutation chasm.NodesMutation,
+) bool {
+	if ms.IsWorkflow() {
+		return false
+	}
+	return !anyTrue(
+		isStateDirty,
+		len(workflowEventsSeq) != 0,
+		len(bufferEvents) != 0,
+		clearBuffer,
+		len(chasmNodesMutation.UpdatedNodes) != 0,
+		len(chasmNodesMutation.DeletedNodes) != 0,
+		ms.hasTasks(ms.InsertTasks),
+		ms.hasTaskKeys(ms.BestEffortDeleteTasks),
+		len(ms.reapplyEventsCandidate) != 0,
+		ms.hasMutableStateDurableUpdates(),
+		ms.hBuilder.IsDirty(),
+		ms.stateMachineNode != nil && ms.stateMachineNode.Dirty(),
+		ms.chasmTree.IsDirty(),
+		ms.executionInfo.SuccessorRunId != "",
+	)
+}
+
+func (ms *MutableStateImpl) hasMutableStateDurableUpdates() bool {
+	return anyNonZero(
+		len(ms.updateActivityInfos),
+		len(ms.deleteActivityInfos),
+		len(ms.syncActivityTasks),
+		len(ms.updateTimerInfos),
+		len(ms.deleteTimerInfos),
+		len(ms.updateChildExecutionInfos),
+		len(ms.deleteChildExecutionInfos),
+		len(ms.updateRequestCancelInfos),
+		len(ms.deleteRequestCancelInfos),
+		len(ms.updateSignalInfos),
+		len(ms.deleteSignalInfos),
+		len(ms.updateSignalRequestedIDs),
+		len(ms.deleteSignalRequestedIDs),
+		len(ms.updateInfoUpdated),
+		len(ms.activityInfosUserDataUpdated),
+		len(ms.timerInfosUserDataUpdated),
+	) || anyTrue(
+		ms.visibilityUpdated,
+		ms.executionStateUpdated,
+		ms.workflowTaskUpdated,
+		ms.isResetStateUpdated,
+		ms.timeSkippingInfoUpdated,
+		ms.subStateMachineDeleted,
+	)
+}
+
+func (ms *MutableStateImpl) hasTasks(taskMap map[tasks.Category][]tasks.Task) bool {
+	for _, taskList := range taskMap {
+		if len(taskList) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (ms *MutableStateImpl) hasTaskKeys(taskMap map[tasks.Category][]tasks.Key) bool {
+	for _, taskList := range taskMap {
+		if len(taskList) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func anyNonZero(counts ...int) bool {
+	for _, count := range counts {
+		if count != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func anyTrue(values ...bool) bool {
+	for _, value := range values {
+		if value {
+			return true
+		}
+	}
+	return false
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(

@@ -579,3 +579,74 @@ func (s *contextSuite) TestRefreshTask() {
 		})
 	}
 }
+
+func (s *contextSuite) TestUpdateWorkflowExecutionWithNew_NativeChasmNoopSkipsPersistence() {
+	now := time.Now().UTC()
+	nativeChasmArchetypeID := chasm.WorkflowArchetypeID + 101
+	dbState := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte("token#1"),
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 1, Version: common.EmptyVersion},
+						},
+					},
+				},
+			},
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{
+					NamespaceFailoverVersion: common.EmptyVersion,
+					TransitionCount:          1,
+				},
+			},
+			ExecutionStats: &persistencespb.ExecutionStats{
+				HistorySize: 128,
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:     tests.RunID,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(now),
+		},
+		NextEventId: 2,
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.MockEventsCache,
+		s.mockShard.GetLogger(),
+		tests.LocalNamespaceEntry,
+		dbState,
+		1,
+	)
+	s.NoError(err)
+	_, err = mutableState.StartTransaction(tests.LocalNamespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(gomock.NewController(s.T()))
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(nativeChasmArchetypeID).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	s.workflowContext.archetypeID = nativeChasmArchetypeID
+	s.workflowContext.MutableState = mutableState
+
+	err = s.workflowContext.UpdateWorkflowExecutionWithNew(
+		context.Background(),
+		s.mockShard,
+		persistence.UpdateWorkflowModeIgnoreCurrent,
+		nil,
+		nil,
+		historyi.TransactionPolicyActive,
+		nil,
+	)
+	s.NoError(err)
+}
