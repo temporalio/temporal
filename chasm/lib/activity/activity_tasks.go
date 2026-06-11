@@ -2,13 +2,19 @@ package activity
 
 import (
 	"context"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/workercommands"
+	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
 )
 
@@ -276,4 +282,82 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		metricsHandler: metricsHandler,
 		fromStatus:     activity.GetStatus(),
 	})
+}
+
+// cancelCommandDispatchTaskHandler dispatches a cancel command to the worker via the Nexus
+// worker commands control queue. This is a best-effort mechanism — the activity will eventually
+// time out if the worker doesn't respond.
+type cancelCommandDispatchTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*activitypb.CancelCommandDispatchTask]
+	opts cancelCommandDispatchTaskHandlerOptions
+}
+
+type cancelCommandDispatchTaskHandlerOptions struct {
+	fx.In
+
+	MatchingClient resource.MatchingClient
+	Config         *configs.Config
+	MetricsHandler metrics.Handler
+	Logger         log.Logger
+}
+
+func newCancelCommandDispatchTaskHandler(opts cancelCommandDispatchTaskHandlerOptions) *cancelCommandDispatchTaskHandler {
+	return &cancelCommandDispatchTaskHandler{opts: opts}
+}
+
+func (h *cancelCommandDispatchTaskHandler) Validate(
+	_ chasm.Context,
+	activity *Activity,
+	_ chasm.TaskAttributes,
+	_ *activitypb.CancelCommandDispatchTask,
+) (bool, error) {
+	// Valid if the activity is in a state where it has been requested to cancel or terminated
+	// (meaning it was running on a worker when the cancel/terminate was issued).
+	return activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, nil
+}
+
+const cancelCommandDispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
+
+func (h *cancelCommandDispatchTaskHandler) Execute(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+	taskAttrs chasm.TaskAttributes,
+	_ *activitypb.CancelCommandDispatchTask,
+) error {
+	if !h.opts.Config.EnableCancelActivityWorkerCommand(activityRef.NamespaceID) {
+		return nil
+	}
+
+	// Read the activity to build the task token for the cancel command.
+	taskToken, err := chasm.ReadComponent(
+		ctx,
+		activityRef,
+		(*Activity).buildCancelCommandTaskToken,
+		activityRef,
+	)
+	if err != nil {
+		return err
+	}
+
+	command := &workerpb.WorkerCommand{
+		Type: &workerpb.WorkerCommand_CancelActivity{
+			CancelActivity: &workerpb.CancelActivityCommand{
+				TaskToken: taskToken,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, cancelCommandDispatchTimeout)
+	defer cancel()
+
+	return workercommands.DispatchToWorker(
+		ctx,
+		h.opts.MatchingClient,
+		h.opts.MetricsHandler,
+		h.opts.Logger,
+		activityRef.NamespaceID,
+		taskAttrs.Destination,
+		[]*workerpb.WorkerCommand{command},
+	)
 }

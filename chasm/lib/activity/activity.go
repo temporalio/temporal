@@ -213,6 +213,29 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 	}, nil
 }
 
+// buildCancelCommandTaskToken builds the serialized task token for a cancel command.
+// This token identifies the same activity as the poll response token but is not byte-identical —
+// matching builds poll tokens with additional fields (Clock, Version, etc.).
+func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
+	componentRefBytes, err := ctx.Ref(a)
+	if err != nil {
+		return nil, err
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
+
+	token := &tokenspb.Task{
+		NamespaceId:  key.NamespaceID,
+		ActivityId:   key.BusinessID,
+		ActivityType: a.GetActivityType().GetName(),
+		Attempt:      attempt.GetCount(),
+		ComponentRef: componentRefBytes,
+	}
+
+	return token.Marshal()
+}
+
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
@@ -571,6 +594,13 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
+	// If the activity is running on a worker, proactively notify the worker via Nexus.
+	// Must be done before the transition since it checks current status.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		a.addCancelCommandDispatchTask(ctx)
+	}
+
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	if err != nil {
 		return chasm.TerminateComponentResponse{}, err
@@ -591,6 +621,23 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
 	return heartbeat
+}
+
+// addCancelCommandDispatchTask schedules a side-effect task to dispatch a cancel command to the
+// worker via the Nexus worker commands control queue. No-op if the worker doesn't support worker
+// commands (i.e., has no control queue).
+func (a *Activity) addCancelCommandDispatchTask(ctx chasm.MutableContext) {
+	controlQueue := a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue()
+	if controlQueue == "" {
+		return
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			Destination: controlQueue,
+		},
+		&activitypb.CancelCommandDispatchTask{},
+	)
 }
 
 func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
@@ -615,6 +662,10 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
+	}
+
+	if !isCancelImmediately {
+		a.addCancelCommandDispatchTask(ctx)
 	}
 
 	if isCancelImmediately {

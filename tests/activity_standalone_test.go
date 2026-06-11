@@ -15,6 +15,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -31,11 +32,13 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -2612,6 +2615,99 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.ErrorAs(t, err, &notFoundErr)
 		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
 	})
+}
+
+// TestDispatchCancelCommandToWorker tests that when a standalone activity is cancelled,
+// the server dispatches a cancel command to the worker's control queue via Nexus.
+func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
+	env := s.newTestEnv()
+	t := s.T()
+	ctx := s.Context()
+
+	// Enable cancel command dispatch. Set globally (unconstrained) because the CHASM task handler
+	// resolves the feature flag using namespace ID, not namespace name.
+	env.GetTestCluster().OverrideDynamicConfig(
+		t, dynamicconfig.EnableCancelActivityWorkerCommand,
+		true,
+	)
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	tv := env.Tv()
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+
+	// Start standalone activity.
+	startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	// Poll for the activity task with WorkerInstanceKey + WorkerControlTaskQueue so the server
+	// knows this worker supports cancel commands.
+	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity:               tv.WorkerIdentity(),
+		WorkerInstanceKey:      tv.WorkerInstanceKey(),
+		WorkerControlTaskQueue: controlQueueName,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activityID, activityPollResp.GetActivityId())
+	require.NotEmpty(t, activityPollResp.TaskToken)
+
+	// Request cancellation of the standalone activity.
+	_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Identity:   "cancelling-client",
+		Reason:     "test cancel command dispatch",
+	})
+	require.NoError(t, err)
+
+	// Poll the Nexus control queue — should receive the cancel command.
+	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
+	await.RequireTrue(t, func() bool {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:  tv.WorkerIdentity(),
+		})
+		if err == nil && resp != nil && resp.Request != nil {
+			nexusPollResp = resp
+			return true
+		}
+		return false
+	}, 30*time.Second, 200*time.Millisecond)
+
+	// Verify the Nexus request contains an ExecuteCommands operation with a CancelActivity command.
+	startOp := nexusPollResp.Request.GetStartOperation()
+	require.NotNil(t, startOp, "expected StartOperation in Nexus request")
+	require.Equal(t, "temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service)
+	require.Equal(t, "ExecuteCommands", startOp.Operation)
+
+	require.NotNil(t, startOp.Payload)
+	var executeReq workerservicepb.ExecuteCommandsRequest
+	require.NoError(t, proto.Unmarshal(startOp.Payload.Data, &executeReq))
+	require.Len(t, executeReq.Commands, 1, "expected exactly 1 command")
+	cancelCmd := executeReq.Commands[0].GetCancelActivity()
+	require.NotNil(t, cancelCmd, "expected CancelActivity command")
+
+	// The cancel command token identifies the same activity but is not byte-identical to the poll
+	// response token (the poll token includes additional fields like Clock, Version). Verify by
+	// deserializing and comparing the activity-identifying fields.
+	serializer := tasktoken.NewSerializer()
+	pollToken, err := serializer.Deserialize(activityPollResp.TaskToken)
+	require.NoError(t, err)
+	cancelToken, err := serializer.Deserialize(cancelCmd.TaskToken)
+	require.NoError(t, err)
+	require.Equal(t, pollToken.NamespaceId, cancelToken.NamespaceId)
+	require.Equal(t, pollToken.ActivityId, cancelToken.ActivityId)
+	require.Equal(t, pollToken.ActivityType, cancelToken.ActivityType)
+	require.Equal(t, pollToken.Attempt, cancelToken.Attempt)
 }
 
 func (s *standaloneActivityTestSuite) TestTerminate() {
