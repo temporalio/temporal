@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -36,9 +39,13 @@ func (s *monitorSuite) SetupTest() {
 	s.monitor = newMonitor(
 		tasks.CategoryTypeScheduled,
 		s.mockTimeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
 		&MonitorOptions{
 			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+			ReaderStuckLagDuration:      dynamicconfig.GetDurationPropertyFn(0),
+			ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 		},
 	)
@@ -185,6 +192,82 @@ func (s *monitorSuite) TestSliceCount() {
 			CriticalSliceCount: threshold,
 		},
 	}, *alert)
+}
+
+func (s *monitorSuite) TestReaderWatermarkLagDuration() {
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	monitor := newMonitor(
+		tasks.CategoryTypeScheduled,
+		timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+		&MonitorOptions{
+			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(2),
+			ReaderStuckLagDuration:      dynamicconfig.GetDurationPropertyFn(10 * time.Second),
+			ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
+			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
+		},
+	)
+	defer monitor.Close()
+
+	watermark := tasks.NewKey(timeSource.Now(), 0)
+	monitor.SetReaderWatermark(DefaultReaderId, watermark)
+	monitor.SetReaderWatermark(DefaultReaderId, watermark)
+	select {
+	case <-monitor.AlertCh():
+		s.Fail("should not trigger alert before lag duration")
+	default:
+	}
+
+	timeSource.Advance(11 * time.Second)
+	monitor.SetReaderWatermark(DefaultReaderId, watermark)
+	alert := <-monitor.AlertCh()
+	s.Equal(Alert{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+			ReaderID:         DefaultReaderId,
+			CurrentWatermark: tasks.NewKey(watermark.FireTime.Truncate(monitorWatermarkPrecision), 0),
+		},
+	}, *alert)
+}
+
+func (s *monitorSuite) TestReaderWatermarkShadowMode() {
+	timeSource := clock.NewEventTimeSource()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	monitor := newMonitor(
+		tasks.CategoryTypeScheduled,
+		timeSource,
+		log.NewTestLogger(),
+		metricsHandler,
+		&MonitorOptions{
+			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1),
+			ReaderStuckLagDuration:      dynamicconfig.GetDurationPropertyFn(0),
+			ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(true),
+			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
+		},
+	)
+	defer monitor.Close()
+
+	watermark := tasks.NewKey(timeSource.Now(), 0)
+	monitor.SetReaderWatermark(DefaultReaderId, watermark)
+	monitor.SetReaderWatermark(DefaultReaderId, watermark)
+	select {
+	case <-monitor.AlertCh():
+		s.Fail("should not trigger alert in shadow mode")
+	default:
+	}
+
+	snapshot := capture.Snapshot()
+	records, ok := snapshot["queue_alert_shadow"]
+	s.True(ok)
+	s.NotEmpty(records)
+	s.Equal(readerStuckActionName, records[0].Tags[metrics.QueueActionTagName])
 }
 
 func (s *monitorSuite) TestResolveAlert() {
