@@ -89,51 +89,14 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	s.NoError(err0)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
-	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		if !activityScheduled {
-			activityScheduled = true
-			buf := new(bytes.Buffer)
-			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
-
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              taskQueue,
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-					ScheduleToStartTimeout: durationpb.New(25 * time.Second),
-					StartToCloseTimeout:    durationpb.New(50 * time.Second),
-					HeartbeatTimeout:       durationpb.New(25 * time.Second),
-				}},
-			}}}, nil
-		}
-
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-				Result: payloads.EncodeString("Done"),
-			}},
-		}}}, nil
-	}
-
-	// activity handler
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-
-		return &workflowservice.RespondActivityTaskCompletedRequest{
-			Result: payloads.EncodeString("Activity Result"),
-		}, nil
-	}
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
@@ -159,8 +122,25 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := workflowPoller.HandleTask(env.Tv(), wtHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
+		_, scheduleActivityErr := workflowPoller.HandleTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			buf := new(bytes.Buffer)
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             convert.Int32ToString(1),
+					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					TaskQueue:              taskQueue,
+					Input:                  payloads.EncodeBytes(buf.Bytes()),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(25 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(25 * time.Second),
+				}},
+			}}}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(scheduleActivityErr))
 	})
 	start = time.Now().UTC()
 	events, token = s.getHistory(env, workflowID, token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
@@ -171,12 +151,23 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
-		_, errActivity := activityPoller.HandleTask(env.Tv(), atHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
+		_, completeActivityErr := activityPoller.HandleTask(env.Tv(), func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			return &workflowservice.RespondActivityTaskCompletedRequest{
+				Result: payloads.EncodeString("Activity Result"),
+			}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeActivityErr))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := workflowPoller.HandleTask(env.Tv(), wtHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
+		_, completeWorkflowErr := workflowPoller.HandleTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				}},
+			}}}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeWorkflowErr))
 	})
 	for token != nil {
 		events, token = s.getHistory(env, workflowID, token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
@@ -249,50 +240,14 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	s.NoError(err0)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
-	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *historypb.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		if !activityScheduled {
-			activityScheduled = true
-			buf := new(bytes.Buffer)
-			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
-
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              taskQueue,
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-					ScheduleToStartTimeout: durationpb.New(25 * time.Second),
-					StartToCloseTimeout:    durationpb.New(50 * time.Second),
-					HeartbeatTimeout:       durationpb.New(25 * time.Second),
-				}},
-			}}}, nil
-		}
-
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-				Result: payloads.EncodeString("Done"),
-			}},
-		}}}, nil
-	}
-
-	// activity handler
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-		return &workflowservice.RespondActivityTaskCompletedRequest{
-			Result: payloads.EncodeString("Activity Result"),
-		}, nil
-	}
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
@@ -315,9 +270,26 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.Empty(events)
 	s.NotNil(token)
 
-	_, errWorkflowTask1 := workflowPoller.HandleTask(env.Tv(), wtHandler)
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
-	s.NoError(errWorkflowTask1)
+	_, scheduleActivityErr := workflowPoller.HandleTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		buf := new(bytes.Buffer)
+		s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
+
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             convert.Int32ToString(1),
+				ActivityType:           &commonpb.ActivityType{Name: activityName},
+				TaskQueue:              taskQueue,
+				Input:                  payloads.EncodeBytes(buf.Bytes()),
+				ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+				ScheduleToStartTimeout: durationpb.New(25 * time.Second),
+				StartToCloseTimeout:    durationpb.New(50 * time.Second),
+				HeartbeatTimeout:       durationpb.New(25 * time.Second),
+			}},
+		}}}, nil
+	})
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(scheduleActivityErr))
+	s.NoError(scheduleActivityErr)
 
 	start = time.Now()
 	events, token = s.getHistory(env, workflowID, token, true, closeEventOnly)
@@ -327,13 +299,24 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.NotNil(token)
 
 	// finish the activity and poll all events
-	_, errActivity := activityPoller.HandleTask(env.Tv(), atHandler)
-	env.Logger.Info("PollAndProcessActivityTask", tag.Error(errActivity))
-	s.NoError(errActivity)
+	_, completeActivityErr := activityPoller.HandleTask(env.Tv(), func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return &workflowservice.RespondActivityTaskCompletedRequest{
+			Result: payloads.EncodeString("Activity Result"),
+		}, nil
+	})
+	env.Logger.Info("PollAndProcessActivityTask", tag.Error(completeActivityErr))
+	s.NoError(completeActivityErr)
 
-	_, errWorkflowTask2 := workflowPoller.HandleTask(env.Tv(), wtHandler)
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
-	s.NoError(errWorkflowTask2)
+	_, completeWorkflowErr := workflowPoller.HandleTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}}, nil
+	})
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeWorkflowErr))
+	s.NoError(completeWorkflowErr)
 
 	s.Await(func(s *GetHistorySuite) {
 		events, token = s.getHistory(env, workflowID, token, true, closeEventOnly)
@@ -372,55 +355,14 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		Identity:            env.Tv().WorkerIdentity(),
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
-	s.NoError(err0)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
-	activityScheduled := false
 	activityData := int32(1)
 	// var signalEvent *workflow.HistoryEvent
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-
-		if !activityScheduled {
-			activityScheduled = true
-			buf := new(bytes.Buffer)
-			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
-
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             env.Tv().ActivityID(),
-						ActivityType:           env.Tv().ActivityType(),
-						TaskQueue:              env.Tv().TaskQueue(),
-						Input:                  payloads.EncodeBytes(buf.Bytes()),
-						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-						ScheduleToStartTimeout: durationpb.New(25 * time.Second),
-						StartToCloseTimeout:    durationpb.New(50 * time.Second),
-						HeartbeatTimeout:       durationpb.New(25 * time.Second),
-					},
-				},
-			}}}, nil
-		}
-
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				}},
-		}}}, nil
-	}
-
-	// activity handler
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-
-		return &workflowservice.RespondActivityTaskCompletedRequest{
-			Result: payloads.EncodeString("Activity Result."),
-		}, nil
-	}
 
 	poller := env.TaskPoller()
 	getRawHistory := func(workflowID string, token []byte, isLongPoll bool) ([]*commonpb.DataBlob, []byte) {
@@ -470,8 +412,27 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndHandleWorkflowTask(env.Tv(), wtHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
+		_, scheduleActivityErr := poller.PollAndHandleWorkflowTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			buf := new(bytes.Buffer)
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             env.Tv().ActivityID(),
+						ActivityType:           env.Tv().ActivityType(),
+						TaskQueue:              env.Tv().TaskQueue(),
+						Input:                  payloads.EncodeBytes(buf.Bytes()),
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(25 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(25 * time.Second),
+					},
+				},
+			}}}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(scheduleActivityErr))
 	})
 	start = time.Now().UTC()
 	blobs, token = getRawHistory(env.Tv().WorkflowID(), token, true)
@@ -483,12 +444,24 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
-		_, errActivity := poller.PollAndHandleActivityTask(env.Tv(), atHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
+		_, completeActivityErr := poller.PollAndHandleActivityTask(env.Tv(), func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			return &workflowservice.RespondActivityTaskCompletedRequest{
+				Result: payloads.EncodeString("Activity Result."),
+			}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeActivityErr))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndHandleWorkflowTask(env.Tv(), wtHandler)
-		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
+		_, completeWorkflowErr := poller.PollAndHandleWorkflowTask(env.Tv(), func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("Done"),
+					}},
+			}}}, nil
+		})
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeWorkflowErr))
 	})
 	for token != nil {
 		blobs, token = getRawHistory(env.Tv().WorkflowID(), token, true)
