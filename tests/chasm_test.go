@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -61,10 +60,14 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 
 	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
 	// creation per test, unlike passing startup dynamic config.
-	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
-	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	env.OverrideDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified)
-	env.OverrideDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true)
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDedicatedCluster(),
+		testcore.WithWorkerService("delete namespace workflow"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified),
+		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+	)
 
 	chasmEngine, err := env.GetTestCluster().Host().ChasmEngine()
 	require.NoError(t, err)
@@ -228,7 +231,7 @@ func (s *ChasmSuite) TestPayloadStore_PureTask() {
 		)
 		ss.NoError(err)
 
-		ss.Eventually(func() bool {
+		ss.AwaitTrue(func() bool {
 			descResp, err := tests.DescribePayloadStoreHandler(
 				ctx,
 				tests.DescribePayloadStoreRequest{
@@ -262,7 +265,7 @@ func (s *ChasmSuite) TestListExecutions() {
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
 		var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -315,7 +318,7 @@ func (s *ChasmSuite) TestListExecutions() {
 		)
 		ss.NoError(err)
 
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -345,7 +348,7 @@ func (s *ChasmSuite) TestListExecutions() {
 		)
 		ss.NoError(err)
 
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: cenv.Namespace().String(),
@@ -425,7 +428,7 @@ func (s *ChasmSuite) TestCountExecutions_GroupBy() {
 
 		var countResp *chasm.CountExecutionsResponse
 		var err error
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				countResp, err = chasm.CountExecutions[*tests.PayloadStore](
 					ctx,
@@ -501,7 +504,7 @@ func (s *ChasmSuite) TestListWorkflowExecutions() {
 		)
 
 		var execInfo *workflowpb.WorkflowExecutionInfo
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				listResp, err := cenv.FrontendClient().ListWorkflowExecutions(cenv.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 					Namespace: cenv.Namespace().String(),
@@ -554,7 +557,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 		// Make sure visibility record is created, so that we can test its deletion later.
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
 		var executionInfo *workflowpb.WorkflowExecutionInfo
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := cenv.FrontendClient().ListWorkflowExecutions(cenv.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 					Namespace: cenv.Namespace().String(),
@@ -601,7 +604,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 		ss.ErrorAs(err, &notFoundErr)
 
 		// Validate visibility record is deleted.
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: cenv.Namespace().String(),
@@ -638,15 +641,15 @@ func (s *ChasmSuite) TestDeletePayloadStore_RunningExecution() {
 		visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
 
 		// Wait for visibility record to appear.
-		ss.EventuallyWithT(
-			func(t *assert.CollectT) {
+		ss.Await(
+			func(ss *ChasmSuite) {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: cenv.Namespace().String(),
 					PageSize:      10,
 					Query:         visQuery,
 				})
-				require.NoError(t, err)
-				require.Len(t, resp.Executions, 1)
+				ss.NoError(err)
+				ss.Len(resp.Executions, 1)
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -664,15 +667,15 @@ func (s *ChasmSuite) TestDeletePayloadStore_RunningExecution() {
 		ss.NoError(err)
 
 		// Validate execution is fully deleted (both mutable state and visibility record).
-		ss.EventuallyWithT(
-			func(t *assert.CollectT) {
+		ss.Await(
+			func(ss *ChasmSuite) {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: cenv.Namespace().String(),
 					PageSize:      10,
 					Query:         visQuery,
 				})
-				require.NoError(t, err)
-				require.Empty(t, resp.Executions)
+				ss.NoError(err)
+				ss.Empty(resp.Executions)
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -701,7 +704,7 @@ func (s *ChasmSuite) TestListExecutions_ExecutionStatusAsAlias() {
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
 		var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -736,7 +739,7 @@ func (s *ChasmSuite) TestListExecutions_ExecutionStatusAsAlias() {
 		ss.NoError(err)
 
 		visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -774,7 +777,7 @@ func (s *ChasmSuite) TestTaskQueuePreallocatedSearchAttribute() {
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", tests.ArchetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
 
 		var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -823,7 +826,7 @@ func (s *ChasmSuite) TestMutableStateRebuilder() {
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
 		var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 		var runID string
-		ss.Eventually(
+		ss.AwaitTrue(
 			func() bool {
 				resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 					NamespaceName: string(cenv.Namespace()),
@@ -1059,8 +1062,11 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		tv := testvars.New(ss.T())
 
 		// Register a fresh namespace for this test.
-		namespaceName := "ns-chasm-delete-" + tv.Any().String()[:8]
-		_, err := cenv.FrontendClient().RegisterNamespace(cenv.Context(), &workflowservice.RegisterNamespaceRequest{
+		var namespaceSuffix [4]byte
+		_, err := rand.Read(namespaceSuffix[:])
+		ss.NoError(err)
+		namespaceName := fmt.Sprintf("ns-chasm-delete-%x", namespaceSuffix)
+		_, err = cenv.FrontendClient().RegisterNamespace(cenv.Context(), &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        namespaceName,
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 			HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
