@@ -1352,6 +1352,147 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	s.Len(root.mutation.UpdatedNodes, 3)
 }
 
+func (s *nodeSuite) partitionedSnapshotTestNodes() map[string]*persistencespb.ChasmNode {
+	return map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(s.timeSource.Now().Add(time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+					},
+				},
+			},
+		},
+		// A component node with no tasks carries no cluster-local metadata and must be skipped.
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (s *nodeSuite) TestPartitionedSnapshot() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Cluster-local state captures only the component node with tasks, in order.
+	s.Len(localState.GetNodes(), 1)
+	rootState := localState.GetNodes()[""]
+	s.NotNil(rootState)
+	s.Equal([]int32{physicalTaskStatusCreated, physicalTaskStatusNone}, rootState.GetSideEffectTaskStatuses())
+	s.Equal([]int32{physicalTaskStatusCreated}, rootState.GetPureTaskStatuses())
+
+	// The clean snapshot keeps every node key but zeroes the cluster-local fields.
+	s.Len(clean.Nodes, 2)
+	cleanAttr := clean.Nodes[""].GetMetadata().GetComponentAttributes()
+	for _, t := range cleanAttr.GetSideEffectTasks() {
+		s.Equal(physicalTaskStatusNone, t.GetPhysicalTaskStatus())
+	}
+	for _, t := range cleanAttr.GetPureTasks() {
+		s.Equal(physicalTaskStatusNone, t.GetPhysicalTaskStatus())
+	}
+
+	// The live tree must be untouched: Snapshot returns the original statuses.
+	liveAttr := root.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
+	s.Equal(physicalTaskStatusCreated, liveAttr.GetSideEffectTasks()[0].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusCreated, liveAttr.GetPureTasks()[0].GetPhysicalTaskStatus())
+}
+
+func (s *nodeSuite) TestPartitionedSnapshot_MergeRoundTrip() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Merging the extracted state back into the clean snapshot restores the statuses with no mismatch.
+	s.Zero(clean.MergeClusterLocalState(localState))
+	mergedAttr := clean.Nodes[""].GetMetadata().GetComponentAttributes()
+	s.Equal(physicalTaskStatusCreated, mergedAttr.GetSideEffectTasks()[0].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusNone, mergedAttr.GetSideEffectTasks()[1].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusCreated, mergedAttr.GetPureTasks()[0].GetPhysicalTaskStatus())
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_ReportsLengthMismatch() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Truncate the root node's side-effect statuses so they no longer line up with its tasks.
+	localState.Nodes[""].SideEffectTaskStatuses = localState.Nodes[""].SideEffectTaskStatuses[:1]
+	s.Equal(1, clean.MergeClusterLocalState(localState))
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_SkipsMissingNodes() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Simulate the component node being deleted from the snapshot before merge.
+	delete(clean.Nodes, "")
+	s.NotPanics(func() {
+		clean.MergeClusterLocalState(localState)
+	})
+	s.Len(clean.Nodes, 1)
+}
+
+// A tree whose nodes carry no tasks has no cluster-local state: PartitionedSnapshot returns nil,
+// and merging that nil state back is a no-op.
+func (s *nodeSuite) TestPartitionedSnapshot_NoClusterLocalState() {
+	root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{TypeId: testComponentTypeID},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+	s.Nil(localState)
+	s.Len(clean.Nodes, 1)
+	s.Zero(clean.MergeClusterLocalState(localState))
+}
+
 func (s *nodeSuite) TestRefreshTasks() {
 	now := s.timeSource.Now()
 	pureTaskScheduledTime := now.Add(time.Second).UTC()
