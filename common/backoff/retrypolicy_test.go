@@ -294,6 +294,24 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 	s.True(delay < 2200*time.Millisecond)
 }
 
+func (s *RetryPolicySuite) TestConditionalRetryPolicy() {
+	sentinel := errors.New("sentinel")
+	whenTrue := NewConstantDelayRetryPolicy(time.Second)
+	whenFalse := NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(2)
+	policy := NewConditionalRetryPolicy(
+		func(err error) bool { return errors.Is(err, sentinel) },
+		whenTrue,
+		whenFalse,
+	)
+
+	// Non-matching error follows the whenFalse policy.
+	s.Equal(2*time.Second, policy.ComputeNextDelay(0, 1, errors.New("other")))
+	s.Equal(done, policy.ComputeNextDelay(0, 2, errors.New("other")))
+
+	// Matching error follows the whenTrue policy regardless of attempt count.
+	s.Equal(time.Second, policy.ComputeNextDelay(0, 100, sentinel))
+}
+
 // Validate jitter computation
 func (s *RetryPolicySuite) TestAddJitter() {
 	for range 10 {
