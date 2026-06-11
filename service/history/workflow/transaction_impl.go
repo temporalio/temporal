@@ -707,7 +707,7 @@ func emitMutationMetrics(
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
-	chasmRegistry := chasmRegistryForArchetype(shardContext, archetypeID, stats...)
+	chasmRegistry := chasmRegistryForArchetype(shardContext, archetypeID)
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
@@ -726,7 +726,7 @@ func emitGetMetrics(
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
-	chasmRegistry := chasmRegistryForArchetype(shardContext, archetypeID, stats...)
+	chasmRegistry := chasmRegistryForArchetype(shardContext, archetypeID)
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
@@ -741,17 +741,11 @@ func emitGetMetrics(
 func chasmRegistryForArchetype(
 	shardContext historyi.ShardContext,
 	archetypeID chasm.ArchetypeID,
-	stats ...*persistence.MutableStateStatistics,
 ) *chasm.Registry {
 	if archetypeID == chasm.UnspecifiedArchetypeID || archetypeID == chasm.WorkflowArchetypeID {
 		return nil
 	}
-	for _, stat := range stats {
-		if stat != nil {
-			return shardContext.ChasmRegistry()
-		}
-	}
-	return nil
+	return shardContext.ChasmRegistry()
 }
 
 func snapshotToCompletionMetric(
