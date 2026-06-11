@@ -8,9 +8,6 @@ import (
 	"slices"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -492,12 +489,6 @@ func (a *activities) generateReplicationTaskForExec(
 
 // attemptVerifyExec runs the source-describe + target-applied check for
 // a single execution and returns whether it's now verified.
-//
-// Why this isn't a delegation to verifySingleReplicationTask: that
-// helper folds BUSY_WORKFLOW into the generic notVerified result. We
-// inline the DMS call here to keep busy-workflow as a distinct metric
-// counter, preserving the "passive cluster apply is in progress"
-// signal.
 func (a *activities) attemptVerifyExec(
 	ctx context.Context,
 	remoteAdminClient adminservice.AdminServiceClient,
@@ -511,77 +502,17 @@ func (a *activities) attemptVerifyExec(
 			Timer(metrics.VerifyReplicationTaskLatency.Name()).Record(time.Since(attemptStart))
 	}()
 
-	archetype, err := a.archetypeIDToName(ctx, ex.ArchetypeID)
-	if err != nil {
-		return false, err
-	}
-
 	vreq := &verifyReplicationTasksRequest{
 		Namespace:         req.Namespace,
 		NamespaceID:       req.NamespaceID,
 		TargetClusterName: req.TargetClusterName,
 	}
 
-	describeStart := time.Now()
-	mu, err := remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: req.Namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: ex.BusinessID,
-			RunId:      ex.RunID,
-		},
-		Archetype:       archetype,
-		ArchetypeId:     ex.ArchetypeID,
-		SkipForceReload: true,
-	})
-	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(describeStart))
-
-	nsTag := metrics.NamespaceTag(req.Namespace)
-
-	if err == nil {
-		result, vErr := a.workflowVerifier(ctx, vreq, remoteAdminClient, a.adminClient, ns, ex.ExecutionInfo, mu)
-		if vErr != nil {
-			return false, vErr
-		}
-		if result.isVerified() {
-			a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
-			return true, nil
-		}
-		a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskPending.Name()).Record(1)
-		return false, nil
+	result, err := a.verifySingleReplicationTask(ctx, vreq, remoteAdminClient, ns, ex.ExecutionInfo)
+	if err != nil {
+		return false, err
 	}
-
-	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-		a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
-		// Retention/zombie path: a not-found execution may already be
-		// deleted on source (zombie or past retention), in which case it
-		// never needs to replicate — treat that as verified so the
-		// shard's completion accounting moves forward.
-		result, sErr := a.checkSkipWorkflowExecution(ctx, vreq, ex.ExecutionInfo, ns)
-		if sErr != nil {
-			return false, sErr
-		}
-		return result.isVerified(), nil
-	}
-
-	if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
-		return false, temporal.NewNonRetryableApplicationError(
-			"failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
-	}
-
-	if resExhausted, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok && resExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-		// Passive cluster holds the workflow cache lock while applying
-		// history during SyncWorkflowStateTask. Counted separately from
-		// pending so the "apply is in progress" signal stays visible,
-		// but the workflow-side treatment matches pending — per-exec
-		// backoff applies and the per-shard last-progress timer does
-		// not move (it only updates on verified outcomes).
-		a.forceReplicationMetricsHandler.WithTags(nsTag).Counter(metrics.VerifyReplicationTaskBusy.Name()).Record(1)
-		return false, nil
-	}
-
-	a.forceReplicationMetricsHandler.WithTags(nsTag, metrics.ServiceErrorTypeTag(err)).
-		Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
-	return false, fmt.Errorf("describe workflow on remote cluster: %w", err)
+	return result.isVerified(), nil
 }
 
 // signalReleaseShards sends the mid-flight ReleaseShards signal to the
