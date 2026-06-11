@@ -78,13 +78,13 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 func (s *TLSFunctionalSuite) trackAuthInfoByCall(env *testcore.TestEnv) *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
-	env.GetTestCluster().Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	env.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
 			System:     authorization.RoleAdmin,
 			Extensions: authInfo,
 		}, nil
 	})
-	env.GetTestCluster().Host().SetOnAuthorize(func(
+	env.SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
