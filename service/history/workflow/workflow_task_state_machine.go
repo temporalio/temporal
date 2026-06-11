@@ -1359,6 +1359,15 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 
+	// One-time move simple case.
+	// Optional: If SDK-sent behavior is AutoUpgrade and override behavior is Pinned, block the removal?
+	// It is simpler to just always honor the removal request. But also, letting effective behavior become AutoUpgrade
+	// in the background could be a footgun for people who are using AutoUpgrade and want their Override to be sticky.
+	// I think we could hopefully warn people: "Only use RemoveAfterNextTaskCompletion if your workflows are Pinned by the SDK"
+	if versioningInfo != nil && versioningInfo.VersioningOverride != nil && versioningInfo.VersioningOverride.RemoveAfterNextTaskCompletion {
+		versioningInfo.VersioningOverride = nil
+	}
+
 	// Deployment and behavior after applying the data came from the completed wft.
 	wfDeploymentAfter := m.ms.GetEffectiveDeployment()
 	wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
