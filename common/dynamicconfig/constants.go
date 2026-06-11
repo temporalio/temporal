@@ -2761,6 +2761,16 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup enables multi-cursor for replication streaming`,
+	)
+	EnableReplicationNamespaceIsolation = NewGlobalBoolSetting(
+		"history.EnableReplicationNamespaceIsolation",
+		false,
+		`EnableReplicationNamespaceIsolation enables per-namespace isolation for the replication LOW priority lane`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,
@@ -2795,6 +2805,11 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicationReceiverSlowSubmissionFlowControl",
 		false,
 		`Enable slow submission flow control check in replication receiver`,
+	)
+	ReplicationStreamSenderCatchupQPSRatio = NewGlobalFloatSetting(
+		"history.ReplicationStreamSenderCatchupQPSRatio",
+		0.1,
+		`Fraction of ReplicationStreamSenderLowPriorityQPS to use when a namespace is catching up after being throttled`,
 	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",

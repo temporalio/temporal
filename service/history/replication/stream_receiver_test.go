@@ -83,6 +83,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		MetricsHandler:            metrics.NoopMetricsHandler,
 		Logger:                    log.NewTestLogger(),
 		DLQWriter:                 NoopDLQWriter{},
+		NamespaceThrottler:        NoopNamespaceThrottler{},
 	}
 	processToolBox.Config.ReplicationStreamSyncStatusDuration = dynamicconfig.GetDurationPropertyFn(5 * time.Millisecond)
 	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some-cluster-name").AnyTimes()
