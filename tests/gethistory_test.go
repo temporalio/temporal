@@ -83,7 +83,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
-		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
@@ -96,7 +95,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 
 	// workflow logic
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
@@ -234,7 +232,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
-		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
@@ -247,7 +244,6 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 
 	// workflow logic
 	activityData := int32(1)
-	// var signalEvent *historypb.HistoryEvent
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
@@ -349,7 +345,6 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		WorkflowId:          env.Tv().WorkflowID(),
 		WorkflowType:        env.Tv().WorkflowType(),
 		TaskQueue:           env.Tv().TaskQueue(),
-		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            env.Tv().WorkerIdentity(),
@@ -362,7 +357,6 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// workflow logic
 	activityData := int32(1)
-	// var signalEvent *workflow.HistoryEvent
 
 	poller := env.TaskPoller()
 	getRawHistory := func(workflowID string, token []byte, isLongPoll bool) ([]*commonpb.DataBlob, []byte) {
