@@ -59,6 +59,7 @@ type (
 			identity string,
 			priority *commonpb.Priority,
 			timeSkippingConfig *commonpb.TimeSkippingConfig,
+			timeSkippingUpdated bool,
 			workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 		) (*historypb.HistoryEvent, error)
 
