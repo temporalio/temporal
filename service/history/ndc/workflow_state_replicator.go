@@ -1218,7 +1218,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	}
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
-	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
 		// In active cluster, use lowest priority to minimize the impact to live traffic
 		callerType = headers.CallerTypePreemptable
 	}
@@ -1727,7 +1727,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	}
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
-	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
 		// In active cluster, use lowest priority to minimize the impact to live traffic
 		callerType = headers.CallerTypePreemptable
 	}
