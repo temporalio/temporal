@@ -10,14 +10,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -235,75 +233,4 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
 
-func TestHandleError_WorkerError_ReturnNil(t *testing.T) {
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &workerCommandsTaskDispatcher{
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	// Worker-returned errors (ApplicationError, CanceledError) are permanent.
-	workerErr := temporal.NewApplicationError("worker bug", "SomeType", nil)
-	err := workercommands.HandleDispatchError(workerErr, "test-control-queue", metricsHandler, d.logger)
-	require.NoError(t, err, "worker-returned errors are permanent and should be swallowed")
-
-	requireMetricValue(t, capture.Snapshot(), "worker_error")
-}
-
-func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &workerCommandsTaskDispatcher{
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-	err := workercommands.HandleDispatchError(handlerErr, "test-control-queue", metricsHandler, d.logger)
-	require.Error(t, err, "upstream timeout should be retried")
-
-	var he *nexus.HandlerError
-	require.ErrorAs(t, err, &he)
-	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
-
-	requireMetricValue(t, capture.Snapshot(), "no_poller")
-}
-
-func TestHandleError_NonRetryableHandlerError_ReturnNil(t *testing.T) {
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &workerCommandsTaskDispatcher{
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
-	err := workercommands.HandleDispatchError(handlerErr, "test-control-queue", metricsHandler, d.logger)
-	require.NoError(t, err, "non-retryable handler errors should be swallowed")
-
-	requireMetricValue(t, capture.Snapshot(), "non_retryable_error")
-}
-
-func TestHandleError_OtherHandlerError_ReturnRetryable(t *testing.T) {
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &workerCommandsTaskDispatcher{
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "something broke")
-	err := workercommands.HandleDispatchError(handlerErr, "test-control-queue", metricsHandler, d.logger)
-	require.Error(t, err, "transport errors should be retried")
-
-	requireMetricValue(t, capture.Snapshot(), "transport_error")
-}
+// HandleDispatchError tests are in common/workercommands/dispatch_test.go.
