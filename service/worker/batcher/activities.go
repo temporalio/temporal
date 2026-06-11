@@ -117,6 +117,18 @@ func (p *page) done() bool {
 	return p.successCount+p.errorCount == len(p.executionInfos)
 }
 
+// recordCompletedPages records stats for each page that is now fully done and advances the
+// heartbeat resume point to the oldest page that is not yet done.
+func recordCompletedPages(hbd *HeartBeatDetails, resultPage *page) {
+	for pg := resultPage; pg != nil && pg.done(); pg = pg.next {
+		hbd.SuccessCount += pg.successCount
+		hbd.ErrorCount += pg.errorCount
+		hbd.CurrentPage = pg.pageNumber + 1
+		hbd.PageToken = pg.nextPageToken
+		pg.prev = nil
+	}
+}
+
 // fetchPage fetches a new page of workflow executions
 func fetchPage(
 	ctx context.Context,
@@ -181,8 +193,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
 	defer heartbeatTicker.Stop()
 
-	// Start worker processors
-	for range config.concurrency {
+	for range concurrency {
 		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
@@ -223,13 +234,19 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			p.next = nextPage
 			nextPage.prev = p
 			p = nextPage
+		}
 
-			hbd.CurrentPage = p.pageNumber
-			hbd.PageToken = p.nextPageToken
+		// Disable this send case (nil channel) once the page is fully submitted, so the loop
+		// waits on results instead of offering empty tasks.
+		var submitCh chan task
+		var nextTask task
+		if p.submittedCount < len(p.executionInfos) {
+			submitCh = taskCh
+			nextTask = p.nextTask()
 		}
 
 		select {
-		case taskCh <- p.nextTask():
+		case submitCh <- nextTask:
 			p.submittedCount++
 
 		case result := <-respCh:
@@ -240,13 +257,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 				resultPage.errorCount++
 			}
 
-			// Update heartbeat details if this page and all previous pages are complete
-			// Find all pages from the current one on that are done, record their stats, and unlink them.
-			for page := resultPage; page != nil && page.done(); page = page.next {
-				hbd.SuccessCount += page.successCount
-				hbd.ErrorCount += page.errorCount
-				page.prev = nil
-			}
+			recordCompletedPages(&hbd, resultPage)
 
 		case <-heartbeatTicker.C:
 			// Send periodic heartbeat to prevent timeout during slow processing
@@ -459,7 +470,7 @@ func (a *activities) startTaskProcessor(
 				continue
 			}
 
-			a.processSingleTask(ctx, batchOperation, namespace, task, taskCh, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
+			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
 		}
 	}
 }
@@ -472,14 +483,11 @@ func (a *activities) processSingleTask(
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
 	task task,
-	taskCh chan task,
-	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
-	metricsHandler metrics.Handler,
 	logger log.Logger,
-) {
+) error {
 	var err error
 
 	// Bound the processing of each individual task so a single hung operation
@@ -489,9 +497,7 @@ func (a *activities) processSingleTask(
 
 	// Handle admin batch operations
 	if batchOperation.AdminRequest != nil {
-		err = a.processAdminTask(ctx, batchOperation, task, limiter)
-		a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
-		return
+		return a.processAdminTask(ctx, batchOperation, task, limiter)
 	}
 
 	switch operation := batchOperation.Request.Operation.(type) {
@@ -658,7 +664,7 @@ func (a *activities) processSingleTask(
 	default:
 		err = fmt.Errorf("unknown batch type: %v", batchOperation.BatchType)
 	}
-	a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
+	return err
 }
 
 // isNonRetryableError determines if an error should not be retried based on the operation type
@@ -679,39 +685,52 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	}
 }
 
-func (a *activities) handleTaskResult(
+// processTaskWithRetries runs the task's operation, retrying retryable failures in place on
+// this goroutine, and sends exactly one response on respCh per task.
+func (a *activities) processTaskWithRetries(
+	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
+	ns string,
 	task task,
-	err error,
-	taskCh chan task,
 	respCh chan taskResponse,
+	limiter quotas.RequestRateLimiter,
+	sdkClient sdkclient.Client,
+	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-	if err != nil {
+	var err error
+	for {
+		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, sdkClient, frontendClient, logger)
+		if err == nil {
+			metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
+			break
+		}
+
 		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to process batch operation task", tag.Error(err))
 
-		// Check if error is non-retryable:
-		// 1. ApplicationError marked as NonRetryable
-		// 2. Operation-specific non-retryable errors
-		// 3. List of non-retryable errors from frontend
-		var appErr *temporal.ApplicationError
-		nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) ||
-			isNonRetryableError(err, batchOperation.BatchType) ||
-			slices.Contains(batchOperation.NonRetryableErrors, err.Error())
-
-		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
-			respCh <- taskResponse{err: err, page: task.page}
-		} else {
-			// put back to the channel if less than attemptsOnError
+		if isRetryableTaskError(err, batchOperation) && task.attempts <= int(batchOperation.AttemptsOnRetryableError) && !isDone(ctx) {
 			task.attempts++
-			taskCh <- task
+			continue
 		}
-	} else {
-		metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-		respCh <- taskResponse{err: nil, page: task.page}
+		break
 	}
+
+	// Send one response per task; stop early if the context is cancelled.
+	select {
+	case respCh <- taskResponse{err: err, page: task.page}:
+	case <-ctx.Done():
+	}
+}
+
+// isRetryableTaskError reports whether a failed task's error permits a retry.
+func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInput) bool {
+	var appErr *temporal.ApplicationError
+	nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) ||
+		isNonRetryableError(err, batchOperation.BatchType) ||
+		slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+	return !nonRetryable
 }
 
 func (a *activities) processAdminTask(
