@@ -195,6 +195,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 }
 
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransitionHistory bool) {
+	// Use small long poll timeout to speed up test.
 	longPollTimeout := 5 * time.Second
 
 	env := s.newTestEnv(enableTransitionHistory,
@@ -230,11 +231,10 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 
 	var events []*historypb.HistoryEvent
 	var token []byte
-	closeEventOnly := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
 	// here do a long pull with only close events requested; since the workflow is still running, this waits for the long-poll timeout.
 	start := time.Now()
-	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	s.GreaterOrEqual(time.Since(start), longPollTimeout)
 	// since we are only interested in close event
 	s.Empty(events)
@@ -262,7 +262,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.NoError(scheduleActivityErr)
 
 	start = time.Now()
-	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	s.GreaterOrEqual(time.Since(start), longPollTimeout)
 	// since we are only interested in close event
 	s.Empty(events)
@@ -289,7 +289,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.NoError(completeWorkflowErr)
 
 	s.Await(func(s *GetHistorySuite) {
-		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 
 		// since we are only interested in close event
 		s.Len(events, 1)
@@ -300,7 +300,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	// test non long poll for only closed events
 	token = nil
 	for {
-		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, false, closeEventOnly)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 		if token == nil {
 			break
 		}
