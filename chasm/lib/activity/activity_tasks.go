@@ -2,30 +2,20 @@ package activity
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
-	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/proto"
 )
 
 type activityDispatchTaskHandlerOptions struct {
@@ -327,12 +317,7 @@ func (h *cancelCommandDispatchTaskHandler) Validate(
 		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, nil
 }
 
-const (
-	cancelCommandDispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
-
-	workerCommandsServiceName   = "temporal.api.nexusservices.workerservice.v1.WorkerService"
-	workerCommandsOperationName = "ExecuteCommands"
-)
+const cancelCommandDispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
 
 func (h *cancelCommandDispatchTaskHandler) Execute(
 	ctx context.Context,
@@ -363,101 +348,16 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		},
 	}
 
-	return h.dispatchToWorker(ctx, activityRef.NamespaceID, taskAttrs.Destination, []*workerpb.WorkerCommand{command})
-}
-
-func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
-	ctx context.Context,
-	namespaceID string,
-	controlQueue string,
-	commands []*workerpb.WorkerCommand,
-) error {
 	ctx, cancel := context.WithTimeout(ctx, cancelCommandDispatchTimeout)
 	defer cancel()
 
-	request := &workerservicepb.ExecuteCommandsRequest{
-		Commands: commands,
-	}
-	requestData, err := proto.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("failed to encode worker commands request: %w", err)
-	}
-	requestPayload := &commonpb.Payload{
-		Metadata: map[string][]byte{
-			"encoding": []byte("binary/protobuf"),
-		},
-		Data: requestData,
-	}
-
-	nexusRequest := &nexuspb.Request{
-		Header: map[string]string{},
-		Variant: &nexuspb.Request_StartOperation{
-			StartOperation: &nexuspb.StartOperationRequest{
-				Service:   workerCommandsServiceName,
-				Operation: workerCommandsOperationName,
-				Payload:   requestPayload,
-			},
-		},
-	}
-
-	resp, err := h.opts.MatchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: namespaceID,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: controlQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
-		},
-		Request: nexusRequest,
-	})
-	if err != nil {
-		h.opts.Logger.Warn("Failed to dispatch cancel command",
-			tag.NewStringTag("control_queue", controlQueue),
-			tag.Error(err))
-		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("rpc_error"))
-		return err
-	}
-
-	nexusErr := commonnexus.DispatchResponseToError(resp)
-	if nexusErr == nil {
-		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("success"))
-		return nil
-	}
-
-	return h.handleDispatchError(nexusErr, controlQueue)
-}
-
-func (h *cancelCommandDispatchTaskHandler) handleDispatchError(nexusErr error, controlQueue string) error {
-	var handlerErr *nexus.HandlerError
-	if errors.As(nexusErr, &handlerErr) {
-		// Handler-level error (transport, timeout, internal).
-		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
-			h.opts.Logger.Warn("No worker polling control queue",
-				tag.NewStringTag("control_queue", controlQueue))
-			metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("no_poller"))
-			return nexusErr
-		}
-
-		if !handlerErr.Retryable() {
-			h.opts.Logger.Error("Cancel command non-retryable handler error",
-				tag.NewStringTag("control_queue", controlQueue),
-				tag.Error(nexusErr))
-			metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("non_retryable_error"))
-			return nil
-		}
-
-		h.opts.Logger.Warn("Cancel command transport failure",
-			tag.NewStringTag("control_queue", controlQueue),
-			tag.Error(nexusErr))
-		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("transport_error"))
-		return nexusErr
-	}
-
-	// Worker-returned failure (ApplicationError, CanceledError, etc.). The worker received
-	// and processed the request but returned an error. Permanent — the worker contract
-	// requires success for all defined commands, so this indicates a bug or version
-	// incompatibility. Retrying won't help.
-	h.opts.Logger.Error("Worker returned failure for cancel command",
-		tag.NewStringTag("control_queue", controlQueue),
-		tag.Error(nexusErr))
-	metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("worker_error"))
-	return nil
+	return workercommands.DispatchToWorker(
+		ctx,
+		h.opts.MatchingClient,
+		h.opts.MetricsHandler,
+		h.opts.Logger,
+		activityRef.NamespaceID,
+		taskAttrs.Destination,
+		[]*workerpb.WorkerCommand{command},
+	)
 }
