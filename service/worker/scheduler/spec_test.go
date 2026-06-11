@@ -237,6 +237,24 @@ func (s *specSuite) TestSpecIntervalPhase() {
 	)
 }
 
+func (s *specSuite) TestSpecIntervalPhaseWithMicroseconds() {
+	s.checkSequenceRaw(
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{
+					Interval: durationpb.New(120 * time.Second),
+					Phase:    durationpb.New(63*time.Second + 123*time.Microsecond),
+				},
+			},
+		},
+		time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC),
+		time.Date(2022, 3, 23, 12, 53, 3, 123000, time.UTC),
+		time.Date(2022, 3, 23, 12, 55, 3, 123000, time.UTC),
+		time.Date(2022, 3, 23, 12, 57, 3, 123000, time.UTC),
+		time.Date(2022, 3, 23, 12, 59, 3, 123000, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecIntervalMultiple() {
 	s.checkSequenceRaw(
 		&schedulepb.ScheduleSpec{
