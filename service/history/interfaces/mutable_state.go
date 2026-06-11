@@ -119,6 +119,10 @@ type (
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
+		// AddWorkflowExecutionOptionsUpdatedEvent records a WorkflowExecutionOptionsUpdated event.
+		// Exception: nil timeSkippingConfig means "no change to time skipping" — it does NOT disable
+		// time skipping. Pass a non-nil value only when the TSC actually changed or the bound is being
+		// renewed; nil prevents applyTimeSkippingBound from resetting a running MaxElapsedDuration countdown.
 		AddWorkflowExecutionOptionsUpdatedEvent(
 			versioningOverride *workflowpb.VersioningOverride,
 			unsetVersioningOverride bool,
