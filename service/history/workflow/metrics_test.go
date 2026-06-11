@@ -82,6 +82,23 @@ func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
 	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 }
 
+func TestGetArchetypeMetricTag(t *testing.T) {
+	registry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+
+	tag, ok := getArchetypeMetricTag(registry, chasm.UnspecifiedArchetypeID)
+	require.True(t, ok)
+	require.Equal(t, metrics.ArchetypeTag(""), tag)
+
+	tag, ok = getArchetypeMetricTag(registry, chasm.WorkflowArchetypeID)
+	require.True(t, ok)
+	require.Equal(t, metrics.ArchetypeTag(chasm.WorkflowComponentName), tag)
+
+	tag, ok = getArchetypeMetricTag(registry, chasm.ArchetypeID(9999))
+	require.True(t, ok)
+	require.Equal(t, metrics.ArchetypeTag("9999"), tag)
+}
+
 func TestEmitWorkflowCompletionStats_SkipNonWorkflow(t *testing.T) {
 	logger := log.NewTestLogger()
 	testHandler, _ := metricstest.NewHandler(logger, metrics.ClientConfig{})

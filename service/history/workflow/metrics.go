@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -90,18 +91,18 @@ func getArchetypeMetricTag(
 ) (metrics.Tag, bool) {
 	switch archetypeID {
 	case chasm.UnspecifiedArchetypeID:
-		return metrics.Tag{}, false
+		return metrics.ArchetypeTag(""), true
 	case chasm.WorkflowArchetypeID:
 		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
 	}
 
 	if chasmRegistry == nil {
-		return metrics.ArchetypeTag(""), true
+		return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
 	}
 	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
 		return metrics.ArchetypeTag(name), true
 	}
-	return metrics.ArchetypeTag(""), true
+	return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
 }
 
 func emitWorkflowCompletionStats(
