@@ -8,15 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
@@ -119,7 +120,7 @@ func TestArchiver(t *testing.T) {
 			Name:    "Search attribute with no embedded type information",
 			Targets: []Target{TargetVisibility},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"Text01": payload.EncodeString("value"),
+				"Text01": sadefs.MustEncodeValue("value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 			}},
 			NameTypeMap: searchattribute.TestNameTypeMap(),
 
@@ -129,7 +130,7 @@ func TestArchiver(t *testing.T) {
 			Name:    "Search attribute missing in type map",
 			Targets: []Target{TargetVisibility},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"Text01": payload.EncodeString("value"),
+				"Text01": sadefs.MustEncodeValue("value", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED),
 			}},
 			NameTypeMap: searchattribute.NameTypeMap{},
 
@@ -141,7 +142,7 @@ func TestArchiver(t *testing.T) {
 			Name:    "Error getting name type map from search attribute provider",
 			Targets: []Target{TargetVisibility},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"Text01": payload.EncodeString("value"),
+				"Text01": sadefs.MustEncodeValue("value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 			}},
 			NameTypeMapErr: errors.New("name-type-map-err"),
 
