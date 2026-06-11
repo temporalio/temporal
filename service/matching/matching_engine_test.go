@@ -908,6 +908,13 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			// #10468: the poll path must emit tasks_dropped with the same label keys as
+			// the backlog path (which carries these worker-version / namespace-state
+			// tags), otherwise the two registrations collide and the Prometheus reporter
+			// logs a "different label names" error.
+			for _, key := range []string{"namespace_state", "worker_version", "worker_deployment_name", "worker_build_id"} {
+				s.Contains(recordings[0].Tags, key, "tasks_dropped missing %q label that the backlog path emits", key)
+			}
 			capture.StopCapture(c)
 		})
 	}
@@ -960,6 +967,13 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
+			// #10468: the poll path must emit tasks_dropped with the same label keys as
+			// the backlog path (which carries these worker-version / namespace-state
+			// tags), otherwise the two registrations collide and the Prometheus reporter
+			// logs a "different label names" error.
+			for _, key := range []string{"namespace_state", "worker_version", "worker_deployment_name", "worker_build_id"} {
+				s.Contains(recordings[0].Tags, key, "tasks_dropped missing %q label that the backlog path emits", key)
+			}
 			capture.StopCapture(c)
 		})
 	}
@@ -6393,4 +6407,123 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 			return false
 		}
 	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
+}
+
+// TestDroppedTaskMetricsHandler_AddsVersionAndStateLabels verifies that
+// droppedTaskMetricsHandler enriches the poll-path handler with the worker-version and
+// namespace-state labels the backlog handler carries, deriving the values from the
+// poller's requested version (#10468).
+func TestDroppedTaskMetricsHandler_AddsVersionAndStateLabels(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	ns, registry := createMockNamespaceCache(controller, matchingTestNamespace)
+	// Enable build-ID breakdown so versioned values are reported verbatim (not masked).
+	dc := dynamicconfig.StaticClient{dynamicconfig.MetricsBreakdownByBuildID.Key(): true}
+	config := NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()))
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, registry)
+
+	prtn := newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	// record emits tasks_dropped through droppedTaskMetricsHandler and returns the tags
+	// captured for that single emission. A bare capture handler is passed as opMetrics so
+	// the only tags present are the ones the helper adds (plus the reason recorded at emit).
+	record := func(t *testing.T, depl *deploymentpb.WorkerDeploymentOptions) map[string]string {
+		t.Helper()
+		capture := metricstest.NewCaptureHandler()
+		c := capture.StartCapture()
+		defer capture.StopCapture(c)
+		h := e.droppedTaskMetricsHandler(capture, prtn, ns.Name().String(), nil, depl)
+		metrics.DroppedTasksCounter.With(h).Record(1, metrics.DroppedTaskReasonNotFoundTag)
+		recs := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
+		require.Len(t, recs, 1)
+		return recs[0].Tags
+	}
+
+	t.Run("unversioned", func(t *testing.T) {
+		tags := record(t, nil)
+		require.Equal(t, "__unversioned__", tags["worker_version"])
+		require.Equal(t, "", tags["worker_deployment_name"])
+		require.Equal(t, "", tags["worker_build_id"])
+		require.Contains(t, tags, "namespace_state")
+		require.NotEmpty(t, tags["namespace_state"])
+		require.Equal(t, metrics.DroppedTaskReasonNotFoundTag.Value, tags["reason"])
+	})
+
+	t.Run("worker deployment", func(t *testing.T) {
+		depl := &deploymentpb.WorkerDeploymentOptions{
+			DeploymentName:       "my-series",
+			BuildId:              "build-7",
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+		}
+		tags := record(t, depl)
+		require.Equal(t, "my-series:build-7", tags["worker_version"])
+		require.Equal(t, "my-series", tags["worker_deployment_name"])
+		require.Equal(t, "build-7", tags["worker_build_id"])
+		require.Contains(t, tags, "namespace_state")
+	})
+}
+
+// TestDroppedTaskMetricsHandler_PollAndBacklogLabelKeysMatch guards #10468: the poll-path
+// drop handler and the backlog physical-queue handler must emit tasks_dropped under the
+// same label-key set. Builds both real handlers and asserts their label keys match, so a
+// tag change on either side fails here before the divergence reaches Prometheus.
+func TestDroppedTaskMetricsHandler_PollAndBacklogLabelKeysMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	ns, registry := createMockNamespaceCache(controller, matchingTestNamespace)
+	config := defaultTestConfig()
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, registry)
+	capture := metricstest.NewCaptureHandler()
+	e.metricsHandler = capture // base for every derived handler, so both paths record here
+
+	prtn := newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
+
+	// Real backlog/physical-queue handler.
+	logger, _, partitionHandler := e.loggerAndMetricsForPartition(ns, prtn, tqConfig)
+	pm, err := newTaskQueuePartitionManager(e, ns, prtn, tqConfig, logger, logger, partitionHandler, &mockUserDataManager{})
+	require.NoError(t, err)
+	pqm, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(prtn))
+	require.NoError(t, err)
+	backlogHandler := pqm.metricsHandler
+
+	// Real poll-path drop handler: opMetrics as Handler.opMetricsHandler builds it, enriched.
+	opMetrics := metrics.GetPerTaskQueuePartitionIDScope(
+		e.metricsHandler.WithTags(metrics.OperationTag("PollWorkflowTaskQueue")),
+		ns.Name().String(),
+		prtn,
+		tqConfig.BreakdownMetricsByTaskQueue(),
+		tqConfig.BreakdownMetricsByPartition(),
+	)
+	pollHandler := e.droppedTaskMetricsHandler(opMetrics, prtn, ns.Name().String(), nil, nil)
+
+	c := capture.StartCapture()
+	defer capture.StopCapture(c)
+	metrics.DroppedTasksCounter.With(backlogHandler).Record(1, metrics.DroppedTaskReasonExpiredReadTag)
+	metrics.DroppedTasksCounter.With(pollHandler).Record(1, metrics.DroppedTaskReasonNotFoundTag)
+
+	recs := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
+	require.Len(t, recs, 2)
+	var backlogTags, pollTags map[string]string
+	for _, r := range recs {
+		switch r.Tags["reason"] {
+		case metrics.DroppedTaskReasonExpiredReadTag.Value:
+			backlogTags = r.Tags
+		case metrics.DroppedTaskReasonNotFoundTag.Value:
+			pollTags = r.Tags
+		}
+	}
+	require.NotNil(t, backlogTags, "backlog emission not captured")
+	require.NotNil(t, pollTags, "poll emission not captured")
+
+	backlogKeys := make([]string, 0, len(backlogTags))
+	for k := range backlogTags {
+		backlogKeys = append(backlogKeys, k)
+	}
+	pollKeys := make([]string, 0, len(pollTags))
+	for k := range pollTags {
+		pollKeys = append(pollKeys, k)
+	}
+	require.ElementsMatch(t, backlogKeys, pollKeys,
+		"tasks_dropped label keys diverged between poll and backlog paths (#10468); "+
+			"update droppedTaskMetricsHandler to match the physical-queue handler")
 }
