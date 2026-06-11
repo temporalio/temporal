@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/tidwall/btype"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -124,21 +125,30 @@ type taskBTree struct {
 	// note that matcherData may get tasks from multiple versioned backlogs due to
 	// versioning redirection.
 	ages backlogAgeTracker
-
-	seq int64 // insertion counter; see btreeSeq on internalTask
 }
 
 func taskBTreeCompare(a, b *internalTask) int {
 	if c := cmp.Compare(a.effectivePriority, b.effectivePriority); c != 0 {
 		return c
 	}
-	if a.btreeFairLevel.less(b.btreeFairLevel) {
+	afl := taskFairLevel(a)
+	bfl := taskFairLevel(b)
+	if afl.less(bfl) {
 		return -1
 	}
-	if b.btreeFairLevel.less(a.btreeFairLevel) {
+	if bfl.less(afl) {
 		return 1
 	}
-	return cmp.Compare(a.btreeSeq, b.btreeSeq)
+	// Pointer value is unique per live allocation; used as a stable tiebreaker.
+	return cmp.Compare(uintptr(unsafe.Pointer(a)), uintptr(unsafe.Pointer(b)))
+}
+
+// taskFairLevel returns the fair level for a task. Safe for tasks with no AllocatedTaskInfo.
+func taskFairLevel(task *internalTask) fairLevel {
+	if task.event == nil {
+		return fairLevel{}
+	}
+	return fairLevel{pass: task.event.GetTaskPass(), id: task.event.GetTaskId()}
 }
 
 func newTaskBTree() taskBTree {
@@ -151,11 +161,6 @@ func newTaskBTree() taskBTree {
 }
 
 func (b *taskBTree) Add(task *internalTask) {
-	b.seq++
-	task.btreeSeq = b.seq
-	if task.event != nil {
-		task.btreeFairLevel = fairLevel{pass: task.event.GetTaskPass(), id: task.event.GetTaskId()}
-	}
 	task.matchHeapIndex = 0 // non-negative: signals "in queue"
 	b.tree.Insert(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
@@ -396,40 +401,10 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// matchPollerForTask returns the first poller compatible with task, or nil.
-// call with lock held
-func (d *matcherData) matchPollerForTask(task *internalTask, allowForwarding bool) *waitingPoller {
-	for _, poller := range d.pollers.heap {
-		if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
-			// query-only poll only matches with query (but can match poll forwarder)
-			continue
-		}
-		if task.isPollForwarder() && poller.forwardCtx == nil {
-			// poll forwarder only matches polls that have a forwardCtx
-			continue
-		}
-		if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
-			// task forwarder only matches when forwarding is allowed
-			continue
-		}
-		if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-			// validator (root only) only matches local backlog tasks
-			continue
-		}
-		if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
-			// Note the ">" above: "min" priority is a numeric max.
-			// Also note: this condition will be false for draining tasks since we artifically boost
-			// their priority above "1". that's inaccurate but it's just a temporary situation.
-			continue
-		}
-		return poller
-	}
-	return nil
-}
-
 // findMatch should return the highest priority task+poller match even if the per-task rate
 // limit doesn't allow the task to be matched yet.
 // call with lock held
+// nolint:revive // cognitive complexity acceptable here
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
 	for task := range d.tasks.tree.All() {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
@@ -437,9 +412,29 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
 			continue
 		}
-		matched := d.matchPollerForTask(task, allowForwarding)
-		if matched != nil {
-			return task, matched
+
+		for _, poller := range d.pollers.heap {
+			// can't match cases:
+			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
+				// query-only poll only matches with query (but can match poll forwarder)
+				continue
+			} else if task.isPollForwarder() && poller.forwardCtx == nil {
+				// poll forwarder only matches polls that have a forwardCtx
+				continue
+			} else if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
+				// task forwarder only matches when forwarding is allowed
+				continue
+			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
+				// validator (root only) only matches local backlog tasks
+				continue
+			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
+				// Note the ">" above: "min" priority is a numeric max.
+				// Also note: this condition will be false for draining tasks since we artifically boost
+				// their priority above "1". that's inaccurate but it's just a temporary situation.
+				continue
+			}
+
+			return task, poller
 		}
 	}
 	return nil, nil

@@ -88,14 +88,6 @@ type (
 		// in between priority levels.
 		effectivePriority priorityKey
 		pollForwarderType pollForwarderType
-		// btreeSeq and btreeFairLevel are the tiebreakers that make taskBTreeCompare a
-		// strict total order, required by btype.Table. btreeFairLevel is snapshotted at
-		// Add time because the sort key must not change while a task is in the tree.
-		// btreeSeq is an insertion counter that breaks remaining ties: sync-match, query,
-		// and nexus tasks have no AllocatedTaskInfo and therefore all share a zero fairLevel,
-		// so without it the comparator would treat concurrent tasks of the same type as equal.
-		btreeSeq       int64
-		btreeFairLevel fairLevel
 	}
 
 	// taskResponse is used to report the result of either a match with a local poller,
