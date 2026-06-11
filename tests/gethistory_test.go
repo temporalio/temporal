@@ -13,12 +13,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -66,26 +64,16 @@ func (s *GetHistorySuite) newTestEnv(enableTransitionHistory bool, opts ...testc
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHistory bool) {
 	env := s.newTestEnv(enableTransitionHistory)
 
-	workflowID := "functional-get-workflow-history-events-long-poll-test-all"
-	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-all-type"
-	taskqueueName := "functional-get-workflow-history-events-long-poll-test-all-taskqueue"
-	identity := "worker1"
-	activityName := "activity_type1"
-
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
+		RequestId:           env.Tv().RequestID(),
 		Namespace:           env.Namespace().String(),
-		WorkflowId:          workflowID,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		WorkflowId:          env.Tv().WorkflowID(),
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           env.Tv().TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            env.Tv().WorkerIdentity(),
 	}
 
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
@@ -97,10 +85,10 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	activityData := int32(1)
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: taskQueue,
+		TaskQueue: env.Tv().TaskQueue(),
 	})
 	activityPoller := env.TaskPoller().PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: taskQueue,
+		TaskQueue: env.Tv().TaskQueue(),
 	})
 
 	var allEvents []*historypb.HistoryEvent
@@ -109,7 +97,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now().UTC()
-	events, token = s.getHistory(env, workflowID, token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().UTC().Before(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -125,9 +113,9 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              taskQueue,
+					ActivityId:             env.Tv().ActivityID(),
+					ActivityType:           env.Tv().ActivityType(),
+					TaskQueue:              env.Tv().TaskQueue(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(25 * time.Second),
@@ -139,7 +127,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(scheduleActivityErr))
 	})
 	start = time.Now().UTC()
-	events, token = s.getHistory(env, workflowID, token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().UTC().After(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -166,7 +154,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(completeWorkflowErr))
 	})
 	for token != nil {
-		events, token = s.getHistory(env, workflowID, token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
 		allEvents = append(allEvents, events...)
 	}
 	s.EqualHistoryEvents(`
@@ -186,7 +174,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	allEvents = nil
 	token = nil
 	for {
-		events, token = s.getHistory(env, workflowID, token, false, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, false, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
 		allEvents = append(allEvents, events...)
 		if token == nil {
 			break
@@ -213,26 +201,16 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 		testcore.WithDynamicConfig(dynamicconfig.HistoryLongPollExpirationInterval, longPollTimeout),
 	)
 
-	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
-	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
-	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"
-	identity := "worker1"
-	activityName := "activity_type1"
-
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
+		RequestId:           env.Tv().RequestID(),
 		Namespace:           env.Namespace().String(),
-		WorkflowId:          workflowID,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		WorkflowId:          env.Tv().WorkflowID(),
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           env.Tv().TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            env.Tv().WorkerIdentity(),
 	}
 
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
@@ -244,10 +222,10 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	activityData := int32(1)
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: taskQueue,
+		TaskQueue: env.Tv().TaskQueue(),
 	})
 	activityPoller := env.TaskPoller().PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
-		TaskQueue: taskQueue,
+		TaskQueue: env.Tv().TaskQueue(),
 	})
 
 	var events []*historypb.HistoryEvent
@@ -256,7 +234,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 
 	// here do a long pull with only close events requested; since the workflow is still running, this waits for the long-poll timeout.
 	start := time.Now()
-	events, token = s.getHistory(env, workflowID, token, true, closeEventOnly)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
 	s.GreaterOrEqual(time.Since(start), longPollTimeout)
 	// since we are only interested in close event
 	s.Empty(events)
@@ -269,9 +247,9 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-				ActivityId:             convert.Int32ToString(1),
-				ActivityType:           &commonpb.ActivityType{Name: activityName},
-				TaskQueue:              taskQueue,
+				ActivityId:             env.Tv().ActivityID(),
+				ActivityType:           env.Tv().ActivityType(),
+				TaskQueue:              env.Tv().TaskQueue(),
 				Input:                  payloads.EncodeBytes(buf.Bytes()),
 				ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(25 * time.Second),
@@ -284,7 +262,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.NoError(scheduleActivityErr)
 
 	start = time.Now()
-	events, token = s.getHistory(env, workflowID, token, true, closeEventOnly)
+	events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
 	s.GreaterOrEqual(time.Since(start), longPollTimeout)
 	// since we are only interested in close event
 	s.Empty(events)
@@ -311,7 +289,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	s.NoError(completeWorkflowErr)
 
 	s.Await(func(s *GetHistorySuite) {
-		events, token = s.getHistory(env, workflowID, token, true, closeEventOnly)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, true, closeEventOnly)
 
 		// since we are only interested in close event
 		s.Len(events, 1)
@@ -322,7 +300,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 	// test non long poll for only closed events
 	token = nil
 	for {
-		events, token = s.getHistory(env, workflowID, token, false, closeEventOnly)
+		events, token = s.getHistory(env, env.Tv().WorkflowID(), token, false, closeEventOnly)
 		if token == nil {
 			break
 		}
