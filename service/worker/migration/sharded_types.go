@@ -41,7 +41,10 @@ const (
 	// backstop. While a shard's pending exec count is non-zero and
 	// no exec on that shard has produced a verified outcome for this
 	// long (carried across CAN via the resume payload), the activity
-	// fails non-retryably naming the stuck shard.
+	// fails non-retryably naming the stuck shard. A shard awaiting its
+	// very first verification gets double this window so the server has
+	// time to clear any backlog predating our task submission; it
+	// reverts to this value once the shard's first exec verifies.
 	defaultShardNoProgress = 5 * time.Minute
 
 	// defaultDrainGrace is the wall-budget the activity gets after

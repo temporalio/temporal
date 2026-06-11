@@ -367,8 +367,9 @@ func earliest(cur, candidate time.Time) time.Time {
 }
 
 // checkStuckShard fails non-retryably if any shard has gone longer than
-// req.ShardNoProgress without a verified outcome. Duration is cumulative
-// across CAN cycles via tracker seeding.
+// req.ShardNoProgress without a verified outcome (double that for a shard
+// still awaiting its first verification — see pickStuck). Duration is
+// cumulative across CAN cycles via tracker seeding.
 func (a *activities) checkStuckShard(
 	req *shardedBatchReq,
 	shards shardVerifyTracker,
@@ -606,6 +607,7 @@ type shardVerify struct {
 	doneAt       time.Time // set when pending first hits zero; cleared on signal release
 	released     bool      // ReleaseShards signal already sent
 	lastProgress time.Time // wall time of the most recent verified outcome
+	verifiedAny  bool      // an exec on this shard has produced a verified outcome
 }
 
 type shardVerifyTracker map[int32]shardVerify
@@ -625,6 +627,11 @@ func newShardVerifyTracker(
 	for sh, sv := range t {
 		if resume {
 			sv.lastProgress = nowSeed.Add(-noProgressByShard[sh])
+			// Resumed shards had their tasks submitted (and their initial
+			// first-verification grace) in a prior CAN cycle — inject is
+			// skipped on resume — so they continue cumulative no-progress
+			// tracking against the normal window, not the doubled one.
+			sv.verifiedAny = true
 		} else {
 			sv.lastProgress = nowSeed
 		}
@@ -637,6 +644,7 @@ func (t shardVerifyTracker) recordVerified(sh int32, now time.Time) {
 	sv := t[sh]
 	sv.pending--
 	sv.lastProgress = now
+	sv.verifiedAny = true
 	if sv.pending == 0 {
 		sv.doneAt = now
 	}
@@ -692,7 +700,11 @@ func (t shardVerifyTracker) allCompleted() []int32 {
 }
 
 // pickStuck returns (shard, age, true) for the lowest-numbered shard
-// whose cumulative no-progress duration meets or exceeds threshold.
+// whose cumulative no-progress duration meets or exceeds its effective
+// threshold. A shard that hasn't yet produced any verified outcome gets
+// double the window: the server may still be working through a backlog
+// that predates our task submission. Once any exec on the shard verifies
+// we expect the rest within the normal window, so the threshold reverts.
 func (t shardVerifyTracker) pickStuck(now time.Time, threshold time.Duration) (int32, time.Duration, bool) {
 	var (
 		minShard int32
@@ -703,8 +715,12 @@ func (t shardVerifyTracker) pickStuck(now time.Time, threshold time.Duration) (i
 		if sv.pending <= 0 {
 			continue
 		}
+		effective := threshold
+		if !sv.verifiedAny {
+			effective = 2 * threshold
+		}
 		age := now.Sub(sv.lastProgress)
-		if age < threshold {
+		if age < effective {
 			continue
 		}
 		if !found || sh < minShard {

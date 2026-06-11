@@ -3,6 +3,7 @@ package migration
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -88,4 +89,51 @@ func TestBatchPayload_Flatten(t *testing.T) {
 	require.Equal(t, "ra1", got[1].RunID)
 	require.Equal(t, "ra2", got[2].RunID)
 	require.Equal(t, "b-z", got[3].BusinessID)
+}
+
+// TestShardVerifyTracker_FirstVerificationDoubledWindow pins the
+// no-progress backstop's grace for a shard's first verified outcome: a
+// shard that hasn't verified anything yet gets 2×threshold before
+// pickStuck reports it (the server may still be clearing a backlog that
+// predates our task submission), then reverts to the plain threshold —
+// measured from the verification time — once its first exec verifies.
+func TestShardVerifyTracker_FirstVerificationDoubledWindow(t *testing.T) {
+	const threshold = 5 * time.Minute
+	base := time.Unix(1700000000, 0)
+
+	tr := shardVerifyTracker{0: {pending: 2, lastProgress: base}}
+
+	_, _, stuck := tr.pickStuck(base.Add(threshold+time.Minute), threshold)
+	require.False(t, stuck, "must not trip past 1×threshold while awaiting first verification")
+
+	sh, age, stuck := tr.pickStuck(base.Add(2*threshold), threshold)
+	require.True(t, stuck, "must trip at 2×threshold while awaiting first verification")
+	require.Equal(t, int32(0), sh)
+	require.Equal(t, 2*threshold, age)
+
+	// First exec verifies → window reverts to the plain threshold,
+	// measured from the verification time.
+	verifiedAt := base.Add(threshold)
+	tr.recordVerified(0, verifiedAt)
+
+	_, _, stuck = tr.pickStuck(verifiedAt.Add(threshold-time.Second), threshold)
+	require.False(t, stuck, "must not trip below 1×threshold after first verification")
+
+	_, _, stuck = tr.pickStuck(verifiedAt.Add(threshold), threshold)
+	require.True(t, stuck, "must trip at 1×threshold after first verification")
+}
+
+// TestNewShardVerifyTracker_ResumeSkipsDoubledWindow: a resumed shard's
+// tasks were submitted (and given their first-verification grace) in a
+// prior CAN cycle, so it is seeded as already past its first
+// verification and tracks cumulative no-progress against the plain
+// threshold. A fresh shard awaits its first verification.
+func TestNewShardVerifyTracker_ResumeSkipsDoubledWindow(t *testing.T) {
+	execs := []*shardedExecutionInfo{{Shard: 0}}
+
+	fresh := newShardVerifyTracker(execs, false, nil)
+	require.False(t, fresh[0].verifiedAny, "fresh shard awaits its first verification")
+
+	resumed := newShardVerifyTracker(execs, true, map[int32]time.Duration{0: time.Minute})
+	require.True(t, resumed[0].verifiedAny, "resumed shard skips the doubled first-verification window")
 }
