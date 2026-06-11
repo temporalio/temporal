@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -2667,7 +2668,7 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 
 	// Poll the Nexus control queue — should receive the cancel command.
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -2680,7 +2681,7 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 			return true
 		}
 		return false
-	}, 30*time.Second, 200*time.Millisecond, "timed out waiting for cancel command on control queue")
+	}, 30*time.Second, 200*time.Millisecond)
 
 	// Verify the Nexus request contains an ExecuteCommands operation with a CancelActivity command.
 	startOp := nexusPollResp.Request.GetStartOperation()
