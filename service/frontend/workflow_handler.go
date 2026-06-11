@@ -5106,8 +5106,8 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 		return nil, err
 	}
 
-	schedules := make([]*schedulepb.ScheduleListEntry, len(resp.Executions))
-	for i, ex := range resp.Executions {
+	schedules := make([]*schedulepb.ScheduleListEntry, 0, len(resp.Executions))
+	for _, ex := range resp.Executions {
 		// Schedules returned may have either a Memo (V1) or a ChasmMemo (V2) containing
 		// the ScheduleListInfo. Both must be handled, as migration means a mix of
 		// versions can be returned.
@@ -5123,7 +5123,21 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 		workflowID := ex.BusinessID
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
 
-		schedules[i] = &schedulepb.ScheduleListEntry{
+		// Skip entries that carry no decodable ScheduleListInfo. This happens during
+		// a CHASM->V1 migration: the migrated V1 workflow is Running under the
+		// scheduler namespace division (so it matches the query) before it has
+		// written its TemporalScheduleInfo memo, so neither the V2 nor V1 decode
+		// above yields a spec. Emitting such an entry with a nil Info crashes clients
+		// that dereference the spec, so omit it until the info memo is populated.
+		if listInfo == nil {
+			wh.logger.Warn("Dropping schedule list entry with no decodable ScheduleInfo memo (expected transiently while a recently-migrated scheduler workflow has not yet written its info memo)",
+				tag.WorkflowNamespace(namespaceName.String()),
+				tag.ScheduleID(scheduleID),
+				tag.WorkflowID(workflowID))
+			continue
+		}
+
+		schedules = append(schedules, &schedulepb.ScheduleListEntry{
 			ScheduleId: scheduleID,
 			Memo:       customMemo,
 			// cleanScheduleSearchAttributes is only needed for V1 schedules
@@ -5131,7 +5145,7 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 				IndexedFields: ex.CustomSearchAttributes,
 			}),
 			Info: listInfo,
-		}
+		})
 	}
 
 	return &workflowservice.ListSchedulesResponse{
@@ -5161,19 +5175,36 @@ func (wh *WorkflowHandler) listSchedulesWorkflow(
 		return nil, err
 	}
 
-	schedules := make([]*schedulepb.ScheduleListEntry, len(persistenceResp.Executions))
-	for i, ex := range persistenceResp.Executions {
+	schedules := make([]*schedulepb.ScheduleListEntry, 0, len(persistenceResp.Executions))
+	for _, ex := range persistenceResp.Executions {
 		memo := ex.GetMemo()
 		info := wh.decodeScheduleListInfo(memo)
-		memo = wh.cleanScheduleMemo(memo)
 		workflowID := ex.GetExecution().GetWorkflowId()
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
-		schedules[i] = &schedulepb.ScheduleListEntry{
+
+		// Skip entries with no decodable ScheduleListInfo. A scheduler workflow is
+		// Running under the scheduler namespace division (so it matches the query)
+		// from the moment it is started, but only writes its TemporalScheduleInfo
+		// memo once it executes its first iteration (see updateMemoAndSearchAttributes
+		// in the scheduler workflow). This window is especially visible right after a
+		// CHASM->V1 migration, which starts the V1 workflow with only the custom memo.
+		// Emitting such an entry with a nil Info crashes clients that dereference the
+		// spec, so omit it until the info memo is populated.
+		if info == nil {
+			wh.logger.Warn("Dropping schedule list entry with no decodable ScheduleInfo memo (expected transiently while a recently-migrated scheduler workflow has not yet written its info memo)",
+				tag.WorkflowNamespace(namespaceName.String()),
+				tag.ScheduleID(scheduleID),
+				tag.WorkflowID(workflowID))
+			continue
+		}
+
+		memo = wh.cleanScheduleMemo(memo)
+		schedules = append(schedules, &schedulepb.ScheduleListEntry{
 			ScheduleId:       scheduleID,
 			Memo:             memo,
 			SearchAttributes: wh.cleanScheduleSearchAttributes(ex.GetSearchAttributes()),
 			Info:             info,
-		}
+		})
 	}
 
 	return &workflowservice.ListSchedulesResponse{
