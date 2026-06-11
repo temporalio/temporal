@@ -100,13 +100,27 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	type historyPage struct {
 		events []*historypb.HistoryEvent
 		token  []byte
+		err    error
 	}
 	longPollStarted := make(chan struct{})
 	historyPageCh := make(chan historyPage, 1)
 	go func(token []byte) {
 		close(longPollStarted)
-		events, token := s.getHistory(env, env.Tv().WorkflowID(), token, true, enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED)
-		historyPageCh <- historyPage{events: events, token: token}
+		response, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: env.Tv().WorkflowID(),
+			},
+			MaximumPageSize:        100,
+			WaitNewEvent:           true,
+			NextPageToken:          token,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED,
+		})
+		if err != nil {
+			historyPageCh <- historyPage{err: err}
+			return
+		}
+		historyPageCh <- historyPage{events: response.History.Events, token: response.NextPageToken}
 	}(token)
 	<-longPollStarted
 
@@ -128,6 +142,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 	s.NoError(scheduleActivityErr)
 
 	page := <-historyPageCh
+	s.NoError(page.err)
 	events, token = page.events, page.token
 	allEvents = append(allEvents, events...)
 	s.NotEmpty(events)
@@ -356,13 +371,27 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	type rawHistoryPage struct {
 		blobs []*commonpb.DataBlob
 		token []byte
+		err   error
 	}
 	longPollStarted := make(chan struct{})
 	rawHistoryPageCh := make(chan rawHistoryPage, 1)
 	go func(token []byte) {
 		close(longPollStarted)
-		blobs, token := getRawHistory(env.Tv().WorkflowID(), token, true)
-		rawHistoryPageCh <- rawHistoryPage{blobs: blobs, token: token}
+		response, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: env.Tv().WorkflowID(),
+			},
+			// Page size has no reliable relation to the number of returned events, so use a large value.
+			MaximumPageSize: 100,
+			WaitNewEvent:    true,
+			NextPageToken:   token,
+		})
+		if err != nil {
+			rawHistoryPageCh <- rawHistoryPage{err: err}
+			return
+		}
+		rawHistoryPageCh <- rawHistoryPage{blobs: response.RawHistory, token: response.NextPageToken}
 	}(token)
 	<-longPollStarted
 
@@ -386,6 +415,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	s.NoError(scheduleActivityErr)
 
 	page := <-rawHistoryPageCh
+	s.NoError(page.err)
 	blobs, token = page.blobs, page.token
 	events = deserializeHistoryBlobs(blobs)
 	allEvents = append(allEvents, events...)
