@@ -98,11 +98,9 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_All(enableTransitionHi
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
-		Identity:  identity,
 	})
 	activityPoller := env.TaskPoller().PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
 		TaskQueue: taskQueue,
-		Identity:  identity,
 	})
 
 	var allEvents []*historypb.HistoryEvent
@@ -247,11 +245,9 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_Close(enableTransition
 
 	workflowPoller := env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: taskQueue,
-		Identity:  identity,
 	})
 	activityPoller := env.TaskPoller().PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{
 		TaskQueue: taskQueue,
-		Identity:  identity,
 	})
 
 	var events []*historypb.HistoryEvent
