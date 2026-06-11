@@ -189,7 +189,7 @@ func (s *readerSuite) TestMergeSlices() {
 
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -218,7 +218,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes[2].Predicate = predicates.Empty[tasks.Task]()
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -511,7 +511,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		slices = append(slices, slice)
 	}
 

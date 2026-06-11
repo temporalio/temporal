@@ -1903,6 +1903,12 @@ which causes all tasks in the scope's range to eventually be reprocessed without
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
 	)
+	QueueShrinkPredicateMaxPendingKeys = NewGlobalIntSetting(
+		"history.queueShrinkPredicateMaxPendingKeys",
+		10,
+		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
+keys.`,
+	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,

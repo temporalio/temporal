@@ -3,13 +3,17 @@ package queues
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 	expmaps "golang.org/x/exp/maps"
 )
 
 const (
-	shrinkPredicateMaxPendingKeys = 3
+	// Reasons a queue slice gives up exact predicate resolution, emitted as the reason
+	// tag on metrics.QueuePredicateResolutionLoss.
+	predicateResolutionLossMaxPendingKeys metrics.ReasonString = "max_pending_keys"
+	predicateResolutionLossPredicateSize  metrics.ReasonString = "predicate_size"
 )
 
 type (
@@ -50,6 +54,8 @@ type (
 		monitor Monitor
 
 		maxPredicateSizeFn func() int
+		maxPendingKeysFn   func() int
+		metricsHandler     metrics.Handler
 	}
 )
 
@@ -60,6 +66,8 @@ func NewSlice(
 	scope Scope,
 	grouper Grouper,
 	maxPredicateSizeFn func() int,
+	maxPendingKeysFn func() int,
+	metricsHandler metrics.Handler,
 ) *SliceImpl {
 	s := &SliceImpl{
 		paginationFnProvider: paginationFnProvider,
@@ -71,6 +79,8 @@ func NewSlice(
 		executableTracker:  newExecutableTracker(grouper),
 		monitor:            monitor,
 		maxPredicateSizeFn: maxPredicateSizeFn,
+		maxPendingKeysFn:   maxPendingKeysFn,
+		metricsHandler:     metricsHandler,
 	}
 	s.ensurePredicateSizeLimit()
 	return s
@@ -336,8 +346,12 @@ func (s *SliceImpl) shrinkPredicate() {
 
 	// TODO: this should be generic enough to shrink any predicate type, probably doesn't belong here.
 	pendingPerKey := s.executableTracker.pendingPerKey
-	if len(pendingPerKey) > shrinkPredicateMaxPendingKeys {
+	if len(pendingPerKey) > s.maxPendingKeysFn() {
 		// only shrink predicate if there're few keys left
+		metrics.QueuePredicateResolutionLoss.With(s.metricsHandler).Record(
+			1,
+			metrics.ReasonTag(predicateResolutionLossMaxPendingKeys),
+		)
 		return
 	}
 
@@ -444,6 +458,8 @@ func (s *SliceImpl) newSlice(
 		executableTracker:    tracker,
 		monitor:              s.monitor,
 		maxPredicateSizeFn:   s.maxPredicateSizeFn,
+		maxPendingKeysFn:     s.maxPendingKeysFn,
+		metricsHandler:       s.metricsHandler,
 	}
 	slice.ensurePredicateSizeLimit()
 	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
@@ -458,6 +474,10 @@ func (s *SliceImpl) ensurePredicateSizeLimit() {
 		// Due to the limitations in predicate merging logic, the predicate size can easily grow unbounded.
 		// The simplest mitigation is to stop merging and replace with the univeral predicate.
 		s.scope.Predicate = predicates.Universal[tasks.Task]()
+		metrics.QueuePredicateResolutionLoss.With(s.metricsHandler).Record(
+			1,
+			metrics.ReasonTag(predicateResolutionLossPredicateSize),
+		)
 	}
 }
 

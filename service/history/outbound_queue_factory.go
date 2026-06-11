@@ -283,10 +283,11 @@ func (f *outboundQueueFactory) CreateQueue(
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:            f.Config.OutboundTaskBatchSize,
-				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
-				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
-				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
+				BatchSize:                     f.Config.OutboundTaskBatchSize,
+				MaxPendingTasksCount:          f.Config.OutboundQueuePendingTaskMaxCount,
+				PollBackoffInterval:           f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:              f.Config.OutboundQueueMaxPredicateSize,
+				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,

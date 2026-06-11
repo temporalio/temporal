@@ -181,10 +181,11 @@ func (f *transferQueueFactory) CreateQueue(
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:            f.Config.TransferTaskBatchSize,
-				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
-				PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
-				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
+				BatchSize:                     f.Config.TransferTaskBatchSize,
+				MaxPendingTasksCount:          f.Config.QueuePendingTaskMaxCount,
+				PollBackoffInterval:           f.Config.TransferProcessorPollBackoffInterval,
+				MaxPredicateSize:              f.Config.QueueMaxPredicateSize,
+				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
