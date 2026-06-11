@@ -466,6 +466,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 					namespaceID = uuid.NewString() // should be filtered out
 				}
 				mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+				mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
 
@@ -515,6 +516,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+				mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
@@ -559,6 +561,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+				mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
