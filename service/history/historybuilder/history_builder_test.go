@@ -1344,6 +1344,9 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	parentClosePolicy := enumspb.ParentClosePolicy(rand.Int31n(int32(len(enumspb.ParentClosePolicy_name))))
 	workflowIdReusePolicy := enumspb.WorkflowIdReusePolicy(rand.Int31n(int32(len(enumspb.WorkflowIdReusePolicy_name))))
 	control := "random control"
+	versioningOverride := &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+	}
 
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:                testNamespaceName.String(),
@@ -1362,6 +1365,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		Memo:                     testMemo,
 		SearchAttributes:         testSearchAttributes,
 		Header:                   testHeader,
+		VersioningOverride:       versioningOverride,
 	}
 	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
@@ -1397,6 +1401,9 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 				Memo:                         testMemo,
 				SearchAttributes:             testSearchAttributes,
 				Header:                       testHeader,
+				VersioningOverride: &workflowpb.VersioningOverride{
+					Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+				},
 			},
 		},
 	}, event)
