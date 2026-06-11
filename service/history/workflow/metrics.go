@@ -36,13 +36,14 @@ func emitWorkflowHistoryStats(
 func emitMutableStateStatus(
 	metricsHandler metrics.Handler,
 	chasmRegistry *chasm.Registry,
+	archetypeID chasm.ArchetypeID,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
 
-	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, stats.ArchetypeID); ok {
+	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, archetypeID); ok {
 		metricsHandler = metricsHandler.WithTags(archetypeTag)
 	}
 
@@ -87,8 +88,15 @@ func getArchetypeMetricTag(
 	chasmRegistry *chasm.Registry,
 	archetypeID chasm.ArchetypeID,
 ) (metrics.Tag, bool) {
-	if chasmRegistry == nil || archetypeID == chasm.UnspecifiedArchetypeID {
+	switch archetypeID {
+	case chasm.UnspecifiedArchetypeID:
 		return metrics.Tag{}, false
+	case chasm.WorkflowArchetypeID:
+		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
+	}
+
+	if chasmRegistry == nil {
+		return metrics.ArchetypeTag(""), true
 	}
 	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
 		return metrics.ArchetypeTag(name), true

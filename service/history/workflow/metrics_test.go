@@ -69,9 +69,9 @@ func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
 	emitMutableStateStatus(
 		handler,
 		registry,
+		chasm.WorkflowArchetypeID,
 		&persistence.MutableStateStatistics{
-			ArchetypeID: chasm.WorkflowArchetypeID,
-			TotalSize:   42,
+			TotalSize: 42,
 		},
 	)
 

@@ -2,19 +2,8 @@ package persistence
 
 import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/tasks"
 )
-
-func withArchetypeID(
-	stats *MutableStateStatistics,
-	archetypeID chasm.ArchetypeID,
-) *MutableStateStatistics {
-	if stats != nil {
-		stats.ArchetypeID = archetypeID
-	}
-	return stats
-}
 
 func statusOfInternalWorkflow(
 	internalState *InternalWorkflowMutableState,
