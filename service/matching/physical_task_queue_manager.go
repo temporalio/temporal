@@ -520,7 +520,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
-			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
 			recordDroppedTask(c.metricsHandler, task, metrics.DroppedTaskReasonExpiredMemoryTag)
 			task.finish(nil, false)
 			continue
@@ -571,8 +570,6 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
 		task.finish(nil, false)
 
-		var invalidTaskTag = getInvalidTaskTag(task)
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		recordDroppedTask(c.metricsHandler, task, getDroppedTaskExpiryReasonTag(task))
 		// Don't try to set read level here because it may have been advanced already.
 

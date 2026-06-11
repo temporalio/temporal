@@ -4,13 +4,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
-}
-
 // getDroppedTaskExpiryReasonTag returns the tasks_dropped reason tag for a task
 // being thrown away due to in-memory expiry or validation failure.
 func getDroppedTaskExpiryReasonTag(task *internalTask) metrics.Tag {
