@@ -116,6 +116,21 @@ func (c *retryableClient) CheckTaskQueueVersionMembership(
 	return resp, err
 }
 
+func (c *retryableClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CountWorkersResponse, error) {
+	var resp *matchingservice.CountWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountWorkers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,

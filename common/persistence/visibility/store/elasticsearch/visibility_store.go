@@ -880,7 +880,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 		lastHitSort = hit.Sort
 	}
 
-	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
+	if len(searchResult.Hits.Hits) > 0 { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
 		})

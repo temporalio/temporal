@@ -2,7 +2,6 @@ package callback
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -63,25 +62,28 @@ func (c invocableInternal) Invoke(
 		header = nexus.Header{}
 	}
 
-	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
-	if encodedRef == "" {
+	// Get back the component ref and (optional) request ID from the callback token in the header.
+	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedToken == "" {
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
 
-	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)
+	decodedRef, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
 	if err != nil {
-		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
+	}
+	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
+	if requestID == "" {
+		requestID = c.requestID
 	}
 
 	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
-	err = proto.Unmarshal(decodedRef, ref)
-	if err != nil {
+	if err := proto.Unmarshal(decodedRef, ref); err != nil {
 		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
-	request, err := c.getHistoryRequest(decodedRef)
+	request, err := c.getHistoryRequest(decodedRef, requestID)
 	if err != nil {
 		return invocationResultFail{logInternalError(h.logger, "failed to build history request", err)}
 	}
@@ -128,12 +130,13 @@ func isRetryableRPCResponse(err error) bool {
 
 func (c invocableInternal) getHistoryRequest(
 	refBytes []byte,
+	requestID string,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	completion := &tokenspb.NexusOperationCompletion{
 		ComponentRef: refBytes,
-		RequestId:    c.requestID,
+		RequestId:    requestID,
 	}
 
 	if c.completion.Error == nil {

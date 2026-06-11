@@ -17,10 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// A buffer of only deferred starts (Attempt=-1) must NOT emit a
-// ProcessBufferTask. Deferred starts wait on completion events, not on a
+// A buffer of only deferred starts (Attempt=-1) must NOT start a workflow or
+// emit a ProcessBufferTask. Deferred starts wait on completion events, not on a
 // wall-clock deadline, so emitting an immediate ProcessBufferTask would
-// spin-loop on a no-op processBuffer call.
+// spin-loop on a no-op processBuffer call. (A visibility-update task may fire
+// because the buffered count changed; the assertions below are scoped to
+// exclude it.)
 func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
@@ -39,8 +41,8 @@ func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
 	invoker.EnqueueBufferedStarts(ctx, nil)
 	require.NoError(t, env.CloseTransaction())
 
-	require.False(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
-		"all-deferred buffer must not emit any side-effect task")
+	require.False(t, env.HasTaskInCategory(&tasks.ChasmTask{}, tasks.CategoryTransfer, chasm.TaskScheduledTimeImmediate),
+		"all-deferred buffer must not emit an immediate workflow-start (execute) task")
 	require.False(t, env.HasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate),
 		"all-deferred buffer must not emit an immediate ProcessBufferTask")
 }

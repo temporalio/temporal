@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,14 +55,19 @@ func (r *SchedulerIdleTaskHandler) Execute(
 ) error {
 	scheduler.EventLog.Get(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
+	newTaggedMetricsHandler(r.metricsHandler, scheduler).
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeFired))
 	return nil
 }
 
-// Validate returns true (fire) when the schedule should still close. False
-// drops for: already-closed (idempotency), held-open by state, or a deadline
-// that shifted later than ScheduledTime (the Generator will have re-armed at
-// the new deadline). It deliberately does not re-derive "is the spec
-// exhausted" - that's an arm-time concern.
+// Idle-task invalidation reasons. Limited cardinality for ReasonTag.
+const (
+	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
+	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
+	idleInvalidatedClosed          metrics.ReasonString = "closed"
+)
+
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
@@ -69,9 +75,11 @@ func (r *SchedulerIdleTaskHandler) Validate(
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
 	if scheduler.Closed {
+		r.recordInvalidated(scheduler, idleInvalidatedClosed, taskAttrs.ScheduledTime, time.Time{})
 		return false, nil
 	}
 	if scheduler.isHeldOpen() {
+		r.recordInvalidated(scheduler, idleInvalidatedHeldOpen, taskAttrs.ScheduledTime, time.Time{})
 		return false, nil
 	}
 
@@ -79,6 +87,7 @@ func (r *SchedulerIdleTaskHandler) Validate(
 	// that should still fire.
 	idleExpiration := scheduler.idleDeadline(ctx, task.IdleTimeTotal.AsDuration())
 	if idleExpiration.After(taskAttrs.ScheduledTime) {
+		r.recordInvalidated(scheduler, idleInvalidatedExpirationShift, taskAttrs.ScheduledTime, idleExpiration)
 		return false, nil
 	}
 
@@ -91,6 +100,21 @@ func (r *SchedulerIdleTaskHandler) Validate(
 			tag.NewTimeTag("scheduled-time", taskAttrs.ScheduledTime))
 	}
 	return true, nil
+}
+
+func (r *SchedulerIdleTaskHandler) recordInvalidated(
+	scheduler *Scheduler,
+	reason metrics.ReasonString,
+	scheduledTime time.Time,
+	recomputedDeadline time.Time,
+) {
+	newTaggedMetricsHandler(r.metricsHandler, scheduler).
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(reason))
+	newTaggedLogger(r.baseLogger, scheduler).Debug("idle task invalidated",
+		tag.NewStringTag("reason", string(reason)),
+		tag.NewTimeTag("scheduled-time", scheduledTime),
+		tag.NewTimeTag("recomputed-deadline", recomputedDeadline))
 }
 
 type SchedulerCallbacksTaskHandlerOptions struct {
@@ -131,9 +155,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 ) error {
 	var scheduler *Scheduler
 	var starts []*schedulespb.BufferedStart
-	var callback *commonpb.Callback
+	var componentRef []byte
 
-	// Read scheduler state and generate the Nexus callback token.
+	// Read scheduler state and capture the scheduler's component ref.
 	_, err := chasm.ReadComponent(
 		ctx,
 		schedulerRef,
@@ -149,11 +173,11 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 
-			cb, err := chasm.GenerateNexusCallback(ctx, s)
+			ref, err := ctx.Ref(s)
 			if err != nil {
 				return struct{}{}, err
 			}
-			callback = common.CloneProto(cb)
+			componentRef = ref
 
 			return struct{}{}, nil
 		},
@@ -166,7 +190,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	// Attach callbacks and check workflow status.
 	results := make(map[string]*watchResult, len(starts))
 	for _, start := range starts {
-		result, err := r.watchRunningStart(ctx, scheduler, start, callback)
+		result, err := r.watchRunningStart(ctx, scheduler, start, componentRef)
 		if err != nil {
 			return err
 		}
@@ -216,7 +240,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 ) (*watchResult, error) {
 	// Describe the workflow to ensure it exists and is still running.
 	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
@@ -260,6 +284,13 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	// reuse policy prevents accidentally starting a new workflow if the original
 	// completes between the describe and this call.
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
+
+	// Pack this start's request ID into the callback token so completions are matched from the token
+	// (which survives continue-as-new) rather than the started workflow's callback state.
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
