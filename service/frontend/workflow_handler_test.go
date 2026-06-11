@@ -228,10 +228,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		nexusoperation.NewFrontendHandler(
 			nil,
 			nil,
-			s.mockResource.GetLogger(),
 			s.mockResource.GetNamespaceRegistry(),
 			nil,
-			s.mockResource.GetSearchAttributesMapperProvider(),
 			nil,
 		),
 		nil, // Not testing CHASM registry here
