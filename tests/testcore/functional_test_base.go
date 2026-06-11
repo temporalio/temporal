@@ -157,7 +157,7 @@ func WithArchivalEnabled() TestClusterOption {
 	}
 }
 
-func WithMTLS() TestClusterOption {
+func withMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
 	}
