@@ -20,13 +20,14 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // listWorkersPageToken is the cursor for paginating ListWorkers results.
 type listWorkersPageToken struct {
-	// LastWorkerInstanceKey is the WorkerInstanceKey of the last worker returned in the previous page.
-	// The next page will return workers with keys > this value.
-	LastWorkerInstanceKey string `json:"l"`
+	LastTaskQueue         string `json:"t,omitempty"`
+	LastStartTimestamp    int64  `json:"s,omitempty"` // UnixNano
+	LastWorkerInstanceKey string `json:"k,omitempty"`
 }
 
 type (
@@ -443,9 +444,29 @@ func (m *registryImpl) CountWorkers(nsID namespace.ID, query string, includeSyst
 	return int64(len(workers)), nil
 }
 
+// compareWorkers defines the sort order for ListWorkers pagination:
+// (TaskQueue asc, StartTime asc, WorkerInstanceKey asc).
+// TaskQueue groups workers by what they poll. StartTime provides a stable,
+// human-meaningful order within each group (oldest first). WorkerInstanceKey
+// is a unique tiebreaker for pagination correctness.
+func compareWorkers(a, b *workerpb.WorkerHeartbeat) int {
+	if c := strings.Compare(a.GetTaskQueue(), b.GetTaskQueue()); c != 0 {
+		return c
+	}
+	aTime := a.GetStartTime().AsTime().UnixNano()
+	bTime := b.GetStartTime().AsTime().UnixNano()
+	if aTime != bTime {
+		if aTime < bTime {
+			return -1
+		}
+		return 1
+	}
+	return strings.Compare(a.GetWorkerInstanceKey(), b.GetWorkerInstanceKey())
+}
+
 // paginateWorkers applies cursor-based pagination to a list of workers.
-// Workers are sorted by WorkerInstanceKey for deterministic ordering.
-// Returns the paginated slice and a token for the next page (nil if no more pages).
+// Workers are sorted by (TaskQueue, StartTime asc, WorkerInstanceKey) for stable,
+// deterministic ordering. Returns the paginated slice and a token for the next page.
 func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPageToken []byte) (ListWorkersResponse, error) {
 	if len(workers) == 0 {
 		return ListWorkersResponse{Workers: workers}, nil
@@ -456,34 +477,30 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 		return ListWorkersResponse{Workers: workers}, nil
 	}
 
-	// Sort by WorkerInstanceKey for deterministic pagination
-	slices.SortFunc(workers, func(a, b *workerpb.WorkerHeartbeat) int {
-		return strings.Compare(a.WorkerInstanceKey, b.WorkerInstanceKey)
-	})
+	slices.SortFunc(workers, compareWorkers)
 
-	// Decode page token to find the cursor
-	var cursor string
+	// Decode page token and find the starting index using binary search (O(log n)).
+	// Stale tokens from a previous sort order will have zero-value fields, causing
+	// the cursor to sort before all workers — the client gets page 1 again, which
+	// is acceptable during the narrow rolling-deploy window.
+	startIdx := 0
 	if len(nextPageToken) > 0 {
 		var token listWorkersPageToken
 		if err := json.Unmarshal(nextPageToken, &token); err != nil {
 			return ListWorkersResponse{}, serviceerror.NewInvalidArgument("invalid next_page_token")
 		}
-		cursor = token.LastWorkerInstanceKey
-	}
-
-	// Find the starting index using binary search (O(log n))
-	startIdx := 0
-	if cursor != "" {
-		// BinarySearchFunc returns the index where cursor would be inserted.
-		// We want the first worker with key > cursor.
-		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(worker *workerpb.WorkerHeartbeat, target string) int {
-			return strings.Compare(worker.WorkerInstanceKey, target)
+		cursor := &workerpb.WorkerHeartbeat{
+			TaskQueue:         token.LastTaskQueue,
+			StartTime:         timestamppb.New(time.Unix(0, token.LastStartTimestamp)),
+			WorkerInstanceKey: token.LastWorkerInstanceKey,
+		}
+		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(w, c *workerpb.WorkerHeartbeat) int {
+			return compareWorkers(w, c)
 		})
-		// If exact match found, move past it to get first key > cursor
-		if startIdx < len(workers) && workers[startIdx].WorkerInstanceKey == cursor {
+		// Move past the cursor itself to get the first entry after it
+		if startIdx < len(workers) && compareWorkers(workers[startIdx], cursor) == 0 {
 			startIdx++
 		}
-		// If we've gone past the end, return empty
 		if startIdx >= len(workers) {
 			return ListWorkersResponse{}, nil
 		}
@@ -500,8 +517,11 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 	// Generate next page token if there are more results
 	var newNextPageToken []byte
 	if endIdx < len(workers) {
+		last := result[len(result)-1]
 		token := listWorkersPageToken{
-			LastWorkerInstanceKey: result[len(result)-1].WorkerInstanceKey,
+			LastTaskQueue:         last.GetTaskQueue(),
+			LastStartTimestamp:    last.GetStartTime().AsTime().UnixNano(),
+			LastWorkerInstanceKey: last.GetWorkerInstanceKey(),
 		}
 		newNextPageToken, _ = json.Marshal(token)
 	}
