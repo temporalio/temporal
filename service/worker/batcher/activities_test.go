@@ -635,6 +635,122 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	s.NoError(resp.err)
 }
 
+// TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that when an operation keeps
+// failing with a retryable error, the worker retries it in place (on its own goroutine) and
+// emits exactly one response per task, instead of re-queuing the task onto taskCh.
+// Re-queuing deadlocked the pool: the worker goroutines are the only consumers of taskCh, so
+// a burst of retryable errors made them all block on the re-enqueue send with the buffer full
+// and no drainer left, leaving the activity heartbeating but stuck with no progress.
+func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	const numTasks = 5
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		// Bounded retries keep the test fast; each task is attempted a few times.
+		AttemptsOnRetryableError: 2,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "ns",
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{Signal: "test-signal"},
+			},
+		},
+	}
+
+	// Every signal fails with a retryable error, forcing the worker down the retry path.
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("transient error")).
+		AnyTimes()
+
+	// A single worker with a small buffer is the configuration that wedged when retries
+	// were re-queued onto taskCh.
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	// Feed tasks from a separate goroutine so the test can drain responses concurrently.
+	go func() {
+		for i := range numTasks {
+			p := &page{
+				executionInfos: []*workflowpb.WorkflowExecutionInfo{
+					{Execution: &commonpb.WorkflowExecution{WorkflowId: fmt.Sprintf("wf-%d", i), RunId: "run"}},
+				},
+			}
+			taskCh <- task{executionInfo: p.executionInfos[0], attempts: 1, page: p}
+		}
+	}()
+
+	// Every task must produce exactly one error response; the activity must not deadlock.
+	for range numTasks {
+		select {
+		case resp := <-respCh:
+			s.Require().Error(resp.err)
+		case <-time.After(10 * time.Second):
+			s.FailNow("timed out waiting for task response: worker is deadlocked")
+		}
+	}
+}
+
+// TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies that the heartbeat
+// resume point (PageToken/CurrentPage) only advances across the contiguous fully-done prefix
+// of pages and never past a still-in-flight earlier page. Pages are fetched ahead once
+// submitted (not done), so a resume point that ran ahead of completion would skip in-flight
+// pages on restart and silently drop their workflows.
+func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompletePage() {
+	mkPage := func(num, size int, next string) *page {
+		return &page{
+			executionInfos: make([]*workflowpb.WorkflowExecutionInfo, size),
+			nextPageToken:  []byte(next),
+			pageNumber:     num,
+		}
+	}
+	p1 := mkPage(0, 2, "tok-p2")
+	p2 := mkPage(1, 2, "tok-p3")
+	p3 := mkPage(2, 1, "")
+	p1.next, p2.prev = p2, p1
+	p2.next, p3.prev = p3, p2
+
+	hbd := &HeartBeatDetails{PageToken: []byte("tok-p1")}
+
+	// Page 3 finishes first, while pages 1 and 2 are still in flight.
+	p3.successCount = 1
+	recordCompletedPages(hbd, p3)
+	// Resume point must NOT move: page 1 (the oldest) is still in flight.
+	s.Equal([]byte("tok-p1"), hbd.PageToken, "must not advance past in-flight earlier pages")
+	s.Equal(0, hbd.CurrentPage)
+	s.Equal(0, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
+
+	// Page 1 finishes; page 2 still in flight.
+	p1.successCount, p1.errorCount = 1, 1
+	recordCompletedPages(hbd, p1)
+	// Resume point advances to page 2 (now the oldest incomplete); only page 1 is counted.
+	s.Equal([]byte("tok-p2"), hbd.PageToken)
+	s.Equal(1, hbd.CurrentPage)
+	s.Equal(1, hbd.SuccessCount)
+	s.Equal(1, hbd.ErrorCount)
+
+	// Page 2 finishes; the done prefix now extends through the already-complete page 3.
+	p2.successCount = 2
+	recordCompletedPages(hbd, p2)
+	s.Empty(hbd.PageToken, "all pages done -> resume token is the last page's (empty) next token")
+	s.Equal(3, hbd.CurrentPage)
+	s.Equal(4, hbd.SuccessCount) // p1:1 + p2:2 + p3:1
+	s.Equal(1, hbd.ErrorCount)   // p1:1
+}
+
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	ctx := context.Background()
 
