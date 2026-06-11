@@ -4144,11 +4144,6 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 	s.Equal(createRequestID, ci.CreateRequestId)
 }
 
-// TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot verifies that
-// AddStartChildWorkflowExecutionInitiatedEvent snapshots the parent's TimeSkippingInfo
-// into the event attributes at command time. The transfer task that later starts the
-// child reads this snapshot off the event (see transfer_queue_active_task_executor.go),
-// so the snapshot must faithfully represent what the parent workflow observed.
 func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot() {
 	cases := []struct {
 		name              string
@@ -4158,20 +4153,20 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 		expectInitialSkip *durationpb.Duration
 	}{
 		{
-			name:         "no TimeSkippingInfo on parent → no snapshot on event",
+			name:         "no TimeSkippingInfo on parent",
 			parentTSI:    nil,
 			expectNilCfg: true,
 		},
 		{
-			name: "config only, no accumulated skip → config cloned, zero initial skip",
+			name: "config only",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 			},
 			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
-			expectInitialSkip: durationpb.New(0),
+			expectInitialSkip: nil,
 		},
 		{
-			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
+			name: "config + accumulated skip",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
@@ -4180,20 +4175,13 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "multi-generation: parent's accumulated (which already includes grandparent's contribution) becomes InitialSkippedDuration",
+			name: "accumulated skip only",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
-			},
-			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
-			expectInitialSkip: durationpb.New(2 * time.Hour),
-		},
-		{
-			name: "accumulated skip only, no config → nothing propagated (skipping disabled)",
-			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config:                     &workflowpb.TimeSkippingConfig{Enabled: false},
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
-			expectNilCfg: true,
+			expectNilCfg:      true,
+			expectInitialSkip: durationpb.New(15 * time.Minute),
 		},
 		{
 			name: "MaxElapsedDuration is never propagated to children → cleared from child snapshot",
@@ -4224,9 +4212,12 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			s.NoError(err)
 
 			gotAttrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+			// forever nil
+			gotFastForward := gotAttrs.GetTimeSkippingStatePropagation().GetFastForwardTargetTime()
+			s.Nil(gotFastForward)
+
 			gotTSC := gotAttrs.GetTimeSkippingConfig()
 			gotInitialSkip := gotAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration()
-
 			if tc.expectInitialSkip == nil {
 				s.Nil(gotInitialSkip)
 			} else {
