@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
@@ -182,8 +181,12 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	// Build the start request to match createScheduleWorkflow in the frontend
 	// as closely as possible. Include TemporalNamespaceDivision so the V1
 	// workflow is discoverable via ListSchedules.
-	sa := &commonpb.SearchAttributes{IndexedFields: maps.Clone(result.searchAttributes)}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(legacyscheduler.NamespaceDivision))
+	saMap := payload.MergeMapOfPayload(
+		result.searchAttributes,
+		map[string]*commonpb.Payload{
+			sadefs.TemporalNamespaceDivision: payload.EncodeString(legacyscheduler.NamespaceDivision),
+		},
+	)
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
@@ -196,7 +199,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		Memo:                     &commonpb.Memo{Fields: maps.Clone(result.memo)},
-		SearchAttributes:         sa,
+		SearchAttributes:         &commonpb.SearchAttributes{IndexedFields: saMap},
 		Priority:                 &commonpb.Priority{},
 	}
 

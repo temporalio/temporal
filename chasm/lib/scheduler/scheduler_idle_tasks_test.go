@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -116,4 +117,68 @@ func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
 		},
 		expectedValid: false,
 	})
+}
+
+// Each Validate=false branch must emit ScheduleIdleTask{outcome=invalidated}
+// with the matching reason tag; pin the reason values so a future rename of
+// the constants surfaces in tests.
+func TestIdleTask_Validate_MetricReasons(t *testing.T) {
+	cases := []struct {
+		name           string
+		expectedReason string
+		setup          func(sched *scheduler.Scheduler, now time.Time, taskAttrs *chasm.TaskAttributes)
+	}{
+		{
+			name:           "closed",
+			expectedReason: "closed",
+			setup: func(sched *scheduler.Scheduler, _ time.Time, _ *chasm.TaskAttributes) {
+				sched.Closed = true
+			},
+		},
+		{
+			name:           "held_open via paused",
+			expectedReason: "held_open",
+			setup: func(sched *scheduler.Scheduler, _ time.Time, _ *chasm.TaskAttributes) {
+				sched.Schedule.State.Paused = true
+			},
+		},
+		{
+			name:           "expiration_shift",
+			expectedReason: "expiration_shift",
+			setup: func(sched *scheduler.Scheduler, now time.Time, _ *chasm.TaskAttributes) {
+				sched.Info.UpdateTime = timestamppb.New(now)
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			now := env.TimeSource.Now()
+			rec := metricstest.NewCaptureHandler()
+			capture := rec.StartCapture()
+			defer rec.StopCapture(capture)
+
+			handler := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
+				Config: &scheduler.Config{
+					Tweakables: func(_ string) scheduler.Tweakables { return scheduler.DefaultTweakables },
+				},
+				MetricsHandler: rec,
+				BaseLogger:     log.NewTestLogger(),
+			})
+
+			taskAttrs := chasm.TaskAttributes{ScheduledTime: now}
+			c.setup(env.Scheduler, now, &taskAttrs)
+
+			isValid, err := handler.Validate(env.MutableContext(), env.Scheduler, taskAttrs,
+				&schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(10 * time.Minute)})
+			require.NoError(t, err)
+			require.False(t, isValid)
+
+			recorded := capture.Snapshot()[metrics.ScheduleIdleTask.Name()]
+			require.Len(t, recorded, 1, "expected exactly one idle-task counter sample")
+			require.Equal(t, "invalidated", recorded[0].Tags["outcome"])
+			require.Equal(t, c.expectedReason, recorded[0].Tags["reason"])
+		})
+	}
 }
