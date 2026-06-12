@@ -41,11 +41,13 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 type Config struct {
 	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
 	RetryPolicy    func() backoff.RetryPolicy
+	EncodedToken   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		RequestTimeout: RequestTimeout.Get(dc),
+		EncodedToken:   CallbackEncodedTokenWithRequestID.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -57,6 +59,14 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		},
 	}
 }
+
+var CallbackEncodedTokenWithRequestID = dynamicconfig.NewNamespaceBoolSetting(
+	"callback.encodedTokenWithRequestId",
+	false,
+	`Controls the wire format of the CHASM Nexus completion callback token.
+When true the token is a NexusOperationCompletion envelope carrying the component ref and request ID;
+when false (default) the legacy bare base64-encoded ChasmComponentRef is used.`,
+)
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	"callback.allowedAddresses",

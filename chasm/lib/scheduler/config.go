@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
@@ -78,21 +79,6 @@ var (
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
 
-	// CallbackEncodedTokenWithRequestID gates the wire format of the Nexus completion callback token the
-	// scheduler attaches to started workflows. When true, the token is a NexusOperationCompletion envelope
-	// carrying the component ref and request ID (matched across continue-as-new). When false (default),
-	// the legacy bare base64-encoded ChasmComponentRef is written. Keep disabled until every server in the
-	// fleet can read the envelope format (any server able to read it accepts both), then enable
-	// per-namespace. Likely removed in a future version.
-	CallbackEncodedTokenWithRequestID = dynamicconfig.NewNamespaceBoolSetting(
-		"callback.encodedTokenWithRequestId",
-		false,
-		`Controls the wire format of the CHASM Nexus completion callback token written by the scheduler.
-When true the token is a NexusOperationCompletion envelope carrying the component ref and request ID;
-when false (default) the legacy bare base64-encoded ChasmComponentRef is written. Gates a safe
-fleet-wide rollout of the envelope format. Likely removed in a future version.`,
-	)
-
 	// SentinelIdleTime is how long a CHASM sentinel reserves the schedule ID
 	// before auto-closing via the idle task mechanism. Matches the dummy
 	// workflow's duration.
@@ -115,7 +101,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Tweakables:         CurrentTweakables.Get(dc),
 		ServiceCallTimeout: ServiceCallTimeout.Get(dc),
-		EncodedToken:       CallbackEncodedTokenWithRequestID.Get(dc),
+		EncodedToken:       callback.CallbackEncodedTokenWithRequestID.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

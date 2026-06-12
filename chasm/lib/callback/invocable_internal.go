@@ -2,6 +2,7 @@ package callback
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -68,11 +69,25 @@ func (c invocableInternal) Invoke(
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
 
-	decodedRef, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
-	if err != nil {
-		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
+	var decodedRef []byte
+	requestID := c.requestID
+	if h.config.EncodedToken(ns.Name().String()) {
+		var err error
+		decodedRef, requestID, err = chasm.UnpackNexusCallbackToken(encodedToken)
+		if err != nil {
+			return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
+		}
+		if requestID == "" {
+			requestID = c.requestID
+		}
+	} else {
+		var err error
+		decodedRef, err = base64.RawURLEncoding.DecodeString(encodedToken)
+		if err != nil {
+			return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
+		}
 	}
-	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
+
 	if requestID == "" {
 		requestID = c.requestID
 	}

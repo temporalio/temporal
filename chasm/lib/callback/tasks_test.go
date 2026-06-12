@@ -179,6 +179,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					EncodedToken:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -536,6 +537,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					EncodedToken:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
