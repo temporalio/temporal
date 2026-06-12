@@ -176,6 +176,19 @@ func (b *taskBTree) Remove(task *internalTask) {
 	}
 }
 
+// popFront removes and returns the highest-priority (minimum) task in one tree pass.
+func (b *taskBTree) popFront() (*internalTask, bool) {
+	task, ok := b.tree.PopFront()
+	if !ok {
+		return nil, false
+	}
+	task.matchHeapIndex = invalidHeapIndex
+	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
+		b.ages.record(task.event.Data.CreateTime, -1)
+	}
+	return task, true
+}
+
 func (b *taskBTree) Len() int {
 	return b.tree.Len()
 }
@@ -401,15 +414,30 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// findMatch should return the highest priority task+poller match even if the per-task rate
-// limit doesn't allow the task to be matched yet.
+// findMatch returns the highest priority task+poller match, removing the task from the
+// queue. Tasks that are skipped (no compatible poller) are temporarily popped and
+// re-inserted before returning, so queue order is preserved.
 // call with lock held
-// nolint:revive // cognitive complexity acceptable here
+// nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
-	for task := range d.tasks.tree.All() {
+	// skipped accumulates tasks popped but not matched; re-inserted on return.
+	// Stays nil in the common case (minimum task always has a compatible poller),
+	// so no allocation occurs on the hot path.
+	var skipped []*internalTask
+
+	for {
+		task, ok := d.tasks.popFront()
+		if !ok {
+			for _, t := range skipped {
+				d.tasks.Add(t)
+			}
+			return nil, nil
+		}
+
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
+			skipped = append(skipped, task)
 			continue
 		}
 
@@ -433,11 +461,14 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
-
+			for _, t := range skipped {
+				d.tasks.Add(t)
+			}
 			return task, poller
 		}
+
+		skipped = append(skipped, task)
 	}
-	return nil, nil
 }
 
 // call with lock held
@@ -479,7 +510,12 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	now := d.timeSource.Now().UnixNano()
 
 	for {
-		// search for highest priority match
+		if d.pollers.Len() == 0 {
+			d.rateLimitTimer.unset()
+			return false
+		}
+
+		// search for highest priority match; task is removed from queue when found
 		task, poller := d.findMatch(allowForwarding)
 		if task == nil || poller == nil {
 			// no more current matches, stop rate limit timer if was running
@@ -491,10 +527,10 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
-			return true // not ready yet, timer will call match later
+			d.tasks.Add(task) // put back; timer will call match later
+			return true
 		}
 
-		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 
 		// TODO(pri): maybe we can allow tasks to have costs other than 1
