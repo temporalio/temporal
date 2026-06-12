@@ -84,7 +84,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	testOpts = append(
 		testOpts,
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
-		testcore.WithDynamicConfig(callback.CallbackEncodedTokenWithRequestID, false),
+		testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, false),
 	)
 	env := testcore.NewEnv(s.T(), testOpts...)
 
@@ -123,7 +123,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	s.NoError(err)
 
 	var startedWFID string
-	env.Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
@@ -154,7 +154,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	s.NoError(decErr)
 	s.Empty(reqID, "gate OFF must write a legacy token with no embedded request ID")
 
-	env.OverrideDynamicConfig(callback.CallbackEncodedTokenWithRequestID, true)
+	env.OverrideDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true)
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
@@ -163,7 +163,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	})
 	s.NoError(err)
 
-	env.Eventually(func() bool {
+	await.RequireTruef(s.T(), func() bool {
 		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,

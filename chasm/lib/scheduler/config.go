@@ -24,10 +24,10 @@ type (
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
 	Config struct {
-		Tweakables         dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
-		ServiceCallTimeout dynamicconfig.DurationPropertyFn
-		RetryPolicy        func() backoff.RetryPolicy
-		EncodedToken       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		Tweakables                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+		ServiceCallTimeout              dynamicconfig.DurationPropertyFn
+		RetryPolicy                     func() backoff.RetryPolicy
+		EncodeInternalTokenWithEnvelope dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -99,9 +99,9 @@ var (
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Tweakables:         CurrentTweakables.Get(dc),
-		ServiceCallTimeout: ServiceCallTimeout.Get(dc),
-		EncodedToken:       callback.CallbackEncodedTokenWithRequestID.Get(dc),
+		Tweakables:                      CurrentTweakables.Get(dc),
+		ServiceCallTimeout:              ServiceCallTimeout.Get(dc),
+		EncodeInternalTokenWithEnvelope: callback.EncodeInternalTokenWithEnvelope.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

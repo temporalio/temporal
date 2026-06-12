@@ -648,7 +648,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	// completion is matched by a request ID that rides in the callback header and survives
 	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
 	// new run.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodedToken(scheduler.Namespace))
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
 	if err != nil {
 		return err
 	}

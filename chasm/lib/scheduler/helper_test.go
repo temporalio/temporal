@@ -73,7 +73,7 @@ func defaultConfig() *scheduler.Config {
 		ServiceCallTimeout: func() time.Duration {
 			return 5 * time.Second
 		},
-		EncodedToken: func(string) bool {
+		EncodeInternalTokenWithEnvelope: func(string) bool {
 			return true
 		},
 		RetryPolicy: func() backoff.RetryPolicy {
