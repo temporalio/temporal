@@ -1348,13 +1348,13 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 //
 // Scenario:
 //   - Start a cron workflow (`* * * * *`) with TimeSkippingConfig{Enabled: true,
-//     Bound: MaxSkippedDuration(1h)}. Event #1's InitialSkippedDuration is unset
+//     Bound: MaxElapsedDuration(1h)}. Event #1's InitialSkippedDuration is unset
 //     (no parent, no prior CaN).
 //   - Run 1 issues StartTimer(t1, 50min). Idle → server skips 50min → run1.Accum ≈ 50min.
 //   - Run 1 completes. Cron rolls forward; server creates run 2 with
 //     createRequest.TimeSkippingConfig = run 1's event #1 TSC (Enabled=true,
-//     Bound=MaxSkippedDuration(1h)) and no InitialSkippedDuration → run 2 MS has
-//     Config{Enabled: true, Bound: MaxSkippedDuration(1h)}, Accum=0.
+//     Bound=MaxElapsedDuration(1h)) and no InitialSkippedDuration → run 2 MS has
+//     Config{Enabled: true, Bound: MaxElapsedDuration(1h)}, Accum=0.
 //   - Run 2 completes immediately (no own skipping). Run 1's 50min accum is NOT inherited.
 //
 // End-state assertions:
@@ -1373,8 +1373,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	wfID := tv.WorkflowID()
 	tq := tv.TaskQueue()
 
-	bound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-		MaxSkippedDuration: durationpb.New(time.Hour),
+	bound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+		MaxElapsedDuration: durationpb.New(time.Hour),
 	}
 	inputCfg := &workflowpb.TimeSkippingConfig{Enabled: true, Bound: bound}
 
@@ -1437,7 +1437,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	run1TSI := run1MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run1TSI)
 	s.True(proto.Equal(inputCfg, run1TSI.GetConfig()),
-		"run 1 Config mirrors the start request: Enabled=true, Bound=MaxSkippedDuration(1h)")
+		"run 1 Config mirrors the start request: Enabled=true, Bound=MaxElapsedDuration(1h)")
 	// Tolerance absorbs per-skip clock drift plus up to ~60s of cron backoff that may
 	// be skipped while waiting for the first WFT.
 	s.InDelta(float64(50*time.Minute), float64(run1TSI.GetAccumulatedSkippedDuration().AsDuration()), float64(90*time.Second),
@@ -1448,7 +1448,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	run2TSI := run2MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run2TSI, "run 2 should have TimeSkippingInfo propagated from run 1's event #1")
 	s.True(proto.Equal(inputCfg, run2TSI.GetConfig()),
-		"run 2 Config matches run 1's event #1 verbatim: Enabled=true and Bound=MaxSkippedDuration(1h) are inherited")
+		"run 2 Config matches run 1's event #1 verbatim: Enabled=true and Bound=MaxElapsedDuration(1h) are inherited")
 	s.Less(run2TSI.GetAccumulatedSkippedDuration().AsDuration(), 10*time.Minute,
 		"run 2 Accum is fresh — nowhere near run 1's 50min; the previous run's in-flight skip is NOT carried forward on cron")
 
@@ -1466,7 +1466,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, startedAttr.GetInitiator(),
 		"run 2 is initiated by cron schedule")
 	s.True(proto.Equal(inputCfg, startedAttr.GetTimeSkippingConfig()),
-		"started event carries Enabled=true, Bound=MaxSkippedDuration(1h) — the verbatim snapshot from run 1's event #1")
+		"started event carries Enabled=true, Bound=MaxElapsedDuration(1h) — the verbatim snapshot from run 1's event #1")
 	s.Zero(startedAttr.GetInitialSkippedDuration().AsDuration(),
 		"started event InitialSkippedDuration is unset for a top-level cron workflow")
 }

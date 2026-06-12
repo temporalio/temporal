@@ -114,6 +114,14 @@ func (g *GeneratorTaskHandler) Execute(
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
 
+	// Track tick volume so operators can attribute CHASM pure-task throughput
+	// to paused schedules vs. real work. Each fire while paused advances the
+	// HWM without buffering anything.
+	metricsHandler.Counter(metrics.ScheduleGeneratorTicks.Name()).Record(1)
+	if scheduler.Schedule.State.Paused {
+		metricsHandler.Counter(metrics.ScheduleGeneratorPausedTicks.Name()).Record(1)
+	}
+
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
@@ -162,8 +170,10 @@ func (g *GeneratorTaskHandler) Execute(
 		// fire will simply advance the HWM without appending actions (handled in
 		// ProcessTimeRange).
 		generator.scheduleTask(ctx, result.NextWakeupTime)
+	} else {
+		// Hold open without a task: see the comment block above.
+		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
-	// else: hold open without a task; see the comment block above.
 
 	return nil
 }

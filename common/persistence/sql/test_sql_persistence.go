@@ -197,6 +197,10 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}()
 
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
+	}
+
 	for _, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
 			s.logger.Fatal("LoadSchema", tag.Error(err))

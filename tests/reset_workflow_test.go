@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -26,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -36,15 +35,16 @@ import (
 )
 
 type ResetWorkflowTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*ResetWorkflowTestSuite]
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(ResetWorkflowTestSuite))
+	parallelsuite.Run(t, &ResetWorkflowTestSuite{})
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-reset-workflow-test"
 	wt := "functional-reset-workflow-test-type"
 	tq := "functional-reset-workflow-test-taskqueue"
@@ -56,7 +56,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -66,10 +66,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
 	workflowComplete := false
@@ -132,33 +132,33 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// Process first workflow task to schedule activities
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process one activity task which also creates second workflow task
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("Poll and process first activity", tag.Error(err))
+	env.Logger.Info("Poll and process first activity", tag.Error(err))
 	s.NoError(err)
 
 	// Process second workflow task which checks activity completion
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
+	env.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
 
 	// Find reset point (last completed workflow task)
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -170,8 +170,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	}
 
 	// Reset workflow execution
-	resetResp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -183,22 +183,22 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("Poll and process second activity", tag.Error(err))
+	env.Logger.Info("Poll and process second activity", tag.Error(err))
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("Poll and process third activity", tag.Error(err))
+	env.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
+	env.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
 
 	s.NotNil(firstActivityCompletionEvent)
 	s.True(workflowComplete)
 
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
@@ -208,7 +208,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
-func (s *ResetWorkflowTestSuite) runWorkflowWithPoller(tv *testvars.TestVars) []*commonpb.WorkflowExecution {
+func (s *ResetWorkflowTestSuite) runWorkflowWithPoller(env *testcore.TestEnv, tv *testvars.TestVars) []*commonpb.WorkflowExecution {
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		executions = append(executions, task.WorkflowExecution)
@@ -223,12 +223,12 @@ func (s *ResetWorkflowTestSuite) runWorkflowWithPoller(tv *testvars.TestVars) []
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           tv.TaskQueue(),
 		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -238,13 +238,15 @@ func (s *ResetWorkflowTestSuite) runWorkflowWithPoller(tv *testvars.TestVars) []
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
+	env := testcore.NewEnv(s.T())
+
 	startTime := time.Now().UTC()
 	tv := testvars.New(s.T())
 	tv.WorkerIdentity()
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
-		Namespace:                s.Namespace().String(),
+		Namespace:                env.Namespace().String(),
 		WorkflowId:               tv.WorkflowID(),
 		WorkflowType:             tv.WorkflowType(),
 		TaskQueue:                tv.TaskQueue(),
@@ -254,14 +256,14 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 		Identity:                 tv.WorkerIdentity(),
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
-	s.runWorkflowWithPoller(tv)
+	s.runWorkflowWithPoller(env, tv)
 
 	var historyEvents []*historypb.HistoryEvent
 	s.Eventually(func() bool {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
@@ -282,8 +284,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	// wait till workflow is closed
 	closedCount := 0
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.Namespace().String(),
+		resp, err := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
 				EarliestTime: timestamppb.New(startTime),
@@ -296,7 +298,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 		s.NoError(err)
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			env.Logger.Info("Closed WorkflowExecution is not yet visible")
 		}
 
 		return closedCount > 0
@@ -307,8 +309,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	// make sure we are past timeout time
 	time.Sleep(time.Second) //nolint:forbidigo
 
-	_, err = s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
@@ -319,9 +321,9 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	})
 	s.NoError(err)
 
-	executions := s.runWorkflowWithPoller(tv)
+	executions := s.runWorkflowWithPoller(env, tv)
 
-	events := s.GetHistory(s.Namespace().String(), executions[0])
+	events := env.GetHistory(env.Namespace().String(), executions[0])
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted {"Attempt":1}
@@ -335,16 +337,20 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyDefault() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 	}
 	t.run()
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
@@ -353,8 +359,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_SIGNAL,
@@ -363,8 +371,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_NONE,
@@ -373,8 +383,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
@@ -383,8 +395,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_SIGNAL,
@@ -393,8 +407,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplySignal() 
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
+	env := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
+		env:                    env,
 		tv:                     testvars.New(s.T()),
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_NONE,
@@ -404,6 +420,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
 
 type resetTest struct {
 	*ResetWorkflowTestSuite
+	env                 *testcore.TestEnv
 	tv                  *testvars.TestVars
 	reapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 	reapplyType         enumspb.ResetReapplyType
@@ -418,13 +435,13 @@ type resetTest struct {
 func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		RequestId:         uuid.NewString(),
-		Namespace:         t.Namespace().String(),
+		Namespace:         t.env.Namespace().String(),
 		WorkflowExecution: t.tv.WorkflowExecution(),
 		SignalName:        t.tv.HandlerName(),
 		Input:             t.tv.Any().Payloads(),
 		Identity:          t.tv.WorkerIdentity(),
 	}
-	_, err := t.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalRequest)
+	_, err := t.env.FrontendClient().SignalWorkflowExecution(t.Context(), signalRequest)
 	t.NoError(err)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	t.NoError(err)
@@ -432,7 +449,7 @@ func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
-	sendUpdateNoErrorWaitPolicyAccepted(t, tv)
+	sendUpdateNoErrorWaitPolicyAccepted(t.env, tv)
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -443,11 +460,11 @@ func (t *resetTest) sendStartWorkflowRequestWithOptions(
 	tv *testvars.TestVars,
 	optsFn ...func(request *workflowservice.StartWorkflowExecutionRequest),
 ) *workflowservice.StartWorkflowExecutionResponse {
-	request := startWorkflowRequest(t, tv)
+	request := startWorkflowRequest(t.env, tv)
 	for _, fn := range optsFn {
 		fn(request)
 	}
-	resp, err := t.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	resp, err := t.env.FrontendClient().StartWorkflowExecution(t.Context(), request)
 	t.NoError(err)
 	return resp
 }
@@ -510,8 +527,8 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 }
 
 func (t *resetTest) reset(eventId int64) string {
-	resp, err := t.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 t.Namespace().String(),
+	resp, err := t.env.FrontendClient().ResetWorkflowExecution(t.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 t.env.Namespace().String(),
 		WorkflowExecution:         t.tv.WorkflowExecution(),
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: eventId,
@@ -526,16 +543,16 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	runID := mustStartWorkflow(t, t.tv)
+	runID := mustStartWorkflow(t.env, t.tv)
 
 	poller := &testcore.TaskPoller{
-		Client:              t.FrontendClient(),
-		Namespace:           t.Namespace().String(),
+		Client:              t.env.FrontendClient(),
+		Namespace:           t.env.Namespace().String(),
 		TaskQueue:           t.tv.TaskQueue(),
 		Identity:            t.tv.WorkerIdentity(),
 		WorkflowTaskHandler: t.wftHandler,
 		MessageHandler:      t.messageHandler,
-		Logger:              t.Logger,
+		Logger:              t.env.Logger,
 		T:                   t.T(),
 	}
 
@@ -547,7 +564,7 @@ func (t *resetTest) run() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-`, t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution()))
+`, t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution()))
 
 	// Trying to start workflow with same WorkflowID will attach the RequestID to the existing workflow.
 	onConflictOptions := &workflowpb.OnConflictOptions{AttachRequestId: true}
@@ -570,7 +587,7 @@ func (t *resetTest) run() {
 	t.True(t.commandsCompleted)
 	t.True(t.messagesCompleted)
 
-	events := t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+	events := t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
 	t.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -609,7 +626,7 @@ func (t *resetTest) run() {
 	resetToEventId := int64(4)
 	newRunId := t.reset(resetToEventId)
 	t.tv = t.tv.WithRunID(newRunId)
-	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+	events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(t.reapplyExcludeTypes, t.reapplyType)
 	_, noSignals := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
@@ -665,7 +682,7 @@ func (t *resetTest) run() {
 		resetToEventId := int64(4)
 		newRunId = t.reset(resetToEventId)
 		t.tv = t.tv.WithRunID(newRunId)
-		events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+		events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
 		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -693,21 +710,24 @@ func (t *resetTest) run() {
 	requireNotStartedButRunning(t.T(), resp)
 
 	// History events must be the same.
-	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+	events = t.env.GetHistory(t.env.Namespace().String(), t.tv.WorkflowExecution())
 	t.EqualHistoryEvents(expectedHistory, events)
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsReappliedOnReset() {
+	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
-	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
+	s.testResetWorkflowSignalReapplyBuffer(env, tv, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsDroppedOnReset() {
+	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
-	s.testResetWorkflowSignalReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_NONE)
+	s.testResetWorkflowSignalReapplyBuffer(env, tv, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
 func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
+	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	reapplyType enumspb.ResetReapplyType,
 ) {
@@ -718,8 +738,8 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 		- depending on the reapply type, the buffered signal is applied post-reset or not
 	*/
 
-	runID := mustStartWorkflow(s, tv)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(runID))
+	runID := mustStartWorkflow(env, tv)
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(runID))
 
 	var resetRunID string
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -730,10 +750,10 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
   3 WorkflowTaskStarted`, task.History.Events)
 
 			// (1) send Signal
-			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+			_, err := env.FrontendClient().SignalWorkflowExecution(s.Context(),
 				&workflowservice.SignalWorkflowExecutionRequest{
 					RequestId:         tv.RequestID(),
-					Namespace:         s.Namespace().String(),
+					Namespace:         env.Namespace().String(),
 					WorkflowExecution: tv.WorkflowExecution(),
 					SignalName:        tv.Any().String(),
 					Input:             tv.Any().Payloads(),
@@ -742,9 +762,9 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 			s.NoError(err)
 
 			// (2) send Reset
-			resp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(),
+			resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(),
 				&workflowservice.ResetWorkflowExecutionRequest{
-					Namespace:                 s.Namespace().String(),
+					Namespace:                 env.Namespace().String(),
 					WorkflowExecution:         tv.WorkflowExecution(),
 					Reason:                    "reset execution from test",
 					WorkflowTaskFinishEventId: 3,
@@ -768,24 +788,24 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           tv.TaskQueue(),
 		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err) // due to workflow termination (reset)
 
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
 	switch reapplyType { // nolint:exhaustive
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		s.EqualHistoryEvents(`
@@ -816,27 +836,31 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_Schedule() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-schedule"
 	workflowTypeName := "functional-reset-workflow-test-schedule-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-taskqueue"
-	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 3)
+	s.testResetWorkflowRangeScheduleToStart(env, workflowID, workflowTypeName, taskQueueName, 3)
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-schedule-to-start"
 	workflowTypeName := "functional-reset-workflow-test-schedule-to-start-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-to-start-taskqueue"
-	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 4)
+	s.testResetWorkflowRangeScheduleToStart(env, workflowID, workflowTypeName, taskQueueName, 4)
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_Start() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-start"
 	workflowTypeName := "functional-reset-workflow-test-start-type"
 	taskQueueName := "functional-reset-workflow-test-start-taskqueue"
-	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 5)
+	s.testResetWorkflowRangeScheduleToStart(env, workflowID, workflowTypeName, taskQueueName, 5)
 }
 
 func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
+	env *testcore.TestEnv,
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -850,7 +874,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -860,11 +884,11 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 		Identity:            identity,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.RunId,
@@ -899,18 +923,18 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// events layout
@@ -921,8 +945,8 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 	//  5. WorkflowTaskCompleted
 
 	// Reset workflow execution
-	_, err = s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.RunId,
@@ -934,7 +958,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 	s.NoError(err)
 
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -947,17 +971,16 @@ func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	env := testcore.NewEnv(s.T())
 
-	s.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: s.TaskQueue()}, CaNOnceWorkflow, "")
+	env.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
 
 	// wait for your workflow and its CaN to complete
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
 		})
 		s.NoError(err)
@@ -970,7 +993,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	}
 
 	// Find reset point (last completed workflow task)
-	events := s.GetHistory(s.Namespace().String(), wfExec)
+	events := env.GetHistory(env.Namespace().String(), wfExec)
 	var lastWorkflowTask *historypb.HistoryEvent
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
@@ -979,8 +1002,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	}
 
 	// reset the original workflow
-	_, err = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace().String(),
+	_, err = env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
 		WorkflowExecution:         wfExec,
 		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
 		RequestId:                 uuid.NewString(),
@@ -989,7 +1012,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
-	s.OverrideDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true)
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true))
 
 	// This test verifies that ExternalPayloadSize and ExternalPayloadCount are correctly
 	// tracked when a workflow is reset. It resets to a point before the activity completes,
@@ -1022,9 +1045,9 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		},
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1034,7 +1057,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		Identity:            identity,
 	})
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// Workflow handler - schedules activity on first task, completes on second task
 	isFirstTaskProcessed := false
@@ -1072,21 +1095,21 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	}
 
 	tv := testvars.New(s.T()).WithTaskQueue(taskQueue)
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// Process first workflow task to schedule activities
 	_, err := poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		cmds, err := wtHandler(task)
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
 	})
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process one activity task which also creates second workflow task
 	_, err = poller.PollAndHandleActivityTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		return &workflowservice.RespondActivityTaskCompletedRequest{Result: payloads.EncodeString("Activity Result")}, nil
 	})
-	s.Logger.Info("Poll and process first activity", tag.Error(err))
+	env.Logger.Info("Poll and process first activity", tag.Error(err))
 	s.NoError(err)
 
 	// Process second workflow task which checks activity completion
@@ -1094,13 +1117,13 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		cmds, err := wtHandler(task)
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
 	})
-	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
+	env.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
 
 	s.True(workflowComplete)
 
-	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, descErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.GetRunId(),
@@ -1111,7 +1134,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 
 	// Get history to find reset point (first completed workflow task)
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      we.GetRunId(),
 	})
@@ -1125,8 +1148,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	}
 	s.Positive(resetToEventID, "Should have found first completed workflow task")
 
-	resetResp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.RunId,
@@ -1136,10 +1159,10 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
-	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.Int64("ResetToEventID", resetToEventID))
+	env.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.Int64("ResetToEventID", resetToEventID))
 
-	descResp, descErr = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, descErr = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      resetResp.GetRunId(),
@@ -1151,8 +1174,4 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.NotNil(descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
-}
-
-func (s *ResetWorkflowTestSuite) Context() context.Context {
-	return s.T().Context()
 }

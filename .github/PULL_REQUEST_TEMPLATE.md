@@ -1,20 +1,15 @@
 ## What changed?
+_Describe what has changed in this PR._
 
-<!-- Give a brief description of what the commit or commits included in this
-patch do. -->
+## Why?
+_Tell your future self why have you made these changes._
 
-### Original PRs
+## How did you test it?
+- [ ] built
+- [ ] run locally and tested manually
+- [ ] covered by existing tests
+- [ ] added new unit test(s)
+- [ ] added new functional test(s)
 
-<!-- Link the original PR(s) here. -->
-
-## Why is this necessary as a patch?
-
-<!-- Why can't we wait until the next release? -->
-
-## What testing or retesting is appropriate for this patch after merge?
-
-<!-- E.g., do we need to rerun VCR? OSS Longhaul? Some subset of those? Manual
-validation? Etc. -->
-
-<!-- As part of answering this, it is usually helpful to describe what testing
-has already been done. -->
+## Potential risks
+_Any change is risky. Identify all risks you are aware of. If none, remove this section._

@@ -1,10 +1,8 @@
 package testcore
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"maps"
 	"os"
@@ -35,6 +33,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -49,8 +48,6 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -104,6 +101,7 @@ type (
 		EnableWorkerService             bool
 		FaultInjectionConfig            *config.FaultInjection
 		NumHistoryShards                int32
+		Logger                          log.Logger
 		SharedCluster                   bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -159,7 +157,7 @@ func WithArchivalEnabled() TestClusterOption {
 	}
 }
 
-func WithMTLS() TestClusterOption {
+func withMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
 	}
@@ -180,6 +178,14 @@ func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 func WithNumHistoryShards(n int32) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.NumHistoryShards = n
+	}
+}
+
+// WithClusterLogger sets a custom logger for the test cluster, used instead of
+// the default test logger. Useful for intercepting server log output.
+func WithClusterLogger(logger log.Logger) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.Logger = logger
 	}
 }
 
@@ -285,6 +291,11 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
+	// A custom logger supplied via WithClusterLogger takes precedence.
+	if params.Logger != nil {
+		s.Logger = params.Logger
+	}
+
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
 		// The cluster outlives any single test and s.T() changes as different tests use it,
@@ -317,8 +328,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
+		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
 		s.isShared = true
 	}
 
@@ -349,6 +359,14 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 }
 
+func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
+	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		return *persistencetests.GetSQLiteFileTestClusterOption()
+	}
+	return defaults
+}
+
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
 // call this testcore FunctionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
@@ -358,11 +376,6 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
-		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
-	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -413,13 +426,6 @@ func (s *FunctionalTestBase) setupSdk() {
 
 	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-	}
-
-	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
 	}
 
 	var err error
@@ -479,7 +485,6 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
-	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
@@ -641,32 +646,11 @@ func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.Wo
 	return s.GetHistoryFunc(namespace, execution)()
 }
 
-func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {
-	s.T().Helper()
-	var r string
-	s.NoError(payloads.Decode(ps, &r))
-	return r
-}
-
 func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
 	s.NoError(payloads.Decode(ps, &r))
 	return r
-}
-
-func (s *FunctionalTestBase) DecodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
-	s.T().Helper()
-	var buf []byte
-	s.NoError(payloads.Decode(ps, &buf))
-	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
-	return
-}
-
-func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
-	s.T().Helper()
-	s.Greater(value, target-tolerance)
-	s.Less(value, target+tolerance)
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
