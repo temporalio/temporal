@@ -55,6 +55,7 @@ type (
 		enableCHASMMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		schedulerVersionCeiling      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -93,6 +94,7 @@ func NewResult(
 			enableCHASMMigration:         dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
 			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
+			schedulerVersionCeiling:      dynamicconfig.SchedulerVersionCeiling.Get(dc),
 			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -117,10 +119,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		migrateWithRunningWorkflows := func() bool {
 			return s.migrateWithRunningWorkflows(nsName)
 		}
+		versionCeiling := func() int {
+			return s.schedulerVersionCeiling(nsName)
+		}
 		return schedulerWorkflowWithDeps(ctx, args, schedulerDeps{
 			specBuilder:                 s.specBuilder,
 			enableCHASMMigration:        enableMigration,
 			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+			versionCeiling:              versionCeiling,
 		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
