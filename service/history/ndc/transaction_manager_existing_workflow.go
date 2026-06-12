@@ -7,8 +7,10 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -95,8 +97,21 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		return err
 	}
 	if currentRunID == "" {
-		// this means a bug in our code or DB is inconsistent...
-		return serviceerror.NewInternal("transactionMgr: unable to locate current workflow during update")
+		// No current execution record means the workflow was deleted. A closed
+		// run here is just an orphan left behind (e.g. an older run after the
+		// current run was deleted), so ack it instead of poison-pilling. A
+		// running run with no current record is a real inconsistency and must
+		// surface.
+		if mutableState.IsWorkflowExecutionRunning() {
+			return serviceerror.NewInternal("transactionMgr: unable to locate current workflow during update")
+		}
+		r.shardContext.GetThrottledLogger().Warn(
+			"Skipping replication update for closed run with no current execution; workflow appears deleted",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(targetRunID),
+		)
+		return consts.ErrDuplicate
 	}
 
 	if currentRunID == targetRunID {
