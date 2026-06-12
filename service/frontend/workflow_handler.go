@@ -700,19 +700,30 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
-	namespaceName namespace.Name,
+	tsc *workflowpb.TimeSkippingConfig,
+	ns namespace.Name,
 ) error {
-	if timeSkippingConfig == nil {
+	if tsc == nil {
 		return nil
 	}
-
 	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+	if !wh.config.TimeSkippingEnabled(ns.String()) {
 		return serviceerror.NewUnimplementedf(
 			"The Time-Skipping feature is not enabled for namespace %s",
-			namespaceName,
+			ns.String(),
 		)
+	}
+
+	if !tsc.GetEnabled() {
+		if tsc.GetBound() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		}
+		return nil
+	}
+	if b, ok := tsc.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
+		if b.MaxElapsedDuration.AsDuration() < 0 {
+			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
+		}
 	}
 
 	return nil
