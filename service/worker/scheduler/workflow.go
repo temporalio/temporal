@@ -114,10 +114,11 @@ type (
 		// without modifying state).
 		specBuilder *SpecBuilder
 		cspec       *CompiledSpec
-		// enableCHASMMigration and migrateWithRunningWorkflows are re-evaluated
-		// every iteration inside the "tweakables" MutableSideEffect.
+		// enableCHASMMigration, migrateWithRunningWorkflows, and versionCeiling are
+		// re-evaluated every iteration inside the "tweakables" MutableSideEffect.
 		enableCHASMMigration        func() bool
 		migrateWithRunningWorkflows func() bool
+		versionCeiling              func() int
 
 		tweakables TweakablePolicies
 
@@ -235,6 +236,7 @@ type schedulerDeps struct {
 	specBuilder                 *SpecBuilder
 	enableCHASMMigration        func() bool
 	migrateWithRunningWorkflows func() bool
+	versionCeiling              func() int
 }
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
@@ -251,6 +253,9 @@ func schedulerWorkflowWithDeps(ctx workflow.Context, args *schedulespb.StartSche
 	if deps.migrateWithRunningWorkflows == nil {
 		deps.migrateWithRunningWorkflows = func() bool { return false }
 	}
+	if deps.versionCeiling == nil {
+		deps.versionCeiling = func() int { return 0 }
+	}
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -263,6 +268,7 @@ func schedulerWorkflowWithDeps(ctx workflow.Context, args *schedulespb.StartSche
 		specBuilder:                 deps.specBuilder,
 		enableCHASMMigration:        deps.enableCHASMMigration,
 		migrateWithRunningWorkflows: deps.migrateWithRunningWorkflows,
+		versionCeiling:              deps.versionCeiling,
 	}
 	return scheduler.run()
 }

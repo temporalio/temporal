@@ -3335,6 +3335,16 @@ The configured value will be divided by the number of worker hosts to get the pe
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
+	SchedulerVersionCeiling = NewNamespaceIntSetting(
+		"worker.schedulerVersionCeiling",
+		0,
+		`SchedulerVersionCeiling clamps the recorded version (TweakablePolicies.Version) of the V1
+scheduler workflow: when set to N > 0, the workflow runs at min(current, N). Intended for
+cross-version multi-cluster topologies that must survive failover plus rollback: set it on the
+newer cluster so the history it writes stays replayable by the older peer. Choose N as the
+highest version the oldest rollback peer can replay (a release defines, and can replay, more
+versions than it records by default).`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
