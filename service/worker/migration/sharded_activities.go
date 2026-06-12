@@ -673,36 +673,28 @@ func buildInFlight(
 	shards shardVerifyTracker,
 	now time.Time,
 ) []ResumeShard {
-	byShard := map[int32]map[string][]RunEntry{}
+	payload := BatchPayload{}
 	for i, ex := range execs {
 		if verified[i] {
 			continue
 		}
-		if byShard[ex.Shard] == nil {
-			byShard[ex.Shard] = map[string][]RunEntry{}
+		if payload[ex.Shard] == nil {
+			payload[ex.Shard] = map[string][]RunEntry{}
 		}
-		byShard[ex.Shard][ex.BusinessID] = append(byShard[ex.Shard][ex.BusinessID], RunEntry{
+		payload[ex.Shard][ex.BusinessID] = append(payload[ex.Shard][ex.BusinessID], RunEntry{
 			RunID:       ex.RunID,
 			ArchetypeID: ex.ArchetypeID,
 		})
 	}
-	if len(byShard) == 0 {
+	if len(payload) == 0 {
 		return nil
 	}
-	shardIDs := make([]int32, 0, len(byShard))
-	for sh := range byShard {
-		shardIDs = append(shardIDs, sh)
+	noProgress := make(map[int32]time.Duration, len(payload))
+	//workflowcheck:ignore (one entry per shard; order-independent)
+	for sh := range payload {
+		noProgress[sh] = now.Sub(shards[sh].lastProgress)
 	}
-	slices.Sort(shardIDs)
-	out := make([]ResumeShard, 0, len(shardIDs))
-	for _, sh := range shardIDs {
-		out = append(out, ResumeShard{
-			Shard:              sh,
-			Execs:              byShard[sh],
-			NoProgressDuration: now.Sub(shards[sh].lastProgress),
-		})
-	}
-	return out
+	return resumeShardsFromPayload(payload, noProgress)
 }
 
 // firstUnverifiedOnShard returns the index of the first execution in the

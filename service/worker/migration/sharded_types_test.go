@@ -112,6 +112,32 @@ func TestBatchPayload_mergeInto(t *testing.T) {
 	require.Equal(t, 4, dst.totalRuns())
 }
 
+func TestResumeShardPayloadRoundTrip(t *testing.T) {
+	shards := []ResumeShard{
+		{Shard: 2, Execs: map[string][]RunEntry{"b": {{RunID: "r2"}}}, NoProgressDuration: 3 * time.Second},
+		{Shard: 1, Execs: map[string][]RunEntry{"a": {{RunID: "r1"}, {RunID: "r1b"}}}, NoProgressDuration: 5 * time.Second},
+	}
+	payload, noProgress := resumeShardsToPayload(shards)
+	got := resumeShardsFromPayload(payload, noProgress)
+
+	require.Len(t, got, 2)
+	require.Equal(t, int32(1), got[0].Shard)
+	require.Equal(t, 5*time.Second, got[0].NoProgressDuration)
+	require.Len(t, got[0].Execs["a"], 2)
+	require.Equal(t, int32(2), got[1].Shard)
+	require.Equal(t, 3*time.Second, got[1].NoProgressDuration)
+}
+
+func TestResumeShardsToPayload_mergesDuplicateShards(t *testing.T) {
+	shards := []ResumeShard{
+		{Shard: 1, Execs: map[string][]RunEntry{"a": {{RunID: "r1"}}}, NoProgressDuration: time.Second},
+		{Shard: 1, Execs: map[string][]RunEntry{"b": {{RunID: "r2"}}}, NoProgressDuration: 2 * time.Second},
+	}
+	payload, noProgress := resumeShardsToPayload(shards)
+	require.Len(t, payload[1], 2)
+	require.Equal(t, 2*time.Second, noProgress[1])
+}
+
 // TestShardVerifyTracker_FirstVerificationDoubledWindow pins the
 // no-progress backstop's grace for a shard's first verified outcome: a
 // shard that hasn't verified anything yet gets 2×threshold before

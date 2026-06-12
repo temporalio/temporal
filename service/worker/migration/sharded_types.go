@@ -336,10 +336,65 @@ type ShardedForceReplicationParams struct {
 // for that BID. Grouping by BID at the wire level lets a hot BID (with
 // many runs) collapse to one BID-string + N tuples rather than N copies
 // of the BID; see BatchPayload's docstring.
+//
+// The slice-of-ResumeShard form is the CAN/activity wire shape: JSON-
+// friendly, easy to append from drained batches, and sortable for replay
+// determinism. The packer and activity input use BatchPayload plus a
+// per-shard no-progress map; resumeShardsToPayload and
+// resumeShardsFromPayload convert between the two.
 type ResumeShard struct {
 	Shard              int32
 	Execs              map[string][]RunEntry
 	NoProgressDuration time.Duration
+}
+
+// resumeShardsFromPayload expands a BatchPayload and its per-shard
+// no-progress durations into a shard-sorted ResumeShard slice.
+func resumeShardsFromPayload(payload BatchPayload, noProgress map[int32]time.Duration) []ResumeShard {
+	if len(payload) == 0 {
+		return nil
+	}
+	out := make([]ResumeShard, 0, len(payload))
+	for _, sh := range payload.sortedShards() {
+		execs := payload[sh]
+		if len(execs) == 0 {
+			continue
+		}
+		out = append(out, ResumeShard{
+			Shard:              sh,
+			Execs:              execs,
+			NoProgressDuration: noProgress[sh],
+		})
+	}
+	return out
+}
+
+// resumeShardsToPayload folds a ResumeShard slice into the BatchPayload
+// and per-shard no-progress map the packer and activity input use.
+// Duplicate shard entries merge execs; the last NoProgressDuration wins.
+func resumeShardsToPayload(shards []ResumeShard) (BatchPayload, map[int32]time.Duration) {
+	if len(shards) == 0 {
+		return nil, nil
+	}
+	payload := BatchPayload{}
+	noProgress := map[int32]time.Duration{}
+	for _, rs := range shards {
+		if len(rs.Execs) == 0 {
+			continue
+		}
+		if payload[rs.Shard] == nil {
+			payload[rs.Shard] = map[string][]RunEntry{}
+		}
+		//workflowcheck:ignore (writes are to disjoint BID keys per shard entry; order-independent)
+		for bid, runs := range rs.Execs {
+			payload[rs.Shard][bid] = append(payload[rs.Shard][bid], runs...)
+		}
+		noProgress[rs.Shard] = rs.NoProgressDuration
+	}
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	return payload, noProgress
 }
 
 // shardedBatchReq is the per-batch activity input. Executions is the

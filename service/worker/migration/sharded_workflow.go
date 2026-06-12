@@ -882,16 +882,12 @@ func (s *shardedWorkflowState) packResumeBatchPlan(entries []ResumeShard) []resu
 // shard ID so the slice flowing into the CAN args is deterministic
 // across replays.
 func unpackResumeBatches(batches []resumeBatch) []ResumeShard {
+	if len(batches) == 0 {
+		return nil
+	}
 	var out []ResumeShard
 	for _, b := range batches {
-		//workflowcheck:ignore (output is sorted below before any observable use)
-		for sh, execs := range b.payload {
-			out = append(out, ResumeShard{
-				Shard:              sh,
-				Execs:              execs,
-				NoProgressDuration: b.noProgress[sh],
-			})
-		}
+		out = append(out, resumeShardsFromPayload(b.payload, b.noProgress)...)
 	}
 	slices.SortFunc(out, func(a, b ResumeShard) int {
 		return int(a.Shard - b.Shard)
