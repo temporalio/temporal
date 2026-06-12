@@ -1,14 +1,13 @@
 package matching
 
 import (
-	"cmp"
 	"container/heap"
 	"context"
 	"sync"
 	"time"
 	"unsafe"
 
-	"github.com/tidwall/btype"
+	"github.com/tidwall/btree"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -119,7 +118,7 @@ func (p *pollerPQ) Pop() any {
 
 // taskBTree is a priority-ordered collection of tasks backed by a B-tree.
 type taskBTree struct {
-	tree btype.Table[*internalTask]
+	tree btree.BTreeG[*internalTask]
 
 	// ages holds task create time for tasks from merged local backlogs (not forwarded).
 	// note that matcherData may get tasks from multiple versioned backlogs due to
@@ -127,20 +126,20 @@ type taskBTree struct {
 	ages backlogAgeTracker
 }
 
-func taskBTreeCompare(a, b *internalTask) int {
-	if c := cmp.Compare(a.effectivePriority, b.effectivePriority); c != 0 {
-		return c
+func taskBTreeLess(a, b *internalTask) bool {
+	if a.effectivePriority != b.effectivePriority {
+		return a.effectivePriority < b.effectivePriority
 	}
 	afl := taskFairLevel(a)
 	bfl := taskFairLevel(b)
 	if afl.less(bfl) {
-		return -1
+		return true
 	}
 	if bfl.less(afl) {
-		return 1
+		return false
 	}
 	// Pointer value is unique per live allocation; used as a stable tiebreaker.
-	return cmp.Compare(uintptr(unsafe.Pointer(a)), uintptr(unsafe.Pointer(b)))
+	return uintptr(unsafe.Pointer(a)) < uintptr(unsafe.Pointer(b))
 }
 
 // taskFairLevel returns the fair level for a task. Safe for tasks with no AllocatedTaskInfo.
@@ -153,16 +152,14 @@ func taskFairLevel(task *internalTask) fairLevel {
 
 func newTaskBTree() taskBTree {
 	return taskBTree{
-		tree: *btype.NewTableOptions(btype.TableOptions[*internalTask]{
-			Compare: taskBTreeCompare,
-		}),
+		tree: *btree.NewBTreeG(taskBTreeLess),
 		ages: newBacklogAgeTracker(),
 	}
 }
 
 func (b *taskBTree) Add(task *internalTask) {
 	task.matchHeapIndex = 0 // non-negative: signals "in queue"
-	b.tree.Insert(task)
+	b.tree.Set(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, 1)
 	}
@@ -178,7 +175,7 @@ func (b *taskBTree) Remove(task *internalTask) {
 
 // popFront removes and returns the highest-priority (minimum) task in one tree pass.
 func (b *taskBTree) popFront() (*internalTask, bool) {
-	task, ok := b.tree.PopFront()
+	task, ok := b.tree.PopMin()
 	if !ok {
 		return nil, false
 	}
@@ -197,11 +194,14 @@ func (b *taskBTree) Len() int {
 // and removes the task. pred and post must not call back into taskBTree.
 func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
 	var toRemove []*internalTask
-	for task := range b.tree.All() {
+	iter := b.tree.Iter()
+	for ok := iter.First(); ok; ok = iter.Next() {
+		task := iter.Item()
 		if !task.isPollForwarder() && pred(task) {
 			toRemove = append(toRemove, task)
 		}
 	}
+	iter.Release()
 	for _, task := range toRemove {
 		b.tree.Delete(task)
 		task.matchHeapIndex = invalidHeapIndex
