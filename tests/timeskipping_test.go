@@ -69,7 +69,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+		FastForward: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
@@ -98,7 +98,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+		FastForward: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -129,7 +129,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(maxElapsedDuration)},
+		FastForward: durationpb.New(maxElapsedDuration),
 	}
 
 	resp, err := env.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), &workflowservice.ExecuteMultiOperationRequest{
@@ -227,7 +227,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// First update: enable with a max_elapsed_duration.
 	config1 := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+		FastForward: durationpb.New(time.Hour),
 	}
 	updateOptions(config1)
 
@@ -239,8 +239,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// Second update: change the max_elapsed_duration duration.
 	config2 := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+		Enabled:     true,
+		FastForward: durationpb.New(2 * time.Hour),
 	}
 	updateOptions(config2)
 
@@ -304,8 +304,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}}
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour)}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
@@ -1193,4 +1193,116 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 		"activity-2 ActivityTimeoutTask VisibilityTimestamp %v is later than expected ~wallAtSchedule+5min %v; this would happen if the virtual ScheduledTime leaked into VisibilityTimestamp (would show ≈ wallAtSchedule + 1h + 5min)",
 		activity2TimeoutTask.VisibilityTimestamp, activity2TimerExpected,
 	)
+}
+
+func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	wfID := tv.WorkflowID()
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          wfID,
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: false},
+	})
+	s.NoError(err)
+	originalRunID := startResp.RunId
+
+	// Drive WFT 1 with an empty command response so the workflow completes its
+	// first task and idles. This gives us a stable reset point before the
+	// options update.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err)
+
+	resetEventID := s.firstWorkflowTaskCompletedEventID(ctx, env, wfID, originalRunID)
+
+	// UpdateWorkflowExecutionOptions to enable time-skipping. This emits a
+	// WorkflowExecutionOptionsUpdated event. It does NOT schedule a new WFT,
+	// so we terminate the workflow below to close it before resetting.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	// Terminate the original workflow so it's closed; the terminate event
+	// lands in history after the OPTIONS_UPDATED event. Terminate events are
+	// always excluded from reapply, so the reset scan will see OPTIONS_UPDATED
+	// as the only reapplyable post-reset event.
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		Reason:            "test: close original before reset",
+	})
+	s.NoError(err)
+
+	// Sanity: original run ended with TSC enabled.
+	origMS := s.getMutableState(env, wfID, originalRunID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, origMS.State.ExecutionState.State)
+	s.True(origMS.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+		"original run should have TSC enabled after UpdateWorkflowExecutionOptions")
+
+	// Reset to the first WFTCompleted event with default reapply.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		Reason:                    "test: verify OPTIONS_UPDATED reapply preserves TimeSkippingConfig",
+		WorkflowTaskFinishEventId: resetEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRunID := resetResp.RunId
+	s.NotEqual(originalRunID, resetRunID, "reset must produce a fresh run")
+
+	// Drive the reset run's fresh WFT to completion.
+	s.drivePollsUntilClosed(ctx, env, tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return cmdsResponse(completeCmd()), nil
+	}, wfID, resetRunID, 10)
+
+	// Key assertion: the reset run has TSC enabled because the post-reset
+	// OPTIONS_UPDATED event was reapplied onto the new run.
+	resetMS := s.getMutableState(env, wfID, resetRunID)
+	s.True(resetMS.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+		"reset run should have TSC enabled; OPTIONS_UPDATED event is reapplied from original run")
+
+	// Confirm the mechanism: the reset run's history contains exactly one
+	// reapplied OPTIONS_UPDATED event, and the WorkflowExecutionStarted event
+	// still reflects the original disabled config (i.e. replay restored the
+	// start-point state before reapply enabled it).
+	resetHist, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: resetRunID},
+	})
+	s.NoError(err)
+	var optionsUpdatedCount int
+	var startedEvent *historypb.HistoryEvent
+	for _, e := range resetHist.History.Events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			optionsUpdatedCount++
+		}
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			startedEvent = e
+		}
+	}
+	s.Equal(1, optionsUpdatedCount,
+		"reset run should contain exactly one reapplied OPTIONS_UPDATED event")
+	s.NotNil(startedEvent)
+	startedTSC := startedEvent.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig()
+	s.NotNil(startedTSC, "WorkflowExecutionStarted should carry the original TimeSkippingConfig")
+	s.False(startedTSC.GetEnabled(),
+		"WorkflowExecutionStarted on reset run should carry the original disabled config; the later enable comes from reapply, not replay")
 }

@@ -715,15 +715,13 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	}
 
 	if !tsc.GetEnabled() {
-		if tsc.GetBound() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		if tsc.GetFastForward() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 		}
 		return nil
 	}
-	if b, ok := tsc.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
-		if b.MaxElapsedDuration.AsDuration() < 0 {
-			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
-		}
+	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
+		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
 	}
 
 	return nil

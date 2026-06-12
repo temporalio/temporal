@@ -91,7 +91,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 
 	cfg := &workflowpb.TimeSkippingConfig{
 		Enabled:     true,
-		Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -141,13 +141,13 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	s.Len(transitions, 2)
 
 	first := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.False(first.GetDisabledAfterBound())
+	s.False(first.GetDisabledAfterFastForward())
 	s.NotNil(first.GetTargetTime())
 	firstSkip := first.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
 	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(accumTol))
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(second.GetDisabledAfterBound())
+	s.True(second.GetDisabledAfterFastForward())
 
 	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
@@ -224,8 +224,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+		Enabled:     true,
+		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -310,11 +310,11 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	s.Len(transitions, 2, "expected exactly two transitions across the entire lifecycle")
 
 	first := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.False(first.GetDisabledAfterBound())
+	s.False(first.GetDisabledAfterFastForward())
 	s.NotNil(first.GetTargetTime())
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(second.GetDisabledAfterBound(), "second transition must be the fast-forward-disable event")
+	s.True(second.GetDisabledAfterFastForward(), "second transition must be the fast-forward-disable event")
 
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED), "pause event must be in history")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED), "unpause event must be in history")
@@ -351,8 +351,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)}}
+		Enabled:     true,
+		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -373,7 +373,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1)
 	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(attrs.GetDisabledAfterBound())
+	s.True(attrs.GetDisabledAfterFastForward())
 	s.WithinDuration(startTime, transitions[0].GetEventTime().AsTime(), minuteToler)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
@@ -407,8 +407,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
 	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)},
+		Enabled:     true,
+		FastForward: durationpb.New(fastForward),
 	}
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -506,8 +506,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
 			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(fastForward)},
+				Enabled:     true,
+				FastForward: durationpb.New(fastForward),
 			},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
@@ -522,7 +522,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 	hist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
 	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
-	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
-		"run timeout caps the skip before fast-forward is reached: DisabledAfterBound must be false")
+	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+		"run timeout caps the skip before fast-forward is reached: DisabledAfterFastForward must be false")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }
