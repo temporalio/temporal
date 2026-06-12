@@ -53,7 +53,7 @@ func NewSQLiteFileConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		DatabaseName:      persistencetests.GenerateRandomDBName(),
 		ConnectAttributes: map[string]string{"cache": "private"},
 	}
 }
