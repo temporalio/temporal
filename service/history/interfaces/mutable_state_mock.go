@@ -3561,16 +3561,16 @@ func (mr *MockMutableStateMockRecorder) SetHistoryTree(executionTimeout, runTime
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), executionTimeout, runTimeout, treeID)
 }
 
-// SetLatestEventBatchID mocks base method.
-func (m *MockMutableState) SetLatestEventBatchID(batchID int64) {
+// SetReplayEventBatchID mocks base method.
+func (m *MockMutableState) SetReplayEventBatchID(batchID int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetLatestEventBatchID", batchID)
+	m.ctrl.Call(m, "SetReplayEventBatchID", batchID)
 }
 
-// SetLatestEventBatchID indicates an expected call of SetLatestEventBatchID.
-func (mr *MockMutableStateMockRecorder) SetLatestEventBatchID(batchID any) *gomock.Call {
+// SetReplayEventBatchID indicates an expected call of SetReplayEventBatchID.
+func (mr *MockMutableStateMockRecorder) SetReplayEventBatchID(batchID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLatestEventBatchID", reflect.TypeOf((*MockMutableState)(nil).SetLatestEventBatchID), batchID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReplayEventBatchID", reflect.TypeOf((*MockMutableState)(nil).SetReplayEventBatchID), batchID)
 }
 
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.

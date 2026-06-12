@@ -125,7 +125,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
-	s.mockMutableState.EXPECT().SetLatestEventBatchID(gomock.Any()).AnyTimes()
+	s.mockMutableState.EXPECT().SetReplayEventBatchID(gomock.Any()).AnyTimes()
 	s.mockMutableState.EXPECT().GenerateEventLoadToken(gomock.Any()).Return([]byte("token"), nil).AnyTimes()
 
 	populateTaskGeneratorProvider(&testTaskGeneratorProvider{

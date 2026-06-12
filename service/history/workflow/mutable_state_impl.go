@@ -274,6 +274,11 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
+
+		// replayEventBatchID is the first event ID of the history batch currently being applied
+		// during replay, set via SetReplayEventBatchID by the rebuilder. It is common.EmptyEventID
+		// on the live path, where the batch ID is derived from the batch being built instead.
+		replayEventBatchID int64
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -1361,28 +1366,29 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
-// SetLatestEventBatchID records the first event ID of the persistence batch that subsequent
-// GenerateEventLoadToken calls should reference. The live path sets this automatically when an
-// event is added. The rebuilder sets it for each batch before replaying its events.
-func (ms *MutableStateImpl) SetLatestEventBatchID(batchID int64) {
-	ms.hBuilder.SetLatestEventBatchID(batchID)
+// SetReplayEventBatchID records the first event ID of the history batch that subsequent
+// GenerateEventLoadToken calls should reference. Only needed during replay. The rebuilder sets it
+// for each batch before applying its events.
+func (ms *MutableStateImpl) SetReplayEventBatchID(batchID int64) {
+	ms.replayEventBatchID = batchID
 }
 
 // GenerateEventLoadToken generates a token for loading a history event at a later time. The token encodes the event ID
 // and the batch ID (if applicable) which can be used to load the event from the events cache.
-//
-// The batch ID comes from the latest event batch (see [MutableStateImpl.SetLatestEventBatchID]), which assumes the
-// token is generated for the event that was just added (live path) or is currently being applied during replay. This must
-// be called after adding the event and not for an arbitrary historical event.
 func (ms *MutableStateImpl) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	if event.EventId == common.BufferedEventID {
+		return nil, serviceerror.NewInternalf("cannot reference buffered event: %v", event.EventType)
+	}
 	batchID := ms.hBuilder.LatestEventBatchID()
+	if batchID == common.EmptyEventID {
+		batchID = ms.replayEventBatchID
+	}
 	if batchID == common.EmptyEventID {
 		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
 	}
 	if batchID > event.EventId {
 		// The batch ID is the first event ID of the event's own batch, so it can never exceed the
-		// event's ID. A larger value means the cursor advanced past this event (token generated
-		// after a later event rolled the batch).
+		// event's ID.
 		return nil, serviceerror.NewInternalf(
 			"event load token batch ID %d exceeds event ID %d",
 			batchID, event.EventId)
@@ -8347,6 +8353,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
 	ms.reapplyEventsCandidate = nil
 	ms.subStateMachineDeleted = false
+	ms.replayEventBatchID = common.EmptyEventID
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()

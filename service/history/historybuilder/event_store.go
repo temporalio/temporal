@@ -38,12 +38,6 @@ type EventStore struct {
 
 	maxEventBatchSizeInBytes dynamicconfig.IntPropertyFn
 
-	// latestEventBatchID is the first event ID of the latest batch an event was added
-	// to (live path), or the batch currently being applied (during replay via
-	// SetLatestEventBatchID). It is common.EmptyEventID until the first non-buffered event is
-	// added. Unlike memLatestBatch, it is not cleared on Flush.
-	latestEventBatchID int64
-
 	// scheduled to started event ID mapping
 	scheduledIDToStartedID map[int64]int64
 	// request id to event ID mapping
@@ -105,21 +99,17 @@ func (b *EventStore) add(
 		event.EventId = b.AllocateEventID()
 		b.appendToLatestBatch(event)
 		batchID = b.memLatestBatch[0].EventId
-		b.latestEventBatchID = batchID
 	}
 	return event, batchID
 }
 
-// LatestEventBatchID returns the first event ID of the latest batch an event was added to, or the
-// batch set via SetLatestEventBatchID during replay. See the latestEventBatchID field.
+// LatestEventBatchID returns the first event ID of the batch currently being built, or
+// common.EmptyEventID if the current batch is empty, e.g. after a Flush.
 func (b *EventStore) LatestEventBatchID() int64 {
-	return b.latestEventBatchID
-}
-
-// SetLatestEventBatchID overrides the latest event batch ID. Used by the rebuilder, which
-// applies events without going through add and must supply the batch ID.
-func (b *EventStore) SetLatestEventBatchID(batchID int64) {
-	b.latestEventBatchID = batchID
+	if len(b.memLatestBatch) > 0 {
+		return b.memLatestBatch[0].EventId
+	}
+	return common.EmptyEventID
 }
 
 // appendToLatestBatch appends event to memLatestBatch, rolling into a new batch

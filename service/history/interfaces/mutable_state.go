@@ -44,7 +44,7 @@ type (
 	MutableState interface {
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
-		SetLatestEventBatchID(batchID int64)
+		SetReplayEventBatchID(batchID int64)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)

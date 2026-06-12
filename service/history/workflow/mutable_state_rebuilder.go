@@ -147,7 +147,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	// [history] is a single persistence batch, so firstEvent.EventId is the batch ID for every
 	// event applied below. Event definitions that generate load tokens (e.g. NexusOperationScheduled)
 	// read this via GenerateEventLoadToken to find the original batch ID.
-	b.mutableState.SetLatestEventBatchID(firstEvent.GetEventId())
+	b.mutableState.SetReplayEventBatchID(firstEvent.GetEventId())
 
 	for _, event := range history {
 		switch event.GetEventType() {
