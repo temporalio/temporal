@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -59,7 +60,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			saName: payload.EncodeString("random"),
+			saName: sadefs.MustEncodeValue("random", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 
