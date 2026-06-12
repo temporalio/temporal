@@ -57,6 +57,11 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
+	// CHASM search attribute of type Text is not supported at this moment.
+	// SearchAttributeFieldText01 = newSearchAttributeFieldText(1)
+
+	// Predefined search attributes don't have alias.
+	// TaskQueue is a system search attribute outside CHASM, but treated as predefined inside CHASM.
 	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
 	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
 	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
@@ -76,14 +81,13 @@ var (
 )
 
 var (
-	// CHASM search attribute of type Text is not supported at this moment.
-	// Note that it's currently assumed that string type values are Keyword search attributes.
 	_ SearchAttribute = (*SearchAttributeBool)(nil)
 	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
 	_ SearchAttribute = (*SearchAttributeInt)(nil)
 	_ SearchAttribute = (*SearchAttributeDouble)(nil)
 	_ SearchAttribute = (*SearchAttributeKeyword)(nil)
 	_ SearchAttribute = (*SearchAttributeKeywordList)(nil)
+	_ SearchAttribute = (*SearchAttributeText)(nil)
 
 	_ typedSearchAttribute[bool]      = (*SearchAttributeBool)(nil)
 	_ typedSearchAttribute[time.Time] = (*SearchAttributeDateTime)(nil)
@@ -91,6 +95,7 @@ var (
 	_ typedSearchAttribute[float64]   = (*SearchAttributeDouble)(nil)
 	_ typedSearchAttribute[string]    = (*SearchAttributeKeyword)(nil)
 	_ typedSearchAttribute[[]string]  = (*SearchAttributeKeywordList)(nil)
+	_ typedSearchAttribute[string]    = (*SearchAttributeText)(nil)
 )
 
 type (
@@ -191,6 +196,17 @@ type SearchAttributeFieldKeywordList struct {
 func newSearchAttributeFieldKeywordList(index int) SearchAttributeFieldKeywordList {
 	return SearchAttributeFieldKeywordList{
 		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, index),
+	}
+}
+
+// SearchAttributeFieldText is a search attribute field for a text value.
+type SearchAttributeFieldText struct {
+	field string
+}
+
+func newSearchAttributeFieldText(index int) SearchAttributeFieldText {
+	return SearchAttributeFieldText{
+		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_TEXT, index),
 	}
 }
 
@@ -415,6 +431,43 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 
 func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
 
+// SearchAttributeText is a search attribute for a text value.
+type SearchAttributeText struct {
+	searchAttributeDefinition
+}
+
+// NewSearchAttributeText creates a new text search attribute given a predefined chasm field
+func NewSearchAttributeText(alias string, textField SearchAttributeFieldText) SearchAttributeText {
+	return SearchAttributeText{
+		searchAttributeDefinition: searchAttributeDefinition{
+			alias:     alias,
+			field:     textField.field,
+			valueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
+		},
+	}
+}
+
+func newSearchAttributeTextByField(field string) SearchAttributeText {
+	return SearchAttributeText{
+		searchAttributeDefinition: searchAttributeDefinition{
+			alias:     field,
+			field:     field,
+			valueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
+		},
+	}
+}
+
+// Value sets the string value of the search attribute.
+func (s SearchAttributeText) Value(value string) SearchAttributeKeyValue {
+	return SearchAttributeKeyValue{
+		Alias: s.alias,
+		Field: s.field,
+		Value: VisibilityValueText(value),
+	}
+}
+
+func (s SearchAttributeText) typeMarker(_ string) {}
+
 // SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
@@ -438,7 +491,7 @@ func newSearchAttributesMapFromProto(
 	for saName, saPayload := range searchAttributes.IndexedFields {
 		value, err := visibilityValueFromPayload(saPayload)
 		if err != nil {
-			return SearchAttributesMap{}, nil
+			return SearchAttributesMap{}, err
 		}
 		result.values[saName] = value
 	}

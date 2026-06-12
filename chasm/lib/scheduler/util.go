@@ -48,6 +48,14 @@ func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) 
 	)
 }
 
+// Outcomes for task-lifecycle counters (e.g. ScheduleIdleTask). Mutually
+// exclusive: a given task run either fires (Validate=true, Execute ran) or is
+// invalidated (Validate=false; reason tag explains why).
+const (
+	outcomeFired       = "fired"
+	outcomeInvalidated = "invalidated"
+)
+
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.
 // Immediate tasks (zero scheduled time) are always valid since they execute inline.

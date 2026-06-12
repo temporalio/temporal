@@ -700,19 +700,30 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
-	namespaceName namespace.Name,
+	tsc *workflowpb.TimeSkippingConfig,
+	ns namespace.Name,
 ) error {
-	if timeSkippingConfig == nil {
+	if tsc == nil {
 		return nil
 	}
-
 	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+	if !wh.config.TimeSkippingEnabled(ns.String()) {
 		return serviceerror.NewUnimplementedf(
 			"The Time-Skipping feature is not enabled for namespace %s",
-			namespaceName,
+			ns.String(),
 		)
+	}
+
+	if !tsc.GetEnabled() {
+		if tsc.GetBound() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		}
+		return nil
+	}
+	if b, ok := tsc.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
+		if b.MaxElapsedDuration.AsDuration() < 0 {
+			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
+		}
 	}
 
 	return nil
@@ -3555,9 +3566,17 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// Phase 2: Write real V1 scheduler workflow.
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	saMap := payload.MergeMapOfPayload(
+		request.SearchAttributes.GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			sadefs.TemporalNamespaceDivision: payload.EncodeString(scheduler.NamespaceDivision),
+		},
+	)
 
-	sa, err := wh.validator.UnaliasedSearchAttributesFrom(request.GetSearchAttributes(), request.Namespace)
+	sa, err := wh.validator.UnaliasedSearchAttributesFrom(
+		&commonpb.SearchAttributes{IndexedFields: saMap},
+		request.Namespace,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -5750,10 +5769,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		},
 	}
 
-	// Add pre-define search attributes
+	// Add predefined search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.NamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
