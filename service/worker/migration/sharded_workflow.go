@@ -849,10 +849,6 @@ func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 			s.params.ResumeShards = unpackResumeBatches(batches[i:])
 			return
 		}
-		//workflowcheck:ignore (setting a set of flags is order-independent)
-		for sh := range batch.payload {
-			s.shardInFlight[sh] = true
-		}
 		s.spawnBatch(ctx, batch.payload, true, batch.noProgress)
 	}
 }
@@ -1056,6 +1052,7 @@ func (s *shardedWorkflowState) spawnBatch(
 	held := make(map[int32]bool, len(payload))
 	//workflowcheck:ignore (building a set of flags is order-independent)
 	for sh := range payload {
+		s.shardInFlight[sh] = true
 		held[sh] = true
 	}
 	s.heldByBatch[batchID] = held
@@ -1146,7 +1143,6 @@ func (s *shardedWorkflowState) tryPackStreaming(ctx workflow.Context, relax bool
 		}
 		payload[sh] = s.takeFromBucket(sh, take)
 		packed += take
-		s.shardInFlight[sh] = true
 	}
 	if packed == 0 {
 		return false
