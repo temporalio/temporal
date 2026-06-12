@@ -375,6 +375,13 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 }
 
 func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+	if req.GetNamespaceId() != a.namespaceID.String() {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("MigrateScheduleToChasm: request namespace ID %q does not match activity namespace ID %q", req.GetNamespaceId(), a.namespaceID),
+			"namespace_mismatch",
+			nil,
+		)
+	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency).

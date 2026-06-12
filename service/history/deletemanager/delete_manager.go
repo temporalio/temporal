@@ -123,7 +123,16 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		false,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -134,8 +143,20 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
+	// Skip replication for retention-based deletion. Both clusters have independent retention
+	// timers and will delete on their own schedule.
+	stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		true,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -145,10 +166,16 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	weCtx historyi.WorkflowContext,
 	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 	metricsHandler metrics.Handler,
 ) error {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+
+	closeTime, err := ms.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
@@ -164,8 +191,10 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		ms.ChasmTree().ArchetypeID(),
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
-		executionInfo.GetCloseTime().AsTime(),
+		closeTime,
+		ms.GetExecutionState().GetStartTime().AsTime(),
 		stage,
+		retentionDelete,
 	); err != nil {
 		return err
 	}

@@ -16,6 +16,11 @@ on:
         required: false
         default: "3"
         type: string
+      notify_slack:
+        description: "Send Slack notification"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -49,7 +54,7 @@ jobs:
         id: process-flaky-tests
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK: ${{ (github.event_name == 'schedule' || github.event.inputs.notify_slack == 'true') && secrets.SLACK_WEBHOOK || '' }}
           DAYS_PARAM: ${{ github.event.inputs.days || '7' }}
           MAX_LINKS_PARAM: ${{ github.event.inputs.max_links || '3' }}
           RUN_ID: ${{ github.run_id }}
@@ -65,7 +70,9 @@ jobs:
             --slack-webhook "$SLACK_WEBHOOK" \
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \
-            --sha "$SHA"
+            --sha "$SHA" \
+            --bisect \
+            --bisect-days 28
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v6

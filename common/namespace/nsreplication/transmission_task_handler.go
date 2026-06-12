@@ -109,6 +109,10 @@ func (r *replicator) HandleTransmissionTask(
 		},
 	}
 
+	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
+		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
+	}
+
 	return r.namespaceReplicationQueue.Publish(
 		ctx,
 		&replicationspb.ReplicationTask{

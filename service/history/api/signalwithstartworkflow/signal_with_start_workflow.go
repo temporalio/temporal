@@ -27,10 +27,11 @@ func SignalWithStartWorkflow(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (string, bool, error) {
-	// workflow is running and restart was not requested
+	// workflow is running and restart was not requested, and conflict policy is to use existing
 	if currentWorkflowLease != nil &&
 		currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() &&
-		signalWithStartRequest.WorkflowIdConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
+		signalWithStartRequest.WorkflowIdConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
+		signalWithStartRequest.WorkflowIdConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
 
 		// current workflow exists & running
 		if err := signalWorkflow(
@@ -256,6 +257,7 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowLease.GetMutableState(),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		historyi.TransactionPolicyActive,
 	)
 	switch failedErr := err.(type) {
 	case nil:
@@ -306,6 +308,7 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetRequestId(),
 		request.GetLinks(),
 	); err != nil {
 		return err

@@ -18,50 +18,9 @@ import (
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
+
+// HTTPCallerProvider is a method that can be used to retrieve an HTTPCaller for a given namespace and destination.
 type HTTPCallerProvider func(common.NamespaceIDAndDestination) HTTPCaller
-
-func NewInvocationTaskHandler(opts InvocationTaskHandlerOptions) *InvocationTaskHandler {
-	return &InvocationTaskHandler{
-		config:             opts.Config,
-		namespaceRegistry:  opts.NamespaceRegistry,
-		metricsHandler:     opts.MetricsHandler,
-		logger:             opts.Logger,
-		httpCallerProvider: opts.HTTPCallerProvider,
-		httpTraceProvider:  opts.HTTPTraceProvider,
-		historyClient:      opts.HistoryClient,
-	}
-}
-
-type InvocationTaskHandlerOptions struct {
-	fx.In
-
-	Config             *Config
-	NamespaceRegistry  namespace.Registry
-	MetricsHandler     metrics.Handler
-	Logger             log.Logger
-	HTTPCallerProvider HTTPCallerProvider
-	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
-	HistoryClient      resource.HistoryClient
-}
-
-type InvocationTaskHandler struct {
-	chasm.SideEffectTaskHandlerBase[*callbackspb.InvocationTask]
-	config             *Config
-	namespaceRegistry  namespace.Registry
-	metricsHandler     metrics.Handler
-	logger             log.Logger
-	httpCallerProvider HTTPCallerProvider
-	httpTraceProvider  commonnexus.HTTPClientTraceProvider
-	historyClient      resource.HistoryClient
-}
-
-func (h InvocationTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
-	return h.Invoke(ctx, ref, attrs, task)
-}
-
-func (h InvocationTaskHandler) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
-	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
-}
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the handler how to handle the
 // invocation outcome.
@@ -71,7 +30,7 @@ type invocationResult interface {
 	error() error
 }
 
-// invocationResultFail marks an invocation as successful.
+// invocationResultOK marks an invocation as successful.
 type invocationResultOK struct{}
 
 func (invocationResultOK) mustImplementInvocationResult() {}
@@ -102,15 +61,54 @@ func (r invocationResultRetry) error() error {
 	return r.err
 }
 
-type callbackInvokable interface {
+type invocable interface {
 	// Invoke executes the callback logic and returns the invocation result.
-	Invoke(ctx context.Context, ns *namespace.Namespace, h InvocationTaskHandler, task *callbackspb.InvocationTask, taskAttr chasm.TaskAttributes) invocationResult
+	Invoke(ctx context.Context, ns *namespace.Namespace, h *invocationTaskHandler, task *callbackspb.InvocationTask, taskAttr chasm.TaskAttributes) invocationResult
 	// WrapError provides each variant the opportunity to wrap the error returned by the task handler for, e.g. to
 	// trigger the circuit breaker.
 	WrapError(result invocationResult, err error) error
 }
 
-func (h InvocationTaskHandler) Invoke(
+type invocationTaskHandlerOptions struct {
+	fx.In
+
+	Config             *Config
+	NamespaceRegistry  namespace.Registry
+	MetricsHandler     metrics.Handler
+	Logger             log.Logger
+	HTTPCallerProvider HTTPCallerProvider
+	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
+	HistoryClient      resource.HistoryClient
+}
+
+type invocationTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*callbackspb.InvocationTask]
+	config             *Config
+	namespaceRegistry  namespace.Registry
+	metricsHandler     metrics.Handler
+	logger             log.Logger
+	httpCallerProvider HTTPCallerProvider
+	httpTraceProvider  commonnexus.HTTPClientTraceProvider
+	historyClient      resource.HistoryClient
+}
+
+func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
+	return &invocationTaskHandler{
+		config:             opts.Config,
+		namespaceRegistry:  opts.NamespaceRegistry,
+		metricsHandler:     opts.MetricsHandler,
+		logger:             opts.Logger,
+		httpCallerProvider: opts.HTTPCallerProvider,
+		httpTraceProvider:  opts.HTTPTraceProvider,
+		historyClient:      opts.HistoryClient,
+	}
+}
+
+func (h *invocationTaskHandler) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
+}
+
+func (h *invocationTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	taskAttr chasm.TaskAttributes,
@@ -150,32 +148,20 @@ func (h InvocationTaskHandler) Invoke(
 	return invokable.WrapError(result, saveErr)
 }
 
-type BackoffTaskHandler struct {
+type backoffTaskHandler struct {
 	chasm.PureTaskHandlerBase
-	config         *Config
-	metricsHandler metrics.Handler
-	logger         log.Logger
 }
 
-type BackoffTaskHandlerOptions struct {
+type backoffTaskHandlerOptions struct {
 	fx.In
-
-	Config         *Config
-	MetricsHandler metrics.Handler
-	Logger         log.Logger
 }
 
-func NewBackoffTaskHandler(opts BackoffTaskHandlerOptions) *BackoffTaskHandler {
-	return &BackoffTaskHandler{
-		config:         opts.Config,
-		metricsHandler: opts.MetricsHandler,
-		logger:         opts.Logger,
-	}
+func newBackoffTaskHandler(opts backoffTaskHandlerOptions) *backoffTaskHandler {
+	return &backoffTaskHandler{}
 }
 
-// Execute transitions the callback from BACKING_OFF to SCHEDULED state
-// and generates an InvocationTask for the next attempt.
-func (h *BackoffTaskHandler) Execute(
+// Execute toggles the callback status from BACKING_OFF to SCHEDULED to trigger a new invocation attempt.
+func (h *backoffTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	callback *Callback,
 	taskAttrs chasm.TaskAttributes,
@@ -184,12 +170,13 @@ func (h *BackoffTaskHandler) Execute(
 	return TransitionRescheduled.Apply(callback, ctx, EventRescheduled{})
 }
 
-func (h *BackoffTaskHandler) Validate(
+// Validate validates that the callback is in BACKING_OFF state and that the attempt number matches before allowing the
+// backoff task to execute.
+func (h *backoffTaskHandler) Validate(
 	ctx chasm.Context,
 	callback *Callback,
 	taskAttr chasm.TaskAttributes,
 	task *callbackspb.BackoffTask,
 ) (bool, error) {
-	// Validate that the callback is in BACKING_OFF state
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
 }

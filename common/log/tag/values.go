@@ -74,6 +74,9 @@ var (
 	WorkflowActionExternalWorkflowSignalRequested = workflowAction("add-externalworkflow-signal-requested-event")
 	WorkflowActionExternalWorkflowSignalFailed    = workflowAction("add-externalworkflow-signal-failed-event")
 
+	// time skipping
+	WorkflowActionWorkflowExecutionTimeSkippingTransitioned = workflowAction("add-workflow-execution-time-skipping-transitioned-event")
+
 	WorkflowActionUnknown = workflowAction("add-unknown-event")
 )
 
@@ -103,6 +106,7 @@ var (
 	ComponentShardContext              = component("shard-context")
 	ComponentShardEngine               = component("shard-engine")
 	ComponentMatchingEngine            = component("matching-engine")
+	ComponentPartitionScaler           = component("partition-scaler")
 	ComponentReplicator                = component("replicator")
 	ComponentReplicationTaskProcessor  = component("replication-task-processor")
 	ComponentHSMStateReplicator        = component("hsm-state-replicator")
@@ -117,6 +121,7 @@ var (
 	ComponentESVisibilityManager       = component("es-visibility-manager")
 	ComponentArchiver                  = component("archiver")
 	ComponentBatcher                   = component("batcher")
+	ComponentAdminBatcher              = component("admin-batcher")
 	ComponentWorker                    = component("worker")
 	ComponentWorkerManager             = component("worker-manager")
 	ComponentPerNSWorkerManager        = component("perns-worker-manager")

@@ -76,7 +76,7 @@ func (c *Callback) recordAttempt(ts time.Time) {
 func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
-) (callbackInvokable, error) {
+) (invocable, error) {
 	target := c.CompletionSource.Get(ctx)
 
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
@@ -84,23 +84,23 @@ func (c *Callback) loadInvocationArgs(
 		return nil, err
 	}
 
-	variant := c.GetCallback().GetNexus()
-	if variant == nil {
+	callback := c.GetCallback().GetNexus()
+	if callback == nil {
 		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unprocessable callback variant: %v", variant),
+			fmt.Sprintf("unprocessable callback variant: %v", callback),
 		)
 	}
 
-	if variant.Url == chasm.NexusCompletionHandlerURL {
-		return chasmInvocation{
-			nexus:      variant,
+	if callback.Url == chasm.NexusCompletionHandlerURL {
+		return invocableInternal{
+			callback:   callback,
 			attempt:    c.Attempt,
 			completion: completion,
 			requestID:  c.RequestId,
 		}, nil
 	}
-	return nexusInvocation{
-		nexus:      variant,
+	return invocableOutbound{
+		callback:   callback,
 		completion: completion,
 		workflowID: ctx.ExecutionKey().BusinessID,
 		runID:      ctx.ExecutionKey().RunID,
@@ -162,4 +162,20 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 
 	// This should not happen as CHASM only supports Nexus callbacks currently
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
+}
+
+// ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,
+// triggering their invocation. Used by both workflows and standalone activities
+// when the execution reaches a terminal state.
+func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *Callback]) error {
+	for _, field := range callbacks {
+		cb := field.Get(ctx)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

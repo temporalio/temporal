@@ -61,7 +61,10 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	}
 	alias, ok := v.fieldToAlias[field]
 	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+		return "", serviceerror.NewInvalidArgumentf(
+			"visibility search attributes mapper has no registered field %q",
+			field,
+		)
 	}
 	return alias, nil
 }
@@ -161,16 +164,21 @@ func NewVisibilityWithData(
 		},
 	}
 
-	if len(customSearchAttributes) != 0 {
+	// Filter out nil/empty payload values for search attributes.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+	if len(filteredSA) != 0 {
 		visibility.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
 		)
 	}
-	if len(customMemo) != 0 {
+
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+	if len(filteredMemo) != 0 {
 		visibility.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 
@@ -228,12 +236,16 @@ func (v *Visibility) MergeCustomSearchAttributes(
 }
 
 // ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
-// If `customSearchAttributes` is empty, the underlying search attributes node is deleted.
+// Nil/empty payload values are filtered.
+// If `customSearchAttributes` is empty or all values are nil after filtering, the underlying search attributes node is deleted.
 func (v *Visibility) ReplaceCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
-	if len(customSearchAttributes) == 0 {
+	// Filter out nil/empty payload values.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+
+	if len(filteredSA) == 0 {
 		_, ok := v.SA.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
@@ -244,7 +256,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 	} else {
 		v.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
 		)
 	}
 
@@ -301,7 +313,10 @@ func (v *Visibility) ReplaceCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	if len(customMemo) == 0 {
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+
+	if len(filteredMemo) == 0 {
 		_, ok := v.Memo.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
@@ -312,7 +327,7 @@ func (v *Visibility) ReplaceCustomMemo(
 	} else {
 		v.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 

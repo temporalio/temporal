@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,12 +19,12 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
@@ -76,7 +77,28 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	schedulerRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerMigrateToWorkflowTask,
-) error {
+) (retErr error) {
+	metricsHandler := h.metricsHandler.WithTags(
+		metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToWorkflow),
+	)
+	metricsHandler.Counter(metrics.ScheduleMigrationStarted.Name()).Record(1)
+
+	// logger is initialized after ReadComponent, once namespace/scheduleID are known.
+	var logger log.Logger
+	defer func() {
+		if retErr != nil {
+			metricsHandler.Counter(metrics.ScheduleMigrationFailed.Name()).Record(1)
+			if logger != nil {
+				logger.Error("schedule migration to workflow failed", tag.Error(retErr))
+			}
+		} else {
+			metricsHandler.Counter(metrics.ScheduleMigrationCompleted.Name()).Record(1)
+			if logger != nil {
+				logger.Info("schedule migration to workflow succeeded")
+			}
+		}
+	}()
+
 	// Read state and convert to V1 args inside the ReadComponent callback,
 	// where we have access to the CHASM context for consistent time.
 	type readResult struct {
@@ -143,6 +165,13 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		return fmt.Errorf("failed to read scheduler state: %w", err)
 	}
 
+	logger = log.With(
+		h.baseLogger,
+		tag.WorkflowNamespace(result.namespace),
+		tag.ScheduleID(result.scheduleID),
+	)
+	logger.Info("schedule migration to workflow started")
+
 	// Serialize the V1 workflow input.
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(result.args)
 	if err != nil {
@@ -152,8 +181,12 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	// Build the start request to match createScheduleWorkflow in the frontend
 	// as closely as possible. Include TemporalNamespaceDivision so the V1
 	// workflow is discoverable via ListSchedules.
-	sa := &commonpb.SearchAttributes{IndexedFields: result.searchAttributes}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(legacyscheduler.NamespaceDivision))
+	saMap := payload.MergeMapOfPayload(
+		result.searchAttributes,
+		map[string]*commonpb.Payload{
+			sadefs.TemporalNamespaceDivision: payload.EncodeString(legacyscheduler.NamespaceDivision),
+		},
+	)
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
@@ -165,8 +198,8 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		Identity:                 fmt.Sprintf("temporal-scheduler-migration-%s-%s", result.namespace, result.scheduleID),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		Memo:                     &commonpb.Memo{Fields: result.memo},
-		SearchAttributes:         sa,
+		Memo:                     &commonpb.Memo{Fields: maps.Clone(result.memo)},
+		SearchAttributes:         &commonpb.SearchAttributes{IndexedFields: saMap},
 		Priority:                 &commonpb.Priority{},
 	}
 

@@ -57,6 +57,22 @@ func (s *componentRefSuite) TestArchetypeID() {
 	s.Equal(rc.componentID, archetypeID)
 }
 
+func (s *componentRefSuite) TestNewComponentRefByArchetypeID() {
+	executionKey := ExecutionKey{
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
+	}
+	expectArchetypeID := WorkflowArchetypeID
+	ref := NewComponentRefByArchetypeID(executionKey, expectArchetypeID)
+
+	s.Equal(executionKey, ref.ExecutionKey)
+
+	archetypeID, err := ref.ArchetypeID(s.registry)
+	s.NoError(err)
+	s.Equal(expectArchetypeID, archetypeID)
+}
+
 func (s *componentRefSuite) TestSerializeDeserialize() {
 	_, err := DeserializeComponentRef(nil)
 	s.ErrorIs(err, ErrInvalidComponentRef)

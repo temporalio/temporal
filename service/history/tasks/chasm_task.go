@@ -68,11 +68,14 @@ type ChasmTask struct {
 	Info                   *persistencespb.ChasmTaskInfo
 
 	// In-memory only
-	DeserializedTask reflect.Value
+	outboundTaskGroup string // set to the registered task's taskgroup after deserialization for outbound tasks
+	DeserializedTask  reflect.Value
 }
 
 var _ Task = &ChasmTask{}
 var _ HasArchetypeID = &ChasmTask{}
+var _ HasOutboundTaskGroup = &ChasmTask{}
+var _ HasDestination = &ChasmTask{}
 
 func (t *ChasmTask) GetCategory() Category {
 	return t.Category
@@ -105,6 +108,19 @@ func (t *ChasmTask) GetVisibilityTime() time.Time {
 func (t *ChasmTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
+
 func (t *ChasmTask) GetArchetypeID() uint32 {
 	return t.Info.GetArchetypeId()
+}
+
+func (t *ChasmTask) GetDestination() string {
+	return t.Destination
+}
+
+func (t *ChasmTask) OutboundTaskGroup() string {
+	return t.outboundTaskGroup
+}
+
+func (t *ChasmTask) SetOutboundTaskGroup(taskgroup string) {
+	t.outboundTaskGroup = taskgroup
 }

@@ -106,6 +106,9 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	// Record Nexus-specific metrics
 	metrics.NexusRequests.With(c.metricsHandler).Record(1)
 	metrics.NexusLatency.With(c.metricsHandler).Record(time.Since(c.requestStartTime))
+	if *errPtr != nil {
+		metrics.NexusRequestErrors.With(c.metricsHandler).Record(1)
+	}
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
@@ -178,11 +181,13 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
+	// Nexus requests are not tied to a business ID, hence the empty string.
+	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName, namespace.EmptyBusinessID); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("invalid_namespace_state"))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	//nolint:forbidigo // Nexus requests are not tied to a business ID by design (see line 184)
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns
@@ -190,12 +195,12 @@ func (c *operationContext) interceptRequest(
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			handler, forwardStartTime := c.redirectionInterceptor.BeforeCall(c.apiName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(_ map[string]string, retErr error) {
-				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.EmptyBusinessID), c.namespace.Name().String(), retErr)
+				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.RoutingKey{}), c.namespace.Name().String(), retErr)
 			})
 			return serviceerror.NewNamespaceNotActive(
 				c.namespaceName,
 				c.clusterMetadata.GetCurrentClusterName(),
-				c.namespace.ActiveClusterName(namespace.EmptyBusinessID),
+				c.namespace.ActiveClusterName(namespace.RoutingKey{}),
 			)
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_inactive_forwarding_disabled"))
@@ -444,6 +449,7 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
@@ -602,7 +608,7 @@ func (h *nexusHandler) forwardStartOperation(
 			tag.Endpoint(oc.endpointName),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)),
+			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})),
 		)
 		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -661,6 +667,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -736,7 +743,7 @@ func (h *nexusHandler) forwardCancelOperation(
 			tag.Endpoint(oc.endpointName),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)),
+			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})),
 		)
 		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -754,9 +761,9 @@ func (h *nexusHandler) forwardCancelOperation(
 }
 
 func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexusrpc.HTTPClient, error) {
-	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName(""))
+	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName(namespace.RoutingKey{}))
 	if err != nil {
-		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)), tag.TargetCluster(oc.namespace.ActiveClusterName("")))
+		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})), tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}

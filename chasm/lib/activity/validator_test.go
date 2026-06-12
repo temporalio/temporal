@@ -46,6 +46,12 @@ var (
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
 	}
+	defaultMaxLinksPerRequest = func(ns string) int {
+		return 10
+	}
+	defaultLinkMaxSize = func(ns string) int {
+		return 4000
+	}
 )
 
 func TestValidateSuccess(t *testing.T) {
@@ -71,7 +77,8 @@ func TestValidateSuccess(t *testing.T) {
 			defaultNamespaceID,
 			&defaultActivityOptions,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 		require.NoError(t, err)
 	})
 }
@@ -312,7 +319,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 }
 
 func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
-	t.Run("Allow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Allow PerNSWorkerTaskQueue TaskQueue on the same TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -326,8 +333,31 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			primitives.PerNSWorkerTaskQueue)
 		require.NoError(t, err)
+	})
+
+	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue from non-internal TaskQueue", func(t *testing.T) {
+		options := &activitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		}
+
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			options,
+			&defaultPriority,
+			durationpb.New(0),
+			defaultTaskQueue)
+
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Error(), "cannot use internal per-namespace task queue")
 	})
 
 	t.Run("Disallow Internal TaskQueue Prefix", func(t *testing.T) {
@@ -344,7 +374,8 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
@@ -365,7 +396,8 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
@@ -403,7 +435,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -423,7 +455,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -450,7 +482,7 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
 	require.NoError(t, err)
 }
 
@@ -468,7 +500,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
@@ -620,7 +652,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: defaultActivityID,
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -629,7 +661,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -637,7 +669,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: "",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -646,7 +678,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -656,9 +688,33 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "not-a-valid-uuid",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+	})
+}
+
+func TestValidateStartDelay(t *testing.T) {
+	t.Run("NilDuration", func(t *testing.T) {
+		err := validateStartDelay(nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("ZeroDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(0))
+		require.NoError(t, err)
+	})
+
+	t.Run("ValidDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(5 * time.Second))
+		require.NoError(t, err)
+	})
+
+	t.Run("NegativeDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(-1 * time.Second))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "invalid StartDelay")
 	})
 }
 

@@ -52,11 +52,6 @@ type TaskQueueStatsSuite struct {
 	parallelsuite.Suite[*TaskQueueStatsSuite]
 }
 
-// TODO(pri): remove once the classic matcher is removed
-func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	parallelsuite.Run(t, &TaskQueueStatsSuite{}, false) // usePriMatcher = false
-}
-
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 	parallelsuite.Run(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
 }
@@ -742,6 +737,7 @@ func newTaskQueueStatsContext(
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
 	opts := []testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment versioning"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),

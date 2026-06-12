@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,9 +11,11 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -281,6 +284,7 @@ func TestTransitionRescheduled(t *testing.T) {
 func TestTransitionStarted(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	ctx.GoCtx = headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", "")
 	attemptState := &activitypb.ActivityAttemptState{
 		Count:       1,
 		StartedTime: timestamppb.New(defaultTime),
@@ -309,6 +313,8 @@ func TestTransitionStarted(t *testing.T) {
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
 	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
+	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
+	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)
@@ -595,9 +601,10 @@ func TestTransitionTerminated(t *testing.T) {
 	counterTerminate.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
 
+	identity := "terminator"
 	req := chasm.TerminateComponentRequest{
 		Reason:    "Test Termination",
-		Identity:  "terminator",
+		Identity:  identity,
 		RequestID: "test-request-id",
 	}
 
@@ -613,8 +620,12 @@ func TestTransitionTerminated(t *testing.T) {
 	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{
-		Message:     "Test Termination",
-		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+		Message: "Test Termination",
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+			TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+				Identity: identity,
+			},
+		},
 	}
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
 }
@@ -656,6 +667,7 @@ func TestTransitionCanceled(t *testing.T) {
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	outcome := &activitypb.ActivityOutcome{}
+	identity := "canceler"
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
@@ -666,6 +678,9 @@ func TestTransitionCanceled(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			CancelState: &activitypb.ActivityCancelState{
+				Identity: identity,
+			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
@@ -699,7 +714,8 @@ func TestTransitionCanceled(t *testing.T) {
 		Message: "Activity canceled",
 		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-				Details: payloads.EncodeString("Details"),
+				Details:  payloads.EncodeString("Details"),
+				Identity: identity,
 			},
 		},
 	}

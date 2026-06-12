@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -11,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,10 +24,13 @@ import (
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -52,8 +59,9 @@ func TestChasmTestSuite(t *testing.T) {
 func (s *ChasmTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():                           true,
-			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
+			dynamicconfig.EnableChasm.Key():                            true,
+			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key():  s.enableUnifiedQueryConverter,
+			dynamicconfig.DeleteNamespaceUseChasmDeleteExecution.Key(): true,
 		}),
 	)
 
@@ -227,12 +235,9 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", archetypeID, storeID)
-
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -273,7 +278,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.NoError(payload.Decode(visRecord.CustomSearchAttributes[sadefs.TemporalNamespaceDivision], &archetypeIDStr))
 	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
 	s.NoError(err)
-	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
+	s.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
 	addPayloadResp, err := tests.AddPayloadHandler(
 		ctx,
@@ -517,9 +522,7 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.NoError(err)
 
 	// Make sure visibility record is created, so that we can test its deletion later.
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
 	var executionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
@@ -543,17 +546,15 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.NoError(payload.Decode(archetypePayload, &archetypeIDStr))
 	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
 	s.NoError(err)
-	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
+	s.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
-	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
-	s.True(ok)
 	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
-		Archetype: archetype,
+		Archetype: tests.Archetype,
 	})
 	s.NoError(err)
 
@@ -564,7 +565,7 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
-		Archetype: archetype,
+		Archetype: tests.Archetype,
 	})
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
@@ -661,14 +662,11 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-
 	// Query using "ExecutionStatus" as a CHASM alias (which maps to TemporalKeyword03)
 	// This tests that CHASM components can use "ExecutionStatus" as an alias for their own search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", archetypeID, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -703,7 +701,7 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	)
 	s.NoError(err)
 
-	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", archetypeID, storeID)
+	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -736,13 +734,10 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-
 	// Query using TaskQueue as a CHASM preallocated search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", tests.ArchetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -787,11 +782,8 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.NoError(err)
 
 	// wait for the payload store to be created
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	var runID string
 	s.Eventually(
 		func() bool {
@@ -815,8 +807,7 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.Equal(storeID, visRecord.BusinessID)
 
 	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
-	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
-	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
+	s.NotEqual(tests.Archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
 	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
 		Namespace: s.Namespace().String(),
@@ -949,6 +940,138 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
 	s.NoError(err)
 	s.False(descResp.State.Closed, "Store should not be closed")
 	s.Equal(int64(42), descResp.State.TotalCount) // Update was applied during creation.
+}
+
+func (s *ChasmTestSuite) TestPayloadStore_ApproximateExecutionSize() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	initialApproxSize := descResp.ApproximateStateSize
+
+	payloadSize := 100 * 1024 // 100KB
+	payloadData := make([]byte, payloadSize)
+	_, err = rand.Read(payloadData)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		ctx,
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeBytes(payloadData),
+		},
+	)
+	s.NoError(err)
+
+	descResp, err = tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	currentApproxSize := descResp.ApproximateStateSize
+	sizeDelta := float64(100) // Allow 100 bytes of variance due to overhead, encoding, etc.
+	s.InDelta(payloadSize, currentApproxSize-initialApproxSize, sizeDelta)
+
+	adminDescResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		ArchetypeId: tests.ArchetypeID,
+	})
+	s.NoError(err)
+	s.InDelta(adminDescResp.DatabaseMutableState.Size(), currentApproxSize, sizeDelta)
+}
+
+// TestNamespaceDelete_WithChasmExecutions verifies that running CHASM executions are cleaned
+// up when their namespace is deleted, exercising the DeleteExecution history service API.
+func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
+	tv := testvars.New(s.T())
+
+	// Register a fresh namespace for this test.
+	namespaceName := "ns-chasm-delete-" + tv.Any().String()[:8]
+	_, err := s.FrontendClient().RegisterNamespace(testcore.NewContext(), &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespaceName,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespaceName,
+	})
+	s.NoError(err)
+	nsID := namespace.ID(descResp.GetNamespaceInfo().GetId())
+
+	// Create running CHASM executions in the new namespace.
+	const numExecutions = 3
+	for range numExecutions {
+		_, err = tests.NewPayloadStoreHandler(s.chasmContext, tests.NewPayloadStoreRequest{
+			NamespaceID:      nsID,
+			StoreID:          tv.Any().String(),
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		})
+		s.NoError(err)
+	}
+
+	// Wait for visibility records to appear.
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d'", tests.ArchetypeID)
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: namespaceName,
+			PageSize:  10,
+			Query:     visQuery,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Executions, numExecutions)
+	}, testcore.WaitForESToSettle, 100*time.Millisecond)
+
+	// Delete the namespace, which should trigger DeleteExecution for all CHASM executions.
+	_, err = s.OperatorClient().DeleteNamespace(testcore.NewContext(), &operatorservice.DeleteNamespaceRequest{
+		Namespace: namespaceName,
+	})
+	s.NoError(err)
+
+	// Verify all CHASM executions are cleaned up from visibility.
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: namespaceName,
+			PageSize:  10,
+			Query:     visQuery,
+		})
+		var notFound *serviceerror.NamespaceNotFound
+		if errors.As(err, &notFound) {
+			return // namespace fully deleted is also acceptable
+		}
+		require.NoError(t, err)
+		require.Empty(t, resp.Executions)
+	}, 20*time.Second*debug.TimeoutMultiplier, time.Second)
 }
 
 // TODO: More tests here...

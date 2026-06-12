@@ -12,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -67,23 +66,7 @@ func (s *VisibilityTestSuite) TearDownSuite() {
 
 func (s *VisibilityTestSuite) TestSearchAttributes() {
 	ns := s.createGlobalNamespace()
-	if testcore.UseSQLVisibility() {
-		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		updateNamespaceConfig(s.Assertions, ns,
-			func() *namespacepb.NamespaceConfig {
-				return &namespacepb.NamespaceConfig{
-					CustomSearchAttributeAliases: map[string]string{
-						"Bool01":     "CustomBoolField",
-						"Datetime01": "CustomDatetimeField",
-						"Double01":   "CustomDoubleField",
-						"Int01":      "CustomIntField",
-						"Keyword01":  "CustomKeywordField",
-						"Text01":     "CustomTextField",
-					},
-				}
-			},
-			s.clusters, 0)
-	}
+	s.registerTestSearchAttributes(ns)
 
 	client0 := s.clusters[0].FrontendClient() // active
 	client1 := s.clusters[1].FrontendClient() // standby
@@ -97,7 +80,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": payload.EncodeString("test value"),
+			"CustomTextField": sadefs.MustEncodeValue("test value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -192,9 +175,10 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 				return false
 			}
 			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
-			if len(fields) != 3 {
+			if len(fields) < 3 {
 				return false
 			}
+			s.Len(fields, 3)
 
 			searchValBytes := fields["CustomTextField"]
 			var searchVal string
@@ -301,11 +285,10 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 
 // TODO (alex): remove this func.
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": payload.EncodeString("another string"),
-			"CustomIntField":  attrValPayload2,
+			"CustomTextField": sadefs.MustEncodeValue("another string", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			"CustomIntField":  sadefs.MustEncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT),
 		},
 	}
 	return upsertSearchAttr

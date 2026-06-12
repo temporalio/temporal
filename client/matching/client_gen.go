@@ -113,6 +113,26 @@ func (c *clientImpl) CheckTaskQueueVersionMembership(
 	return client.CheckTaskQueueVersionMembership(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CountWorkersResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CountWorkers(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -228,26 +248,6 @@ func (c *clientImpl) DescribeWorker(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DescribeWorker(ctx, request, opts...)
-}
-
-func (c *clientImpl) DispatchNexusTask(
-	ctx context.Context,
-	request *matchingservice.DispatchNexusTaskRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.DispatchNexusTaskResponse, error) {
-
-	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DispatchNexusTask(ctx, request, opts...)
 }
 
 func (c *clientImpl) ForceLoadTaskQueuePartition(
@@ -442,26 +442,6 @@ func (c *clientImpl) ListWorkers(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.ListWorkers(ctx, request, opts...)
-}
-
-func (c *clientImpl) PollNexusTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollNexusTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.PollNexusTaskQueueResponse, error) {
-
-	p, err := tqid.PartitionFromProto(request.GetRequest().GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
 func (c *clientImpl) RecordWorkerHeartbeat(

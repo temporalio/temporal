@@ -28,6 +28,7 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -46,6 +47,7 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	taskExpireStage                                = "task_expire_stage"
+	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -60,6 +62,8 @@ const (
 	toUnversioned                                  = "to_unversioned"
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
+	clientName                                     = "client_name"
+	isInternal                                     = "is_internal"
 	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -313,6 +317,22 @@ func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
 }
 
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
+}
+
+const (
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
+)
+
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {
@@ -550,10 +570,26 @@ var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
 var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
 var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
+// ClientNameTag returns a new client_name tag for the SDK client name.
+func ClientNameTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: clientName, Value: value}
+}
+
+func IsInternalTag(internal bool) Tag {
+	return Tag{Key: isInternal, Value: strconv.FormatBool(internal)}
+}
+
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}
 }
 
 func HeaderCallsiteTag(kind string) Tag {
 	return Tag{Key: headerCallsiteTagName, Value: kind}
+}
+
+func TimeoutTypeTag(timeoutType string) Tag {
+	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
 }

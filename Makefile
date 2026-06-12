@@ -136,7 +136,7 @@ PINNED_DEPENDENCIES := \
 TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
-COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
+COVERPKG_FLAG 		    = -coverpkg=./...
 
 # DB
 SQL_USER ?= temporal
@@ -332,6 +332,8 @@ proto-codegen:
 	@go generate -run genrpcwrappers ./client/...
 	@printf $(COLOR) "Generate server interceptors..."
 	@go generate ./common/rpc/interceptor/logtags/...
+	@printf $(COLOR) "Generate routing key extractor..."
+	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
 	@printf $(COLOR) "Generate search attributes helpers..."
 	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 
@@ -557,6 +559,11 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
+generate-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner generate-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
+		--summary-output-dir=$(TEST_OUTPUT_ROOT)
+
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
 	@printf $(COLOR) "Install Cassandra schema..."
@@ -696,6 +703,10 @@ start-xdc-cluster-b: temporal-server
 
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
+
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
 
 ##### Grafana #####
 update-dashboards:

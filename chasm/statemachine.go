@@ -28,7 +28,8 @@ type Transition[S comparable, SM StateMachine[S], E any] struct {
 }
 
 // NewTransition creates a new [Transition] from the given source states to a destination state for a given event.
-// The apply function is called after verifying the transition is possible and setting the destination state.
+// The apply function is called after verifying the transition is possible but before setting the destination state,
+// so it can inspect the current (source) state.
 func NewTransition[S comparable, SM StateMachine[S], E any](src []S, dst S, apply func(SM, MutableContext, E) error) Transition[S, SM, E] {
 	return Transition[S, SM, E]{
 		Sources:     src,
@@ -43,13 +44,17 @@ func (t Transition[S, SM, E]) Possible(sm SM) bool {
 }
 
 // Apply applies a transition event to the given state machine changing the state machine's state to the transition's
-// Destination on success.
+// Destination on success. The apply function is called before the state is changed, so it can inspect the current
+// (source) state.
 func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) error {
 	prevState := sm.StateMachineState()
 	if !t.Possible(sm) {
 		return fmt.Errorf("%w from %v", ErrInvalidTransition, prevState)
 	}
 
+	if err := t.apply(sm, ctx, event); err != nil {
+		return err
+	}
 	sm.SetStateMachineState(t.Destination)
-	return t.apply(sm, ctx, event)
+	return nil
 }

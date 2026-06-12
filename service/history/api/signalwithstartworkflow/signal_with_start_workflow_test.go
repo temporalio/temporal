@@ -140,6 +140,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetRequestId(),
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
@@ -174,6 +175,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetRequestId(),
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(true)
@@ -207,6 +209,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetRequestId(),
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)

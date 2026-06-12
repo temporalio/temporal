@@ -90,6 +90,7 @@ func NewTestController(
 		ThrottledLogger:             resource.GetThrottledLogger(),
 		TimeSource:                  resource.GetTimeSource(),
 		TaskCategoryRegistry:        tasks.NewDefaultTaskCategoryRegistry(),
+		HandoverTrackerFactory:      NewDefaultHandoverTrackerFactory(),
 	})
 
 	return ControllerProvider(

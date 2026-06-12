@@ -93,6 +93,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 {},
 
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         {},
@@ -104,8 +105,10 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             {},
 
-		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":        {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":  {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -125,10 +128,14 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	apis := map[string]struct{}{
-		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      {},
+		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                 {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                   {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
