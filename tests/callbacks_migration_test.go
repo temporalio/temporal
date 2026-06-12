@@ -7,14 +7,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -455,4 +460,128 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 			suite.NotNil(callbackInfo.LastAttemptCompleteTime)
 		}
 	}, 2*time.Second, 100*time.Millisecond)
+}
+
+// TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead verifies the write-side
+// callback.encodedTokenWithRequestId gate produces a completion token the reader accepts, across a
+// mid-flight flip. The CHASM scheduler attaches the completion callback when it starts a scheduled
+// workflow; with the gate OFF the token is the legacy bare-ref format (carrying no request ID). The
+// gate is flipped ON before the workflow completes, and the completion is still read successfully: the
+// reader (chasm.UnpackNexusCallbackToken) is format-agnostic, so flipping the write gate never breaks
+// in-flight legacy tokens. Without that the completion would fail with "failed to unmarshal CHASM
+// ComponentRef" and the scheduler would never observe the action completing.
+func (s *CallbacksMigrationSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead() {
+	opts := append(
+		scheduleCommonOpts(s.T()),
+		// Route completion through the CHASM callback read path (chasm/lib/callback/invocable_internal.go).
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		// Write gate starts OFF: the scheduler writes the legacy bare-ref completion token.
+		testcore.WithDynamicConfig(chasmscheduler.CallbackEncodedTokenWithRequestID, false),
+	)
+	env := testcore.NewEnv(s.T(), opts...)
+
+	ctx := s.Context()
+	sid := testcore.RandomizeStr("sched-token-migration")
+	wid := testcore.RandomizeStr("sched-token-migration-wf")
+	wt := testcore.RandomizeStr("sched-token-migration-wt")
+
+	// The workflow blocks until signaled so the gate can be flipped after the callback token is written
+	// (at start) but before the completion is delivered.
+	blockingWorkflow := func(ctx workflow.Context) error {
+		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+		},
+		// SKIP keeps a single action running at a time, so the test controls completion timing.
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	_, err := env.FrontendClient().CreateSchedule(chasmContextFactory(ctx), &workflowservice.CreateScheduleRequest{
+		Namespace:  env.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(s.T(), err)
+
+	// Wait for the scheduler to start an action, and capture the started workflow ID.
+	var startedWFID string
+	env.Eventually(func() bool {
+		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if wfid := a.GetStartWorkflowResult().GetWorkflowId(); wfid != "" {
+				startedWFID = wfid
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 200*time.Millisecond, "scheduler should start a scheduled action")
+	env.NotEmpty(startedWFID)
+
+	// The completion callback the scheduler attached must be the legacy (bare-ref) format: it carries no
+	// embedded request ID, because the gate was OFF when the workflow started. The header key is stored
+	// lowercase, so read it via the case-insensitive nexus.Header accessor like the production code does.
+	var token string
+	for _, e := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: startedWFID}) {
+		for _, cb := range e.GetWorkflowExecutionStartedEventAttributes().GetCompletionCallbacks() {
+			if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+				token = nexus.Header(cb.GetNexus().GetHeader()).Get(commonnexus.CallbackTokenHeader)
+			}
+		}
+	}
+	env.NotEmpty(token, "scheduled workflow must carry an internal completion callback token")
+	_, reqID, decErr := chasm.UnpackNexusCallbackToken(token)
+	require.NoError(s.T(), decErr)
+	env.Empty(reqID, "gate OFF must write a legacy token with no embedded request ID")
+
+	// Flip the gate ON, then let the workflow complete. The completion is now read via the envelope-aware
+	// path, which must still decode the legacy token written above.
+	env.OverrideDynamicConfig(chasmscheduler.CallbackEncodedTokenWithRequestID, true)
+
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: startedWFID},
+		SignalName:        "continue",
+	})
+	require.NoError(s.T(), err)
+
+	// The scheduler records the action COMPLETED only if it successfully read the completion callback
+	// (a legacy token) under the now-enabled envelope path. Without the fallback this would never flip.
+	env.Eventually(func() bool {
+		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowResult().GetWorkflowId() == startedWFID &&
+				a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				return true
+			}
+		}
+		return false
+	}, 20*time.Second, 200*time.Millisecond,
+		"scheduler must observe completion of the legacy-token action after enabling the envelope gate")
 }

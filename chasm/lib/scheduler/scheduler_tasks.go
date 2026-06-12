@@ -287,7 +287,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 
 	// Pack this start's request ID into the callback token so completions are matched from the token
 	// (which survives continue-as-new) rather than the started workflow's callback state.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, r.config.EncodedToken(scheduler.Namespace))
 	if err != nil {
 		return nil, err
 	}
