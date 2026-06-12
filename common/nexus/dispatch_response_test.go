@@ -1,4 +1,4 @@
-package history
+package nexus
 
 import (
 	"testing"
@@ -25,7 +25,7 @@ func TestDispatchResponseToError_SyncSuccess(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.NoError(t, err)
 }
 
@@ -45,7 +45,7 @@ func TestDispatchResponseToError_AsyncSuccess(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.NoError(t, err)
 }
 
@@ -55,7 +55,7 @@ func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
 			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
@@ -76,7 +76,7 @@ func TestDispatchResponseToError_WorkerFailure(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var appErr *temporal.ApplicationError
@@ -105,7 +105,7 @@ func TestDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T)
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var appErr *temporal.ApplicationError
@@ -132,7 +132,7 @@ func TestDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var cancelErr *temporal.CanceledError
@@ -141,7 +141,7 @@ func TestDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
 
 func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{}
-	err := dispatchResponseToError(resp)
+	err := DispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
@@ -151,7 +151,7 @@ func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
 
 func TestStartOperationResponseToError_EmptyVariant(t *testing.T) {
 	resp := &nexuspb.StartOperationResponse{}
-	err := startOperationResponseToError(resp)
+	err := StartOperationResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
