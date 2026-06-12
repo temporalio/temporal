@@ -672,8 +672,6 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
 	require.NoError(t, err)
 	require.NotNil(t, mutation)
-	// StartedClock is now set inside AddActivityTaskStartedEvent, which is verified
-	// by the mock expectation above receiving expectedClock as the startedClock arg.
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
