@@ -4169,7 +4169,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
 		)
 	}
-	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
+	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
 		return serviceerror.NewInternal(
 			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
 		)
@@ -4183,10 +4183,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
 	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
-	tsi.Config.Enabled = !attr.GetDisabledAfterBound()
+	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
 
-	if attr.GetDisabledAfterBound() && tsi.GetFastForward() != nil {
-		tsi.FastForward.HasReached = true
+	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
+		tsi.FastForwardInfo.HasReached = true
 	}
 
 	ms.timeSkippingInfoUpdated = true
@@ -10023,9 +10023,9 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 	tsi := ms.executionInfo.TimeSkippingInfo
 
 	// clear fast forward if disabled or zero max_elapsed_duration
-	if !tsc.GetEnabled() || tsc.GetMaxElapsedDuration().AsDuration() <= 0 {
-		if tsi.FastForward != nil {
-			tsi.FastForward = nil
+	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
+		if tsi.FastForwardInfo != nil {
+			tsi.FastForwardInfo = nil
 		}
 		return
 	}
@@ -10034,7 +10034,7 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 	if propagatedTargetTime != nil {
 		targetTime = propagatedTargetTime.AsTime()
 	} else {
-		remaining := tsc.GetMaxElapsedDuration().AsDuration() - ms.accumulatedSkippedDuration()
+		remaining := tsc.GetFastForward().AsDuration() - ms.accumulatedSkippedDuration()
 		if remaining < 0 {
 			ms.logger.Error("fast forward remaining duration is less than 0, set target time to now",
 				tag.WorkflowNamespaceID(ms.GetExecutionInfo().NamespaceId),
@@ -10047,7 +10047,7 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 	}
 
 	// always install a fresh fast-forward bound
-	tsi.FastForward = &persistencespb.FastForwardInfo{
+	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
 		TargetTime:    timestamppb.New(targetTime),
 		SourceEventId: currentEventID,
 		HasReached:    false,
@@ -10215,8 +10215,8 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	}
 
 	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	if !tsi.GetFastForward().GetHasReached() && tsi.GetFastForward().GetTargetTime() != nil {
-		advance(tsi.GetFastForward().GetTargetTime().AsTime(), true)
+	if !tsi.GetFastForwardInfo().GetHasReached() && tsi.GetFastForwardInfo().GetTargetTime() != nil {
+		advance(tsi.GetFastForwardInfo().GetTargetTime().AsTime(), true)
 	}
 
 	// Cap any skip target at the run/execution timeout: never advance virtual time past

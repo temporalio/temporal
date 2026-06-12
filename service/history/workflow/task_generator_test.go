@@ -1449,7 +1449,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			tsi: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{
 					Enabled:     true,
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
@@ -1464,7 +1464,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			tsi: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{
 					Enabled:     true,
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
@@ -1478,7 +1478,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			tsi: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{
 					Enabled:     false,
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)}},
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime:    timestamppb.New(fastForwardTarget),
