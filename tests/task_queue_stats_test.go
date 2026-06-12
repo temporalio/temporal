@@ -759,7 +759,7 @@ func (s *TaskQueueStatsVersionSuite) requireWDVTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(label, s.Assertions, stats, expectation)
+	validateTaskQueueStats(s.T(), label, stats, expectation)
 }
 
 // requireLegacyTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition scenarios.
@@ -780,7 +780,7 @@ func (s *TaskQueueStatsVersionSuite) requireLegacyTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(label, s.Assertions, stats, expectation)
+	validateTaskQueueStats(s.T(), label, stats, expectation)
 }
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
@@ -1329,9 +1329,6 @@ func (s *taskQueueStatsContext) validateRates(
 	expectAddRate bool,
 	expectDispatchRate bool,
 ) {
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-	defer cancel()
-
 	req := &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1339,21 +1336,20 @@ func (s *taskQueueStatsContext) validateRates(
 		ReportStats:   true,
 	}
 
-	await.Require(ctx, s.tb, func(t *await.T) {
-		a := require.New(t)
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		label := "validateRates[" + tqType.String() + "]"
 
 		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
-		a.NoError(err)
-		a.NotNil(resp)
-		a.NotNil(resp.Stats)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.Stats)
 
 		if expectAddRate {
-			a.Greater(resp.Stats.TasksAddRate, float32(0),
+			require.Greater(t, resp.Stats.TasksAddRate, float32(0),
 				"%s: TasksAddRate should be > 0, got %f", label, resp.Stats.TasksAddRate)
 		}
 		if expectDispatchRate {
-			a.Greater(resp.Stats.TasksDispatchRate, float32(0),
+			require.Greater(t, resp.Stats.TasksDispatchRate, float32(0),
 				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
@@ -1365,10 +1361,7 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByType(
 	expectation taskQueueExpectations,
 	singlePartition bool,
 ) {
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-	defer cancel()
-
-	s.validateDescribeTaskQueueWithDefaultMode(ctx, tqName, tqType, expectation, singlePartition)
+	s.validateDescribeTaskQueueWithDefaultMode(tqName, tqType, expectation, singlePartition)
 
 	// The other two methods report *either* versioned or unversioned stats, so we need to
 	// half the expectations to account for that.
@@ -1376,12 +1369,11 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByType(
 	halfExpectation.BacklogCount /= 2
 	halfExpectation.MaxExtraTasks /= 2
 
-	s.validateDescribeTaskQueueWithEnhancedMode(ctx, tqName, tqType, halfExpectation)
-	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
+	s.validateDescribeTaskQueueWithEnhancedMode(tqName, tqType, halfExpectation)
+	s.validateDescribeWorkerDeploymentVersion(tqName, tqType, halfExpectation)
 }
 
 func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
-	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
@@ -1394,41 +1386,39 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+	resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Nil(resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
 	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	await.Require(ctx, s.tb, func(t *await.T) {
-		a := require.New(t)
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
 		req.ReportStats = true
 		//nolint:staticcheck // SA1019 deprecated
 		req.IncludeTaskQueueStatus = true
 		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
-		a.NoError(err)
-		a.NotNil(resp)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 
 		if singlePartition {
 			expected := expectation.BacklogCount / 2 // only reports unversioned
 			//nolint:staticcheck // SA1019 deprecated field
 			actual := resp.TaskQueueStatus.GetBacklogCountHint()
-			a.EqualValuesf(expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
+			require.EqualValuesf(t, expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
 
-		validateTaskQueueStats(label, a, resp.Stats, expectation)
+		validateTaskQueueStats(t, label, resp.Stats, expectation)
 		if s.usePriMatcher && expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
-			s.validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
+			s.validateTaskQueueStatsByPriority(t, label, resp.StatsByPriorityKey, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
-	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
@@ -1451,7 +1441,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 	}
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(s.Context(), req)
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Nil(resp.Stats, "stats should not be reported by default")
@@ -1459,37 +1449,34 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	await.Require(ctx, s.tb, func(t *await.T) {
-		a := require.New(t)
-
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		req.ReportStats = true
 		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
-		a.NoError(err)
-		a.NotNil(resp)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		a.Len(resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
+		require.Len(t, resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
-			a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
+			require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
 
 			info := v.GetTypesInfo()[int32(tqType)]
-			a.NotNil(info, "should have info for task queue type %s", tqType)
+			require.NotNil(t, info, "should have info for task queue type %s", tqType)
 			if info == nil {
 				return
 			}
-			a.NotNil(info.Stats, "should have stats for task queue type %s", tqType)
+			require.NotNil(t, info.Stats, "should have stats for task queue type %s", tqType)
 			if info.Stats == nil {
 				return
 			}
 
-			validateTaskQueueStats("DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", a, info.Stats, expectation)
+			validateTaskQueueStats(t, "DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", info.Stats, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
-	ctx context.Context,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation taskQueueExpectations,
@@ -1504,43 +1491,41 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 	}
 
 	// test stats are not reported by default (and therefore also not cached)
-	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), req)
 	s.NoError(err)
 	s.NotNil(resp)
 	for _, info := range resp.VersionTaskQueues {
 		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	await.Require(ctx, s.tb, func(t *await.T) {
-		a := require.New(t)
-
+	await.Require(s.Context(), s.tb, func(t *await.T) {
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(t.Context(), req)
-		a.NoError(err)
-		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
+		require.NoError(t, err)
+		require.Len(t, resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
-				validateTaskQueueStats(label, a, info.Stats, expectation)
+				validateTaskQueueStats(t, label, info.Stats, expectation)
 				if s.usePriMatcher && expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
-					s.validateTaskQueueStatsByPriority(label, a, info.StatsByPriorityKey, expectation)
+					s.validateTaskQueueStatsByPriority(t, label, info.StatsByPriorityKey, expectation)
 				}
 				return
 			}
 		}
-		a.Failf("Task queue %s of type %s not found in response", tqName, tqType)
+		require.Failf(t, "task queue not found", "Task queue %s of type %s not found in response", tqName, tqType)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *taskQueueStatsContext) validateTaskQueueStatsByPriority(
+	t require.TestingT,
 	label string,
-	a *require.Assertions,
 	stats map[int32]*taskqueuepb.TaskQueueStats,
 	taskQueueExpectation taskQueueExpectations,
 ) {
-	a.Len(stats, s.maxPriority, "%s: stats should contain %d priorities", label, s.maxPriority)
+	require.Len(t, stats, s.maxPriority, "%s: stats should contain %d priorities", label, s.maxPriority)
 
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
@@ -1549,7 +1534,12 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 				return
 			}
 		}
-		a.Failf("%s: should have found at least one non-zero backlog count with any non-zero rate across priorities", label)
+		require.Failf(
+			t,
+			"no non-zero priority stats found",
+			"%s: should have found at least one non-zero backlog count with any non-zero rate across priorities",
+			label,
+		)
 	}
 
 	var accBacklogCount int
@@ -1560,11 +1550,11 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 			priExpectation.BacklogCount *= 2 // zero priority translates to default priority 3
 		}
 
-		a.Containsf(stats, i, "%s: stats should contain priority %d", label, i)
-		validateTaskQueueStats(fmt.Sprintf("%s_Pri[%d]", label, i), a, stats[i], priExpectation)
+		require.Containsf(t, stats, i, "%s: stats should contain priority %d", label, i)
+		validateTaskQueueStats(t, fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
-	a.GreaterOrEqualf(taskQueueExpectation.BacklogCount, accBacklogCount,
+	require.GreaterOrEqualf(t, taskQueueExpectation.BacklogCount, accBacklogCount,
 		"%s: accumulated backlog count from all priorities should be at least %d, got %d",
 		label, taskQueueExpectation.BacklogCount, accBacklogCount)
 }
@@ -1579,38 +1569,38 @@ func (s *taskQueueStatsContext) deploymentOptions(tqName string) *deploymentpb.W
 }
 
 func validateTaskQueueStatsStrict(
+	t require.TestingT,
 	label string,
-	a *require.Assertions,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
-	a.Equal(int64(expectation.BacklogCount), stats.ApproximateBacklogCount,
+	require.Equal(t, int64(expectation.BacklogCount), stats.ApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
-	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	require.Equal(t, stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }
 
 func validateTaskQueueStats(
+	t require.TestingT,
 	label string,
-	a *require.Assertions,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	a.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
+	require.GreaterOrEqual(t, stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	a.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
+	require.LessOrEqual(t, stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
 		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
 
-	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	require.Equal(t, stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }
