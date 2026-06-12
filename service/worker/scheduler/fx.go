@@ -117,7 +117,11 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		migrateWithRunningWorkflows := func() bool {
 			return s.migrateWithRunningWorkflows(nsName)
 		}
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, migrateWithRunningWorkflows)
+		return schedulerWorkflowWithDeps(ctx, args, schedulerDeps{
+			specBuilder:                 s.specBuilder,
+			enableCHASMMigration:        enableMigration,
+			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 

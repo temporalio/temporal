@@ -227,12 +227,30 @@ var (
 	errUpdateConflict = errors.New("conflicting concurrent update")
 )
 
-func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	disabled := func() bool { return false }
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), disabled, disabled)
+// schedulerDeps bundles the non-deterministic dependencies threaded into the scheduler
+// workflow by fx.go (or test code). The closures are re-evaluated every iteration inside
+// the "tweakables" MutableSideEffect and must not be read elsewhere in workflow code.
+// Nil fields default to a disabled/zero implementation.
+type schedulerDeps struct {
+	specBuilder                 *SpecBuilder
+	enableCHASMMigration        func() bool
+	migrateWithRunningWorkflows func() bool
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
+func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	return schedulerWorkflowWithDeps(ctx, args, schedulerDeps{})
+}
+
+func schedulerWorkflowWithDeps(ctx workflow.Context, args *schedulespb.StartScheduleArgs, deps schedulerDeps) error {
+	if deps.specBuilder == nil {
+		deps.specBuilder = NewSpecBuilder()
+	}
+	if deps.enableCHASMMigration == nil {
+		deps.enableCHASMMigration = func() bool { return false }
+	}
+	if deps.migrateWithRunningWorkflows == nil {
+		deps.migrateWithRunningWorkflows = func() bool { return false }
+	}
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -242,9 +260,9 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
 		}),
-		specBuilder:                 specBuilder,
-		enableCHASMMigration:        enableCHASMMigration,
-		migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+		specBuilder:                 deps.specBuilder,
+		enableCHASMMigration:        deps.enableCHASMMigration,
+		migrateWithRunningWorkflows: deps.migrateWithRunningWorkflows,
 	}
 	return scheduler.run()
 }
