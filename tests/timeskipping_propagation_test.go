@@ -1609,17 +1609,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 }
 
 // (TestTSPInChildWf_PropagationDisabled removed: DisableChildPropagation is not yet in the API)
-//
 // Scenario:
 //   - Parent starts with TimeSkippingConfig{Enabled: true, DisableChildPropagation: true}.
 //   - Parent issues StartTimer(t1, 1h) → idle → skips 1h → parent.Accum = 1h.
 //   - t1 fires. Parent issues StartChild(child) + StartTimer(t2, 1h). The child gets no
-//     time skipping, so its own timer is wall-short: child issues StartTimer(tc, 2s),
-//     waits it out in real time, completes.
-//   - Child completed → parent idle on t2 → skips 1h → t2 fires → parent completes.
+//     TSC but its TSI has accumulated skipped duration of 1hour.
 //
 // End-state assertions:
-//   - parent.Accum == 2h; parent config retains Enabled + DisableChildPropagation.
-//   - child MS has NO TimeSkippingInfo.
-//   - initiated event: TimeSkippingConfig == nil, InitialSkippedDuration == 0.
-//   - child's start time is wall time, NOT shifted by the parent's 1h skip.
