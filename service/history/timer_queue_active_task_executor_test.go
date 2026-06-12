@@ -2415,9 +2415,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wor
 	pms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}},
-		FastForward: &persistencespb.FastForwardInfo{
+			Enabled:     true,
+			FastForward: durationpb.New(time.Hour)},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2457,7 +2457,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Con
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{Enabled: false},
-		FastForward: &persistencespb.FastForwardInfo{
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2500,7 +2500,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Has
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		FastForward: &persistencespb.FastForwardInfo{
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 			HasReached:    true,
@@ -2524,7 +2524,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		FastForward: &persistencespb.FastForwardInfo{
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 0,
 		},
@@ -2547,7 +2547,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		FastForward: &persistencespb.FastForwardInfo{
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 2, // fast-forward was reconfigured; old task carries EventID=1.
 		},
@@ -2570,9 +2570,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Hap
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}},
-		FastForward: &persistencespb.FastForwardInfo{
+			Enabled:     true,
+			FastForward: durationpb.New(time.Hour)},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2598,7 +2598,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Hap
 	tsi := loaded.GetExecutionInfo().GetTimeSkippingInfo()
 	s.Require().NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled(), "happy path must flip Enabled=false")
-	s.True(tsi.GetFastForward().GetHasReached(), "happy path must set HasReached=true")
+	s.True(tsi.GetFastForwardInfo().GetHasReached(), "happy path must set HasReached=true")
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask() {

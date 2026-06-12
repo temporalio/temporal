@@ -14,28 +14,41 @@ import (
 // affecting the source.
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
-) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
+) (*workflowpb.TimeSkippingConfig, *workflowpb.TimeSkippingStatePropagation) {
 	var tsc *workflowpb.TimeSkippingConfig
 	if cfg := source.GetTimeSkippingInfo().GetConfig(); cfg != nil {
 		tsc = common.CloneProto(cfg)
 	}
-	return tsc, durationpb.New(accumulatedSkippedDuration(source))
+	stateProp := &workflowpb.TimeSkippingStatePropagation{
+		InitialSkippedDuration: durationpb.New(accumulatedSkippedDuration(source)),
+	}
+	if ff := source.GetTimeSkippingInfo().GetFastForwardInfo(); ff != nil && !ff.GetHasReached() {
+		stateProp.FastForwardTargetTime = ff.GetTargetTime()
+	}
+	return tsc, stateProp
 }
 
 // propagateTimeSkippingToChild makes sure the start time of the child workflow execution
 // is shifted forward by the accumulated skipped duration.
-// MaxElapsedDuration/FastForward is never propagated to children.
+// FastForward is never propagated to children.
 func propagateTimeSkippingToChild(
 	source *persistencespb.WorkflowExecutionInfo,
-) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
-	initialSkip := durationpb.New(accumulatedSkippedDuration(source))
+) (*workflowpb.TimeSkippingConfig, *workflowpb.TimeSkippingStatePropagation) {
+	accum := accumulatedSkippedDuration(source)
+	var stateProp *workflowpb.TimeSkippingStatePropagation
+	if accum > 0 {
+		stateProp = &workflowpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(accum),
+		}
+	}
+
 	enabled := source.GetTimeSkippingInfo().GetConfig().GetEnabled()
 	if !enabled {
-		return nil, initialSkip
+		return nil, stateProp
 	}
 	return &workflowpb.TimeSkippingConfig{
 		Enabled: enabled,
-	}, initialSkip
+	}, stateProp
 }
 
 func accumulatedSkippedDuration(source *persistencespb.WorkflowExecutionInfo) time.Duration {

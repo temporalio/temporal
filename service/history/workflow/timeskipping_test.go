@@ -13,8 +13,8 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		return &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(3 * time.Hour)},
+					Enabled:     true,
+					FastForward: durationpb.New(3 * time.Hour),
 				},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
@@ -25,7 +25,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		tsc, initialSkip := propagateTimeSkippingToNextRun(newSource())
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
-		s.Equal(3*time.Hour, tsc.GetMaxElapsedDuration().AsDuration())
+		s.Equal(3*time.Hour, tsc.GetFastForward().AsDuration())
 		s.Equal(time.Hour, initialSkip.AsDuration())
 	})
 
@@ -43,7 +43,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		tsc, initialSkip := propagateTimeSkippingToChild(newSource())
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
-		s.Nil(tsc.GetMaxElapsedDuration(), "MaxElapsedDuration never cascades into children")
+		s.Nil(tsc.GetFastForward(), "MaxElapsedDuration never cascades into children")
 		s.Equal(time.Hour, initialSkip.AsDuration())
 	})
 
@@ -54,7 +54,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		tsc.Enabled = false
 		tsc.Bound = nil
 		s.True(src.GetTimeSkippingInfo().GetConfig().GetEnabled(), "source Enabled must not be mutated")
-		s.Equal(3*time.Hour, src.GetTimeSkippingInfo().GetConfig().GetMaxElapsedDuration().AsDuration(),
+		s.Equal(3*time.Hour, src.GetTimeSkippingInfo().GetConfig().GetFastForward().AsDuration(),
 			"source MaxElapsedDuration must not be mutated")
 	})
 }
