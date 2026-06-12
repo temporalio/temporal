@@ -104,7 +104,7 @@ func TestBatchPayload_mergeInto(t *testing.T) {
 	}
 	src.mergeInto(dst, counts)
 
-	require.Equal(t, 2, len(dst))
+	require.Len(t, dst, 2)
 	require.Len(t, dst[1]["a"], 1)
 	require.Len(t, dst[1]["b"], 2)
 	require.Len(t, dst[2]["c"], 1)
