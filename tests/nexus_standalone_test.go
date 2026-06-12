@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -70,7 +71,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		}
 		testSearchAttributes := &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
-				"CustomKeywordField": payload.EncodeString("test-value"),
+				"CustomKeywordField": sadefs.MustEncodeValue("test-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			},
 		}
 		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
@@ -1240,7 +1241,7 @@ func (s *NexusStandaloneTestSuite) TestListStandaloneNexusOperation() {
 
 		testSA := &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
-				"CustomKeywordField": payload.EncodeString("list-sa-value"),
+				"CustomKeywordField": sadefs.MustEncodeValue("list-sa-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			},
 		}
 		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
@@ -1632,7 +1633,7 @@ func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
 				Endpoint:    endpointName,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("count-sa-value"),
+						"CustomKeywordField": sadefs.MustEncodeValue("count-sa-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			})

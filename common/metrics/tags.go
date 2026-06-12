@@ -570,17 +570,6 @@ var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
 var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
 var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
-// Closed enum of reasons used with DroppedTasksCounter.
-// new failure modes should be added here rather than passed as ad-hoc strings.
-var (
-	DroppedTaskReasonNotFoundTag      = Tag{Key: reason, Value: "not_found"}
-	DroppedTaskReasonInternalTag      = Tag{Key: reason, Value: "internal_error"}
-	DroppedTaskReasonDataLossTag      = Tag{Key: reason, Value: "data_loss"}
-	DroppedTaskReasonExpiredReadTag   = Tag{Key: reason, Value: "expired_read"}
-	DroppedTaskReasonExpiredMemoryTag = Tag{Key: reason, Value: "expired_memory"}
-	DroppedTaskReasonInvalidTag       = Tag{Key: reason, Value: "invalid"}
-)
-
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {
 	if len(value) == 0 {

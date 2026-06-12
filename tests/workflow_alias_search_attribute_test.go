@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
@@ -181,7 +180,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"WorkflowVersioningBehavior": payload.EncodeString("user-defined"),
+			"WorkflowVersioningBehavior": sadefs.MustEncodeValue("user-defined", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 

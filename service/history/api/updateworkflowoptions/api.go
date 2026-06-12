@@ -123,21 +123,6 @@ func Invoke(
 	return ret, nil
 }
 
-func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig) error {
-	if !cfg.GetEnabled() {
-		if cfg.GetBound() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
-		}
-		return nil
-	}
-	if b, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
-		if b.MaxElapsedDuration.AsDuration() < 0 {
-			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
-		}
-	}
-	return nil
-}
-
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
 // and applies the changes to the mutable state. Returns the merged options and a boolean indicating if there were any changes.
 func MergeAndApply(
