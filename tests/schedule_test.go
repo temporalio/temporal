@@ -23,6 +23,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -113,6 +114,9 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { testCreatesCHASMSentinel(t, newContext) })
 	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { testSkipsCHASMSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { testUpdateScheduleMemoRejected(t, newContext) })
+	t.Run("TestScheduleVersionCeiling", func(t *testing.T) { testScheduleVersionCeiling(t, newContext) })
+	t.Run("TestScheduleVersionCeilingAppearsMidRun", func(t *testing.T) { testScheduleVersionCeilingAppearsMidRun(t, newContext) })
+	t.Run("TestScheduleVersionCeilingMemoSize", func(t *testing.T) { testScheduleVersionCeilingMemoSize(t, newContext) })
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
@@ -1156,15 +1160,12 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 	s.Len(resp.GetStartTime(), 5)
 }
 
-func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
-
-	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
-
-	sid := "sched-test-limit-memo-size"
-	wid := "sched-test-limit-memo-size-wf"
-	wt := "sched-test-limit-memo-size-wt"
-
+// createOversizedSpecSchedule registers a no-op workflow for wt and creates a schedule whose
+// spec carries SpecFieldLengthLimit*2 entries in each spec field, so tests can assert how the
+// LimitMemoSpecSize gate trims (or, under a version ceiling, keeps) the visibility memo.
+// Manual triggers still run when the schedule is created paused.
+func createOversizedSpecSchedule(t *testing.T, s *testcore.TestEnv, newContext contextFactory, sid, wid, wt string, paused bool) {
+	specSize := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit * 2
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{},
 		Action: &schedulepb.ScheduleAction{
@@ -1176,11 +1177,9 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 				},
 			},
 		},
+		State: &schedulepb.ScheduleState{Paused: paused},
 	}
-
-	// Set up a schedule with a large number of spec items that should be trimmed in
-	// the memo block.
-	for i := 0; i < expectedLimit*2; i++ {
+	for i := range specSize {
 		schedule.Spec.Interval = append(schedule.Spec.Interval, &schedulepb.IntervalSpec{
 			Interval: durationpb.New(time.Duration(i+1) * time.Second),
 		})
@@ -1202,21 +1201,28 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 		})
 	}
 
-	// Create the schedule.
-	req := &workflowservice.CreateScheduleRequest{
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
-	}
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error { return nil },
-		workflow.RegisterOptions{Name: wt},
-	)
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, req)
-	s.NoError(err)
+	})
+	require.NoError(t, err)
+}
+
+func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
+
+	sid := "sched-test-limit-memo-size"
+	createOversizedSpecSchedule(t, s, newContext, sid,
+		"sched-test-limit-memo-size-wf", "sched-test-limit-memo-size-wt", false)
 
 	// Verify the memo field length limit was enforced.
 	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
@@ -1225,6 +1231,238 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	require.Len(t, spec.GetInterval(), expectedLimit)
 	require.Len(t, spec.GetStructuredCalendar(), expectedLimit)
 	require.Len(t, spec.GetExcludeStructuredCalendar(), expectedLimit)
+}
+
+func testScheduleVersionCeiling(t *testing.T, newContext contextFactory) {
+	// worker.schedulerVersionCeiling clamps the V1 scheduler's recorded version.
+	// At ceiling 7 (below LimitMemoSpecSize=11) the visibility memo does not trim spec
+	// fields (both the frontend-written initial memo and the workflow's rewrite honor the
+	// ceiling) while basic operation (create/describe/trigger) keeps working. Gate-level
+	// equivalence of the clamped workflow is covered by the unit tests in
+	// service/worker/scheduler/version_ceiling_test.go.
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.SchedulerVersionCeiling, 7))...)
+
+	specSize := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit * 2
+
+	sid := "sched-test-version-ceiling"
+	// Paused so the short intervals in the oversized spec don't fire on their own.
+	createOversizedSpecSchedule(t, s, newContext, sid,
+		"sched-test-version-ceiling-wf", "sched-test-version-ceiling-wt", true)
+	ctx := newContext(s.Context())
+
+	// Under the ceiling the LimitMemoSpecSize gate is off: the memo keeps all spec entries
+	// (without the ceiling this same input shows SpecFieldLengthLimit per field, as
+	// testLimitMemoSpecSize asserts).
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return len(e.GetInfo().GetSpec().GetInterval()) == specSize
+	})
+	require.NotNil(t, entry)
+	spec := entry.GetInfo().GetSpec()
+	require.Len(t, spec.GetInterval(), specSize)
+	require.Len(t, spec.GetStructuredCalendar(), specSize)
+	require.Len(t, spec.GetExcludeStructuredCalendar(), specSize)
+
+	// Trigger-immediately fires under the clamp.
+	_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && resp.GetInfo().GetActionCount() >= 1
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// The persisted "tweakables" markers must record the clamped version. This attributes
+	// the clamp to the workflow layer (the memo assertion above is also satisfiable by the
+	// frontend's creation-time clamp alone) and pins the actual server-persisted wire shape,
+	// json/plain payloads with Version=7, that a v1.23.1 peer would decode on replay.
+	require.Eventually(t, func() bool {
+		versions := tweakablesVersionsFromHistory(s.GetHistory(s.Namespace().String(),
+			&commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid}))
+		if len(versions) == 0 {
+			return false
+		}
+		for _, v := range versions {
+			if v != 7 {
+				return false
+			}
+		}
+		return true
+	}, 15*time.Second, 500*time.Millisecond, "workflow history must record clamped json/plain tweakables markers")
+}
+
+// tweakablesVersionsFromHistory extracts the recorded TweakablePolicies.Version from every
+// "tweakables" MutableSideEffect marker. Markers whose value payload is not json/plain (the
+// only encoding pre-1.24 binaries decode) are skipped, so an accidental encoding change
+// surfaces as "no versions found".
+func tweakablesVersionsFromHistory(events []*historypb.HistoryEvent) []int64 {
+	dc := converter.GetDefaultDataConverter()
+	var versions []int64
+	for _, event := range events {
+		marker := event.GetMarkerRecordedEventAttributes()
+		if marker.GetMarkerName() != "MutableSideEffect" {
+			continue
+		}
+		ids := marker.GetDetails()["side-effect-id"]
+		if ids == nil || len(ids.Payloads) == 0 {
+			continue
+		}
+		var sideEffectID string
+		if dc.FromPayload(ids.Payloads[0], &sideEffectID) != nil || !strings.HasPrefix(sideEffectID, "tweakables") {
+			continue
+		}
+		// The marker data holds [mutable-side-effect id, wrapped Payloads of the value].
+		data := marker.GetDetails()["data"]
+		if data == nil || len(data.Payloads) < 2 {
+			continue
+		}
+		var wrapped commonpb.Payloads
+		if dc.FromPayload(data.Payloads[1], &wrapped) != nil || len(wrapped.Payloads) == 0 {
+			continue
+		}
+		value := wrapped.Payloads[0]
+		if string(value.Metadata["encoding"]) != "json/plain" {
+			continue
+		}
+		var policies struct{ Version int64 }
+		if dc.FromPayload(value, &policies) != nil {
+			continue
+		}
+		versions = append(versions, policies.Version)
+	}
+	return versions
+}
+
+func testScheduleVersionCeilingAppearsMidRun(t *testing.T, newContext contextFactory) {
+	// The ceiling closure is re-read from dynamic config every workflow iteration: a value
+	// set at runtime (the real migration-cell flow, where the namespace already exists when
+	// the operator sets the ceiling) must show up as a new clamped tweakables marker with no restarts.
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...) // no ceiling at boot
+
+	sid := "sched-test-version-ceiling-flip"
+	createOversizedSpecSchedule(t, s, newContext, sid, sid+"-wf", sid+"-wt", true)
+	ctx := newContext(s.Context())
+	wfExec := &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid}
+
+	trigger := func() {
+		_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch: &schedulepb.SchedulePatch{
+				TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+			},
+			Identity:  "test",
+			RequestId: uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+
+	containsVersion := func(want int64) func() bool {
+		return func() bool {
+			for _, v := range tweakablesVersionsFromHistory(s.GetHistory(s.Namespace().String(), wfExec)) {
+				if v == want {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	// Unclamped: the workflow records the current version.
+	trigger()
+	require.Eventually(t, containsVersion(12), 15*time.Second, 500*time.Millisecond,
+		"unclamped workflow must record the current version")
+
+	// Clamp at runtime; the next woken iteration must record the clamped version.
+	cleanup := s.OverrideDynamicConfig(dynamicconfig.SchedulerVersionCeiling, 7)
+	defer cleanup()
+	trigger()
+	require.Eventually(t, containsVersion(7), 15*time.Second, 500*time.Millisecond,
+		"runtime ceiling must produce a clamped marker on the next iteration")
+}
+
+func testScheduleVersionCeilingMemoSize(t *testing.T, newContext contextFactory) {
+	// Reproduces faithful pre-v11 behavior: ceiling 7 turns the LimitMemoSpecSize(11) memo
+	// trimming off, so a schedule whose untrimmed list-info memo exceeds MemoSizeLimitError
+	// gets its scheduler workflow TERMINATED by the server's modify-workflow-properties size
+	// check on the first clamped memo rewrite (workflow-side UpsertMemo errors are only
+	// logged). This is not a clamp-introduced defect: the actual pre-v11 binary the clamp
+	// emulates behaves identically, which is why equivalence requires it. Operators must
+	// audit schedules whose untrimmed memo approaches the limit before clamping below 11.
+	// This follows the realistic ordering: the schedule is created (and its memo trimmed)
+	// at the current version; the operator sets the ceiling afterwards.
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.MemoSizeLimitError, 2*1024))...)
+
+	sid := "sched-test-version-ceiling-memo"
+	wid, wt := sid+"-wf", sid+"-wt"
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+	// Large enough that the untrimmed list-info memo exceeds the lowered 4KB limit while
+	// the v11-trimmed memo (10 entries) stays far below it.
+	for i := range 500 {
+		schedule.Spec.Interval = append(schedule.Spec.Interval, &schedulepb.IntervalSpec{
+			Interval: durationpb.New(time.Duration(i+1) * time.Second),
+		})
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err, "creation succeeds: the v11 (LimitMemoSpecSize) memo trim keeps it under the limit")
+
+	// Operator sets the ceiling; the next woken iteration rewrites the memo untrimmed.
+	cleanup := s.OverrideDynamicConfig(dynamicconfig.SchedulerVersionCeiling, 7)
+	defer cleanup()
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+		})
+		return err == nil &&
+			resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 20*time.Second, 500*time.Millisecond,
+		"the oversized untrimmed memo rewrite terminates the scheduler workflow (faithful pre-v11 behavior)")
 }
 
 func testCountSchedules(t *testing.T, newContext contextFactory) {
