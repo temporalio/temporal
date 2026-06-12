@@ -1,8 +1,9 @@
 # Reviews PRs from opted-in team members with Claude.
 #
 # Uses `pull_request_target` so the workflow has access to secrets even when
-# a PR is opened from a fork. This is safe ONLY because the `check-membership`
-# job gates the review job behind active membership in a trusted team.
+# a PR is opened from a fork. This is safe ONLY because the
+# `check-review-eligibility` job gates the review job behind trusted eligibility
+# checks.
 name: Claude review for opted-in team PRs
 
 on:
@@ -26,7 +27,7 @@ env:
   REVIEW_OPT_OUT_LABEL: opt-out
 
 jobs:
-  check-membership:
+  check-review-eligibility:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
@@ -147,8 +148,8 @@ jobs:
           echo "should_review=${should_review}" >> "$GITHUB_OUTPUT"
 
   review:
-    needs: check-membership
-    if: needs.check-membership.outputs.should_review == 'true'
+    needs: check-review-eligibility
+    if: needs.check-review-eligibility.outputs.should_review == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
@@ -161,7 +162,7 @@ jobs:
           # pull_request_target defaults to the base ref; explicitly check out
           # the PR head so the review sees the proposed changes. Safe here
           # because the team-membership gate above limits this to trusted authors.
-          ref: ${{ needs.check-membership.outputs.head_sha }}
+          ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
