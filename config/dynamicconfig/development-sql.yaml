@@ -73,3 +73,7 @@ history.enableChasm:
   - value: true
 activity.enableStandalone:
   - value: true
+nexusoperation.enableStandalone:
+  - value: true
+history.enableChasmCallbacks:
+  - value: true

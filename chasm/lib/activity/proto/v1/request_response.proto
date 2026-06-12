@@ -3,6 +3,7 @@ syntax = "proto3";
 package temporal.server.chasm.lib.activity.proto.v1;
 
 import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/api/activity/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
@@ -10,7 +11,14 @@ message StartActivityExecutionRequest {
   string namespace_id = 1;
 
   temporal.api.workflowservice.v1.StartActivityExecutionRequest frontend_request = 2;
+
+  // Server-only metadata describing how this activity was invoked (e.g. by a Nexus operation
+  // completion via a worker callback). This is a sibling of frontend_request, NOT part of it: the
+  // frontend handler never populates it, so clients cannot set it. Only server-internal callers
+  // set it, and it is surfaced read-only on PollActivityTaskQueueResponse.
+  temporal.api.activity.v1.ActivityInvocationSource invocation_source = 3;
 }
+
 
 message StartActivityExecutionResponse {
   temporal.api.workflowservice.v1.StartActivityExecutionResponse frontend_response = 1;

@@ -142,6 +142,7 @@ func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
 func NewStandaloneActivity(
 	ctx chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
+	invocationSource *apiactivitypb.ActivityInvocationSource,
 ) (*Activity, error) {
 	visibility := chasm.NewVisibilityWithData(
 		ctx,
@@ -160,6 +161,7 @@ func NewStandaloneActivity(
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
 			StartDelay:             request.GetStartDelay(),
+			InvocationSource:       invocationSource,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -247,6 +249,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
 		CurrentAttemptScheduledTime: a.attemptScheduleTime(attempt),
+		InvocationSource:            a.GetInvocationSource(),
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),

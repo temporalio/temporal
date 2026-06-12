@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	apiactivitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -51,8 +52,14 @@ func (c invokeWorkerCallback) Invoke(
 	header := c.callback.GetHeader()
 	targetNamespaceName := header[commonnexus.WorkerCallbackTargetNamespaceHeader]
 	targetActivityType := header[commonnexus.WorkerCallbackTargetActivityHeader]
+	targetActivityId := header[commonnexus.WorkerCallbackTargetActivityIDHeader]
 	targetTaskQueue := header[commonnexus.WorkerCallbackTargetTaskQueueHeader]
-	if targetNamespaceName == "" || targetActivityType == "" || targetTaskQueue == "" {
+	// Server-only invocation metadata describing the Nexus operation whose completion triggered this
+	// worker callback (set by nexusoperation.addCompletionCallbacks). Optional: its absence does not
+	// fail the callback.
+	nexusService := header[commonnexus.WorkerCallbackNexusServiceHeader]
+	nexusOperation := header[commonnexus.WorkerCallbackNexusOperationHeader]
+	if targetNamespaceName == "" || targetActivityType == "" || targetTaskQueue == "" || targetActivityId == "" {
 		// Misconfigured callback: nothing a retry can fix. Fail permanently.
 		err := logInternalError(h.logger, "worker callback missing required header", nil)
 		return invocationResultFail{err}
@@ -85,6 +92,7 @@ func (c invokeWorkerCallback) Invoke(
 			err := logInternalError(h.logger, fmt.Sprintf("expected *commonpb.Payload result, got %T", c.completion.Result), nil)
 			return invocationResultFail{err}
 		}
+
 		input = &commonpb.Payloads{Payloads: []*commonpb.Payload{p}}
 	}
 
@@ -101,7 +109,7 @@ func (c invokeWorkerCallback) Invoke(
 	// SECURITY: We are bypassing all sorts of validations for SAA found in activity/frontend.go.
 	startReq := &workflowservice.StartActivityExecutionRequest{
 		Namespace:    targetNamespaceName,
-		ActivityId:   idempotencyKey,
+		ActivityId:   targetActivityId,
 		RequestId:    idempotencyKey,
 		ActivityType: &commonpb.ActivityType{Name: targetActivityType},
 		TaskQueue: &taskqueuepb.TaskQueue{
@@ -125,6 +133,15 @@ func (c invokeWorkerCallback) Invoke(
 		// execution rather than spawning duplicates.
 		IdReusePolicy:    enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		IdConflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
+		Header: &commonpb.Header{
+			// PROTOTYPE: This should instead be an option on the activitypb.StartActivityExecutionRequest,
+			// stored in the activity state, and then returned as proto in the poll activity task queue response
+			Fields: map[string]*commonpb.Payload{
+				commonnexus.WorkerCallbackBrandHeader:    {Data: []byte("true"), Metadata: map[string][]byte{"encoding": []byte("binary/plain")}},
+				commonnexus.WorkerCallbackTypeHeader:     {Data: []byte("nexus-operation"), Metadata: map[string][]byte{"encoding": []byte("binary/plain")}},
+				commonnexus.WorkerCallbackMetadataHeader: {Data: []byte(header[commonnexus.WorkerCallbackMetadataHeader]), Metadata: map[string][]byte{"encoding": []byte("json/plain")}},
+			},
+		},
 	}
 
 	// Dispatch the activity.
@@ -147,10 +164,25 @@ func (c invokeWorkerCallback) Invoke(
 			"worker callback dispatch requires an ActivityServiceClient, but none is configured", nil)}
 	}
 
+	// Server-only metadata surfaced read-only to the worker on the activity poll response. It is set
+	// as a sibling of FrontendRequest (never inside it), so clients cannot spoof it.
+	var invocationSource *apiactivitypb.ActivityInvocationSource
+	if nexusService != "" || nexusOperation != "" {
+		invocationSource = &apiactivitypb.ActivityInvocationSource{
+			Variant: &apiactivitypb.ActivityInvocationSource_Nexus{
+				Nexus: &apiactivitypb.NexusInvocation{
+					Service:   nexusService,
+					Operation: nexusOperation,
+				},
+			},
+		}
+	}
+
 	log.Printf("Calling StartActivityExecution...")
 	_, err = h.activityClient.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
-		NamespaceId:     targetNamespace.ID().String(),
-		FrontendRequest: startReq,
+		NamespaceId:      targetNamespace.ID().String(),
+		FrontendRequest:  startReq,
+		InvocationSource: invocationSource,
 	})
 	if err != nil {
 		// A retried side-effect task re-issues the same RequestId, so the engine normally dedupes

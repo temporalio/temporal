@@ -391,6 +391,9 @@ message RecordActivityTaskStartedResponse {
   int64 start_version = 12;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 13;
+  // Server-only metadata describing how this activity was invoked (e.g. by a Nexus operation
+  // completion via a worker callback). Surfaced read-only on PollActivityTaskQueueResponse.
+  temporal.api.activity.v1.ActivityInvocationSource invocation_source = 14;
 }
 
 message RespondWorkflowTaskCompletedRequest {

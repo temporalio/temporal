@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v11 "go.temporal.io/api/activity/v1"
 	v1 "go.temporal.io/api/workflowservice/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -27,8 +28,13 @@ type StartActivityExecutionRequest struct {
 	state           protoimpl.MessageState            `protogen:"open.v1"`
 	NamespaceId     string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	FrontendRequest *v1.StartActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Server-only metadata describing how this activity was invoked (e.g. by a Nexus operation
+	// completion via a worker callback). This is a sibling of frontend_request, NOT part of it: the
+	// frontend handler never populates it, so clients cannot set it. Only server-internal callers
+	// set it, and it is surfaced read-only on PollActivityTaskQueueResponse.
+	InvocationSource *v11.ActivityInvocationSource `protobuf:"bytes,3,opt,name=invocation_source,json=invocationSource,proto3" json:"invocation_source,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StartActivityExecutionRequest) Reset() {
@@ -71,6 +77,13 @@ func (x *StartActivityExecutionRequest) GetNamespaceId() string {
 func (x *StartActivityExecutionRequest) GetFrontendRequest() *v1.StartActivityExecutionRequest {
 	if x != nil {
 		return x.FrontendRequest
+	}
+	return nil
+}
+
+func (x *StartActivityExecutionRequest) GetInvocationSource() *v11.ActivityInvocationSource {
+	if x != nil {
+		return x.InvocationSource
 	}
 	return nil
 }
@@ -579,10 +592,11 @@ var File_temporal_server_chasm_lib_activity_proto_v1_request_response_proto prot
 
 const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Btemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xad\x01\n" +
+	"Btemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a&temporal/api/activity/v1/message.proto\"\x8e\x02\n" +
 	"\x1dStartActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartActivityExecutionRequestR\x0ffrontendRequest\"\x8e\x01\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartActivityExecutionRequestR\x0ffrontendRequest\x12_\n" +
+	"\x11invocation_source\x18\x03 \x01(\v22.temporal.api.activity.v1.ActivityInvocationSourceR\x10invocationSource\"\x8e\x01\n" +
 	"\x1eStartActivityExecutionResponse\x12l\n" +
 	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.api.workflowservice.v1.StartActivityExecutionResponseR\x10frontendResponse\"\xb3\x01\n" +
 	" DescribeActivityExecutionRequest\x12!\n" +
@@ -635,30 +649,32 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTy
 	(*DeleteActivityExecutionRequest)(nil),           // 10: temporal.server.chasm.lib.activity.proto.v1.DeleteActivityExecutionRequest
 	(*DeleteActivityExecutionResponse)(nil),          // 11: temporal.server.chasm.lib.activity.proto.v1.DeleteActivityExecutionResponse
 	(*v1.StartActivityExecutionRequest)(nil),         // 12: temporal.api.workflowservice.v1.StartActivityExecutionRequest
-	(*v1.StartActivityExecutionResponse)(nil),        // 13: temporal.api.workflowservice.v1.StartActivityExecutionResponse
-	(*v1.DescribeActivityExecutionRequest)(nil),      // 14: temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
-	(*v1.DescribeActivityExecutionResponse)(nil),     // 15: temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
-	(*v1.PollActivityExecutionRequest)(nil),          // 16: temporal.api.workflowservice.v1.PollActivityExecutionRequest
-	(*v1.PollActivityExecutionResponse)(nil),         // 17: temporal.api.workflowservice.v1.PollActivityExecutionResponse
-	(*v1.TerminateActivityExecutionRequest)(nil),     // 18: temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
-	(*v1.RequestCancelActivityExecutionRequest)(nil), // 19: temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
-	(*v1.DeleteActivityExecutionRequest)(nil),        // 20: temporal.api.workflowservice.v1.DeleteActivityExecutionRequest
+	(*v11.ActivityInvocationSource)(nil),             // 13: temporal.api.activity.v1.ActivityInvocationSource
+	(*v1.StartActivityExecutionResponse)(nil),        // 14: temporal.api.workflowservice.v1.StartActivityExecutionResponse
+	(*v1.DescribeActivityExecutionRequest)(nil),      // 15: temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
+	(*v1.DescribeActivityExecutionResponse)(nil),     // 16: temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
+	(*v1.PollActivityExecutionRequest)(nil),          // 17: temporal.api.workflowservice.v1.PollActivityExecutionRequest
+	(*v1.PollActivityExecutionResponse)(nil),         // 18: temporal.api.workflowservice.v1.PollActivityExecutionResponse
+	(*v1.TerminateActivityExecutionRequest)(nil),     // 19: temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
+	(*v1.RequestCancelActivityExecutionRequest)(nil), // 20: temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
+	(*v1.DeleteActivityExecutionRequest)(nil),        // 21: temporal.api.workflowservice.v1.DeleteActivityExecutionRequest
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_depIdxs = []int32{
 	12, // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionRequest
-	13, // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionResponse
-	14, // 2: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
-	15, // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
-	16, // 4: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionRequest
-	17, // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionResponse
-	18, // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
-	19, // 7: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
-	20, // 8: temporal.server.chasm.lib.activity.proto.v1.DeleteActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteActivityExecutionRequest
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	13, // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest.invocation_source:type_name -> temporal.api.activity.v1.ActivityInvocationSource
+	14, // 2: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionResponse
+	15, // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
+	16, // 4: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
+	17, // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionRequest
+	18, // 6: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionResponse
+	19, // 7: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
+	20, // 8: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
+	21, // 9: temporal.server.chasm.lib.activity.proto.v1.DeleteActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteActivityExecutionRequest
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_init() }

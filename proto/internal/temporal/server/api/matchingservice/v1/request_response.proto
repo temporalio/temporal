@@ -4,6 +4,7 @@ package temporal.server.api.matchingservice.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -149,6 +150,9 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  // Server-only metadata describing how this activity was invoked (e.g. by a Nexus operation
+  // completion via a worker callback). Surfaced read-only on PollActivityTaskQueueResponse.
+  temporal.api.activity.v1.ActivityInvocationSource invocation_source = 21;
 }
 
 message AddWorkflowTaskRequest {

@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"fmt"
 	"log"
+	"maps"
 	"strings"
 	"time"
 
@@ -257,10 +258,17 @@ func (o *Operation) addCompletionCallbacks(
 		case *commonpb.Callback_Nexus_:
 			// SECURITY TODO: Verify that any attached worker callbacks are targeting the same namespace
 			// as the incomming request. No spoofing allowed.
+			// Record the Nexus operation that triggered this worker callback as server-only routing
+			// metadata, alongside the existing target-* headers. invokeWorkerCallback reads these back
+			// and surfaces them read-only to the worker as ActivityInvocationSource. Clone first so we
+			// don't mutate the caller's header map.
+			header := maps.Clone(variant.Nexus.GetHeader())
+			header[commonnexus.WorkerCallbackNexusServiceHeader] = o.Service
+			header[commonnexus.WorkerCallbackNexusOperationHeader] = o.Operation
 			chasmCB.Variant = &callbackspb.Callback_Nexus_{
 				Nexus: &callbackspb.Callback_Nexus{
 					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
+					Header: header,
 				},
 			}
 		default:

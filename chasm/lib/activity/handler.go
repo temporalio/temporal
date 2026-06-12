@@ -79,7 +79,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
-			newActivity, err := NewStandaloneActivity(mutableContext, request)
+			newActivity, err := NewStandaloneActivity(mutableContext, request, req.GetInvocationSource())
 			if err != nil {
 				return nil, err
 			}

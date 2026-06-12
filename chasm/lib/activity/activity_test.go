@@ -339,7 +339,7 @@ func TestNewStandaloneActivity_UserMetadataDualWrite(t *testing.T) {
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: "Q"},
 		RequestId:    "req-id",
 		UserMetadata: md,
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	// New location: SetUserMetadata recorded against the activity.

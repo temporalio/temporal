@@ -1407,6 +1407,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
 		Priority:                    matchingResponse.Priority,
 		RetryPolicy:                 matchingResponse.RetryPolicy,
+		InvocationSource:            matchingResponse.InvocationSource,
 	}, nil
 }
 

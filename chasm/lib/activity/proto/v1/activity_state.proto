@@ -9,6 +9,7 @@ import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/activity/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
@@ -94,6 +95,11 @@ message ActivityState {
   // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
   // has a retry policy, retry attempts will not have start delay applied.
   google.protobuf.Duration start_delay = 13;
+
+  // Server-only metadata describing how this activity was invoked (e.g. by a Nexus operation
+  // completion via a worker callback). Set by server-internal callers only; surfaced read-only on
+  // PollActivityTaskQueueResponse.
+  temporal.api.activity.v1.ActivityInvocationSource invocation_source = 14;
 }
 
 message ActivityCancelState {
