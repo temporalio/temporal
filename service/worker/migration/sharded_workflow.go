@@ -837,13 +837,10 @@ func (s *shardedWorkflowState) dispatchResumeBatches(ctx workflow.Context) {
 
 	batches := s.packResumeBatchPlan(entries)
 	for i, batch := range batches {
-		if s.lastErr != nil {
-			s.params.ResumeShards = unpackResumeBatches(batches[i:])
-			return
-		}
 		// Block until a dispatch slot is free so resume payloads
 		// can't overshoot ConcurrentBatchCount on cycles that
-		// carried many shards across CAN.
+		// carried many shards across CAN. The await also wakes
+		// immediately when lastErr is set.
 		s.waitForDispatchSlot(ctx)
 		if s.lastErr != nil {
 			s.params.ResumeShards = unpackResumeBatches(batches[i:])
