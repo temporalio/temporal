@@ -3423,6 +3423,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
 
+	PollerAutoscalingAutoEnroll = NewNamespaceBoolSetting(
+		"frontend.pollerAutoscalingAutoEnroll",
+		false,
+		`PollerAutoscalingAutoEnroll controls whether workers in a namespace are automatically enrolled in poller autoscaling without explicit opt-in in worker options.`,
+	)
+
 	WorkflowPauseEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkflowPauseEnabled",
 		false,
