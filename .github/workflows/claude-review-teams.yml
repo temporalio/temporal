@@ -104,8 +104,6 @@ jobs:
 
           opt_out_label=$(printf '%s\n' "$labels" | awk -v label="$REVIEW_OPT_OUT_LABEL" 'tolower($0) == tolower(label) { print; exit }')
           if [ -n "$opt_out_label" ]; then
-            echo "Found opt-out label '${opt_out_label}' on PR #${PR_NUMBER}"
-            echo "Skipping team membership check for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
             echo "Skipping Claude review for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
             set_review_decision false
             exit 0
