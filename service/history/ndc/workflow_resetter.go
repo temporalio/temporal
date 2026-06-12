@@ -571,8 +571,13 @@ func (r *workflowResetterImpl) failInflightActivity(
 	for _, ai := range mutableState.GetPendingActivityInfos() {
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
-			// activity not started, noop
 			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+				// Recalculate retry expiration time based on reset time.
+				// Must be done before overwriting ScheduledTime to preserve the original duration.
+				if activityInfo.RetryExpirationTime != nil && activityInfo.ScheduledTime != nil {
+					duration := activityInfo.RetryExpirationTime.AsTime().Sub(activityInfo.ScheduledTime.AsTime())
+					activityInfo.RetryExpirationTime = timestamppb.New(now.Add(duration))
+				}
 				// override the scheduled activity time to now
 				activityInfo.ScheduledTime = timestamppb.New(now)
 				activityInfo.FirstScheduledTime = timestamppb.New(now)
