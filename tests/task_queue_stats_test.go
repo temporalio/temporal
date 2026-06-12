@@ -57,15 +57,15 @@ func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, testcore.MatchingBehavior{})
-	resp, err := env.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{})
+	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.NoError(err)
 	s.NotNil(resp)
 
-	_, err = env.FrontendClient().DescribeTaskQueue(context.Background(),
+	_, err = env.FrontendClient().DescribeTaskQueue(s.Context(),
 		&workflowservice.DescribeTaskQueueRequest{
 			Namespace:   env.Namespace().String(),
 			TaskQueue:   &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -75,7 +75,7 @@ func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) 
 }
 
 func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, testcore.MatchingBehavior{},
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
@@ -85,7 +85,7 @@ func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
 }
 
 func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, testcore.MatchingBehavior{},
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 	)
@@ -150,14 +150,14 @@ type TaskQueueStatsVersionSuite struct {
 }
 
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 	env.publishConsumeWorkflowTasksValidateStats(4, false)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -245,11 +245,11 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 }
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 120*time.Second)
 	defer cancel()
 
 	tqName := "tq-" + common.GenerateRandomString(5)
@@ -396,11 +396,11 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
 	defer cancel()
 
 	deploymentName := testcore.RandomizeStr("deployment")
@@ -458,11 +458,11 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 }
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
 	defer cancel()
 
 	deploymentName := testcore.RandomizeStr("deployment")
@@ -521,7 +521,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 }
 
 func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), usePriMatcher, behavior)
+	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -682,6 +682,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 // taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
 type taskQueueStatsContext struct {
 	testcore.Env
+	suiteContext    context.Context
 	usePriMatcher   bool
 	minPriority     int
 	maxPriority     int
@@ -689,8 +690,13 @@ type taskQueueStatsContext struct {
 	partitionCount  int
 }
 
+type testContextProvider interface {
+	Context() context.Context
+}
+
 func newTaskQueueStatsContext(
 	t *testing.T,
+	suite testContextProvider,
 	usePriMatcher bool,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
@@ -708,6 +714,7 @@ func newTaskQueueStatsContext(
 	behavior.InjectHooks(env)
 	return &taskQueueStatsContext{
 		Env:             env,
+		suiteContext:    suite.Context(),
 		usePriMatcher:   usePriMatcher,
 		minPriority:     1,
 		maxPriority:     5,
@@ -1133,7 +1140,7 @@ func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
 					}
 				}
 
-				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+				_, err := s.FrontendClient().StartWorkflowExecution(s.suiteContext, request)
 				require.NoError(s.T(), err)
 
 				total++
@@ -1184,7 +1191,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.suiteContext, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1193,7 +1200,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	})
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = s.FrontendClient().PollActivityTaskQueue(s.suiteContext, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1219,7 +1226,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					pollReq.DeploymentOptions = deploymentOpts
 				}
 
-				resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), pollReq)
+				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.suiteContext, pollReq)
 				require.NoError(s.T(), err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
@@ -1250,7 +1257,7 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				}
 
-				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
+				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.suiteContext, respondReq)
 				require.NoError(s.T(), err)
 
 				i++
@@ -1276,7 +1283,7 @@ func (s *taskQueueStatsContext) pollActivities(count int, tqName string) {
 		}
 
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
-			testcore.NewContext(), pollReq,
+			s.suiteContext, pollReq,
 		)
 		require.NoError(s.T(), err)
 		if resp == nil || resp.GetAttempt() < 1 {
@@ -1306,7 +1313,7 @@ func (s *taskQueueStatsContext) validateRates(
 	expectAddRate bool,
 	expectDispatchRate bool,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.suiteContext, 30*time.Second)
 	defer cancel()
 
 	req := &workflowservice.DescribeTaskQueueRequest{
@@ -1342,7 +1349,7 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByType(
 	expectation taskQueueExpectations,
 	singlePartition bool,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.suiteContext, 30*time.Second)
 	defer cancel()
 
 	s.validateDescribeTaskQueueWithDefaultMode(ctx, tqName, tqType, expectation, singlePartition)
