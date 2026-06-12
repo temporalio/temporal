@@ -269,9 +269,6 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 	rateLimiter := quotas.NewRateLimiter(req.PerBatchGenerateRPS, int(math.Ceil(req.PerBatchGenerateRPS)))
 	for i := startIdx; i < len(execs); i++ {
 		ex := execs[i]
-		if ctx.Err() != nil {
-			return temporal.NewCanceledError("inject phase cancelled")
-		}
 		if err := a.generateReplicationTaskForExec(ctx, rateLimiter, req, ex); err != nil {
 			if ctx.Err() != nil {
 				return temporal.NewCanceledError("inject phase cancelled")
@@ -448,17 +445,14 @@ func waitNextTick(
 		if remaining := drainGrace - time.Since(drainStartAt); remaining > 0 && remaining < sleepDur {
 			sleepDur = remaining
 		}
-		select {
-		case <-time.After(sleepDur):
-		case <-callCtx.Done():
-		}
-		return
+	}
+	wakeCtx := ctx
+	if draining {
+		wakeCtx = callCtx
 	}
 	select {
 	case <-time.After(sleepDur):
-	case <-ctx.Done():
-		// ctx cancel just sets draining on the next iteration; don't
-		// unwind here.
+	case <-wakeCtx.Done():
 	}
 }
 
@@ -604,12 +598,12 @@ func (t shardVerifyTracker) totalIdleCost(now time.Time) time.Duration {
 	return total
 }
 
-// awaitingRelease returns completed-but-not-yet-signaled shard IDs in
-// ascending order so the signal payload is deterministic across replays.
-func (t shardVerifyTracker) awaitingRelease() []int32 {
+// completedShards returns shard IDs matching filter, sorted ascending
+// so signal payloads and activity returns are deterministic.
+func (t shardVerifyTracker) completedShards(filter func(shardVerify) bool) []int32 {
 	var out []int32
 	for sh, sv := range t {
-		if !sv.doneAt.IsZero() {
+		if filter(sv) {
 			out = append(out, sh)
 		}
 	}
@@ -617,17 +611,20 @@ func (t shardVerifyTracker) awaitingRelease() []int32 {
 	return out
 }
 
+// awaitingRelease returns completed-but-not-yet-signaled shard IDs in
+// ascending order so the signal payload is deterministic across replays.
+func (t shardVerifyTracker) awaitingRelease() []int32 {
+	return t.completedShards(func(sv shardVerify) bool {
+		return !sv.doneAt.IsZero()
+	})
+}
+
 // allCompleted returns every shard that finished during this activity
 // run — both signal-released and still awaiting release at return.
 func (t shardVerifyTracker) allCompleted() []int32 {
-	var out []int32
-	for sh, sv := range t {
-		if sv.released || !sv.doneAt.IsZero() {
-			out = append(out, sh)
-		}
-	}
-	slices.Sort(out)
-	return out
+	return t.completedShards(func(sv shardVerify) bool {
+		return sv.released || !sv.doneAt.IsZero()
+	})
 }
 
 // pickStuck returns (shard, age, true) for the lowest-numbered shard
