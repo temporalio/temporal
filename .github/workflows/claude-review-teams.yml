@@ -137,12 +137,12 @@ jobs:
           if [ "$HAS_OPT_OUT" = "true" ]; then
             echo "Skipping Claude review for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
             should_review=false
-          elif [ "$IS_MEMBER" = "true" ]; then
-            echo "Claude review enabled for PR #${PR_NUMBER}: author is in an opted-in team and no opt-out label is present"
-            should_review=true
-          else
+          elif [ "$IS_MEMBER" = "false" ]; then
             echo "Skipping Claude review for PR #${PR_NUMBER}: author is not in an opted-in team"
             should_review=false
+          else
+            echo "Claude review enabled for PR #${PR_NUMBER}: author is in an opted-in team and no opt-out label is present"
+            should_review=true
           fi
           echo "should_review=${should_review}" >> "$GITHUB_OUTPUT"
 
