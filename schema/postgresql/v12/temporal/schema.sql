@@ -30,7 +30,7 @@ CREATE TABLE shards (
 CREATE TABLE executions(
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   --
   next_event_id BIGINT NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE executions(
 CREATE TABLE current_executions(
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   --
   run_id BYTEA NOT NULL,
   create_request_id VARCHAR(255) NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE current_chasm_executions(
 CREATE TABLE buffered_events (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   id BIGSERIAL NOT NULL UNIQUE,
   --
@@ -227,7 +227,7 @@ CREATE TABLE activity_info_maps (
 -- each row corresponds to one key of one map<string, ActivityInfo>
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   schedule_id BIGINT NOT NULL,
 --
@@ -239,7 +239,7 @@ CREATE TABLE activity_info_maps (
 CREATE TABLE timer_info_maps (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   timer_id VARCHAR(255) NOT NULL,
 --
@@ -251,7 +251,7 @@ CREATE TABLE timer_info_maps (
 CREATE TABLE child_execution_info_maps (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
@@ -263,7 +263,7 @@ CREATE TABLE child_execution_info_maps (
 CREATE TABLE request_cancel_info_maps (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
@@ -275,7 +275,7 @@ CREATE TABLE request_cancel_info_maps (
 CREATE TABLE signal_info_maps (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   initiated_id BIGINT NOT NULL,
 --
@@ -287,7 +287,7 @@ CREATE TABLE signal_info_maps (
 CREATE TABLE signals_requested_sets (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   signal_id VARCHAR(255) NOT NULL,
   --
@@ -297,7 +297,7 @@ CREATE TABLE signals_requested_sets (
 CREATE TABLE chasm_node_maps (
   shard_id INTEGER NOT NULL,
   namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
+  workflow_id VARCHAR(1000) NOT NULL,
   run_id BYTEA NOT NULL,
   chasm_path BYTEA NOT NULL,
 --
