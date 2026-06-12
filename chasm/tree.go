@@ -249,7 +249,6 @@ type (
 	// framework only.
 	NodePureTask interface {
 		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
-		ValidatePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
 
@@ -3313,22 +3312,6 @@ func (n *Node) ExecutePureTask(
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
 
 	return true, nil
-}
-
-// ValidatePureTask runs a pure task's associated validator, returning true
-// if the task is valid. Intended for use by standby handlers as part of
-// EachPureTask's callback.
-// This method assumes the node's value has already been prepared (hydrated).
-func (n *Node) ValidatePureTask(
-	ctx context.Context,
-	taskAttributes TaskAttributes,
-	taskInstance any,
-) (bool, error) {
-	return n.validateTask(
-		NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n),
-		taskAttributes,
-		taskInstance,
-	)
 }
 
 // ValidateSideEffectTask checks whether a side effect task should still be

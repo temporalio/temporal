@@ -101,6 +101,6 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
-) (bool, bool, error) {
+) (isTaskInTree bool, isValidByComponent bool, err error) {
 	return false, false, nil
 }

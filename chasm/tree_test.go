@@ -3529,60 +3529,6 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 }
 
-func (s *nodeSuite) TestValidatePureTask() {
-	taskAttributes := TaskAttributes{}
-	pureTask := &TestPureTask{
-		Data: []byte("some-random-data"),
-	}
-
-	root := s.testComponentTree()
-	_, err := root.CloseTransaction()
-	s.NoError(err)
-
-	ctx := context.Background()
-	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskHandler.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
-	}
-
-	// Succeed task validation (happy case).
-	expectValidate(true, nil)
-	valid, err := root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.True(valid)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Invalid task (validation returns false).
-	expectValidate(false, nil)
-	valid, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.False(valid)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Error during task validation (no execution occurs).
-	expectedErr := errors.New("dummy")
-	expectValidate(false, expectedErr)
-	_, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.ErrorIs(expectedErr, err)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Close the root component.
-	mutableCtx := NewMutableContext(ctx, root)
-	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
-	s.NoError(err)
-	rootComponent.(*TestComponent).Complete(mutableCtx)
-	_, err = root.CloseTransaction()
-	s.NoError(err)
-
-	// Invalid task for sub-component due to access rule.
-	subComponent1, ok := root.children["SubComponent1"]
-	s.True(ok)
-	valid, err = subComponent1.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.False(valid)
-	s.Equal(valueStateSynced, subComponent1.valueState) // node is always clean for task validation
-}
-
 func (s *nodeSuite) TestExecuteSideEffectTask() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
