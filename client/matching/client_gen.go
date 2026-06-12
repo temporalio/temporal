@@ -113,6 +113,26 @@ func (c *clientImpl) CheckTaskQueueVersionMembership(
 	return client.CheckTaskQueueVersionMembership(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CountWorkersResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CountWorkers(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
