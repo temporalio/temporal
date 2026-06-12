@@ -151,12 +151,12 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration         func() time.Duration
-		EphemeralDataUpdateInterval   func() time.Duration
-		BacklogMetricsEmitInterval    func() time.Duration
-		PriorityBacklogForwarding     func() bool
-		BacklogNegligibleAge          func() time.Duration
-		MaxWaitForPollerBeforeFwd     func() time.Duration
+		SyncMatchWaitDuration              func() time.Duration
+		EphemeralDataUpdateInterval        func() time.Duration
+		BacklogMetricsEmitInterval         func() time.Duration
+		PriorityBacklogForwarding          func() bool
+		BacklogNegligibleAge               func() time.Duration
+		MaxWaitForPollerBeforeFwd          func() time.Duration
 		QueryPollerUnavailableWindow       func() time.Duration
 		WorkerControllerNoPollerHookWindow func() time.Duration
 		EmitTaskDispatchLatencyAtPoll      func() bool
