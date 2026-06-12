@@ -6782,6 +6782,7 @@ func addActivityTaskStartedEvent(ms historyi.MutableState, scheduledEventID int6
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	return event
 }
