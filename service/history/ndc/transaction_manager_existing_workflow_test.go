@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -45,6 +47,7 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.mockShard.EXPECT().StateMachineRegistry().Return(reg).AnyTimes()
+	s.mockShard.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil).AnyTimes()
@@ -244,6 +247,70 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_ClosedTargetRun_SkipsAsDeleted() {
+	// Closed run with no current execution record (deleted workflow): ack as a
+	// no-op via ErrDuplicate instead of poison-pilling.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	isWorkflowRebuilt := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	// no current execution record exists
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	// target run is closed -> workflow was deleted
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, nil)
+	s.ErrorIs(err, consts.ErrDuplicate)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_RunningTargetRun_Errors() {
+	// Running run with no current execution record: a real inconsistency that
+	// must still surface as an error.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	isWorkflowRebuilt := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, nil)
+	s.Error(err)
+	s.NotErrorIs(err, consts.ErrDuplicate)
+	s.Contains(err.Error(), "unable to locate current workflow")
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {
