@@ -165,9 +165,6 @@ type (
 
 		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
 		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
-
-		// When introducing a new field with new workflow logic, consider generating a new
-		// history for TestReplays using generate_history.sh.
 	}
 
 	// this is for backwards compatibility; current code serializes cache as proto
