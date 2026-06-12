@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -410,7 +411,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	searchattributes := make(map[string]*commonpb.Payload)
+	searchAttributes := make(map[string]*commonpb.Payload)
 
 	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
 	for alias, value := range aliasedCustomSearchAttributes {
@@ -421,7 +422,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
 			continue
 		}
-		searchattributes[fieldName] = value
+		searchAttributes[fieldName] = value
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
@@ -438,7 +439,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 				}
 				continue
 			}
-			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
+			searchAttributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
@@ -468,11 +469,14 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		namespaceEntry,
 		mutableState,
 		combinedMemo,
-		searchattributes,
+		searchAttributes,
 	)
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
-	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+	searchattribute.AddSearchAttributes(
+		&requestBase.SearchAttributes,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
+	)
 
 	// Override TaskQueue if provided by CHASM search attributes.
 	if chasmTaskQueue != "" {
