@@ -47,6 +47,48 @@ type workflowTasksAndActivitiesPollerParams struct {
 	versioningBehavior enumspb.VersioningBehavior
 }
 
+// taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
+type taskQueueStatsContext struct {
+	testcore.Env
+	*require.Assertions
+	ctx             context.Context
+	usePriMatcher   bool
+	minPriority     int
+	maxPriority     int
+	defaultPriority int
+	partitionCount  int
+}
+
+func newTaskQueueStatsContext(
+	t *testing.T,
+	ctx context.Context,
+	usePriMatcher bool,
+	behavior testcore.MatchingBehavior,
+	extraOpts ...testcore.TestOption,
+) *taskQueueStatsContext {
+	opts := []testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment versioning"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPriorityLevels, 5), // maxPriority
+	}
+	opts = append(opts, behavior.Options()...)
+	opts = append(opts, extraOpts...)
+	env := testcore.NewEnv(t, opts...)
+	behavior.InjectHooks(env)
+	return &taskQueueStatsContext{
+		Env:             env,
+		Assertions:      require.New(t),
+		ctx:             ctx,
+		usePriMatcher:   usePriMatcher,
+		minPriority:     1,
+		maxPriority:     5,
+		defaultPriority: 3,
+		partitionCount:  2, // kept low to reduce test time on CI
+	}
+}
+
 // TaskQueueStatsSuite groups task queue stats tests that are run with different matcher configurations.
 type TaskQueueStatsSuite struct {
 	parallelsuite.Suite[*TaskQueueStatsSuite]
@@ -56,8 +98,16 @@ func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 	parallelsuite.Run(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
 }
 
+func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
+	usePriMatcher bool,
+	behavior testcore.MatchingBehavior,
+	extraOpts ...testcore.TestOption,
+) *taskQueueStatsContext {
+	return newTaskQueueStatsContext(s.T(), s.Context(), usePriMatcher, behavior, extraOpts...)
+}
+
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{})
+	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{})
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -75,7 +125,7 @@ func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) 
 }
 
 func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{},
+	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
@@ -85,7 +135,7 @@ func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
 }
 
 func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMatcher bool) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, testcore.MatchingBehavior{},
+	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 	)
@@ -149,15 +199,23 @@ type TaskQueueStatsVersionSuite struct {
 	parallelsuite.Suite[*TaskQueueStatsVersionSuite]
 }
 
+func (s *TaskQueueStatsVersionSuite) newTaskQueueStatsContext(
+	usePriMatcher bool,
+	behavior testcore.MatchingBehavior,
+	extraOpts ...testcore.TestOption,
+) *taskQueueStatsContext {
+	return newTaskQueueStatsContext(s.T(), s.Context(), usePriMatcher, behavior, extraOpts...)
+}
+
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 	env.publishConsumeWorkflowTasksValidateStats(4, false)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -245,7 +303,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 }
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -396,7 +454,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 }
 
 func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -458,7 +516,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 }
 
 func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -521,7 +579,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 }
 
 func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := newTaskQueueStatsContext(s.T(), s, usePriMatcher, behavior)
+	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -679,50 +737,6 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-// taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
-type taskQueueStatsContext struct {
-	testcore.Env
-	suiteContext    context.Context
-	usePriMatcher   bool
-	minPriority     int
-	maxPriority     int
-	defaultPriority int
-	partitionCount  int
-}
-
-type testContextProvider interface {
-	Context() context.Context
-}
-
-func newTaskQueueStatsContext(
-	t *testing.T,
-	suite testContextProvider,
-	usePriMatcher bool,
-	behavior testcore.MatchingBehavior,
-	extraOpts ...testcore.TestOption,
-) *taskQueueStatsContext {
-	opts := []testcore.TestOption{
-		testcore.WithWorkerService("worker-deployment versioning"),
-		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingPriorityLevels, 5), // maxPriority
-	}
-	opts = append(opts, behavior.Options()...)
-	opts = append(opts, extraOpts...)
-	env := testcore.NewEnv(t, opts...)
-	behavior.InjectHooks(env)
-	return &taskQueueStatsContext{
-		Env:             env,
-		suiteContext:    suite.Context(),
-		usePriMatcher:   usePriMatcher,
-		minPriority:     1,
-		maxPriority:     5,
-		defaultPriority: 3,
-		partitionCount:  2, // kept low to reduce test time on CI
-	}
-}
-
 // requireWDVTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition ramping scenarios.
 // The production code intentionally uses math.Ceil for both ramping and current percentage
 // calculations across partitions, which can result in slight over-counting.
@@ -811,7 +825,7 @@ func (s *taskQueueStatsContext) publishConsumeWorkflowTasksValidateStats(sets in
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
 	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
-	require.Equal(s.T(), total, totalAct, "should have enqueued the same number of activities as workflows")
+	s.Equal(total, totalAct, "should have enqueued the same number of activities as workflows")
 
 	// verify workflow dispatch rate and activity add rate
 	if sets > 0 {
@@ -1140,8 +1154,8 @@ func (s *taskQueueStatsContext) enqueueWorkflows(sets int, tqName string) int {
 					}
 				}
 
-				_, err := s.FrontendClient().StartWorkflowExecution(s.suiteContext, request)
-				require.NoError(s.T(), err)
+				_, err := s.FrontendClient().StartWorkflowExecution(s.ctx, request)
+				s.NoError(err)
 
 				total++
 			}
@@ -1191,7 +1205,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.suiteContext, &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(s.ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1200,7 +1214,7 @@ func (s *taskQueueStatsContext) createDeploymentInTaskQueue(tqName string) {
 	})
 
 	wg.Go(func() {
-		_, _ = s.FrontendClient().PollActivityTaskQueue(s.suiteContext, &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = s.FrontendClient().PollActivityTaskQueue(s.ctx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace:         s.Namespace().String(),
 			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:          "random",
@@ -1226,8 +1240,8 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					pollReq.DeploymentOptions = deploymentOpts
 				}
 
-				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.suiteContext, pollReq)
-				require.NoError(s.T(), err)
+				resp, err := s.FrontendClient().PollWorkflowTaskQueue(s.ctx, pollReq)
+				s.NoError(err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
 				}
@@ -1257,8 +1271,8 @@ func (s *taskQueueStatsContext) enqueueActivitiesForEachWorkflow(sets int, tqNam
 					respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 				}
 
-				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.suiteContext, respondReq)
-				require.NoError(s.T(), err)
+				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(s.ctx, respondReq)
+				s.NoError(err)
 
 				i++
 				total++
@@ -1283,9 +1297,9 @@ func (s *taskQueueStatsContext) pollActivities(count int, tqName string) {
 		}
 
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
-			s.suiteContext, pollReq,
+			s.ctx, pollReq,
 		)
-		require.NoError(s.T(), err)
+		s.NoError(err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			continue // poll again on empty responses
 		}
@@ -1313,7 +1327,7 @@ func (s *taskQueueStatsContext) validateRates(
 	expectAddRate bool,
 	expectDispatchRate bool,
 ) {
-	ctx, cancel := context.WithTimeout(s.suiteContext, 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
 
 	req := &workflowservice.DescribeTaskQueueRequest{
@@ -1323,7 +1337,7 @@ func (s *taskQueueStatsContext) validateRates(
 		ReportStats:   true,
 	}
 
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 		label := "validateRates[" + tqType.String() + "]"
 
@@ -1349,7 +1363,7 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByType(
 	expectation taskQueueExpectations,
 	singlePartition bool,
 ) {
-	ctx, cancel := context.WithTimeout(s.suiteContext, 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
 
 	s.validateDescribeTaskQueueWithDefaultMode(ctx, tqName, tqType, expectation, singlePartition)
@@ -1379,13 +1393,13 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
-	require.NoError(s.T(), err)
-	require.NotNil(s.T(), resp)
-	require.Nil(s.T(), resp.Stats, "stats should not be reported by default")
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Nil(resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
-	require.Nil(s.T(), resp.TaskQueueStatus, "status should not be reported by default")
+	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
@@ -1436,14 +1450,14 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
-		require.NoError(s.T(), err)
-		require.NotNil(s.T(), resp)
-		require.Nil(s.T(), resp.Stats, "stats should not be reported by default")
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Nil(resp.Stats, "stats should not be reported by default")
 		//nolint:staticcheck // SA1019 deprecated
-		require.Nil(s.T(), resp.TaskQueueStatus, "status should not be reported")
+		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
 		req.ReportStats = true
@@ -1489,13 +1503,13 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
-	require.NoError(s.T(), err)
-	require.NotNil(s.T(), resp)
+	s.NoError(err)
+	s.NotNil(resp)
 	for _, info := range resp.VersionTaskQueues {
-		require.Nil(s.T(), info.Stats, "stats should not be reported by default")
+		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
 		req.ReportTaskQueueStats = true
