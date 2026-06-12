@@ -54,9 +54,8 @@ var (
 )
 
 const (
-	defaultTaskDispatchRPS         = 100000.0
-	defaultTaskDispatchRPSTTL      = time.Minute
-	defaultQueryHookNoPollerWindow = 5 * time.Second
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 type (
@@ -1030,7 +1029,7 @@ reredirectTask:
 	// Only fire for non-forwarded queries: forwarded queries already had the hook fired
 	// on the originating partition.
 	if request.ForwardInfo == nil &&
-		!syncMatchQueue.HasPollerAfter(time.Now().Add(-defaultQueryHookNoPollerWindow)) {
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
 	}
@@ -1109,7 +1108,7 @@ reredirectTask:
 	// Only fire for non-forwarded tasks: forwarded tasks already had the hook fired
 	// on the originating partition.
 	if request.ForwardInfo == nil &&
-		!syncMatchQueue.HasPollerAfter(time.Now().Add(-defaultQueryHookNoPollerWindow)) {
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
 	}
