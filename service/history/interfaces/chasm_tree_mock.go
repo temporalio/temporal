@@ -244,6 +244,21 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
+// PartitionedSnapshot mocks base method.
+func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmClusterLocalState) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionedSnapshot", arg0)
+	ret0, _ := ret[0].(chasm.NodesSnapshot)
+	ret1, _ := ret[1].(*persistence.ChasmClusterLocalState)
+	return ret0, ret1
+}
+
+// PartitionedSnapshot indicates an expected call of PartitionedSnapshot.
+func (mr *MockChasmTreeMockRecorder) PartitionedSnapshot(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionedSnapshot", reflect.TypeOf((*MockChasmTree)(nil).PartitionedSnapshot), arg0)
+}
+
 // RefreshTasks mocks base method.
 func (m *MockChasmTree) RefreshTasks() error {
 	m.ctrl.T.Helper()

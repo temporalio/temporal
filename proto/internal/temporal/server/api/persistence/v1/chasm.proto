@@ -80,6 +80,20 @@ message ChasmComponentAttributes {
   temporal.api.sdk.v1.UserMetadata user_metadata = 6;
 }
 
+// ChasmNodeClusterLocalState holds cluster-local (non-replicated) metadata for a single CHASM node.
+message ChasmNodeClusterLocalState {
+  // Physical task statuses, in the same order as ChasmComponentAttributes.side_effect_tasks.
+  repeated int32 side_effect_task_statuses = 1;
+  // Physical task statuses, in the same order as ChasmComponentAttributes.pure_tasks.
+  repeated int32 pure_task_statuses = 2;
+}
+
+// ChasmClusterLocalState is a collection of per-node ChasmNodeClusterLocalState.
+message ChasmClusterLocalState {
+  // Cluster-local state keyed by encoded node path; only nodes that have it are present.
+  map<string, ChasmNodeClusterLocalState> nodes = 1;
+}
+
 message ChasmDataAttributes {}
 
 message ChasmCollectionAttributes {}

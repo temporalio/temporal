@@ -2420,6 +2420,99 @@ func (n *Node) snapshotInternal(
 	}
 }
 
+// PartitionedSnapshot returns the tree's state split into two parts:
+//   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
+//     upload to object storage or replicate to another cluster.
+//   - A ChasmClusterLocalState capturing the extracted cluster-local fields, keyed by encoded
+//     node path. Only nodes that carry such metadata are present.
+//
+// The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
+// zeroes field values, it never adds or removes nodes. The live in-memory tree is left
+// untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
+// Snapshot returns the tree's live node references.
+//
+// The returned ChasmClusterLocalState is nil when no node carries cluster-local fields
+// (consistent with noopChasmTree); MergeClusterLocalState treats a nil state as a no-op.
+func (n *Node) PartitionedSnapshot(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (NodesSnapshot, *persistencespb.ChasmClusterLocalState) {
+	snapshot := n.Snapshot(exclusiveMinVT)
+	var localState *persistencespb.ChasmClusterLocalState
+	for path, node := range snapshot.Nodes {
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		if len(componentAttr.SideEffectTasks) == 0 && len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
+		// read-only in a snapshot, so share its pointer rather than copying component payloads.
+		clean := &persistencespb.ChasmNode{Metadata: common.CloneProto(node.GetMetadata()), Data: node.GetData()}
+		cleanAttr := clean.GetMetadata().GetComponentAttributes()
+		if localState == nil {
+			localState = &persistencespb.ChasmClusterLocalState{
+				Nodes: make(map[string]*persistencespb.ChasmNodeClusterLocalState),
+			}
+		}
+		localState.Nodes[path] = &persistencespb.ChasmNodeClusterLocalState{
+			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
+			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
+		}
+		snapshot.Nodes[path] = clean
+	}
+	return snapshot, localState
+}
+
+// extractAndZeroTaskStatuses records each task's physical task status in order and zeroes
+// it in place. The caller must pass tasks from a node copy, not the live tree.
+func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task) []int32 {
+	if len(taskList) == 0 {
+		return nil
+	}
+	statuses := make([]int32, len(taskList))
+	for i, t := range taskList {
+		statuses[i] = t.PhysicalTaskStatus
+		t.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return statuses
+}
+
+// MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
+// extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
+// state are updated; nodes in the state but not the snapshot are silently skipped (the node
+// may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
+// only the overlapping prefix. It returns the number of nodes whose side-effect or pure status
+// counts didn't match the node's task counts, so callers can surface a (usually stale-data) merge.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmClusterLocalState) int {
+	mismatchedNodes := 0
+	for path, nodeState := range state.GetNodes() {
+		node, ok := s.Nodes[path]
+		if !ok {
+			continue
+		}
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		seMismatch := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureMismatch := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seMismatch || pureMismatch {
+			mismatchedNodes++
+		}
+	}
+	return mismatchedNodes
+}
+
+// mergeTaskStatuses applies statuses to tasks by position and reports whether the lengths differed
+// (in which case only the overlapping prefix was applied).
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) bool {
+	for i := 0; i < len(taskList) && i < len(statuses); i++ {
+		taskList[i].PhysicalTaskStatus = statuses[i]
+	}
+	return len(taskList) != len(statuses)
+}
+
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
 // cluster specific chasm tree changes.
 // DO NOT USE if you don't know why this method is introduced.
