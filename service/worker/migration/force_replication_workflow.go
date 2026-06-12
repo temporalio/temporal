@@ -11,6 +11,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+const (
+	countWorkflowsForReplicationTimeout        = 2 * time.Minute
+	shardedCountWorkflowsForReplicationTimeout = 30 * time.Second
+)
+
 type (
 	TaskQueueUserDataReplicationParams struct {
 		// PageSize for the SeedReplicationQueueWithUserDataEntries activity
@@ -149,7 +154,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	}
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, params)
+		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, countWorkflowsForReplicationTimeout)
 		if err != nil {
 			return err
 		}
@@ -232,7 +237,7 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 	}
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowForReplication(ctx, params)
+		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, countWorkflowsForReplicationTimeout)
 		if err != nil {
 			return err
 		}
@@ -454,9 +459,9 @@ func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Ch
 	return nil
 }
 
-func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationParams) (int64, error) {
+func countWorkflowsForReplication(ctx workflow.Context, namespace, query string, startToCloseTimeout time.Duration) (int64, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout: startToCloseTimeout,
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 
@@ -466,8 +471,8 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 		workflow.WithActivityOptions(ctx, ao),
 		a.CountWorkflow,
 		&workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: params.Namespace,
-			Query:     params.Query,
+			Namespace: namespace,
+			Query:     query,
 		}).Get(ctx, &output); err != nil {
 		return 0, err
 	}

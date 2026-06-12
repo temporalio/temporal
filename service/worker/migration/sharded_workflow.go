@@ -99,7 +99,7 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 	// via the same CountWorkflow activity upstream uses. Skipped on
 	// subsequent CAN cycles — the count carries across via params.
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := shardedCountWorkflowsForReplication(ctx, &params)
+		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, shardedCountWorkflowsForReplicationTimeout)
 		if err != nil {
 			return err
 		}
@@ -165,29 +165,6 @@ func maybeKickoffShardedTaskQueueUserDataReplication(ctx workflow.Context, param
 	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)
 	var childExecution workflow.Execution
 	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
-}
-
-// shardedCountWorkflowsForReplication asks the frontend how many
-// workflows match the namespace's force-rep query. Used once at
-// workflow start to seed TotalForceReplicateWorkflowCount for the
-// status query's progress reporting.
-func shardedCountWorkflowsForReplication(ctx workflow.Context, params *ShardedForceReplicationParams) (int64, error) {
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
-	}
-	var a *activities
-	var output countWorkflowResponse
-	if err := workflow.ExecuteActivity(
-		workflow.WithActivityOptions(ctx, ao),
-		a.CountWorkflow,
-		&workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: params.Namespace,
-			Query:     params.Query,
-		}).Get(ctx, &output); err != nil {
-		return 0, err
-	}
-	return output.WorkflowCount, nil
 }
 
 // shardedWorkflowState holds the workflow's per-run state. Workflow
@@ -287,23 +264,17 @@ type shardedWorkflowState struct {
 	metricsHandler sdkclient.MetricsHandler
 }
 
-func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicationParams) (*shardedWorkflowState, error) {
-	lao := workflow.LocalActivityOptions{
-		StartToCloseTimeout: 1 * time.Second,
-		RetryPolicy:         forceReplicationActivityRetryPolicy,
-	}
-	localCtx := workflow.WithLocalActivityOptions(ctx, lao)
-	var a *activities
-	var md MetadataResponse
-	if err := workflow.ExecuteLocalActivity(localCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
-		return nil, err
-	}
-	var targetMd DescribeTargetClusterResponse
-	if err := workflow.ExecuteLocalActivity(localCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
-		TargetClusterName: params.TargetClusterName,
-	}).Get(ctx, &targetMd); err != nil {
-		return nil, err
-	}
+// defaultConcurrentBatchCount derives the in-flight-batch ceiling
+// from the target cluster's shard count: a quarter of the shards,
+// capped at defaultConcurrentBatchCap. The 1/4 fraction leaves worker
+// slots free for unrelated activities; the absolute cap bounds the
+// cluster blast radius regardless of cluster size. Returns at least 1.
+func defaultConcurrentBatchCount(shards int32) int {
+	return max(min(int(shards)/4, defaultConcurrentBatchCap), 1)
+}
+
+// applyShardedDefaults fills zero-valued tuning fields on params.
+func applyShardedDefaults(params *ShardedForceReplicationParams, targetShardCount int32) {
 	if params.BatchSize <= 0 {
 		params.BatchSize = defaultBatchSize
 	}
@@ -329,11 +300,31 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 		params.PerBatchGenerateRPS = defaultPerBatchGenerateRPS
 	}
 	if params.ConcurrentBatchCount <= 0 {
-		params.ConcurrentBatchCount = defaultConcurrentBatchCount(targetMd.ShardCount)
+		params.ConcurrentBatchCount = defaultConcurrentBatchCount(targetShardCount)
 	}
 	if params.EstimationMultiplier <= 0 {
 		params.EstimationMultiplier = 2
 	}
+}
+
+func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicationParams) (*shardedWorkflowState, error) {
+	lao := workflow.LocalActivityOptions{
+		StartToCloseTimeout: 1 * time.Second,
+		RetryPolicy:         forceReplicationActivityRetryPolicy,
+	}
+	localCtx := workflow.WithLocalActivityOptions(ctx, lao)
+	var a *activities
+	var md MetadataResponse
+	if err := workflow.ExecuteLocalActivity(localCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
+		return nil, err
+	}
+	var targetMd DescribeTargetClusterResponse
+	if err := workflow.ExecuteLocalActivity(localCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
+		TargetClusterName: params.TargetClusterName,
+	}).Get(ctx, &targetMd); err != nil {
+		return nil, err
+	}
+	applyShardedDefaults(params, targetMd.ShardCount)
 	// QPSQueue is sized off ConcurrentBatchCount (one sample slot per
 	// expected in-flight batch + one for the starting count). Seeded
 	// with the current ReplicatedWorkflowCount so the very first
@@ -359,14 +350,7 @@ func newShardedWorkflowState(ctx workflow.Context, params *ShardedForceReplicati
 	// Restore execs recovered from cancel-before-start batches in
 	// the prior cycle so the streaming packer picks them up
 	// alongside any new pages.
-	s.buckets.merge(params.RecoveredBuckets)
-	//workflowcheck:ignore (per-shard sum is order-independent)
-	for sh, byBID := range params.RecoveredBuckets {
-		//workflowcheck:ignore (per-shard sum is order-independent)
-		for _, runs := range byBID {
-			s.bucketCounts[sh] += len(runs)
-		}
-	}
+	params.RecoveredBuckets.mergeInto(s.buckets, s.bucketCounts)
 	params.RecoveredBuckets = nil
 	return s, nil
 }
@@ -642,15 +626,6 @@ func (s *shardedWorkflowState) recordVerified(ctx workflow.Context, verified int
 	s.params.QPSQueue.Enqueue(ctx, s.params.ReplicatedWorkflowCount)
 	s.params.ReplicatedWorkflowCountPerSecond = s.params.QPSQueue.CalculateQPS()
 	s.metricsHandler.Gauge(ForceReplicationRpsTagName).Update(s.params.ReplicatedWorkflowCountPerSecond)
-}
-
-// defaultConcurrentBatchCount derives the in-flight-batch ceiling
-// from the target cluster's shard count: a quarter of the shards,
-// capped at defaultConcurrentBatchCap. The 1/4 fraction leaves worker
-// slots free for unrelated activities; the absolute cap bounds the
-// cluster blast radius regardless of cluster size. Returns at least 1.
-func defaultConcurrentBatchCount(shards int32) int {
-	return max(min(int(shards)/4, defaultConcurrentBatchCap), 1)
 }
 
 // collectRecoveredBuckets re-buckets any execs from batches whose

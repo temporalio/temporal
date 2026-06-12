@@ -228,6 +228,26 @@ func (p BatchPayload) merge(src BatchPayload) {
 	}
 }
 
+// addRunCountsTo increments counts[shard] by the number of runs in p.
+func (p BatchPayload) addRunCountsTo(counts map[int32]int) {
+	//workflowcheck:ignore (per-shard sum is order-independent)
+	for sh, byBID := range p {
+		//workflowcheck:ignore (per-shard sum is order-independent)
+		for _, runs := range byBID {
+			counts[sh] += len(runs)
+		}
+	}
+}
+
+// mergeInto folds p into dst and bumps counts by the runs merged from p.
+func (p BatchPayload) mergeInto(dst BatchPayload, counts map[int32]int) {
+	if len(p) == 0 {
+		return
+	}
+	dst.merge(p)
+	p.addRunCountsTo(counts)
+}
+
 // ShardedForceReplicationParams is the workflow input. Configuration
 // fields are read-only across CAN cycles; the carry-over block at the
 // bottom is mutated each cycle.

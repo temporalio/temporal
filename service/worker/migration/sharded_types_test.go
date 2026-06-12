@@ -91,6 +91,27 @@ func TestBatchPayload_Flatten(t *testing.T) {
 	require.Equal(t, "b-z", got[3].BusinessID)
 }
 
+// TestBatchPayload_mergeInto merges payload runs into dst and keeps
+// bucketCounts in sync — the same invariant addToBucket maintains per
+// run, but for a bulk restore on CAN entry.
+func TestBatchPayload_mergeInto(t *testing.T) {
+	dst := BatchPayload{1: {"a": {{RunID: "r0"}}}}
+	counts := map[int32]int{1: 1}
+
+	src := BatchPayload{
+		1: {"b": {{RunID: "r1"}, {RunID: "r2"}}},
+		2: {"c": {{RunID: "r3"}}},
+	}
+	src.mergeInto(dst, counts)
+
+	require.Equal(t, 2, len(dst))
+	require.Len(t, dst[1]["a"], 1)
+	require.Len(t, dst[1]["b"], 2)
+	require.Len(t, dst[2]["c"], 1)
+	require.Equal(t, map[int32]int{1: 3, 2: 1}, counts)
+	require.Equal(t, 4, dst.totalRuns())
+}
+
 // TestShardVerifyTracker_FirstVerificationDoubledWindow pins the
 // no-progress backstop's grace for a shard's first verified outcome: a
 // shard that hasn't verified anything yet gets 2×threshold before
