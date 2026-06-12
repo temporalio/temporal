@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,6 +19,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -51,6 +51,7 @@ type workflowTasksAndActivitiesPollerParams struct {
 type taskQueueStatsContext struct {
 	testcore.Env
 	*require.Assertions
+	tb              testing.TB
 	ctx             context.Context
 	usePriMatcher   bool
 	minPriority     int
@@ -60,8 +61,8 @@ type taskQueueStatsContext struct {
 }
 
 func newTaskQueueStatsContext(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	usePriMatcher bool,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
@@ -80,6 +81,7 @@ func newTaskQueueStatsContext(
 	return &taskQueueStatsContext{
 		Env:             env,
 		Assertions:      require.New(t),
+		tb:              t,
 		ctx:             ctx,
 		usePriMatcher:   usePriMatcher,
 		minPriority:     1,
@@ -103,7 +105,7 @@ func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.T(), s.Context(), usePriMatcher, behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), usePriMatcher, behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) {
@@ -204,7 +206,7 @@ func (s *TaskQueueStatsVersionSuite) newTaskQueueStatsContext(
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.T(), s.Context(), usePriMatcher, behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), usePriMatcher, behavior, extraOpts...)
 }
 
 func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(usePriMatcher bool, behavior testcore.MatchingBehavior) {
@@ -1318,7 +1320,7 @@ func (s *taskQueueStatsContext) validateAllTaskQueueStats(
 	}
 }
 
-// validateRates verifies TasksAddRate and/or TasksDispatchRate in a dedicated EventuallyWithT block.
+// validateRates verifies TasksAddRate and/or TasksDispatchRate in a dedicated await block.
 // This should be called immediately after the relevant operation (enqueue for add rate, poll for dispatch rate)
 // to ensure the rate is checked while still fresh (before the 30-second sliding window decays).
 func (s *taskQueueStatsContext) validateRates(
@@ -1337,11 +1339,11 @@ func (s *taskQueueStatsContext) validateRates(
 		ReportStats:   true,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	await.Require(ctx, s.tb, func(t *await.T) {
+		a := require.New(t)
 		label := "validateRates[" + tqType.String() + "]"
 
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
 		a.NoError(err)
 		a.NotNil(resp)
 		a.NotNil(resp.Stats)
@@ -1399,14 +1401,14 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 	//nolint:staticcheck // SA1019 deprecated
 	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	await.Require(ctx, s.tb, func(t *await.T) {
+		a := require.New(t)
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
 		req.ReportStats = true
 		//nolint:staticcheck // SA1019 deprecated
 		req.IncludeTaskQueueStatus = true
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
 		a.NoError(err)
 		a.NotNil(resp)
 
@@ -1457,11 +1459,11 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	await.Require(ctx, s.tb, func(t *await.T) {
+		a := require.New(t)
 
 		req.ReportStats = true
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		resp, err := s.FrontendClient().DescribeTaskQueue(t.Context(), req)
 		a.NoError(err)
 		a.NotNil(resp)
 
@@ -1509,11 +1511,11 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	await.Require(ctx, s.tb, func(t *await.T) {
+		a := require.New(t)
 
 		req.ReportTaskQueueStats = true
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(t.Context(), req)
 		a.NoError(err)
 		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
