@@ -191,12 +191,11 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 			sadefs.TemporalNamespaceDivision: payload.EncodeString(legacyscheduler.NamespaceDivision),
 		},
 	)
-	// The CHASM scheduler stores custom search attributes by their alias (the
-	// frontend passes the original request through unchanged), whereas V1
-	// scheduler workflows store them unaliased -- the V1 frontend create path
-	// unaliases via UnaliasedSearchAttributesFrom before starting the workflow.
-	// Mirror that here: without it the V1 visibility upsert can't resolve the
-	// aliased names and fails with "invalid search attribute type: Unspecified".
+
+	// The CHASM scheduler stores custom search attributes by their alias (the frontend
+	// passes the original request through unchanged), whereas V1 scheduler workflows
+	// store them unaliased/resolved. Mirror how V1 unaliases search attributes before
+	// starting the system scheduler workflow.
 	sa, err := searchattribute.UnaliasFields(
 		h.saMapperProvider,
 		&commonpb.SearchAttributes{IndexedFields: saMap},
