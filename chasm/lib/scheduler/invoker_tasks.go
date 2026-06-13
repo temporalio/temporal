@@ -209,7 +209,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(h.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleInvokerExecuteTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
+	metricsHandler.Counter(metrics.ScheduleInvokerExecuteTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
@@ -433,7 +433,7 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	scheduler := invoker.Scheduler.Get(ctx)
 	newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
-		Record(1, metrics.OutcomeTag(outcomeFired))
+		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	invoker.EventLog.Get(ctx).LogEvent(ctx, "processBufferTask executed")
 

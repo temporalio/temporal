@@ -57,7 +57,7 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	scheduler.Closed = true
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
 		Counter(metrics.ScheduleIdleTask.Name()).
-		Record(1, metrics.OutcomeTag(outcomeFired))
+		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 	return nil
 }
 
