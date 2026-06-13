@@ -3426,7 +3426,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	PollerAutoscalingAutoEnroll = NewNamespaceBoolSetting(
 		"frontend.pollerAutoscalingAutoEnroll",
 		false,
-		`PollerAutoscalingAutoEnroll controls whether workers in a namespace are automatically enrolled in poller autoscaling without explicit opt-in in worker options.`,
+		`When true, workers should use poller autoscaling by default unless explicitly configured otherwise.`,
 	)
 
 	WorkflowPauseEnabled = NewNamespaceBoolSetting(
