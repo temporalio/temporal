@@ -500,7 +500,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
 		s.md.EnqueueTaskNoWait(t2)
-		time.Sleep(11 * time.Millisecond) // nolint:forbidigo
+		time.Sleep(100 * time.Millisecond) // nolint:forbidigo
 		// but we waited too long, poller timed out, so this does nothing (but doesn't crash or assert)
 		s.md.ReenqueuePollerIfNotMatched(tres.poller)
 		done <- struct{}{}
@@ -818,6 +818,10 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
+			// Reset tasks and pollers for each subtest.
+			s.md.tasks = newTaskBTree()
+			s.md.pollers = pollerPQ{}
+
 			// Create task
 			var task *internalTask
 			if tc.taskIsQuery {
@@ -834,7 +838,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			if tc.taskPriority > 0 {
 				task.effectivePriority = effectivePriorityFactor * priorityKey(tc.taskPriority)
 			}
-			s.md.tasks.heap = []*internalTask{task}
+			s.md.tasks.Add(task)
 
 			// Create poller
 			poller := &waitingPoller{
