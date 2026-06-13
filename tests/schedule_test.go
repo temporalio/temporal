@@ -830,7 +830,12 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 // testScheduleContinuesAfterWorkflowRetryFailure verifies a schedule keeps firing actions
 // after a scheduled workflow exhausts its retry policy and fails.
 func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	// Recording FAILED actions across the workflow's retry chain relies on the scheduler matching
+	// completions by the request ID carried in the completion callback token (which survives the new
+	// runs created by retries). That requires the envelope token format, which is gated off by default
+	// for safe rollout, so enable it explicitly here.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := testcore.NewEnv(t, opts...)
 
 	sid := testcore.RandomizeStr("sched-retry-fail")
 	wid := testcore.RandomizeStr("sched-retry-fail-wf")
@@ -915,7 +920,11 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 // are observed) and that the completion callback is written intact into both the original and the
 // continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
 func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	// The scheduler matches the continued-as-new run's completion by the request ID carried in the
+	// completion callback token, which only survives continue-as-new in the envelope token format.
+	// That format is gated off by default for safe rollout, so enable it explicitly here.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := testcore.NewEnv(t, opts...)
 
 	sid := testcore.RandomizeStr("sched-can-completion")
 	wid := testcore.RandomizeStr("sched-can-completion-wf")
