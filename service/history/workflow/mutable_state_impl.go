@@ -5940,6 +5940,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
+	// TimeSkippingConfig is considered to be an option with side effects,
+	// so it is only nil if the config is unchanged.
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
 		if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
 			ms.initTimeSkippingInfo(tsc, nil, event.GetEventId())
