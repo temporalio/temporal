@@ -1,6 +1,6 @@
 package versioninfo
 
-// SDKINfo is a tuple of (SDK name, SDK version)
+// SDKInfo is a tuple of (SDK name, SDK version)
 type SDKInfo struct {
 	Name    string `json:"sdkName"`
 	Version string `json:"sdkVersion"`
