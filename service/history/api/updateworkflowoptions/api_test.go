@@ -159,6 +159,8 @@ func TestMergeOptions_FooMask(t *testing.T) {
 }
 
 func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
+
+	// assuming the TSC is always in the mask -> meaning the user always updates the TSC
 	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
 	cfgA := &workflowpb.TimeSkippingConfig{Enabled: true}
 	cfgB := &workflowpb.TimeSkippingConfig{
@@ -169,50 +171,50 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 
 	tcs := []struct {
 		name                 string
-		current              *workflowpb.WorkflowExecutionOptions
-		update               *workflowpb.WorkflowExecutionOptions
+		mergeInto            *workflowpb.WorkflowExecutionOptions
+		mergeFrom            *workflowpb.WorkflowExecutionOptions
 		configForUpdateEvent *workflowpb.TimeSkippingConfig
 		configHasChanged     bool
 	}{
 		{
-			name:                 "nil update - existing config preserved",
-			current:              &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
-			update:               &workflowpb.WorkflowExecutionOptions{},
-			configForUpdateEvent: nil,
-			configHasChanged:     false,
+			name:                 "nil update - disable the TSC",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            nil,
+			configForUpdateEvent: &workflowpb.TimeSkippingConfig{Enabled: false},
+			configHasChanged:     true,
 		},
 		{
 			name:                 "same config with side-effect field change",
-			current:              &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
-			update:               &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
 			configForUpdateEvent: cfgB,
 			configHasChanged:     true,
 		},
 		{
 			name:                 "new config with side-effect field change",
-			current:              &workflowpb.WorkflowExecutionOptions{},
-			update:               &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
 			configForUpdateEvent: cfgB,
 			configHasChanged:     true,
 		},
 		{
 			name:                 "same config with no side-effect field change",
-			current:              &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
-			update:               &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
 			configForUpdateEvent: nil,
 			configHasChanged:     false,
 		},
 		{
 			name:                 "new config to disable time skipping",
-			current:              &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
-			update:               &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgC},
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgC},
 			configForUpdateEvent: cfgC,
 			configHasChanged:     true,
 		},
 		{
 			name:                 "new config to enable time skipping",
-			current:              &workflowpb.WorkflowExecutionOptions{},
-			update:               &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
 			configForUpdateEvent: cfgA,
 			configHasChanged:     true,
 		},
@@ -220,10 +222,10 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			merged, sideEffects, err := mergeWorkflowExecutionOptions(tc.current, tc.update, tscMask)
+			merged, sideEffects, err := mergeWorkflowExecutionOptions(tc.mergeInto, tc.mergeFrom, tscMask)
 			require.NoError(t, err)
-			require.Equal(t, tc.configForUpdateEvent, merged.GetTimeSkippingConfig())
-			require.Equal(t, tc.configHasChanged, sideEffects.timeSkippingConfig)
+			require.True(t, proto.Equal(tc.configForUpdateEvent, merged.GetTimeSkippingConfig()))
+			require.Equal(t, tc.configHasChanged, sideEffects.timeSkippingConfigHasChanged)
 		})
 	}
 }
@@ -444,6 +446,43 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
+			name: "using masks for internal fields won't work",
+			initialConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: oneHour},
+			},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Enabled: false,
+				},
+			},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: false,
+			},
+		},
+		{
+			name: "nil with the TSC mask will disable the TSC",
+			initialConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: oneHour},
+			},
+			updateOptions: nil,
+			updateMask:    &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: false,
+			},
+		},
+		{
+			name:          "basic case enable from nil config",
+			initialConfig: nil,
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			},
+			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
 			name: "update max_elapsed_duration while enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
@@ -455,7 +494,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: twoHours},
 				},
 			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
 				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: twoHours},
@@ -470,20 +509,11 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: thirtyMin},
 				},
 			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{
 				Enabled: true,
 				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: thirtyMin},
 			},
-		},
-		{
-			name:          "enable from nil config",
-			initialConfig: nil,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
-			},
-			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
 		},
 		{
 			name:          "disable from enabled config",
@@ -491,7 +521,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
 				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
 			},
-			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
+			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
 		},
 	}

@@ -7893,10 +7893,6 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 	}
 }
 
-// TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig verifies that
-// replaying a WorkflowExecutionOptionsUpdated event with TimeSkippingConfig populates
-// or overwrites executionInfo.TimeSkippingInfo. This is the rebuild path for
-// time-skipping config that is set or changed after workflow start.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
 	initialConfig := &workflowpb.TimeSkippingConfig{
 		Enabled: true,
@@ -7908,46 +7904,69 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 	}
 
 	testCases := []struct {
-		name          string
-		existing      *workflowpb.TimeSkippingConfig
-		eventConfig   *workflowpb.TimeSkippingConfig
-		wantConfig    *workflowpb.TimeSkippingConfig
-		wantInfoIsNil bool
+		name              string
+		existing          *workflowpb.TimeSkippingConfig
+		eventConfig       *workflowpb.TimeSkippingConfig
+		wantConfig        *workflowpb.TimeSkippingConfig
+		wantInfoIsNil     bool
+		targetTimeRenewal bool
 	}{
 		{
-			name:        "sets when none exists",
-			existing:    nil,
-			eventConfig: initialConfig,
-			wantConfig:  initialConfig,
+			name:              "sets when none exists",
+			existing:          nil,
+			eventConfig:       initialConfig,
+			wantConfig:        initialConfig,
+			targetTimeRenewal: true,
 		},
 		{
-			name:        "overwrites existing",
-			existing:    initialConfig,
-			eventConfig: updatedConfig,
-			wantConfig:  updatedConfig,
+			name:              "overwrites existing",
+			existing:          initialConfig,
+			eventConfig:       updatedConfig,
+			wantConfig:        updatedConfig,
+			targetTimeRenewal: true,
 		},
 		{
-			name:          "nil config leaves info untouched",
-			existing:      nil,
-			eventConfig:   nil,
-			wantInfoIsNil: true,
+			name:              "nil won't initialize TSI if none exists",
+			existing:          nil,
+			eventConfig:       nil,
+			wantInfoIsNil:     true,
+			targetTimeRenewal: false,
 		},
 		{
-			name:        "nil config preserves existing",
-			existing:    initialConfig,
-			eventConfig: nil,
-			wantConfig:  initialConfig,
+			name:              "nil indicates no change",
+			existing:          initialConfig,
+			eventConfig:       nil,
+			wantConfig:        initialConfig,
+			targetTimeRenewal: false,
+		},
+		{
+			name:              "same config will trigger target time renewal",
+			existing:          initialConfig,
+			eventConfig:       initialConfig,
+			wantInfoIsNil:     false,
+			targetTimeRenewal: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			if tc.existing != nil {
-				s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tc.existing}
-			}
-
-			event := &historypb.HistoryEvent{
+			// first init the existing TSC to get the TSI
+			initialEvent := &historypb.HistoryEvent{
 				EventId:   int64(2),
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+						TimeSkippingConfig: tc.existing,
+					},
+				},
+			}
+			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(initialEvent)
+			s.NoError(err)
+			initialTSI := common.CloneProto(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			// apply the event config
+			updatedEvent := &historypb.HistoryEvent{
+				EventId:   int64(3),
 				EventTime: timestamppb.New(time.Now().UTC()),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -7956,37 +7975,24 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 					},
 				},
 			}
-
-			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event)
+			err = s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(updatedEvent)
 			s.NoError(err)
+			updatedTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
+			if tc.wantConfig != nil {
+				s.True(proto.Equal(tc.wantConfig, updatedTSI.GetConfig()))
+			}
 			if tc.wantInfoIsNil {
-				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+				s.Nil(updatedTSI)
 			} else {
-				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+				if tc.targetTimeRenewal {
+					s.NotEqual(initialTSI.GetCurrentElapsedDurationBound(), updatedTSI.GetCurrentElapsedDurationBound())
+				} else {
+					s.Equal(initialTSI.GetCurrentElapsedDurationBound(), updatedTSI.GetCurrentElapsedDurationBound())
+				}
 			}
 		})
 	}
-}
-
-func (s *mutableStateSuite) TestAddWorkflowExecutionOptionsUpdatedEvent_NilTimeSkippingConfig() {
-	existingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
-
-	s.Run("no existing TSI", func() {
-		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
-		_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, nil)
-		s.NoError(err)
-		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
-		s.False(s.mutableState.timeSkippingInfoUpdated)
-	})
-
-	s.Run("existing TSI", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: existingConfig}
-		_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "", nil, nil, "", nil, nil, nil)
-		s.NoError(err)
-		s.True(proto.Equal(existingConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
-		s.False(s.mutableState.timeSkippingInfoUpdated)
-	})
 }
 
 func TestGenerateActivityCancelCommandsForClose(t *testing.T) {

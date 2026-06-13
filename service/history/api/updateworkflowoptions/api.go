@@ -126,11 +126,11 @@ func Invoke(
 // UpdateSideEffectOptions is used to track which WorkflowOptions have side effects,
 // and cannot be detected simply by proto.Equal.
 type UpdateSideEffectOptions struct {
-	timeSkippingConfig bool
+	timeSkippingConfigHasChanged bool
 }
 
 func (u UpdateSideEffectOptions) hasChanges() bool {
-	return u.timeSkippingConfig
+	return u.timeSkippingConfigHasChanged
 }
 
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
@@ -245,7 +245,13 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
 	}
 
-	// ==== Time Skipping Config (has side effects when applied)
+	// ==== Time Skipping Config
+	// - has side effects when applied so equality check is not enough to determine if there are changes;
+	// - We only support validating and updating the TSC as a whole, not setting fields individually.
+	//   1) It is because TSC must be validated as a complete unit (check `validateTimeSkippingConfig`) and
+	//   partial field updates risk producing an invalid config and catching that after a merge is late.
+	//   2) It will make it hard to tell from UpdateWorkflowOptionsEvent whether time skipping timer tasks
+	//   regeneration is needed.
 	var originalTsc *workflowpb.TimeSkippingConfig
 	if tsc := mergeInto.GetTimeSkippingConfig(); tsc != nil {
 		if cloned, ok := proto.Clone(tsc).(*workflowpb.TimeSkippingConfig); ok {
@@ -256,37 +262,39 @@ func mergeWorkflowExecutionOptions(
 	// getting the new TSC config
 	var boundInMask bool
 	if _, ok := updateFields["timeSkippingConfig"]; ok {
-		if mergeFrom.GetTimeSkippingConfig() != nil {
+		// if mergeFrom is masked but nil,
+		// - if the original TSC is not nil, we change it to explicitly disable the TSC
+		// 	as nil indicate no change for options that has side effects;
+		// - if the original TSC is nil, we keep it as nil to indicate no change;
+		if mergeFrom.GetTimeSkippingConfig() == nil {
+			if originalTsc == nil {
+				mergeInto.TimeSkippingConfig = nil
+			} else {
+				mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{
+					Enabled: false,
+				}
+			}
+		} else {
 			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
 		}
-		if mergeFrom.GetTimeSkippingConfig().GetBound() != nil {
-			boundInMask = true
+
+		// boundInMask should always from the new TSC config
+		bound := mergeFrom.GetTimeSkippingConfig().GetBound()
+		if bound, ok := bound.(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
+			if bound != nil && bound.MaxElapsedDuration.AsDuration() != 0 {
+				boundInMask = true
+			}
 		}
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
-	}
-
-	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
-		}
-		boundInMask = true
-	}
-
-	var sideEffects UpdateSideEffectOptions
 	// either bound is used or the config contents are changed
+	var sideEffects UpdateSideEffectOptions
+
+	// for workflows with no TSC
 	if boundInMask || (!proto.Equal(mergeInto.GetTimeSkippingConfig(), originalTsc)) {
-		sideEffects.timeSkippingConfig = true
+		sideEffects.timeSkippingConfigHasChanged = true
 	} else {
-		sideEffects.timeSkippingConfig = false
+		sideEffects.timeSkippingConfigHasChanged = false
 		mergeInto.TimeSkippingConfig = nil
 	}
 	return mergeInto, sideEffects, nil
