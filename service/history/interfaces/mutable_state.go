@@ -127,7 +127,7 @@ type (
 			links []*commonpb.Link,
 			identity string,
 			priority *commonpb.Priority,
-			timeSkippingConfig *workflowpb.TimeSkippingConfig,
+			timeSkippingConfig *commonpb.TimeSkippingConfig,
 			workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(updateID string, acceptedRequestMessageID string, acceptedRequestSequencingEventID int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)

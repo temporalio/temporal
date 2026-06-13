@@ -160,8 +160,8 @@ func TestMergeOptions_FooMask(t *testing.T) {
 
 func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
-	cfgA := &workflowpb.TimeSkippingConfig{Enabled: true}
-	cfgB := &workflowpb.TimeSkippingConfig{
+	cfgA := &commonpb.TimeSkippingConfig{Enabled: true}
+	cfgB := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(time.Hour),
 	}
@@ -171,7 +171,7 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 		current     *workflowpb.WorkflowExecutionOptions
 		update      *workflowpb.WorkflowExecutionOptions
 		wantChanged bool
-		wantConfig  *workflowpb.TimeSkippingConfig
+		wantConfig  *commonpb.TimeSkippingConfig
 	}{
 		// nil update means "don't touch" even when mask is present
 		{
@@ -341,42 +341,42 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		initialConfig  *workflowpb.TimeSkippingConfig
+		initialConfig  *commonpb.TimeSkippingConfig
 		updateOptions  *workflowpb.WorkflowExecutionOptions
 		updateMask     *fieldmaskpb.FieldMask
-		expectedConfig *workflowpb.TimeSkippingConfig
+		expectedConfig *commonpb.TimeSkippingConfig
 	}{
 		{
 			name: "update max_elapsed_duration while enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
+			initialConfig: &commonpb.TimeSkippingConfig{
 				Enabled:     true,
 				FastForward: oneHour,
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 					Enabled:     true,
 					FastForward: twoHours,
 				},
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.fast_forward"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
+			expectedConfig: &commonpb.TimeSkippingConfig{
 				Enabled:     true,
 				FastForward: twoHours,
 			},
 		},
 		{
 			name: "set max_elapsed_duration while enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
+			initialConfig: &commonpb.TimeSkippingConfig{
 				Enabled: true,
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 					Enabled:     true,
 					FastForward: thirtyMin,
 				},
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.fast_forward"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
+			expectedConfig: &commonpb.TimeSkippingConfig{
 				Enabled:     true,
 				FastForward: thirtyMin,
 			},
@@ -385,19 +385,19 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			name:          "enable from nil config",
 			initialConfig: nil,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectedConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 		},
 		{
 			name:          "disable from enabled config",
-			initialConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: false},
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+			expectedConfig: &commonpb.TimeSkippingConfig{Enabled: false},
 		},
 	}
 

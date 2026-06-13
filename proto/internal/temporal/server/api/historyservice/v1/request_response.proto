@@ -105,7 +105,7 @@ message StartWorkflowExecutionRequest {
   // WorkflowExecutionStartedEvent.
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
   reserved 18;
-  temporal.api.workflow.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
+  temporal.api.common.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
 }
 
 message StartWorkflowExecutionResponse {

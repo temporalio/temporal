@@ -3,7 +3,7 @@ package workflow
 import (
 	"time"
 
-	workflowpb "go.temporal.io/api/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -12,7 +12,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 	newSource := func() *persistencespb.WorkflowExecutionInfo {
 		return &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
+				Config: &commonpb.TimeSkippingConfig{
 					Enabled:     true,
 					FastForward: durationpb.New(3 * time.Hour),
 				},
@@ -26,7 +26,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
 		s.Equal(3*time.Hour, tsc.GetFastForward().AsDuration())
-		s.Equal(time.Hour, initialSkip.AsDuration())
+		s.Equal(time.Hour, initialSkip.GetInitialSkippedDuration().AsDuration())
 	})
 
 	s.Run("child does not propagate config when Enabled is false", func() {
@@ -35,7 +35,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		tsc, initialSkip := propagateTimeSkippingToChild(src)
 		s.Nil(tsc, "Enabled=false → no config propagated to the child")
 		s.Require().NotNil(initialSkip)
-		s.Equal(time.Hour, initialSkip.AsDuration(),
+		s.Equal(time.Hour, initialSkip.GetInitialSkippedDuration().AsDuration(),
 			"virtual time is always propagated, even when config propagation is disabled")
 	})
 
@@ -44,7 +44,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
 		s.Nil(tsc.GetFastForward(), "MaxElapsedDuration never cascades into children")
-		s.Equal(time.Hour, initialSkip.AsDuration())
+		s.Equal(time.Hour, initialSkip.GetInitialSkippedDuration().AsDuration())
 	})
 
 	s.Run("execution-chain snapshot does not mutate the source config", func() {
@@ -52,9 +52,9 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ContinuationVsChild() {
 		tsc, _ := propagateTimeSkippingToNextRun(src)
 		s.Require().NotNil(tsc)
 		tsc.Enabled = false
-		tsc.Bound = nil
+		tsc.FastForward = nil
 		s.True(src.GetTimeSkippingInfo().GetConfig().GetEnabled(), "source Enabled must not be mutated")
 		s.Equal(3*time.Hour, src.GetTimeSkippingInfo().GetConfig().GetFastForward().AsDuration(),
-			"source MaxElapsedDuration must not be mutated")
+			"source FastForward must not be mutated")
 	})
 }

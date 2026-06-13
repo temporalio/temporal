@@ -3,7 +3,7 @@ package workflow
 import (
 	"time"
 
-	workflowpb "go.temporal.io/api/workflow/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -14,12 +14,12 @@ import (
 // affecting the source.
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
-) (*workflowpb.TimeSkippingConfig, *workflowpb.TimeSkippingStatePropagation) {
-	var tsc *workflowpb.TimeSkippingConfig
+) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
+	var tsc *commonpb.TimeSkippingConfig
 	if cfg := source.GetTimeSkippingInfo().GetConfig(); cfg != nil {
 		tsc = common.CloneProto(cfg)
 	}
-	stateProp := &workflowpb.TimeSkippingStatePropagation{
+	stateProp := &commonpb.TimeSkippingStatePropagation{
 		InitialSkippedDuration: durationpb.New(accumulatedSkippedDuration(source)),
 	}
 	if ff := source.GetTimeSkippingInfo().GetFastForwardInfo(); ff != nil && !ff.GetHasReached() {
@@ -33,11 +33,11 @@ func propagateTimeSkippingToNextRun(
 // FastForward is never propagated to children.
 func propagateTimeSkippingToChild(
 	source *persistencespb.WorkflowExecutionInfo,
-) (*workflowpb.TimeSkippingConfig, *workflowpb.TimeSkippingStatePropagation) {
+) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
 	accum := accumulatedSkippedDuration(source)
-	var stateProp *workflowpb.TimeSkippingStatePropagation
+	var stateProp *commonpb.TimeSkippingStatePropagation
 	if accum > 0 {
-		stateProp = &workflowpb.TimeSkippingStatePropagation{
+		stateProp = &commonpb.TimeSkippingStatePropagation{
 			InitialSkippedDuration: durationpb.New(accum),
 		}
 	}
@@ -46,7 +46,7 @@ func propagateTimeSkippingToChild(
 	if !enabled {
 		return nil, stateProp
 	}
-	return &workflowpb.TimeSkippingConfig{
+	return &commonpb.TimeSkippingConfig{
 		Enabled: enabled,
 	}, stateProp
 }

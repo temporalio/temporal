@@ -5832,7 +5832,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
@@ -9976,8 +9976,8 @@ func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationp
 }
 
 func (ms *MutableStateImpl) initTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
-	timeSkippingStatePropagation *workflowpb.TimeSkippingStatePropagation,
+	config *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 	currentEventID int64,
 ) {
 	// we only need to init time skipping info if
@@ -9997,7 +9997,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
+	config *commonpb.TimeSkippingConfig,
 	currentEventID int64,
 ) {
 	ms.executionInfo.TimeSkippingInfo.Config = config

@@ -61,7 +61,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) findTransitionedEvents(history 
 	return out
 }
 
-func fastForwardStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration, cfg *workflowpb.TimeSkippingConfig) *workflowservice.StartWorkflowExecutionRequest {
+func fastForwardStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration, cfg *commonpb.TimeSkippingConfig) *workflowservice.StartWorkflowExecutionRequest {
 	return &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -89,7 +89,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 		accumTol    = 30 * time.Second
 	)
 
-	cfg := &workflowpb.TimeSkippingConfig{
+	cfg := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
@@ -223,7 +223,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 		minuteToler = time.Minute
 	)
 
-	cfg := &workflowpb.TimeSkippingConfig{
+	cfg := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
@@ -350,7 +350,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 		accumTol    = 30 * time.Second
 	)
 
-	cfg := &workflowpb.TimeSkippingConfig{
+	cfg := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
@@ -406,7 +406,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 		return workflow.Sleep(ctx, runTimeout)
 	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
-	cfg := &workflowpb.TimeSkippingConfig{
+	cfg := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(fastForward),
 	}
@@ -481,7 +481,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 		WorkflowRunTimeout:  durationpb.New(runTimeout),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true}, // no fastForward yet
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true}, // no fastForward yet
 	})
 	s.NoError(err)
 	runID := startResp.RunId
@@ -505,7 +505,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 				Enabled:     true,
 				FastForward: durationpb.New(fastForward),
 			},

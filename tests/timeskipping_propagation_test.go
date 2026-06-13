@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingPropagationTestSuite struct {
@@ -120,7 +121,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		// FastForward never cascades into children; the parent's 2h of own skipping
 		// stays under this budget so the parent's flow is unaffected by it.
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(3 * time.Hour),
 		},
@@ -208,7 +209,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	s.NotNil(initTSC, "initiated event should carry TimeSkippingConfig snapshot")
 	s.True(initTSC.GetEnabled(), "snapshot mirrors parent's Enabled flag")
 	s.Nil(initTSC.GetFastForward(), "initiated-event snapshot excludes the parent's MaxElapsedDuration")
-	s.approxDuration(time.Hour, initAttrs.GetInitialSkippedDuration().AsDuration(),
+	s.approxDuration(time.Hour, initAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
 }
 
@@ -251,7 +252,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
 	s.NoError(err)
 	parentRunID := parentStart.RunId
@@ -386,7 +387,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
 	s.NoError(err)
 	gRunID := gStart.RunId
@@ -549,7 +550,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
 	s.NoError(err)
 	parentRunID := parentStart.RunId
@@ -971,7 +972,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: false},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: false},
 	})
 	s.NoError(err)
 	originalRunID := startResp.RunId
@@ -993,7 +994,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 	})
@@ -1119,7 +1120,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 		TaskQueue:           tq,
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
 	s.NoError(err)
 	run1ID := start1.RunId
@@ -1186,7 +1187,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	startedTSC := startedAttr.GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "run 2's WorkflowExecutionStarted must carry the TSC snapshot")
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors run 1's config")
-	s.approxDuration(time.Hour, startedAttr.GetInitialSkippedDuration().AsDuration(),
+	s.approxDuration(time.Hour, startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"started event retains InitialSkippedDuration=1h (run 1's accumulated at CaN time); applyTimeSkippingConfig uses it to seed AccumulatedSkippedDuration on the MS but the event snapshot is unchanged")
 }
 
@@ -1239,7 +1240,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		// FastForward is part of the inherited config: it caps the whole chain of attempts.
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(4 * time.Hour),
 		},
@@ -1322,7 +1323,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors attempt 1's current config")
 	s.Equal(4*time.Hour, startedTSC.GetFastForward().AsDuration(),
 		"started event carries the inherited MaxElapsedDuration — the snapshot of attempt 1's current config")
-	s.approxDuration(time.Hour, startedAttr.GetInitialSkippedDuration().AsDuration(),
+	s.approxDuration(time.Hour, startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"started event InitialSkippedDuration carries attempt 1's in-flight accumulated skip (1h) at retry time")
 }
 
@@ -1362,7 +1363,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	wfID := tv.WorkflowID()
 	tq := tv.TaskQueue()
 
-	inputCfg := &workflowpb.TimeSkippingConfig{
+	inputCfg := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(time.Hour),
 	}
@@ -1458,7 +1459,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 		"run 2 is initiated by cron schedule")
 	s.True(proto.Equal(inputCfg, startedAttr.GetTimeSkippingConfig()),
 		"started event carries Enabled=true, MaxElapsedDuration=1h — the snapshot from run 1's current config")
-	s.InDelta(float64(50*time.Minute), float64(startedAttr.GetInitialSkippedDuration().AsDuration()), float64(90*time.Second),
+	s.InDelta(float64(50*time.Minute), float64(startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration()), float64(90*time.Second),
 		"started event InitialSkippedDuration carries run 1's in-flight accumulated skip at cron-rollover time")
 }
 
@@ -1506,7 +1507,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 		TaskQueue:           tq,
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(3 * time.Hour),
 		},
