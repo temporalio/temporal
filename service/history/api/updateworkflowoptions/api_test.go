@@ -87,36 +87,40 @@ func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	input := emptyOptions
 
 	// Merge unpinned into empty options
-	merged, _, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
+	merged, sideEffects, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+	require.False(t, sideEffects.hasChanges())
 
 	// Merge pinned_A into unpinned options
-	merged, _, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
+	merged, sideEffects, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
+	require.False(t, sideEffects.hasChanges())
 
 	// Merge pinned_B into pinned_A options
-	merged, _, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
+	merged, sideEffects, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
+	require.False(t, sideEffects.hasChanges())
 
 	// Unset versioning override
-	merged, _, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
+	merged, sideEffects, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, emptyOptions, merged)
+	require.False(t, sideEffects.hasChanges())
 }
 
 func TestMergeOptions_PartialMask(t *testing.T) {
-	bothUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
+	allUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
 	behaviorOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior"}}
 	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
 
@@ -126,9 +130,15 @@ func TestMergeOptions_PartialMask(t *testing.T) {
 	_, _, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
 	require.Error(t, err)
 
-	merged, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, bothUpdateMask)
+	merged, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, allUpdateMask)
 	require.NoError(t, err)
 	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+
+	// partial mask for time skipping config will return invalid argument error
+	timeSkippingPartialMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}}
+	_, _, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, timeSkippingPartialMask)
+	require.Error(t, err)
+
 }
 
 func TestMergeOptions_EmptyMask(t *testing.T) {
