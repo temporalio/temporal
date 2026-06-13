@@ -1716,7 +1716,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
-	request.InitialSkippedDuration = attributes.GetInitialSkippedDuration()
+	request.TimeSkippingStatePropagation = attributes.GetTimeSkippingStatePropagation()
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {
