@@ -182,6 +182,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueVersionMembership
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueVersionMembership), varargs...)
 }
 
+// CountWorkers mocks base method.
+func (m *MockMatchingServiceClient) CountWorkers(ctx context.Context, in *matchingservice.CountWorkersRequest, opts ...grpc.CallOption) (*matchingservice.CountWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CountWorkers", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CountWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWorkers indicates an expected call of CountWorkers.
+func (mr *MockMatchingServiceClientMockRecorder) CountWorkers(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkers", reflect.TypeOf((*MockMatchingServiceClient)(nil).CountWorkers), varargs...)
+}
+
 // CreateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *matchingservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -969,6 +989,21 @@ func (m *MockMatchingServiceServer) CheckTaskQueueVersionMembership(arg0 context
 func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueVersionMembership(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueVersionMembership), arg0, arg1)
+}
+
+// CountWorkers mocks base method.
+func (m *MockMatchingServiceServer) CountWorkers(arg0 context.Context, arg1 *matchingservice.CountWorkersRequest) (*matchingservice.CountWorkersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountWorkers", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CountWorkersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWorkers indicates an expected call of CountWorkers.
+func (mr *MockMatchingServiceServerMockRecorder) CountWorkers(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkers", reflect.TypeOf((*MockMatchingServiceServer)(nil).CountWorkers), arg0, arg1)
 }
 
 // CreateNexusEndpoint mocks base method.

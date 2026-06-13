@@ -585,7 +585,7 @@ func (e *ChasmEngine) deleteExecution(
 		if err != nil {
 			return err
 		}
-		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: ref.BusinessID}) == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 			chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 			if !ok {
 				return serviceerror.NewInternalf(

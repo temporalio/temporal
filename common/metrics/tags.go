@@ -28,6 +28,7 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -314,6 +315,10 @@ func TaskSourceTag(source enumsspb.TaskSource) Tag {
 
 func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
+}
+
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
 }
 
 const (

@@ -9,9 +9,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	sdktemporal "go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -19,9 +21,9 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
-	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingBoundFunctionalSuite struct {
@@ -49,23 +51,6 @@ func (s *TimeSkippingBoundFunctionalSuite) getMutableState(env *testcore.TestEnv
 	return ms
 }
 
-func (s *TimeSkippingBoundFunctionalSuite) getBackoffTimerTasks(env *testcore.TestEnv, workflowID, runID string) []*historytasks.WorkflowBackoffTimerTask {
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
-	s.NotNil(recorder)
-	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
-		NamespaceID: env.NamespaceID().String(),
-		WorkflowID:  workflowID,
-		RunID:       runID,
-	})
-	var out []*historytasks.WorkflowBackoffTimerTask
-	for _, rec := range recorded {
-		if t, ok := rec.Task.(*historytasks.WorkflowBackoffTimerTask); ok {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
 func (s *TimeSkippingBoundFunctionalSuite) findTransitionedEvents(history []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	var out []*historypb.HistoryEvent
 	for _, e := range history {
@@ -87,395 +72,6 @@ func boundStartReq(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig:  cfg,
 	}
-}
-
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_LongUserTimer() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-
-	const (
-		maxSkip     = 30 * time.Minute
-		userTimer   = 1 * time.Hour
-		minuteToler = time.Minute
-		accumTol    = 30 * time.Second
-	)
-
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxSkip)},
-	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
-	s.NoError(err)
-	runID := startResp.RunId
-
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{startTimerCmd("t1", userTimer)},
-		}, nil
-	})
-	s.NoError(err)
-
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-	})
-	s.NoError(err)
-	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1)
-	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(attrs.GetDisabledAfterBound())
-
-	eventTime := transitions[0].GetEventTime().AsTime()
-	s.WithinDuration(startTime, eventTime, minuteToler)
-
-	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
-
-	foundTimer := false
-	for _, ti := range ms.State.TimerInfos {
-		if ti.GetTimerId() == "t1" {
-			foundTimer = true
-			s.WithinDuration(startTime.Add(userTimer), ti.GetExpiryTime().AsTime(), minuteToler)
-		}
-	}
-	s.True(foundTimer, "t1 user timer must be persisted on MS")
-
-	// Load-bearing skip-happened check: regenerated user-timer task's wall-clock fire time
-	// is virtual_expiry - accumulated = startTime + (userTimer - maxSkip). Without skip
-	// it would be startTime + userTimer, so this catches a regression where the
-	// task is not re-emitted after the bound transition.
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
-	s.NotNil(recorder)
-	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
-		NamespaceID: env.NamespaceID().String(),
-		WorkflowID:  tv.WorkflowID(),
-		RunID:       runID,
-	})
-	var t1Task *historytasks.UserTimerTask
-	for _, rec := range recorded {
-		if ut, ok := rec.Task.(*historytasks.UserTimerTask); ok {
-			t1Task = ut
-		}
-	}
-	s.NotNil(t1Task, "t1 user-timer task must be recorded in the timer queue")
-	if t1Task != nil {
-		s.WithinDuration(startTime.Add(userTimer-maxSkip), t1Task.VisibilityTimestamp, minuteToler)
-	}
-
-	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		Reason:            "test cleanup",
-	})
-}
-
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-
-	const (
-		maxSkip     = time.Hour
-		timer1Dur   = 30 * time.Minute
-		timer2Dur   = 40 * time.Minute
-		minuteToler = time.Minute
-		accumTol    = 30 * time.Second
-	)
-
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxSkip)},
-	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
-	s.NoError(err)
-	runID := startResp.RunId
-
-	state := 0
-	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		switch state {
-		case 0:
-			state = 1
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{
-				Commands: []*commandpb.Command{startTimerCmd("t1", timer1Dur)},
-			}, nil
-		case 1:
-			state = 2
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{
-				Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
-			}, nil
-		case 2:
-			state = 3
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{
-				Commands: []*commandpb.Command{startTimerCmd("t2", timer2Dur)},
-			}, nil
-		default:
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-		}
-	}
-
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
-	s.NoError(err)
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
-	s.NoError(err)
-	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
-	s.NoError(err)
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
-	s.NoError(err)
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 2)
-
-	first := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.False(first.GetDisabledAfterBound())
-	s.NotNil(first.GetTargetTime())
-	firstSkip := first.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(accumTol))
-
-	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(second.GetDisabledAfterBound())
-	s.NotNil(second.GetTargetTime())
-	secondSkip := second.GetTargetTime().AsTime().Sub(transitions[1].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(secondSkip), float64(accumTol))
-
-	monotone := transitions[1].GetEventTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(monotone), float64(minuteToler))
-
-	var activityCompleted, activityScheduled int
-	for _, e := range hist {
-		switch e.GetEventType() {
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			activityCompleted++
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
-			activityScheduled++
-		default:
-			// other event types not asserted
-		}
-	}
-	s.Equal(1, activityCompleted)
-	s.Equal(1, activityScheduled)
-
-	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
-
-	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		Reason:            "test cleanup",
-	})
-}
-
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_NoUserTimer() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-
-	const (
-		maxSkip     = 30 * time.Minute
-		minuteToler = time.Minute
-		accumTol    = 30 * time.Second
-	)
-
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxSkip)},
-	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, boundStartReq(env, tv, 24*time.Hour, cfg))
-	s.NoError(err)
-	runID := startResp.RunId
-
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-	})
-	s.NoError(err)
-
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-	})
-	s.NoError(err)
-	startTime := desc.WorkflowExecutionInfo.GetStartTime().AsTime()
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1)
-	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(attrs.GetDisabledAfterBound())
-	s.WithinDuration(startTime, transitions[0].GetEventTime().AsTime(), minuteToler)
-
-	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
-
-	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		Reason:            "test cleanup",
-	})
-}
-
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartBackoffCron() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-
-	// Cron expression chosen so the first run's backoff is comfortably greater than the
-	// (server-enforced 1m minimum) MaxSkippedDuration: hourly cron yields a 0–60min gap.
-	// Skip the rare window where now is in the last minute of the hour.
-	now := time.Now()
-	nextHour := now.Truncate(time.Hour).Add(time.Hour)
-	cronGap := nextHour.Sub(now)
-	if cronGap < 90*time.Second {
-		s.T().Skipf("cron gap (%v) too small for stable test; rerun", cronGap)
-	}
-
-	const boundDuration = time.Minute
-	startWall := time.Now()
-
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(boundDuration)},
-	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
-		WorkflowId:          tv.WorkflowID(),
-		WorkflowType:        tv.WorkflowType(),
-		TaskQueue:           tv.TaskQueue(),
-		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  cfg,
-		CronSchedule:        "0 * * * *",
-	})
-	s.NoError(err)
-	run1ID := startResp.RunId
-
-	// The bound disable fires during WorkflowExecutionStarted's closeTransaction. We do
-	// NOT wait for the first WT — that would require waiting wall-clock (cronGap - bound),
-	// up to ~59 minutes. The TSI / history state is observable as soon as the start
-	// transaction commits.
-	s.Eventually(func() bool {
-		ms := s.getMutableState(env, tv.WorkflowID(), run1ID)
-		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		return tsi != nil && tsi.GetAccumulatedSkippedDuration().AsDuration() > 0
-	}, 30*time.Second, 200*time.Millisecond, "expected MS to record a skip after workflow start")
-
-	elapsed := time.Since(startWall)
-	s.Less(elapsed, 30*time.Second)
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: run1ID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1)
-	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(attrs.GetDisabledAfterBound())
-	s.NotNil(attrs.GetTargetTime())
-	skip := attrs.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(boundDuration), float64(skip), float64(15*time.Second))
-
-	ms := s.getMutableState(env, tv.WorkflowID(), run1ID)
-	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(boundDuration), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(15*time.Second))
-
-	backoffTasks := s.getBackoffTimerTasks(env, tv.WorkflowID(), run1ID)
-	s.NotEmpty(backoffTasks)
-	for _, t := range backoffTasks {
-		s.Equal(enumsspb.WORKFLOW_BACKOFF_TYPE_CRON, t.WorkflowBackoffType)
-	}
-
-	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-		Reason:            "test cleanup: stop cron chain",
-	})
-}
-
-func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartWithDelay() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
-
-	const (
-		delay         = 5 * time.Minute
-		boundDuration = time.Minute
-	)
-
-	startWall := time.Now()
-
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(boundDuration)},
-	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
-		WorkflowId:          tv.WorkflowID(),
-		WorkflowType:        tv.WorkflowType(),
-		TaskQueue:           tv.TaskQueue(),
-		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  cfg,
-		WorkflowStartDelay:  durationpb.New(delay),
-	})
-	s.NoError(err)
-	runID := startResp.RunId
-
-	// Bound disable fires during WorkflowExecutionStarted's closeTransaction. Don't wait
-	// for the first WT — that requires waiting wall-clock (delay - bound), which would
-	// exceed the default poll timeout and may de-subscribe matching pollers.
-	s.Eventually(func() bool {
-		ms := s.getMutableState(env, tv.WorkflowID(), runID)
-		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		return tsi != nil && tsi.GetAccumulatedSkippedDuration().AsDuration() > 0
-	}, 30*time.Second, 200*time.Millisecond, "expected MS to record a skip after workflow start")
-
-	elapsed := time.Since(startWall)
-	s.Less(elapsed, 30*time.Second)
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1)
-	attrs := transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	s.True(attrs.GetDisabledAfterBound())
-	s.NotNil(attrs.GetTargetTime())
-	skip := attrs.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(boundDuration), float64(skip), float64(15*time.Second))
-
-	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.NotNil(tsi)
-	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(boundDuration), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(15*time.Second))
-
-	backoffTasks := s.getBackoffTimerTasks(env, tv.WorkflowID(), runID)
-	s.NotEmpty(backoffTasks)
-	for _, t := range backoffTasks {
-		s.Equal(enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START, t.WorkflowBackoffType)
-	}
-
-	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
-		Reason:            "test cleanup",
-	})
 }
 
 func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
@@ -797,4 +393,139 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		Reason:            "test cleanup",
 	})
+}
+
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_BoundEqualsRunTimeout() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const (
+		runTimeout = 5 * time.Minute
+		bound      = runTimeout // bound == runTimeout
+	)
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Sleep(ctx, runTimeout)
+	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
+
+	cfg := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+	}
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "sleepEqualsTimeoutWorkflow"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowRunTimeout:  durationpb.New(runTimeout),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  cfg,
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	indexOfEventType := func(history []*historypb.HistoryEvent, t enumspb.EventType) int {
+		for i, e := range history {
+			if e.GetEventType() == t {
+				return i
+			}
+		}
+		return -1
+	}
+	transitionIdx := indexOfEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED)
+	timedOutIdx := indexOfEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT)
+	s.GreaterOrEqual(transitionIdx, 0, "expected a time-skipping transition event")
+	s.GreaterOrEqual(timedOutIdx, 0, "expected the workflow to time out")
+	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
+}
+
+// TestBound_MaxElapsed_RunTimeoutBeforeBound is a two-phase test:
+//
+//  1. Workflow starts with time-skipping enabled but NO bound. The workflow is
+//     idle (blocking on a condition) so there are no skip candidates. The
+//     run/execution timeout alone must NOT advance virtual time — it is not a
+//     skip target. The workflow stays RUNNING indefinitely in real time.
+//
+//  2. A MaxElapsed bound larger than the run timeout is added via
+//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the bound
+//     as the only skip candidate, which is then capped at the run timeout
+//     (5 min < 10 min bound). Virtual time advances to the run timeout and the
+//     workflow is TIMED_OUT. The single transition carries DisabledAfterBound=false
+//     (the cap fired before the bound was reached).
+func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_RunTimeoutBeforeBound() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const (
+		runTimeout = 5 * time.Minute
+		bound      = 10 * time.Minute // larger than runTimeout
+	)
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool { return false })
+	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
+
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowRunTimeout:  durationpb.New(runTimeout),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true}, // no bound yet
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// Phase 1: wait for the SDK worker to complete the first WFT (workflow blocks
+	// on Await). After the close-tx there are no skip candidates, so virtual time
+	// must not have advanced and no TimeSkippingTransitioned event should exist.
+	s.AwaitTruef(func() bool {
+		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+		return hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
+	}, 10*time.Second, 200*time.Millisecond, "first WFT must complete")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	s.Empty(s.findTransitionedEvents(hist),
+		"run/execution timeout alone is not a skip target — no transition must have fired")
+
+	// Phase 2: add MaxElapsed bound > run timeout. The update's close-tx finds
+	// the bound as the skip candidate, caps it at the run timeout, and the
+	// workflow is timed out.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(bound)},
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	hist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
+	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound(),
+		"run timeout caps the skip before bound is reached: DisabledAfterBound must be false")
+	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }
