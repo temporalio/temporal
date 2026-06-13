@@ -5840,7 +5840,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
@@ -9985,8 +9985,8 @@ func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationp
 }
 
 func (ms *MutableStateImpl) initTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
-	timeSkippingStatePropagation *workflowpb.TimeSkippingStatePropagation,
+	config *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 	currentEventID int64,
 ) {
 	// we only need to init time skipping info if
@@ -10006,7 +10006,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
+	config *commonpb.TimeSkippingConfig,
 	currentEventID int64,
 ) {
 	ms.executionInfo.TimeSkippingInfo.Config = config
@@ -10015,8 +10015,10 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	ms.timeSkippingInfoUpdated = true
 }
 
-// applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig and propagated time-skippingstates.
+// applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
 // This method should be called whenever the TimeSkippingConfig is initialized or updated.
+// An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
+// the FastForwardInfo should never be nil.
 func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTargetTime *timestamppb.Timestamp) {
 
 	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
@@ -10034,16 +10036,9 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 	if propagatedTargetTime != nil {
 		targetTime = propagatedTargetTime.AsTime()
 	} else {
-		remaining := tsc.GetFastForward().AsDuration() - ms.accumulatedSkippedDuration()
-		if remaining < 0 {
-			ms.logger.Error("fast forward remaining duration is less than 0, set target time to now",
-				tag.WorkflowNamespaceID(ms.GetExecutionInfo().NamespaceId),
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId),
-			)
-			remaining = 0
-		}
-		targetTime = ms.Now().Add(remaining)
+		// if there is no propagated target time,
+		// fast-forward refers to a new duration from now.
+		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
 	}
 
 	// always install a fresh fast-forward bound

@@ -176,7 +176,7 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		}
 	}
 	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
-		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*workflowpb.TimeSkippingConfig); ok {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*commonpb.TimeSkippingConfig); ok {
 			opts.TimeSkippingConfig = cloned
 		}
 	}
@@ -248,14 +248,14 @@ func mergeWorkflowExecutionOptions(
 
 	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+			mergeInto.TimeSkippingConfig = &commonpb.TimeSkippingConfig{}
 		}
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
 	}
 
 	if _, ok := updateFields["timeSkippingConfig.fastForward"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+			mergeInto.TimeSkippingConfig = &commonpb.TimeSkippingConfig{}
 		}
 		mergeInto.TimeSkippingConfig.FastForward = mergeFrom.GetTimeSkippingConfig().GetFastForward()
 	}

@@ -11,7 +11,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -2414,7 +2413,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wor
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{
+		Config: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(time.Hour)},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -2456,7 +2455,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_TSI
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_ConfigDisabled() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: false},
+		Config: &commonpb.TimeSkippingConfig{Enabled: false},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
@@ -2479,7 +2478,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Con
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoFastForwardInfo() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		// FastForward deliberately not set.
 	}
 
@@ -2499,7 +2498,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoF
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_HasReached() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
@@ -2523,7 +2522,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Has
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_SourceEventIDZero() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 0,
@@ -2546,7 +2545,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_SourceEventIDMismatch() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 2, // fast-forward was reconfigured; old task carries EventID=1.
@@ -2569,7 +2568,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_HappyPath() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{
+		Config: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(time.Hour)},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -2769,7 +2768,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	// on reload. After load, pendingActivityTimerHeartbeats[id] is reset to the
 	// year-2000 sentinel by NewMutableStateFromDB, and ToRealTime(year 2000) = 1999-12-31 23:00.
 	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 		AccumulatedSkippedDuration: durationpb.New(time.Hour),
 	}
 
