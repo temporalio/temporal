@@ -15,9 +15,7 @@ func (wt *WorkflowTags) extractFrom{{.Server}}Message(message any) []tag.Tag {
 	{{- range .Messages}}
 	case {{.Type}}:
 	{{- if or .TaskTokenGetter .WorkflowIDGetter .RunIDGetter .ActivityIDGetter .OperationIDGetter .ChasmRunIDGetter}}
-		{{- if .TaskTokenGetter}}
-		return wt.fromTaskToken(r.{{ .TaskTokenGetter}})
-		{{- else}}
+		{{- if or .WorkflowIDGetter .RunIDGetter .ActivityIDGetter .OperationIDGetter .ChasmRunIDGetter}}
 		return []tag.Tag{
 		{{if .WorkflowIDGetter}}	tag.WorkflowID(r.{{.WorkflowIDGetter}}),
 		{{end -}}
@@ -30,6 +28,8 @@ func (wt *WorkflowTags) extractFrom{{.Server}}Message(message any) []tag.Tag {
 		{{if .ChasmRunIDGetter}}	tag.ChasmRunID(r.{{.ChasmRunIDGetter}}),
 		{{end -}}
 		}
+		{{- else if .TaskTokenGetter}}
+		return wt.fromTaskToken(r.{{ .TaskTokenGetter}})
 		{{- end}}
 	{{- else}}
 		return nil

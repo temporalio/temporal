@@ -120,6 +120,7 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 	case *matchingservice.PollActivityTaskQueueResponse:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *matchingservice.PollNexusTaskQueueRequest:

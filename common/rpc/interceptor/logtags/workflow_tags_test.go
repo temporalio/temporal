@@ -18,6 +18,12 @@ import (
 
 func TestExtract(t *testing.T) {
 	serializer := tasktoken.NewSerializer()
+	mustSerialize := func(token *tokenspb.Task) []byte {
+		t.Helper()
+		taskTokenBytes, err := serializer.Serialize(token)
+		assert.NoError(t, err)
+		return taskTokenBytes
+	}
 
 	wt := logtags.NewWorkflowTags(
 		serializer,
@@ -26,32 +32,34 @@ func TestExtract(t *testing.T) {
 
 	tv := testvars.New(t)
 	tv = tv.WithRunID(tv.Any().RunID())
-	taskToken := tokenspb.Task{
+	taskTokenBytes := mustSerialize(&tokenspb.Task{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
+	})
+
+	type expectation struct {
+		workflowID string
+		activityID string
+		runID      string
 	}
-	taskTokenBytes, err := serializer.Serialize(&taskToken)
-	assert.NoError(t, err)
 
 	testCases := []struct {
 		name       string
 		req        any
 		fullMethod string
-		workflowID string
-		runID      string
+		expect     expectation
 	}{
 		{
 			name:       "Frontend StartWorkflowExecutionRequest with only workflowID",
 			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: tv.WorkflowID()},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
-			workflowID: tv.WorkflowID(),
+			expect:     expectation{workflowID: tv.WorkflowID()},
 		},
 		{
 			name:       "Frontend RecordActivityTaskHeartbeatByIdRequest with workflowID and runID",
 			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: tv.WorkflowID(), RunId: tv.RunID()},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "Frontend GetWorkflowExecutionHistoryRequest with execution",
@@ -62,8 +70,7 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "Frontend RequestCancelWorkflowExecutionRequest with workflow_execution",
@@ -74,8 +81,7 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "Frontend RespondActivityTaskCompletedRequest with task_token",
@@ -83,8 +89,31 @@ func TestExtract(t *testing.T) {
 				TaskToken: taskTokenBytes,
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
+		},
+		{
+			name: "Frontend RespondActivityTaskCompletedRequest with workflow activity task_token",
+			req: &workflowservice.RespondActivityTaskCompletedRequest{
+				TaskToken: mustSerialize(&tokenspb.Task{
+					WorkflowId: tv.WorkflowID(),
+					RunId:      tv.RunID(),
+					ActivityId: "workflow-activity-id",
+				}),
+			},
+			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted",
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
+		},
+		{
+			name: "Frontend RespondActivityTaskCompletedRequest with CHASM task_token",
+			req: &workflowservice.RespondActivityTaskCompletedRequest{
+				TaskToken: mustSerialize(&tokenspb.Task{
+					RunId:        tv.RunID(),
+					ActivityId:   "activity-id",
+					ComponentRef: []byte("component-ref"),
+				}),
+			},
+			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted",
+			expect:     expectation{activityID: "activity-id", runID: tv.RunID()},
 		},
 		{
 			name: "Frontend RespondQueryTaskCompletedRequest (task_token is ignored)",
@@ -104,8 +133,7 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/DescribeWorkflowExecution",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "History RespondWorkflowTaskCompletedRequest",
@@ -115,8 +143,7 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "Matching QueryWorkflowRequest",
@@ -129,8 +156,7 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
-			workflowID: tv.WorkflowID(),
-			runID:      tv.RunID(),
+			expect:     expectation{workflowID: tv.WorkflowID(), runID: tv.RunID()},
 		},
 		{
 			name: "Matching RespondWorkflowTaskCompletedRequest",
@@ -149,32 +175,19 @@ func TestExtract(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			tags := wt.Extract(tt.req, tt.fullMethod)
-			var (
-				workflowIDTag tag.Tag
-				runIDTag      tag.Tag
-			)
-			for _, tg := range tags {
-				if tg.Key() == tag.WorkflowID("").Key() {
-					workflowIDTag = tg
+			var got expectation
+			for _, tg := range wt.Extract(tt.req, tt.fullMethod) {
+				switch tg.Key() {
+				case tag.WorkflowID("").Key():
+					got.workflowID = tg.Value().(string)
+				case tag.ActivityID("").Key():
+					got.activityID = tg.Value().(string)
+				case tag.WorkflowRunID("").Key():
+					got.runID = tg.Value().(string)
+				default:
 				}
-				if tg.Key() == tag.WorkflowRunID("").Key() {
-					runIDTag = tg
-				}
 			}
-
-			if tt.workflowID != "" {
-				assert.NotNil(t, workflowIDTag)
-				assert.Equal(t, workflowIDTag.Value(), tt.workflowID)
-			} else {
-				assert.Nil(t, workflowIDTag)
-			}
-			if tt.runID != "" {
-				assert.NotNil(t, runIDTag)
-				assert.Equal(t, runIDTag.Value(), tt.runID)
-			} else {
-				assert.Nil(t, runIDTag)
-			}
+			assert.Equal(t, tt.expect, got)
 		})
 	}
 }
