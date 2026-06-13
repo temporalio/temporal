@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	t.Parallel()
 
-	longCtx, cancel := context.WithTimeout(testcontext.New(t), time.Minute)
+	longCtx, cancel := context.WithTimeout(testcontext.For(t), time.Minute)
 	defer cancel()
 	longDeadline, ok := longCtx.Deadline()
 	require.True(t, ok)
@@ -153,113 +154,204 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
-	t.Run("reports timeout", func(t *testing.T) {
+	t.Run("retries failed attempts until await timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				t.Error("not ready")
-			}, time.Second, 100*time.Millisecond)
+		synctest.Test(t, func(t *testing.T) {
+			ctx := testcontext.For(t)
+			var attempts atomic.Int32
+
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					n := attempts.Add(1)
+					t.Errorf("attempt %d failed", n)
+				}, time.Second, 100*time.Millisecond)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 1s",
+				"details:",
+				"  attempts         = 11",
+				"  attempt duration = avg 0µs, max 0µs",
+			}, "\n"), tb.fatals())
+			require.Equal(t, strings.Join([]string{
+				"attempt errors:",
+				"",
+				"  --- attempt 1 ---",
+				"    attempt 1 failed",
+				"  ... 7 attempts omitted ...",
+				"",
+				"  --- attempt 9 ---",
+				"    attempt 9 failed",
+				"",
+				"  --- attempt 10 ---",
+				"    attempt 10 failed",
+				"",
+				"  --- attempt 11 ---",
+				"    attempt 11 failed",
+			}, "\n"), tb.errors())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
-	t.Run("cancels attempt context on timeout", func(t *testing.T) {
+	t.Run("cancels running attempt at await timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				<-t.Context().Done()
-				if t.Context().Err() != context.DeadlineExceeded {
-					t.Errorf("context error = %v", t.Context().Err())
-				}
-			}, 2*time.Second, time.Second)
+		synctest.Test(t, func(t *testing.T) {
+			ctx := testcontext.For(t)
+
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					<-t.Context().Done()
+					if t.Context().Err() != context.DeadlineExceeded {
+						t.Errorf("context error = %v", t.Context().Err())
+					}
+				}, 2*time.Second, time.Second)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 2s",
+				"details:",
+				"  await timeout    = 2s",
+				"  attempts         = 1",
+				"  attempt duration = avg 2s, max 2s",
+			}, "\n"), tb.fatals())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
-	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
-		attemptTimeoutEnv := 50 * time.Millisecond
-		attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
-		pollInterval := 100 * time.Millisecond
-		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
+	t.Run("retries after attempt deadline expires", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			attemptTimeoutEnv := 50 * time.Millisecond
+			attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
+			pollInterval := 100 * time.Millisecond
+			t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
 
-		ctx := testcontext.New(t)
-		var attempts atomic.Int32
-		var firstAttemptRemaining time.Duration
+			ctx := testcontext.For(t)
+			var attempts atomic.Int32
+			var firstAttemptRemaining time.Duration
 
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				if attempts.Add(1) == 1 {
-					deadline, _ := t.Context().Deadline()
-					firstAttemptRemaining = time.Until(deadline)
-				}
-				<-t.Context().Done()
-			}, attemptTimeout+2*pollInterval, pollInterval)
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					if attempts.Add(1) == 1 {
+						deadline, _ := t.Context().Deadline()
+						firstAttemptRemaining = time.Until(deadline)
+					}
+					<-t.Context().Done()
+				}, attemptTimeout+2*pollInterval, pollInterval)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 250ms",
+				"details:",
+				"  attempts         = 3",
+				"  attempt timeout  = 2 (configured as 50ms)",
+				"  attempt duration = avg 33ms, max 50ms",
+			}, "\n"), tb.fatals())
+			require.Equal(t, attemptTimeout, firstAttemptRemaining)
+			require.Equal(t, int32(3), attempts.Load())
 		})
-
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Positive(t, firstAttemptRemaining)
-		require.LessOrEqual(t, firstAttemptRemaining, attemptTimeout)
-		require.Greater(t, attempts.Load(), int32(1))
 	})
 
-	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
+	t.Run("does not start another attempt after await timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
-		var attempts atomic.Int32
+		synctest.Test(t, func(t *testing.T) {
+			ctx := testcontext.For(t)
+			var attempts atomic.Int32
 
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				attempts.Add(1)
-				<-t.Context().Done() // block until timeout
-			}, time.Second, 100*time.Millisecond)
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					attempts.Add(1)
+					<-t.Context().Done() // block until timeout
+				}, time.Second, 100*time.Millisecond)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 1s",
+				"details:",
+				"  await timeout    = 1s",
+				"  attempts         = 1",
+				"  attempt duration = avg 1s, max 1s",
+			}, "\n"), tb.fatals())
+			require.Equal(t, int32(1), attempts.Load())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, int32(1), attempts.Load())
 	})
 
-	t.Run("caps attempt context with parent deadline", func(t *testing.T) {
+	t.Run("reports parent context deadline as await limit", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithTimeout(testcontext.New(t), time.Second)
-		defer cancel()
+		synctest.Test(t, func(t *testing.T) {
+			parentCtx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+			defer cancel()
 
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(parentCtx, tb, func(t *await.T) {
-				deadline, ok := t.Context().Deadline()
-				if !ok {
-					t.Error("missing deadline")
-				}
-				if time.Until(deadline) > time.Second {
-					t.Errorf("deadline = %v", deadline)
-				}
-				<-t.Context().Done()
-				if t.Context().Err() != context.DeadlineExceeded {
-					t.Errorf("context error = %v", t.Context().Err())
-				}
-			}, 2*time.Second, time.Second)
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(parentCtx, tb, func(t *await.T) {
+					deadline, ok := t.Context().Deadline()
+					if !ok {
+						t.Error("missing deadline")
+					}
+					if time.Until(deadline) > time.Second {
+						t.Errorf("deadline = %v", deadline)
+					}
+					<-t.Context().Done()
+					if t.Context().Err() != context.DeadlineExceeded {
+						t.Errorf("context error = %v", t.Context().Err())
+					}
+				}, 2*time.Second, time.Second)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 1s",
+				"details:",
+				"  await timeout    = 1s (configured 2s; limited by parent context deadline)",
+				"  attempts         = 1",
+				"  attempt duration = avg 1s, max 1s",
+				"  last failure     = parent context deadline",
+			}, "\n"), tb.fatals())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
-	t.Run("parent context cancellation stops polling", func(t *testing.T) {
+	t.Run("reports test context extension cap as await limit", func(t *testing.T) {
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", "10s")
+
+		synctest.Test(t, func(t *testing.T) {
+			tb := newRecordingTB()
+
+			ctx := testcontext.For(tb, testcontext.WithTimeout(5*time.Second))
+
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					<-t.Context().Done()
+				}, 3*time.Minute, time.Second)
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Require: condition not satisfied after 2m0s",
+				"details:",
+				"  await timeout    = 2m0s (configured 3m0s; limited by test context extension cap)",
+				"  attempts         = 11",
+				"  attempt timeout  = 10 (configured as 10s)",
+				"  attempt duration = avg 10s, max 10s",
+				"  ctx extensions   = 1 (+1m55s total)",
+				"    1. +1m55s after 0µs",
+			}, "\n"), tb.fatals())
+		})
+	})
+
+	t.Run("stops after parent context cancellation", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithCancel(testcontext.New(t))
+		parentCtx, cancel := context.WithCancel(testcontext.For(t))
 		defer cancel()
 		var attempts atomic.Int32
 
@@ -271,76 +363,37 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				cancel()
 			}, time.Second, 100*time.Millisecond)
 		})
+
 		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "context canceled before condition was satisfied")
+		require.Equal(t, "Require: context canceled before condition was satisfied: context canceled", tb.fatals())
 
 		require.Equal(t, int32(1), attempts.Load(), "expected cancellation to stop polling")
 	})
 
-	t.Run("reports all attempt errors on timeout", func(t *testing.T) {
+	t.Run("uses Requiref message on await timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
-		var attempts atomic.Int32
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				if attempts.Add(1) == 1 {
-					t.Error("first attempt error")
-					return
-				}
-				<-t.Context().Done()
-				t.Error("last attempt error")
-			}, time.Second, 100*time.Millisecond)
+		synctest.Test(t, func(t *testing.T) {
+			ctx := testcontext.For(t)
+
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Requiref(ctx, tb, func(t *await.T) {
+					t.Error("not ready")
+				}, time.Second, 100*time.Millisecond, "workflow %s not ready", "wf-123")
+			})
+
+			require.True(t, tb.Failed())
+			require.Equal(t, strings.Join([]string{
+				"Requiref: workflow wf-123 not ready (not satisfied after 1s)",
+				"details:",
+				"  attempts         = 11",
+				"  attempt duration = avg 0µs, max 0µs",
+			}, "\n"), tb.fatals())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error", tb.errors())
-		require.Equal(t, int32(2), attempts.Load())
 	})
 
-	t.Run("truncates middle attempts when many fail", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := testcontext.New(t)
-		var attempts atomic.Int32
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				n := attempts.Add(1)
-				t.Errorf("attempt %d failed", n)
-			}, 400*time.Millisecond, 50*time.Millisecond)
-		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-
-		n := attempts.Load()
-		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
-
-		errs := tb.errors()
-		require.Contains(t, errs, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
-		require.Contains(t, errs, fmt.Sprintf("... %d attempts omitted ...", n-4))
-		// Last three attempts present in order.
-		for i := n - 2; i <= n; i++ {
-			require.Contains(t, errs, fmt.Sprintf("--- attempt %d ---\n    attempt %d failed", i, i))
-		}
-	})
-
-	t.Run("Requiref includes message on timeout", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := testcontext.New(t)
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Requiref(ctx, tb, func(t *await.T) {
-				t.Error("not ready")
-			}, time.Second, 100*time.Millisecond, "workflow %s not ready", "wf-123")
-		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "workflow wf-123 not ready")
-	})
-
-	t.Run("panic propagates", func(t *testing.T) {
+	t.Run("propagates panic from attempt", func(t *testing.T) {
 		t.Parallel()
 
 		require.PanicsWithValue(t, "unexpected nil pointer", func() {
@@ -350,37 +403,52 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 	})
 
-	t.Run("reports real TB misuse", func(t *testing.T) {
+	t.Run("detects real TB misuse", func(t *testing.T) {
 		t.Parallel()
 
 		for _, tc := range []struct {
-			name   string
-			misuse func(*recordingTB)
+			name     string
+			misuse   func(*recordingTB)
+			expected string
 		}{
-			{"Fatal stops real TB", func(tb *recordingTB) { tb.Fatal("wrong t used") }},
-			{"Errorf marks real TB failed", func(tb *recordingTB) { tb.Errorf("assert-style misuse") }},
+			{
+				name:   "Fatal stops real TB",
+				misuse: func(tb *recordingTB) { tb.Fatal("wrong t used") },
+				expected: strings.Join([]string{
+					"wrong t used",
+					"Require: the test was marked failed directly — use the *await.T passed to the callback, not s.T() or suite assertion methods",
+				}, "\n"),
+			},
+			{
+				name:     "Errorf marks real TB failed",
+				misuse:   func(tb *recordingTB) { tb.Errorf("assert-style misuse") },
+				expected: "Require: the test was marked failed directly — use the *await.T passed to the callback, not s.T() or suite assertion methods",
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				ctx := testcontext.New(t)
+				ctx := testcontext.For(t)
+
 				tb := newRecordingTB()
 				tb.run(func() {
 					await.Require(ctx, tb, func(_ *await.T) {
 						tc.misuse(tb)
 					}, time.Second, 100*time.Millisecond)
 				})
+
 				require.True(t, tb.Failed())
-				require.Contains(t, tb.fatals(), "use the *await.T")
+				require.Equal(t, tc.expected, tb.fatals())
 			})
 		}
 	})
 
-	t.Run("does not poll after prior failure", func(t *testing.T) {
+	t.Run("skips await after prior failure", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		conditionCalled := false
+
 		tb := newRecordingTB()
 		tb.run(func() {
 			tb.Errorf("previous failure")
@@ -388,6 +456,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 				conditionCalled = true
 			}, time.Second, 100*time.Millisecond)
 		})
+
 		require.True(t, tb.Failed())
 		require.Empty(t, tb.fatals())
 		require.False(t, conditionCalled, "condition should not run when test already failed")
@@ -401,7 +470,7 @@ func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
 
 	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.New(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -427,7 +496,7 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 
 	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.New(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -438,27 +507,35 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 	elapsed := time.Since(start)
 	require.True(t, tb.Failed())
 	require.Contains(t, tb.logs(), "soft deadlock")
-	require.Contains(t, tb.fatals(), "still running")
-	require.Contains(t, tb.fatals(), "does it honor t.Context()")
+	require.Equal(t,
+		"Require: condition still running 100ms past context cancellation — does it honor t.Context()? (1 attempts)",
+		tb.fatals(),
+	)
 	require.Less(t, elapsed, awaitTimeout,
 		"should fail at hard deadlock, not wait the full await timeout (elapsed=%v)", elapsed)
 }
 
 func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
-	t.Parallel()
-
-	var finished atomic.Bool
-	ctx := testcontext.New(t)
-	tb := newRecordingTB()
-	tb.run(func() {
-		await.Require(ctx, tb, func(t *await.T) {
-			<-t.Context().Done()
-			finished.Store(true)
-		}, time.Second, time.Second)
+	synctest.Test(t, func(t *testing.T) {
+		var finished atomic.Bool
+		ctx := testcontext.For(t)
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				<-t.Context().Done()
+				finished.Store(true)
+			}, time.Second, time.Second)
+		})
+		require.True(t, tb.Failed())
+		require.Equal(t, strings.Join([]string{
+			"Require: condition not satisfied after 1s",
+			"details:",
+			"  await timeout    = 1s",
+			"  attempts         = 1",
+			"  attempt duration = avg 1s, max 1s",
+		}, "\n"), tb.fatals())
+		require.True(t, finished.Load(), "Require returned before the running attempt exited")
 	})
-	require.True(t, tb.Failed())
-	require.Contains(t, tb.fatals(), "not satisfied after")
-	require.True(t, finished.Load(), "Require returned before the running attempt exited")
 }
 
 // recordingTB is a minimal testing.TB implementation for testing failure scenarios.

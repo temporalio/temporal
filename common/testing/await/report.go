@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"text/tabwriter"
 	"time"
 )
 
@@ -21,10 +22,16 @@ type attemptFailure struct {
 }
 
 type timeoutReport struct {
-	effectiveTimeout time.Duration
-	attempts         int
-	attemptTimeouts  int
-	failures         []attemptFailure
+	effectiveTimeout    time.Duration
+	configuredTimeout   time.Duration
+	attemptTimeout      time.Duration
+	testExtensionReport string
+	deadlineCause       string
+	attempts            int
+	attemptTimeouts     int
+	attemptDurationSum  time.Duration
+	attemptDurationMax  time.Duration
+	failures            []attemptFailure
 }
 
 func (r *timeoutReport) nextPoll() {
@@ -41,18 +48,88 @@ func (r *timeoutReport) recordAttemptTimeout() {
 	r.attemptTimeouts++
 }
 
+func (r *timeoutReport) recordAttemptDuration(d time.Duration) {
+	r.attemptDurationSum += d
+	r.attemptDurationMax = max(r.attemptDurationMax, d)
+}
+
 func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
 	reportAttemptErrors(tb, r.failures)
 }
 
 func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
 	r.reportAttemptErrors(tb)
-	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
+	message := fmt.Sprintf("condition not satisfied after %v", reportDuration(r.effectiveTimeout))
 	if timeoutMsg != "" {
-		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.effectiveTimeout)
+		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, reportDuration(r.effectiveTimeout))
 	}
-	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
-		funcName, message, r.attempts, r.attemptTimeouts)
+	var details strings.Builder
+	detailWriter := tabwriter.NewWriter(&details, 0, 0, 1, ' ', 0)
+	writeDetail := func(label, value string) {
+		fmt.Fprintf(detailWriter, "  %s\t= %s\n", label, value)
+	}
+
+	hasAttemptFailures := len(r.failures) > 0 || r.attemptTimeouts > 0
+	shortenedTimeout := r.configuredTimeout-r.effectiveTimeout > time.Millisecond
+	if r.configuredTimeout > 0 && (!hasAttemptFailures || shortenedTimeout) {
+		value := reportDuration(r.effectiveTimeout)
+		if shortenedTimeout {
+			value += fmt.Sprintf(" (configured %v", reportDuration(r.configuredTimeout))
+			if r.deadlineCause != "" {
+				value += "; limited by " + r.deadlineCause
+			}
+			value += ")"
+		}
+		writeDetail("await timeout", value)
+	}
+	writeDetail("attempts", fmt.Sprintf("%d", r.attempts))
+	if r.attemptTimeouts > 0 {
+		writeDetail("attempt timeout", fmt.Sprintf("%d (configured as %v)", r.attemptTimeouts, reportDuration(r.attemptTimeout)))
+	}
+	if r.attempts > 0 {
+		writeDetail(
+			"attempt duration",
+			fmt.Sprintf(
+				"avg %v, max %v",
+				reportDuration(r.attemptDurationSum/time.Duration(r.attempts)),
+				reportDuration(r.attemptDurationMax),
+			),
+		)
+	}
+	if r.attemptTimeouts == 0 && r.deadlineCause != "" {
+		writeDetail("last failure", r.deadlineCause)
+	}
+	if r.testExtensionReport != "" {
+		fmt.Fprintln(detailWriter, indentDetail(r.testExtensionReport))
+	}
+	if err := detailWriter.Flush(); err != nil {
+		tb.Fatalf("%s: failed to render timeout report: %v", funcName, err)
+		return
+	}
+	tb.Fatalf("%s: %s\ndetails:\n%s", funcName, message, strings.TrimSuffix(details.String(), "\n"))
+}
+
+func reportDuration(d time.Duration) string {
+	if d > -time.Millisecond && d < time.Millisecond {
+		rounded := d.Round(time.Microsecond)
+		if rounded == 0 {
+			return "0µs"
+		}
+		return rounded.String()
+	}
+	return d.Round(time.Millisecond).String()
+}
+
+func indentDetail(s string) string {
+	var b strings.Builder
+	for line := range strings.SplitSeq(s, "\n") {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString("  ")
+		b.WriteString(line)
+	}
+	return b.String()
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
