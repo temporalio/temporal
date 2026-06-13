@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,6 +18,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -47,6 +51,45 @@ func (s *activitiesSuite) SetupTest() {
 
 func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
+}
+
+func (s *activitiesSuite) TestTaskTimeoutContext() {
+	s.Run("no parent deadline applies default timeout", func() {
+		ctx, cancel := taskTimeoutContext(context.Background())
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("longer parent deadline is shortened to default timeout", func() {
+		parent, parentCancel := context.WithTimeout(context.Background(), defaultTaskTimeout+time.Hour)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
+	})
+
+	s.Run("shorter parent deadline is preserved", func() {
+		shorter := defaultTaskTimeout - 5*time.Second
+		parent, parentCancel := context.WithTimeout(context.Background(), shorter)
+		defer parentCancel()
+
+		ctx, cancel := taskTimeoutContext(parent)
+		defer cancel()
+
+		// The parent context is returned unchanged so we never extend an
+		// existing, shorter deadline.
+		s.Equal(parent, ctx)
+		deadline, ok := ctx.Deadline()
+		s.True(ok)
+		s.InDelta(shorter, time.Until(deadline), float64(time.Second))
+	})
 }
 
 const NumTotalEvents = 10
@@ -635,12 +678,9 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	s.NoError(resp.err)
 }
 
-// TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that when an operation keeps
-// failing with a retryable error, the worker retries it in place (on its own goroutine) and
-// emits exactly one response per task, instead of re-queuing the task onto taskCh.
-// Re-queuing deadlocked the pool: the worker goroutines are the only consumers of taskCh, so
-// a burst of retryable errors made them all block on the re-enqueue send with the buffer full
-// and no drainer left, leaving the activity heartbeating but stuck with no progress.
+// TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that repeated retryable
+// failures are retried in place and each task still yields exactly one response, so the
+// worker pool keeps making progress.
 func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -703,11 +743,8 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	}
 }
 
-// TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies that the heartbeat
-// resume point (PageToken/CurrentPage) only advances across the contiguous fully-done prefix
-// of pages and never past a still-in-flight earlier page. Pages are fetched ahead once
-// submitted (not done), so a resume point that ran ahead of completion would skip in-flight
-// pages on restart and silently drop their workflows.
+// TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies the resume point only
+// advances across the contiguous run of completed pages, never past a page still in flight.
 func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompletePage() {
 	mkPage := func(num, size int, next string) *page {
 		return &page{
@@ -749,6 +786,95 @@ func (s *activitiesSuite) TestRecordCompletedPages_ResumeTracksOldestIncompleteP
 	s.Equal(3, hbd.CurrentPage)
 	s.Equal(4, hbd.SuccessCount) // p1:1 + p2:2 + p3:1
 	s.Equal(1, hbd.ErrorCount)   // p1:1
+}
+
+// TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages drives the coordinator over
+// several pages and checks every workflow is processed exactly once and the activity completes.
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAllPages() {
+	type pageSpec struct {
+		size       int
+		fetchToken string // NextPageToken used to fetch this page
+		nextToken  string // NextPageToken this page returns
+	}
+	pages := []pageSpec{
+		{size: 5, fetchToken: "", nextToken: "p2"},
+		{size: 5, fetchToken: "p2", nextToken: "p3"},
+		{size: 3, fetchToken: "p3", nextToken: ""},
+	}
+	const total = 13
+
+	mockSdk := &mocks.Client{}
+	for i, pg := range pages {
+		execs := make([]*workflowpb.WorkflowExecutionInfo, pg.size)
+		for j := range execs {
+			execs[j] = &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: fmt.Sprintf("p%d-wf%d", i, j)},
+			}
+		}
+		fetchToken := pg.fetchToken
+		mockSdk.On("ListWorkflow", mock.Anything, mock.MatchedBy(func(r *workflowservice.ListWorkflowExecutionsRequest) bool {
+			return string(r.NextPageToken) == fetchToken
+		})).Return(&workflowservice.ListWorkflowExecutionsResponse{
+			Executions:    execs,
+			NextPageToken: []byte(pg.nextToken),
+		}, nil).Once()
+	}
+
+	// Fake worker pool: drain taskCh and report success for every real task.
+	var processed int64
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ sdkclient.Client,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-taskCh:
+				if t.executionInfo == nil {
+					continue
+				}
+				atomic.AddInt64(&processed, 1)
+				select {
+				case respCh <- taskResponse{err: nil, page: t.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		adjustedQuery: "ExecutionStatus = 'Completed'",
+		concurrency:   3,
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	// Run inside an activity environment so the coordinator's RecordHeartbeat call is valid.
+	env := s.NewTestActivityEnvironment()
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, mockSdk, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.NoError(err)
+
+	var hbd HeartBeatDetails
+	s.NoError(encoded.Get(&hbd))
+	s.Equal(total, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
+	s.Equal(int64(total), atomic.LoadInt64(&processed))
+	mockSdk.AssertExpectations(s.T())
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {

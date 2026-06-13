@@ -496,7 +496,9 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		s.Equal(activityName, task.ActivityType.Name)
 		currentActivityId, _ := strconv.Atoi(task.ActivityId)
 		s.Equal(int(expectedActivityID), currentActivityId)
-		s.Equal(expectedActivityID, s.DecodePayloadsByteSliceInt32(task.Input))
+		var inputBytes []byte
+		s.NoError(payloads.Decode(task.Input, &inputBytes))
+		s.Equal(expectedActivityID, int32(binary.LittleEndian.Uint32(inputBytes)))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}

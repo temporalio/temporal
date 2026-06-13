@@ -23,6 +23,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
 
@@ -277,9 +278,10 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - uses: arduino/setup-protoc@v3
+      - uses: jdx/mise-action@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
 

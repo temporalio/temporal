@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -22,13 +21,12 @@ var (
 	ErrInvalidRunCount = errors.New("invalid run count")
 )
 
-type ClientDataConverterTestSuite struct {
-	testcore.FunctionalTestBase
+type ClientDataConverterSuite struct {
+	parallelsuite.Suite[*ClientDataConverterSuite]
 }
 
 func TestClientDataConverterTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(ClientDataConverterTestSuite))
+	parallelsuite.Run(t, &ClientDataConverterSuite{})
 }
 
 func testActivity(_ workflow.Context, msg string) (string, error) {
@@ -80,10 +78,10 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	return "", workflow.NewContinueAsNewError(ctx, testChildWorkflow, totalCount, runCount)
 }
 
-func (s *ClientDataConverterTestSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
+func (s *ClientDataConverterSuite) clientDataConverterStartWorker(env *testcore.TestEnv, tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.FrontendGRPCAddress(),
-		Namespace:     s.Namespace().String(),
+		HostPort:      env.FrontendGRPCAddress(),
+		Namespace:     env.Namespace().String(),
 		DataConverter: dataConverter,
 	})
 	s.NoError(err)
@@ -135,11 +133,12 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	return res, nil
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
+func (s *ClientDataConverterSuite) TestClientDataConverter() {
 	s.T().SkipNow() // need to figure out what is going on
+	env := testcore.NewEnv(s.T())
 	tl := "client-func-data-converter-activity-taskqueue"
 	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := s.startWorkerWithDataConverter(tl, dc)
+	sdkClient, testWorker := s.clientDataConverterStartWorker(env, tl, dc)
 	defer func() {
 		testWorker.Stop()
 		sdkClient.Close()
@@ -148,14 +147,13 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	id := "client-func-data-converter-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
-	s.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
-	s.SdkWorker().RegisterActivity(testActivity)
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+	ctx := env.Context()
+	env.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
+	env.SdkWorker().RegisterActivity(testActivity)
+	we, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
 	s.NotEmpty(we.GetRunID())
@@ -171,10 +169,11 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	s.Equal(1, d.NumOfCallFromPayloads)
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
+func (s *ClientDataConverterSuite) TestClientDataConverterFailed() {
 	s.T().SkipNow()
+	env := testcore.NewEnv(s.T())
 	tl := "client-func-data-converter-activity-failed-taskqueue"
-	sdkClient, newWorker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
+	sdkClient, newWorker := s.clientDataConverterStartWorker(env, tl, nil) // mismatch of data converter
 	defer func() {
 		newWorker.Stop()
 		sdkClient.Close()
@@ -183,15 +182,14 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	id := "client-func-data-converter-failed-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
+	ctx := env.Context()
 
-	s.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
-	s.SdkWorker().RegisterActivity(testActivity)
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+	env.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
+	env.SdkWorker().RegisterActivity(testActivity)
+	we, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
 	s.NotEmpty(we.GetRunID())
@@ -201,7 +199,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	s.Error(err)
 
 	// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
-	iter := s.SdkClient().GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
+	iter := env.SdkClient().GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
 	completedAct := 0
 	failedAct := 0
 	for iter.HasNext() {
@@ -220,10 +218,11 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	s.Equal(1, failedAct)
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
+func (s *ClientDataConverterSuite) TestClientDataConverterWithChild() {
 	s.T().SkipNow()
+	env := testcore.NewEnv(s.T())
 	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := s.startWorkerWithDataConverter(childTaskQueue, dc)
+	sdkClient, testWorker := s.clientDataConverterStartWorker(env, childTaskQueue, dc)
 	defer func() {
 		testWorker.Stop()
 		sdkClient.Close()
@@ -232,15 +231,14 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
 	id := "client-func-data-converter-with-child-workflow"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
-	s.SdkWorker().RegisterWorkflow(testParentWorkflow)
-	s.SdkWorker().RegisterWorkflow(testChildWorkflow)
+	ctx := env.Context()
+	env.SdkWorker().RegisterWorkflow(testParentWorkflow)
+	env.SdkWorker().RegisterWorkflow(testChildWorkflow)
 
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
+	we, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	s.NoError(err)
 	s.NotNil(we)
 	s.NotEmpty(we.GetRunID())

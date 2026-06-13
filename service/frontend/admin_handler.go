@@ -1663,8 +1663,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	}
 
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -1811,6 +1814,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+		ScaleInfo:            resp.ScaleInfo,
 	}, nil
 }
 

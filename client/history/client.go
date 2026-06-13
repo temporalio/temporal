@@ -51,7 +51,7 @@ func NewClient(
 	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient)
+	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 
 	var redirector Redirector[historyservice.HistoryServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {

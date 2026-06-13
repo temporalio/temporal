@@ -454,10 +454,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
-	msCurrent.EXPECT().GetNextEventID().Return(int64(2))
 	msCurrent.EXPECT().GetStartedWorkflowTask().Return(nil)
 	msCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		int64(2),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetReason(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetDetails(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetIdentity(),
