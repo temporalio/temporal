@@ -201,7 +201,7 @@ type StartWorkflowExecutionRequest struct {
 	// directly from the started event. Written onto the new run's
 	// WorkflowExecutionStartedEvent.
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,17,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
-	TimeSkippingStatePropagation *v15.TimeSkippingStatePropagation `protobuf:"bytes,19,opt,name=time_skipping_state_propagation,json=timeSkippingStatePropagation,proto3" json:"time_skipping_state_propagation,omitempty"`
+	TimeSkippingStatePropagation *v14.TimeSkippingStatePropagation `protobuf:"bytes,19,opt,name=time_skipping_state_propagation,json=timeSkippingStatePropagation,proto3" json:"time_skipping_state_propagation,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
@@ -355,7 +355,7 @@ func (x *StartWorkflowExecutionRequest) GetDeclinedTargetVersionUpgrade() *v17.D
 	return nil
 }
 
-func (x *StartWorkflowExecutionRequest) GetTimeSkippingStatePropagation() *v15.TimeSkippingStatePropagation {
+func (x *StartWorkflowExecutionRequest) GetTimeSkippingStatePropagation() *v14.TimeSkippingStatePropagation {
 	if x != nil {
 		return x.TimeSkippingStatePropagation
 	}
@@ -10595,7 +10595,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"task_token\x18\x06 \x01(\tR\ttaskToken\x12\x1d\n" +
 	"\n" +
 	"task_infos\x18\a \x01(\tR\ttaskInfos\x12.\n" +
-	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\x86\r\n" +
+	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\x84\r\n" +
 	"\x1dStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\rstart_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartWorkflowExecutionRequestR\fstartRequest\x12h\n" +
@@ -10614,8 +10614,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x13child_workflow_only\x18\x0e \x01(\bR\x11childWorkflowOnly\x12m\n" +
 	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion\x12s\n" +
 	"\x1binherited_auto_upgrade_info\x18\x10 \x01(\v24.temporal.api.deployment.v1.InheritedAutoUpgradeInfoR\x18inheritedAutoUpgradeInfo\x12|\n" +
-	"\x1fdeclined_target_version_upgrade\x18\x11 \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12}\n" +
-	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v26.temporal.api.workflow.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xfc\x02\n" +
+	"\x1fdeclined_target_version_upgrade\x18\x11 \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12{\n" +
+	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v24.temporal.api.common.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xfc\x02\n" +
 	"\x1eStartWorkflowExecutionResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12?\n" +
 	"\x05clock\x18\x02 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12n\n" +
@@ -11552,7 +11552,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = 
 	(*v16.WorkerDeploymentVersion)(nil),                   // 181: temporal.api.deployment.v1.WorkerDeploymentVersion
 	(*v16.InheritedAutoUpgradeInfo)(nil),                  // 182: temporal.api.deployment.v1.InheritedAutoUpgradeInfo
 	(*v17.DeclinedTargetVersionUpgrade)(nil),              // 183: temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	(*v15.TimeSkippingStatePropagation)(nil),              // 184: temporal.api.workflow.v1.TimeSkippingStatePropagation
+	(*v14.TimeSkippingStatePropagation)(nil),              // 184: temporal.api.common.v1.TimeSkippingStatePropagation
 	(*v18.VectorClock)(nil),                               // 185: temporal.server.api.clock.v1.VectorClock
 	(*v1.PollWorkflowTaskQueueResponse)(nil),              // 186: temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
 	(v12.WorkflowExecutionStatus)(0),                      // 187: temporal.api.enums.v1.WorkflowExecutionStatus
@@ -11670,7 +11670,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	181, // 10: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_pinned_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	182, // 11: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_auto_upgrade_info:type_name -> temporal.api.deployment.v1.InheritedAutoUpgradeInfo
 	183, // 12: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	184, // 13: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.time_skipping_state_propagation:type_name -> temporal.api.workflow.v1.TimeSkippingStatePropagation
+	184, // 13: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.time_skipping_state_propagation:type_name -> temporal.api.common.v1.TimeSkippingStatePropagation
 	185, // 14: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	186, // 15: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.eager_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
 	187, // 16: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus

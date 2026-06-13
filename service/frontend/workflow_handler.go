@@ -700,7 +700,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	tsc *workflowpb.TimeSkippingConfig,
+	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
 	if tsc == nil {

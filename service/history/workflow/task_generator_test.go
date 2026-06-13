@@ -9,10 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1447,7 +1447,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 		{
 			name: "fast-forward configured and unreached emits task",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
+				Config: &commonpb.TimeSkippingConfig{
 					Enabled:     true,
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
@@ -1462,7 +1462,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 		{
 			name: "HasReached=true skips task emission",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
+				Config: &commonpb.TimeSkippingConfig{
 					Enabled:     true,
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
@@ -1476,7 +1476,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 		{
 			name: "Enabled=false skips task emission",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
+				Config: &commonpb.TimeSkippingConfig{
 					Enabled:     false,
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
@@ -1490,7 +1490,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 		{
 			name: "no fast-forward info does not emit fast-forward task",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
 		},
