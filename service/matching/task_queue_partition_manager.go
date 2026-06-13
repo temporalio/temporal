@@ -1025,6 +1025,15 @@ reredirectTask:
 		return nil, err
 	}
 
+	// Fire the task hook so WCI can scale up before we block waiting for a poller.
+	// Only fire for non-forwarded queries: forwarded queries already had the hook fired
+	// on the originating partition.
+	if request.ForwardInfo == nil &&
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+	}
+
 	dbq := pm.defaultQueue()
 	if dbq == nil {
 		return nil, errDefaultQueueNotInit
@@ -1038,6 +1047,11 @@ reredirectTask:
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
+	}
+	// Report a sync match when the query was dispatched locally
+	if err == nil && res == nil && request.ForwardInfo == nil {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
 	return res, err
 }
@@ -1090,6 +1104,15 @@ reredirectTask:
 		return nil, err
 	}
 
+	// Fire the task hook so WCI can scale up before we block waiting for a poller.
+	// Only fire for non-forwarded tasks: forwarded tasks already had the hook fired
+	// on the originating partition.
+	if request.ForwardInfo == nil &&
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+	}
+
 	dbq := pm.defaultQueue()
 	if dbq == nil {
 		return nil, errDefaultQueueNotInit
@@ -1103,6 +1126,11 @@ reredirectTask:
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchNexusTask
 		goto reredirectTask
+	}
+	// Report a sync match when the task was dispatched locally.
+	if err == nil && res == nil && request.ForwardInfo == nil {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
 	return res, err
 }
