@@ -4506,6 +4506,10 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		return nil, err
 	}
 
+	if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
+		return nil, err
+	}
+
 	return event, nil
 }
 
@@ -4553,6 +4557,10 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskFailedEvent(event); err != nil {
+		return nil, err
+	}
+
+	if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
 		return nil, err
 	}
 
@@ -4605,6 +4613,10 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 		retryState,
 	)
 	if err := ms.ApplyActivityTaskTimedOutEvent(event); err != nil {
+		return nil, err
+	}
+
+	if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
 		return nil, err
 	}
 
@@ -4816,6 +4828,10 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 		identity,
 	)
 	if err := ms.ApplyActivityTaskCanceledEvent(event); err != nil {
+		return nil, err
+	}
+
+	if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
 		return nil, err
 	}
 
@@ -6805,6 +6821,10 @@ func (ms *MutableStateImpl) RetryActivity(
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 		}
 
+		if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
+			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+		}
+
 		// TODO: uncomment once RETRY_STATE_PAUSED is supported
 		// return enumspb.RETRY_STATE_PAUSED, nil
 		return enumspb.RETRY_STATE_IN_PROGRESS, nil
@@ -6843,6 +6863,11 @@ func (ms *MutableStateImpl) RetryActivity(
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
+
+	if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
+
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
@@ -6906,14 +6931,25 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	}
 
 	prevPause := ai.Paused
+	prevAttempt := ai.Attempt
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 		prevPause = prev.Paused
+		prevAttempt = prev.Attempt
 	}
 
 	if err := updater(ai, ms); err != nil {
 		return err
+	}
+
+	// If the attempt count changed (e.g., reset to 1 via ResetActivity or UnpauseWithReset),
+	// recompute the reported-problems SA so that entries are cleared when retries no longer
+	// meet the threshold.
+	if prevAttempt != ai.Attempt {
+		if err := ms.maybeUpdateActivityReportedProblems(); err != nil {
+			return err
+		}
 	}
 
 	if prevPause != ai.Paused {
@@ -6990,22 +7026,37 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	var reportedProblems []string
-	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
-		reportedProblems = []string{
-			"category=WorkflowTaskFailed",
-			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
-		}
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
-		reportedProblems = []string{
-			"category=WorkflowTaskTimedOut",
-			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+
+	// Workflow task failure entries — only when WFT reporting is enabled (threshold > 0).
+	// Gating here ensures that if the config is set to 0 (disabled), any stale
+	// LastWorkflowTaskFailure state (e.g., left over from a previous config value) does
+	// not bleed into the search attribute.
+	wftThreshold := ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(ms.GetNamespaceEntry().Name().String())
+	if wftThreshold > 0 {
+		switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
+		case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+			reportedProblems = append(reportedProblems,
+				"category=WorkflowTaskFailed",
+				fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+			)
+		case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+			reportedProblems = append(reportedProblems,
+				"category=WorkflowTaskTimedOut",
+				fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+			)
 		}
 	}
 
-	reportedProblemsPayload, err := sadefs.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
-	if err != nil {
-		return err
+	// Activity retry failure entry: added when any pending activity has accumulated
+	// enough retries to meet the configured threshold.
+	activityThreshold := ms.config.NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute(ms.GetNamespaceEntry().Name().String())
+	if activityThreshold > 0 {
+		for _, ai := range ms.pendingActivityInfoIDs {
+			if int(ai.Attempt) >= activityThreshold {
+				reportedProblems = append(reportedProblems, "category=ActivityRetryFailed")
+				break
+			}
+		}
 	}
 
 	exeInfo := ms.executionInfo
@@ -7028,31 +7079,36 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
-	// Log the search attribute change
+	// Log the search attribute change.
 	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
+	if len(reportedProblems) == 0 {
+		ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil})
+	} else {
+		reportedProblemsPayload, err := sadefs.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		if err != nil {
+			return err
+		}
+		ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
+	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
-	if ms.executionInfo.SearchAttributes == nil {
-		return nil
-	}
-
-	temporalReportedProblems := ms.executionInfo.SearchAttributes[sadefs.TemporalReportedProblems]
-	if temporalReportedProblems == nil {
-		return nil
-	}
-
-	// Log the removal of the search attribute
-	ms.logReportedProblemsChange(ms.decodeReportedProblems(temporalReportedProblems), nil)
-
+	// Clear the WFT failure state and recompute the search attribute. This preserves
+	// any activity-retry entries that should remain even after a WFT succeeds.
 	ms.executionInfo.LastWorkflowTaskFailure = nil
+	return ms.UpdateReportedProblemsSearchAttribute()
+}
 
-	// Just remove the search attribute entirely for now
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil})
-	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+// maybeUpdateActivityReportedProblems updates the TemporalReportedProblems search attribute
+// for activity retry failures if the feature is enabled. It is a no-op when the threshold
+// dynamic config is set to 0 (disabled, the default).
+func (ms *MutableStateImpl) maybeUpdateActivityReportedProblems() error {
+	if ms.config.NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute(ms.GetNamespaceEntry().Name().String()) > 0 {
+		return ms.UpdateReportedProblemsSearchAttribute()
+	}
+	return nil
 }
 
 // logReportedProblemsChange logs changes to the TemporalReportedProblems search attribute
