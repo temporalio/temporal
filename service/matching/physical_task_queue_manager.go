@@ -680,6 +680,12 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		}
 	}
 
+	if c.priMatcher != nil {
+		for pri, tqs := range c.priMatcher.SyncMatchStatsByPriority() {
+			taskqueue.MergeStats(util.GetOrSetNew(stats, pri), tqs)
+		}
+	}
+
 	if includeRates {
 		c.taskTrackerLock.RLock()
 		for pri, tt := range c.tasksAdded {

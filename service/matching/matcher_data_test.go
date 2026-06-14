@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -239,9 +240,15 @@ func (s *MatcherDataSuite) TestQuery() {
 	respC := make(chan taskResponse)
 	go s.queryFakeTime(time.Second, respC)
 
+	await.RequireTrue(s.T(), func() bool {
+		return s.md.SyncMatchStatsByPriority()[0].GetApproximateBacklogCount() == 1
+	}, time.Second, 10*time.Millisecond)
+
 	pres := s.pollFakeTime(time.Second)
 	s.NotNil(pres.task)
 	s.True(pres.task.isQuery())
+	s.Empty(s.md.SyncMatchStatsByPriority())
+
 	// wake up getResponse. use some error just to check it's passed through.
 	someError := errors.New("some error")
 	pres.task.finish(someError, true)
@@ -249,6 +256,53 @@ func (s *MatcherDataSuite) TestQuery() {
 	resp := <-respC
 	s.False(resp.forwarded)
 	s.ErrorIs(resp.startErr, someError)
+}
+
+func (s *MatcherDataSuite) TestQuerySyncMatchStatsRemovedOnReprocess() {
+	ctx, cancel := clock.ContextWithTimeout(context.Background(), time.Second, s.ts)
+	defer cancel()
+
+	done := make(chan *matchResult, 1)
+	task := s.newQueryTask("1")
+	go func() {
+		done <- s.md.EnqueueTaskAndWait([]context.Context{ctx}, task)
+	}()
+
+	await.RequireTrue(s.T(), func() bool {
+		return s.md.SyncMatchStatsByPriority()[0].GetApproximateBacklogCount() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	reprocessed := s.md.ReprocessTasks(func(task *internalTask) bool {
+		return task.isQuery()
+	})
+	s.Len(reprocessed, 1)
+	s.Empty(s.md.SyncMatchStatsByPriority())
+	result := <-done
+	s.ErrorIs(result.ctxErr, errReprocessTask)
+}
+
+func (s *MatcherDataSuite) TestNexusSyncMatchStats() {
+	ctx, cancel := clock.ContextWithTimeout(context.Background(), time.Second, s.ts)
+	defer cancel()
+
+	task := newInternalNexusTask("1", s.now().Add(time.Minute), s.now().Add(time.Minute), &matchingservice.DispatchNexusTaskRequest{})
+	done := make(chan *matchResult, 1)
+	go func() {
+		done <- s.md.EnqueueTaskAndWait([]context.Context{ctx}, task)
+	}()
+
+	await.RequireTrue(s.T(), func() bool {
+		return s.md.SyncMatchStatsByPriority()[0].GetApproximateBacklogCount() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	pres := s.pollFakeTime(time.Second)
+	s.NotNil(pres.task)
+	s.True(pres.task.isNexus())
+	s.Empty(s.md.SyncMatchStatsByPriority())
+
+	pres.task.finish(nil, true)
+	result := <-done
+	s.NoError(result.ctxErr)
 }
 
 func (s *MatcherDataSuite) TestQueryForwardNil() {

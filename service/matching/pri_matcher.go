@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -159,6 +160,10 @@ func (tm *priTaskMatcher) Stop() {
 	// backlog tasks that were redirected from another versioned queue (or the default). To
 	// handle those, the caller of Stop should also call ReprocessRedirectedTasksAfterStop
 	// when applicable.
+}
+
+func (tm *priTaskMatcher) SyncMatchStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+	return tm.data.SyncMatchStatsByPriority()
 }
 
 // TODO(pri): access to retrier is not synchronized

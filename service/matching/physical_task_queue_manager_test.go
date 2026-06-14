@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -25,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -181,6 +184,51 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
 	}
 	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
+// Query and Nexus tasks wait only in memory while looking for a sync match. Verify they
+// are included in physical backlog stats while waiting and removed after cancellation.
+func (s *PhysicalTaskQueueManagerTestSuite) TestGetStatsByPriorityIncludesSyncMatchBacklog() {
+	if s.tqMgr.priMatcher == nil {
+		s.T().Skip("sync-match backlog accounting is only covered for the new matcher")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	queryTask := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
+	nexusTask := newInternalNexusTask(uuid.NewString(), time.Now().Add(time.Second), time.Now().Add(time.Second), &matchingservice.DispatchNexusTaskRequest{})
+	s.tqMgr.config.setDefaultPriority(queryTask)
+	s.tqMgr.config.setDefaultPriority(nexusTask)
+	defaultPriority := int32(s.tqMgr.config.DefaultPriorityKey)
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+	wg.Go(func() {
+		_, err := s.tqMgr.DispatchQueryTask(ctx, queryTask)
+		errCh <- err
+	})
+	wg.Go(func() {
+		_, err := s.tqMgr.DispatchNexusTask(ctx, nexusTask)
+		errCh <- err
+	})
+
+	await.RequireTrue(s.T(), func() bool {
+		stats := s.tqMgr.GetStatsByPriority(false)
+		return stats[defaultPriority].GetApproximateBacklogCount() == 2 &&
+			stats[defaultPriority].GetApproximateBacklogAge().AsDuration() >= 0
+	}, time.Second, 10*time.Millisecond)
+
+	// Both dispatch calls should return errors after the shared context is canceled.
+	cancel()
+	s.True(common.AwaitWaitGroup(&wg, time.Second))
+	close(errCh)
+	for err := range errCh {
+		s.Require().Error(err)
+	}
+	await.RequireTrue(s.T(), func() bool {
+		return s.tqMgr.GetStatsByPriority(false)[defaultPriority].GetApproximateBacklogCount() == 0
+	}, time.Second, 10*time.Millisecond)
 }
 
 // TODO(pri): old matcher cleanup
