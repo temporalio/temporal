@@ -244,6 +244,33 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 }
 
+func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
+	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	wh := &WorkflowHandler{
+		workerDeploymentReadRateLimiter: rateLimiter,
+	}
+	ctx := headers.SetCallerInfo(
+		context.Background(),
+		headers.NewCallerInfo("test-caller", headers.CallerTypeAPI, "test-origin"),
+	)
+	expectedRequest := quotas.NewRequest(
+		"DescribeWorkerDeployment",
+		1,
+		s.testNamespace.String(),
+		headers.CallerTypeAPI,
+		-1,
+		"test-origin",
+	)
+	rateLimiter.EXPECT().Allow(gomock.Any(), expectedRequest).Return(false)
+
+	err := wh.checkWorkerDeploymentReadRateLimit(ctx, s.testNamespace.String(), "DescribeWorkerDeployment")
+
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	s.Require().ErrorAs(err, &resourceExhaustedErr)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhaustedErr.Cause)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhaustedErr.Scope)
+}
+
 func (s *WorkflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
