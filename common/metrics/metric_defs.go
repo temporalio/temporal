@@ -1344,21 +1344,22 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 
-	VisibilityArchiverArchiveNonRetryableErrorCount     = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount        = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                       = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                        = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                          = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                           = NewCounterDef("scavenger_skips")
-	ScheduleInvariantsScannerOverdueNextActionTimeCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
-	ScheduleInvariantsScannerStuckOpenCount             = NewCounterDef("schedule_invariants_scanner_stuck_open")
-	ScheduleInvariantsScannerUnknownStateCount          = NewCounterDef("schedule_invariants_scanner_unknown_state")
-	ScheduleInvariantsScannerErrorCount                 = NewCounterDef("schedule_invariants_scanner_errors")
-	ExecutionsOutstandingCount                          = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                    = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                    = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                       = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                    = NewCounterDef("add_search_attributes_failures")
+	VisibilityArchiverArchiveNonRetryableErrorCount           = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount              = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                             = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                              = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                                = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                                 = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount       = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_cap_hit")
+	ScheduleInvariantsScannerStuckOpenCount                   = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount                = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                       = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                                = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                             = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                          = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
@@ -1439,7 +1440,7 @@ var (
 	)
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
-		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+		WithDescription("The number of successful StartWorkflow RPCs issued by a schedule."),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
@@ -1464,6 +1465,42 @@ var (
 	ScheduleGenerateLatency = NewTimerDef(
 		"schedule_generate_latency",
 		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
+	)
+	ScheduleGeneratorTicks = NewCounterDef(
+		"schedule_generator_ticks",
+		WithDescription("The number of times a scheduler's generator task fired. Compare with schedule_generator_paused_ticks to attribute task throughput to paused vs. active schedules."),
+	)
+	ScheduleGeneratorPausedTicks = NewCounterDef(
+		"schedule_generator_paused_ticks",
+		WithDescription("The number of times a scheduler's generator task fired while the schedule was paused."),
+	)
+	SchedulerGeneratorLoopCompleted = NewCounterDef(
+		"scheduler_generator_loop_completed",
+		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleIdleTask = NewCounterDef(
+		"schedule_idle_task",
+		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleInvokerProcessBufferTask = NewCounterDef(
+		"schedule_invoker_process_buffer_task",
+		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleInvokerExecuteTask = NewCounterDef(
+		"schedule_invoker_execute_task",
+		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleBackfillerTask = NewCounterDef(
+		"schedule_backfiller_task",
+		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleBackfillerCompleted = NewCounterDef(
+		"schedule_backfiller_completed",
+		WithDescription("The number of times a scheduler's Backfiller drained its requested time range and deleted itself. End-to-end signal for backfill request lifecycle."),
+	)
+	ScheduleBufferedStartDropped = NewCounterDef(
+		"schedule_buffered_start_dropped",
+		WithDescription("The number of buffered starts dropped by ProcessBuffer before execution. Tagged with reason (missed_catchup_window, paused_or_limited)."),
 	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",

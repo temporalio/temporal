@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -158,6 +157,16 @@ func WithWorkerService(reason string) TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
 		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithMTLS enables mutual TLS on the test's cluster. This implies a dedicated
+// cluster, since the TLS configuration cannot be shared across tests.
+func WithMTLS() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withMTLS())
+		o.dedicatedReason = "mTLS enabled"
 	}
 }
 
@@ -435,13 +444,6 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 
 		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-		}
-
-		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(interceptor.Unary()),
-				grpc.WithStreamInterceptor(interceptor.Stream()),
-			}
 		}
 
 		var err error

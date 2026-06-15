@@ -393,6 +393,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 		if ns.IsGlobalNamespace() &&
 			ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			//nolint:forbidigo // namespace state-change callback; FailoverNamespace operates per-namespace, no workflow context
 			ns.ActiveInCluster(e.currentClusterName) {
 
 			for _, queueProcessor := range e.queueProcessors {

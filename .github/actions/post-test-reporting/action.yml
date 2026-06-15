@@ -64,7 +64,7 @@ runs:
 
     - name: Upload code coverage to Codecov
       if: ${{ !failure() && !cancelled() }}
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
       with:
         token: ${{ env.CODECOV_TOKEN }}
         directory: ./.testoutput
@@ -72,7 +72,7 @@ runs:
 
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
       with:
         token: ${{ env.CODECOV_TOKEN }}
         directory: ./.testoutput
@@ -88,7 +88,7 @@ runs:
 
     - name: Upload test results to GitHub
       # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       if: ${{ !cancelled() }}
       with:
         name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
@@ -97,7 +97,7 @@ runs:
         retention-days: 28
 
     - name: Upload test summary JSON to GitHub
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       if: ${{ !cancelled() }}
       with:
         name: test-summary-json--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}
@@ -106,7 +106,7 @@ runs:
         retention-days: 28
 
     - name: Upload debug logs
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       if: ${{ !cancelled() && inputs.debug_log_path != '' }}
       with:
         name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ inputs.artifact_name_suffix }}

@@ -14,9 +14,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -299,9 +299,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("v1"),
-						"CustomTextField":    payload.EncodeString("v2"),
-						"CustomIntField":     payload.EncodeString("3"),
+						"CustomKeywordField": sadefs.MustEncodeValue("v1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						"CustomTextField":    sadefs.MustEncodeValue("v2", enumspb.INDEXED_VALUE_TYPE_TEXT),
+						"CustomIntField":     sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT),
 					},
 				}
 			},
@@ -312,7 +312,10 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString(strings.Repeat("x", 100)),
+						"CustomKeywordField": sadefs.MustEncodeValue(
+							strings.Repeat("x", 100),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				}
 			},
@@ -329,7 +332,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				Operation:   "operation",
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("val"),
+						"CustomKeywordField": sadefs.MustEncodeValue("val", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			}
