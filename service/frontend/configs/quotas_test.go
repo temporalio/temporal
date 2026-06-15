@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/temporalapi"
 )
@@ -24,7 +25,13 @@ type (
 		suite.Suite
 		*require.Assertions
 	}
+
+	testMemberCounter int
 )
+
+func (t testMemberCounter) AvailableMemberCount() int {
+	return int(t)
+}
 
 func TestQuotasSuite(t *testing.T) {
 	s := new(quotasSuite)
@@ -187,6 +194,35 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
+}
+
+func (s *quotasSuite) TestGlobalNamespaceRateLimiterUsesConfiguredBurstRatio() {
+	limiter := NewGlobalNamespaceRateLimiter(
+		testMemberCounter(2),
+		func(namespace string) int {
+			s.Equal("test-namespace", namespace)
+			return 10
+		},
+		func(namespace string) float64 {
+			s.Equal("test-namespace", namespace)
+			return 3
+		},
+		log.NewNoopLogger(),
+	)
+	request := quotas.NewRequest(
+		"DescribeWorkerDeployment",
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"",
+	)
+	requestTime := time.Now()
+
+	for range 15 {
+		s.True(limiter.Allow(requestTime, request))
+	}
+	s.False(limiter.Allow(requestTime, request))
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
