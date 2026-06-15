@@ -276,11 +276,12 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 	)
 	s.NoError(err)
 
-	_, err = env.GetTestCluster().SchedulerClient().MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
-		NamespaceId: nsID,
-		ScheduleId:  sid,
-		Identity:    "test",
-		RequestId:   uuid.NewString(),
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
 	})
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)

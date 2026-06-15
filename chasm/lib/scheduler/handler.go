@@ -5,33 +5,26 @@ import (
 	"errors"
 	"fmt"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/worker/dummy"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
 
-	logger        log.Logger
-	specBuilder   *legacyscheduler.SpecBuilder
-	historyClient resource.HistoryClient
+	logger      log.Logger
+	specBuilder *legacyscheduler.SpecBuilder
 }
 
-func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder, historyClient resource.HistoryClient) *handler {
+func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *handler {
 	return &handler{
-		logger:        logger,
-		specBuilder:   specBuilder,
-		historyClient: historyClient,
+		logger:      logger,
+		specBuilder: specBuilder,
 	}
 }
 
@@ -232,54 +225,6 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 
 func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
-
-	var namespace string
-	_, err = chasm.ReadComponent(
-		ctx,
-		chasm.NewComponentRef[*Scheduler](
-			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.ScheduleId,
-			},
-		),
-		func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
-			if s.IsSentinel() {
-				return nil, ErrSentinel
-			}
-			namespace = s.Namespace
-			return nil, nil
-		},
-		(*struct{})(nil),
-	)
-	if errors.Is(err, ErrSentinel) {
-		return nil, ErrSentinelBlocked
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if h.historyClient != nil {
-		descResp, err := h.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-			NamespaceId: req.NamespaceId,
-			Request: &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: namespace,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: legacyscheduler.WorkflowIDPrefix + req.ScheduleId,
-				},
-			},
-		})
-		if err != nil {
-			if !common.IsNotFoundError(err) {
-				return nil, err
-			}
-		} else if descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName {
-			h.logger.Warn(
-				fmt.Sprintf("Migration blocked by workflow sentinel; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
-				tag.NewStringTag("schedule-id", req.ScheduleId),
-			)
-			return nil, ErrSentinelBlocked
-		}
-	}
 
 	resp, _, err = chasm.UpdateComponent(
 		ctx,
