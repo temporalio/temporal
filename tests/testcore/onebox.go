@@ -932,6 +932,7 @@ func sdkClientFactoryProvider(
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
+		nil,
 	)
 }
 

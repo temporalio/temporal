@@ -372,24 +372,30 @@ func ArchiverProviderProvider(
 	)
 }
 
-func SdkClientFactoryProvider(
-	cfg *config.Config,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	metricsHandler metrics.Handler,
-	logger log.SnTaggedLogger,
-	resolver *membership.GRPCResolver,
-	dc *dynamicconfig.Collection,
-) (sdk.ClientFactory, error) {
-	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+type sdkClientFactoryParams struct {
+	fx.In
+
+	Cfg               *config.Config
+	TLSConfigProvider encryption.TLSConfigProvider
+	MetricsHandler    metrics.Handler
+	Logger            log.SnTaggedLogger
+	Resolver          *membership.GRPCResolver
+	DC                *dynamicconfig.Collection
+	TokenProvider     auth.TokenProvider `optional:"true"`
+}
+
+func SdkClientFactoryProvider(p sdkClientFactoryParams) (sdk.ClientFactory, error) {
+	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(p.Cfg, p.TLSConfigProvider, p.Resolver)
 	if err != nil {
 		return nil, err
 	}
 	return sdk.NewClientFactory(
 		frontendURL,
 		frontendTLSConfig,
-		metricsHandler,
-		logger,
-		dynamicconfig.WorkerStickyCacheSize.Get(dc),
+		p.MetricsHandler,
+		p.Logger,
+		dynamicconfig.WorkerStickyCacheSize.Get(p.DC),
+		p.TokenProvider,
 	), nil
 }
 
