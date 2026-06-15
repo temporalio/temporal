@@ -41,6 +41,38 @@ func TestSummaryEmptyWhenNoFailures(t *testing.T) {
 	require.Empty(t, summary.String())
 }
 
+func TestSummaryIncludesSuiteLevelFailures(t *testing.T) {
+	t.Parallel()
+
+	report := &junitReport{Testsuites: junit.Testsuites{
+		Tests:    3,
+		Failures: 2,
+		Suites: []junit.Testsuite{{
+			Tests:    3,
+			Failures: 2,
+			Testcases: []junit.Testcase{
+				{Name: "TestSuite/TestA"},
+				{Name: "TestSuite/TestB"},
+			},
+		}},
+	}}
+
+	summary := newSummaryFromReports([]*junitReport{report})
+	require.Equal(t, []summaryRow{
+		{
+			kind:    failureTypeFailed,
+			name:    "TestSuite (failure 1)",
+			details: noFailureDetails,
+		},
+		{
+			kind:    failureTypeFailed,
+			name:    "TestSuite (failure 2)",
+			details: noFailureDetails,
+		},
+	}, summary.rows)
+	require.Contains(t, summary.String(), "TestSuite (failure 1)")
+}
+
 func TestSummaryTruncatesOversizedDetails(t *testing.T) {
 	t.Parallel()
 

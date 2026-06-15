@@ -92,3 +92,10 @@ func (t *workTracker) finishAttempt(root string, successful bool) progressUpdate
 	}
 	return progressUpdate{completed: t.completed, total: t.total}
 }
+
+func (t *workTracker) allSuccessful() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.total > 0 && t.completed == t.total
+}

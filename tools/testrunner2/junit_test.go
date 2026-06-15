@@ -131,6 +131,53 @@ func TestMergeReports_MissingRetry(t *testing.T) {
 		"expected rerun of all failures from attempt 1, missing in attempt 2: [TestFooSuite/TestFoo_InvalidArgument]")
 }
 
+func TestMergeReports_AddsSyntheticSuiteLevelFailures(t *testing.T) {
+	t.Parallel()
+
+	report := &junitReport{Testsuites: junit.Testsuites{
+		Tests:    3,
+		Failures: 2,
+		Suites: []junit.Testsuite{{
+			Tests:    3,
+			Failures: 2,
+			Testcases: []junit.Testcase{
+				{Name: "TestSuite/TestA"},
+				{Name: "TestSuite/TestB"},
+			},
+		}},
+	}}
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+
+	require.Len(t, merged.Suites[0].Testcases, 4)
+	require.Equal(t, "TestSuite (failure 1)", merged.Suites[0].Testcases[2].Name)
+	require.Equal(t, "TestSuite (failure 2)", merged.Suites[0].Testcases[3].Name)
+	require.Equal(t, string(failureTypeFailed), merged.Suites[0].Testcases[2].Failure.Type)
+	require.Contains(t, merged.Suites[0].Testcases[2].Failure.Message, "without testcase details")
+}
+
+func TestMergeReports_AddsSyntheticSuiteLevelFailureWithoutTestcases(t *testing.T) {
+	t.Parallel()
+
+	report := &junitReport{Testsuites: junit.Testsuites{
+		Tests:    1,
+		Failures: 1,
+		Suites: []junit.Testsuite{{
+			Name:     "suite",
+			Tests:    1,
+			Failures: 1,
+		}},
+	}}
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+
+	require.Len(t, merged.Suites, 1)
+	require.Len(t, merged.Suites[0].Testcases, 1)
+	require.Equal(t, "suite (failure)", merged.Suites[0].Testcases[0].Name)
+}
+
 func TestMergeReports_PreservesFailureDetailsForSummary(t *testing.T) {
 	t.Parallel()
 

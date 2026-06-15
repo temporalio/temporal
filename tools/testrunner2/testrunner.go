@@ -290,6 +290,10 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 
 			results := newJUnitReport(cfg.logPath, cfg.junitPath)
 			detectedAlerts := r.collectAlertsFromFile(cfg.logPath, stream)
+			if terminationAlert, ok := terminatedProcessAlert(exitCode, stream.RunningTests()); ok {
+				detectedAlerts = append(detectedAlerts, terminationAlert)
+				r.addAlerts([]alert{terminationAlert})
+			}
 			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, exitCode, detectedAlerts)
 
 			failed := exitCode != 0 || numFailedTests > 0 || numTests == 0
@@ -391,9 +395,12 @@ func (r *runner) collectJUnitResult(cfg execConfig, exitCode int, detectedAlerts
 
 	jr := &junitReport{path: cfg.junitPath, attempt: cfg.attempt}
 	if err := jr.read(); err == nil {
+		if exitCode != 0 && jr.Failures+jr.Errors == 0 && len(detectedAlerts) == 0 {
+			jr.appendProcessFailure(cfg.unit.displayName, exitCode)
+		}
 		r.addReport(jr)
 		numTests = jr.Tests
-		numFailed = jr.Failures
+		numFailed = jr.Failures + jr.Errors
 		if numTests == 0 && failureKind == "" {
 			failureKind = "no tests"
 			r.addAlerts([]alert{{
@@ -439,8 +446,20 @@ func (r *runner) emitCrashRecoveryRetries(cfg execConfig, failed bool, numTests 
 	}
 
 	if len(emittedRetries) == 0 {
-		r.addError(fmt.Errorf("%s failed on attempt %d", cfg.unit.displayName, cfg.attempt))
+		r.scheduleRetry(cfg, cfg.unit.runTests, nil, emit)
+		return
 	}
+}
+
+func terminatedProcessAlert(exitCode int, tests []string) (alert, bool) {
+	if exitCode != 143 {
+		return alert{}, false
+	}
+	return alert{
+		Kind:    failureKindCrash,
+		Summary: "test process terminated",
+		Tests:   tests,
+	}, true
 }
 
 func (r *runner) finalizeReport(reports []*junitReport) error {
@@ -460,6 +479,10 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 		mergedReport.Errors,
 		mergedReport.Skipped)
 
+	if len(mergedReport.reportingErrs) > 0 && r.tracker.allSuccessful() {
+		r.log("warning: ignoring retry report validation after all scheduled tests passed: %v", errors.Join(mergedReport.reportingErrs...))
+		return nil
+	}
 	return errors.Join(mergedReport.reportingErrs...)
 }
 

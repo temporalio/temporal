@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
 const (
@@ -88,16 +90,27 @@ func newSummaryRowsFromReports(reports []*junitReport) []summaryRow {
 	var rows []summaryRow
 	for _, report := range reports {
 		for _, suite := range report.Suites {
+			testCaseFailures := 0
+			testCaseErrors := 0
 			for _, tc := range suite.Testcases {
-				if tc.Failure == nil {
-					continue
+				if tc.Failure != nil {
+					testCaseFailures++
+					rows = append(rows, summaryRow{
+						kind:    resultFailureType(tc.Failure, failureTypeFailed),
+						name:    tc.Name,
+						details: tc.Failure.Data,
+					})
 				}
-				rows = append(rows, summaryRow{
-					kind:    failureType(tc.Failure.Type),
-					name:    tc.Name,
-					details: tc.Failure.Data,
-				})
+				if tc.Error != nil {
+					testCaseErrors++
+					rows = append(rows, summaryRow{
+						kind:    resultFailureType(tc.Error, failureTypeCrash),
+						name:    tc.Name,
+						details: tc.Error.Data,
+					})
+				}
 			}
+			rows = append(rows, suiteLevelSummaryRows(suite, testCaseFailures, testCaseErrors)...)
 		}
 	}
 	slices.SortFunc(rows, func(a, b summaryRow) int {
@@ -109,6 +122,34 @@ func newSummaryRowsFromReports(reports []*junitReport) []summaryRow {
 		}
 		return strings.Compare(a.details, b.details)
 	})
+	return rows
+}
+
+func resultFailureType(result *junit.Result, defaultType failureType) failureType {
+	if result.Type != "" {
+		return failureType(result.Type)
+	}
+	return defaultType
+}
+
+func suiteLevelSummaryRows(suite junit.Testsuite, testCaseFailures, testCaseErrors int) []summaryRow {
+	var rows []summaryRow
+	for _, tc := range suiteLevelTestCases(suite, "", suite.Failures-testCaseFailures, suite.Errors-testCaseErrors) {
+		if tc.Failure != nil {
+			rows = append(rows, summaryRow{
+				kind:    resultFailureType(tc.Failure, failureTypeFailed),
+				name:    tc.Name,
+				details: tc.Failure.Data,
+			})
+		}
+		if tc.Error != nil {
+			rows = append(rows, summaryRow{
+				kind:    resultFailureType(tc.Error, failureTypeCrash),
+				name:    tc.Name,
+				details: tc.Error.Data,
+			})
+		}
+	}
 	return rows
 }
 
