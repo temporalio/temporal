@@ -1480,19 +1480,19 @@ var (
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",
-		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome."),
+		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleInvokerProcessBufferTask = NewCounterDef(
 		"schedule_invoker_process_buffer_task",
-		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleInvokerExecuteTask = NewCounterDef(
 		"schedule_invoker_execute_task",
-		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleBackfillerTask = NewCounterDef(
 		"schedule_backfiller_task",
-		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleBackfillerCompleted = NewCounterDef(
 		"schedule_backfiller_completed",
