@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -2659,7 +2658,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow(env *testcore.TestEnv) {
 	s.NoError(err)
 
 	acknowledged, err := esClient.IndexPutSettings(
-		context.Background(),
+		s.Context(),
 		esConfig.GetVisibilityIndex(),
 		fmt.Sprintf(`{"max_result_window" : %d}`, testcore.DefaultPageSize))
 	s.NoError(err)
@@ -2667,7 +2666,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow(env *testcore.TestEnv) {
 
 	s.Awaitf(
 		func(s *AdvancedVisibilitySuite) {
-			settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
+			settings, err := esClient.IndexGetSettings(s.Context(), esConfig.GetVisibilityIndex())
 			s.NoError(err)
 			indexSettings, ok := settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]any)
 			s.True(ok)
