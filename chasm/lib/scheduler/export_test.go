@@ -14,7 +14,7 @@ import (
 // Export unexported methods for testing.
 
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder())
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(), nil)
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {

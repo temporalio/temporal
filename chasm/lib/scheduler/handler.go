@@ -5,26 +5,33 @@ import (
 	"errors"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/worker/dummy"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
 
-	logger      log.Logger
-	specBuilder *legacyscheduler.SpecBuilder
+	logger        log.Logger
+	specBuilder   *legacyscheduler.SpecBuilder
+	historyClient resource.HistoryClient
 }
 
-func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *handler {
+func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder, historyClient resource.HistoryClient) *handler {
 	return &handler{
-		logger:      logger,
-		specBuilder: specBuilder,
+		logger:        logger,
+		specBuilder:   specBuilder,
+		historyClient: historyClient,
 	}
 }
 
@@ -226,6 +233,26 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
+	namespace, err := h.getSchedulerNamespace(ctx, req.NamespaceId, req.ScheduleId)
+	if errors.Is(err, ErrSentinel) {
+		return nil, ErrSentinelBlocked
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	isSentinel, err := h.isWorkflowSentinel(ctx, req.NamespaceId, namespace, req.ScheduleId)
+	if err != nil {
+		return nil, err
+	}
+	if isSentinel {
+		h.logger.Warn(
+			fmt.Sprintf("Migration blocked by workflow sentinel; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
+			tag.NewStringTag("schedule-id", req.ScheduleId),
+		)
+		return nil, ErrSentinelBlocked
+	}
+
 	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
@@ -241,6 +268,51 @@ func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.Migrat
 		return nil, ErrSentinelBlocked
 	}
 	return resp, err
+}
+
+func (h *handler) getSchedulerNamespace(ctx context.Context, namespaceID, scheduleID string) (string, error) {
+	var namespace string
+	_, err := chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID,
+				BusinessID:  scheduleID,
+			},
+		),
+		func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+			if s.IsSentinel() {
+				return nil, ErrSentinel
+			}
+			namespace = s.Namespace
+			return nil, nil
+		},
+		(*struct{})(nil),
+	)
+	return namespace, err
+}
+
+func (h *handler) isWorkflowSentinel(ctx context.Context, namespaceID, namespace, scheduleID string) (bool, error) {
+	if h.historyClient == nil {
+		return false, nil
+	}
+
+	descResp, err := h.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + scheduleID,
+			},
+		},
+	})
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName, nil
 }
 
 func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (resp *schedulerpb.DescribeScheduleResponse, err error) {

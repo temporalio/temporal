@@ -208,6 +208,85 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	s.NoError(err)
 }
 
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentinel() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel")
+	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wf")
+	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			nsID,
+			&workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                nsName,
+				WorkflowId:               v1WorkflowID,
+				WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				Identity:                 "test",
+				RequestId:                uuid.NewString(),
+				WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			},
+			nil, nil, time.Now().UTC(),
+		),
+	)
+	s.NoError(err)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+		},
+	)
+	s.NoError(err)
+
+	_, err = env.GetTestCluster().SchedulerClient().MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: nsID,
+		ScheduleId:  sid,
+		Identity:    "test",
+		RequestId:   uuid.NewString(),
+	})
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	s.Contains(unavailableErr.Message, "sentinel")
+}
+
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	env := testcore.NewEnv(
 		s.T(),
