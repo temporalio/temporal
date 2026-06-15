@@ -35,7 +35,7 @@ const (
 
 	// goTestTimeoutGrace lets go test print its timeout panic before the
 	// testrunner kills gotestsum and writes partial results.
-	goTestTimeoutGrace = time.Minute
+	goTestTimeoutGrace = 30 * time.Second
 
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
@@ -360,7 +360,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			currentAttempt.junitReport.appendSyntheticFailure(
 				"testrunner.TotalTimeout",
 				failureTypeTimeout,
-				totalTimeoutFailureDetail(r.totalTimeout, stdout),
+				fmt.Sprintf("test-runner total timeout (%s) reached before all tests completed", r.totalTimeout),
 			)
 			break
 		}
@@ -453,16 +453,6 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
 		os.Exit(1)
 	}
-}
-
-func totalTimeoutFailureDetail(timeout time.Duration, stdout string) string {
-	var detail strings.Builder
-	fmt.Fprintf(&detail, "test-runner total timeout (%s) reached before all tests completed", timeout)
-	if strings.TrimSpace(stdout) != "" {
-		detail.WriteString("\n\nCaptured output before timeout:\n")
-		detail.WriteString(truncateAlertDetails(sanitizeXML(stdout)))
-	}
-	return detail.String()
 }
 
 func stripRunFromArgs(args []string) (argsNoRun []string) {

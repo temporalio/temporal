@@ -50,7 +50,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.NoError(t, err)
 		// The testrunner should derive its total deadline from the go test -timeout flag,
 		// with grace for go test to print its timeout panic before gotestsum is killed.
-		require.Equal(t, 36*time.Minute, r.totalTimeout)
+		require.Equal(t, 35*time.Minute+goTestTimeoutGrace, r.totalTimeout)
 		// The flag must still be present in the passthrough args so gotestsum/go test
 		// also honour it.
 		require.Contains(t, args, "-timeout=35m")
@@ -204,20 +204,6 @@ func TestWriteCurrentReport(t *testing.T) {
 	require.NoError(t, result2.read())
 	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
 	require.Len(t, result2.Suites, 2)
-}
-
-func TestTotalTimeoutFailureDetail(t *testing.T) {
-	detail := totalTimeoutFailureDetail(35*time.Minute, "=== RUN   TestExample\npartial log\u0001\n")
-	require.Contains(t, detail, "test-runner total timeout (35m0s) reached before all tests completed")
-	require.Contains(t, detail, "Captured output before timeout:")
-	require.Contains(t, detail, "=== RUN   TestExample")
-	require.Contains(t, detail, "partial log")
-	require.NotContains(t, detail, "\u0001")
-}
-
-func TestTotalTimeoutFailureDetailWithoutOutput(t *testing.T) {
-	detail := totalTimeoutFailureDetail(35*time.Minute, "")
-	require.Equal(t, "test-runner total timeout (35m0s) reached before all tests completed", detail)
 }
 
 func TestRunnerReportCrash(t *testing.T) {
