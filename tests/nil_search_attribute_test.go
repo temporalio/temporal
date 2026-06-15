@@ -11,6 +11,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -23,7 +24,7 @@ func TestWorkflowStart_NilSearchAttributesFiltered(t *testing.T) {
 
 	nilPayload, err := payload.Encode(nil)
 	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -153,7 +154,7 @@ func TestDescribeWorkflow_NilSearchAttributesNotVisible(t *testing.T) {
 
 	nilPayload, err := payload.Encode(nil)
 	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -210,7 +211,7 @@ func TestWorkflowStart_NilMemoFiltered(t *testing.T) {
 
 	nilPayload, err := payload.Encode(nil)
 	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -331,7 +332,7 @@ func TestDescribeWorkflow_NilMemoNotVisible(t *testing.T) {
 
 	nilPayload, err := payload.Encode(nil)
 	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{

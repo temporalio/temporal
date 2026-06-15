@@ -96,7 +96,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
 	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
 	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-	t.Run("TestNextActionTimeVisibility", func(t *testing.T) { testScheduleNextActionTimeVisibility(t, newContext) })
 	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
 }
 
@@ -120,6 +119,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestBasics", func(t *testing.T) { testBasics(t, newContext) })
 	t.Run("TestInput", func(t *testing.T) { testInput(t, newContext) })
 	t.Run("TestLastCompletionAndError", func(t *testing.T) { testLastCompletionAndError(t, newContext) })
+	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
 	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { testListSchedulesReturnsWorkflowStatus(t, newContext) })
 	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { testUpdateIntervalTakesEffect(t, newContext) })
 	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { testListScheduleMatchingTimes(t, newContext) })
@@ -827,6 +827,89 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
 }
 
+// testScheduleContinuesAfterWorkflowRetryFailure verifies a schedule keeps firing actions
+// after a scheduled workflow exhausts its retry policy and fails.
+func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext contextFactory) {
+	// Recording FAILED actions across the workflow's retry chain relies on the scheduler matching
+	// completions by the request ID carried in the completion callback token (which survives the new
+	// runs created by retries). That requires the envelope token format, which is gated off by default
+	// for safe rollout, so enable it explicitly here.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := testcore.NewEnv(t, opts...)
+
+	sid := testcore.RandomizeStr("sched-retry-fail")
+	wid := testcore.RandomizeStr("sched-retry-fail-wf")
+	wt := testcore.RandomizeStr("sched-retry-fail-wt")
+
+	var sawRetry int32
+	workflowFn := func(ctx workflow.Context) error {
+		if workflow.GetInfo(ctx).Attempt > 1 {
+			atomic.StoreInt32(&sawRetry, 1)
+		}
+		return errors.New("intentional failure to force a retry")
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					RetryPolicy: &commonpb.RetryPolicy{
+						InitialInterval:    durationpb.New(1 * time.Second),
+						BackoffCoefficient: 1.0,
+						MaximumAttempts:    2,
+					},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Two FAILED actions proves the schedule kept firing past the first retry-failure.
+	var failedActions int
+	var lastDescribe *workflowservice.DescribeScheduleResponse
+	s.Eventually(func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		lastDescribe = desc
+		failedActions = 0
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
+				failedActions++
+			}
+		}
+		return atomic.LoadInt32(&sawRetry) == 1 && failedActions >= 2
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule should keep recording FAILED actions after the workflow retry-fails")
+
+	s.Equal(int32(1), atomic.LoadInt32(&sawRetry), "scheduled workflow should have retried (attempt > 1)")
+	s.GreaterOrEqual(failedActions, 2, "schedule should record multiple retry-failed actions")
+	s.GreaterOrEqual(lastDescribe.GetInfo().GetActionCount(), int64(2))
+	s.False(lastDescribe.GetSchedule().GetState().GetPaused(), "a retry-failed workflow must not pause the schedule")
+}
+
 // testScheduledWorkflowContinueAsNewCompletion validates that the CHASM scheduler observes the
 // completion of a scheduled workflow that continues-as-new before completing. The scheduler matches
 // completions by the request ID on the Nexus completion callback it attaches at start; if that ID is
@@ -837,7 +920,11 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 // are observed) and that the completion callback is written intact into both the original and the
 // continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
 func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	// The scheduler matches the continued-as-new run's completion by the request ID carried in the
+	// completion callback token, which only survives continue-as-new in the envelope token format.
+	// That format is gated off by default for safe rollout, so enable it explicitly here.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := testcore.NewEnv(t, opts...)
 
 	sid := testcore.RandomizeStr("sched-can-completion")
 	wid := testcore.RandomizeStr("sched-can-completion-wf")
@@ -3923,10 +4010,10 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 		"paused-window calendar entry must not be replayed on unpause")
 }
 
-// testScheduleNextActionTimeVisibility asserts that the
-// TemporalScheduleNextActionTime search attribute is published to visibility.
-func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactory) {
-	t.Skip("TODO(david, #10584)")
+// TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
+// ScheduleNextActionTime search attribute is published to visibility and is
+// queryable through the frontend ListSchedules API.
+func TestScheduleNextActionTimeVisibility(t *testing.T) {
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
@@ -3934,9 +4021,9 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	wid := testcore.RandomizeStr("sched-next-action-wf")
 	wt := testcore.RandomizeStr("sched-next-action-wt")
 
-	// Register a no-op workflow type. We pause both schedules immediately after
-	// creation so spawned actions shouldn't run, but registering avoids worker
-	// noise if a fire slips through before pause lands.
+	// Register a no-op workflow type so a stray fire doesn't generate worker
+	// noise. The schedule is never paused: we want its next action time to stay
+	// populated so it remains queryable.
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error { return nil },
 		workflow.RegisterOptions{Name: wt},
@@ -3961,6 +4048,7 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 		}
 	}
 
+	newContext := chasmContextFactory
 	v2Ctx := newContext(s.Context())
 	createTime := time.Now()
 
@@ -3973,37 +4061,118 @@ func testScheduleNextActionTimeVisibility(t *testing.T, newContext contextFactor
 	})
 	s.NoError(err)
 
-	// Pause so FutureActionTimes is stable, and so that any SA the
-	// implementation intends to publish has been committed to visibility by
-	// the time the entry comes back paused.
-	for _, p := range []struct {
-		ctx context.Context
-		sid string
-	}{{v2Ctx, v2Sid}} {
-		_, err := s.FrontendClient().PatchSchedule(p.ctx, &workflowservice.PatchScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: p.sid,
-			Patch:      &schedulepb.SchedulePatch{Pause: "halt"},
-			Identity:   "test",
-			RequestId:  uuid.NewString(),
+	// The CHASM scheduler publishes its next action time to visibility as the
+	// ScheduleNextActionTime search attribute. The schedule fires on an hourly
+	// interval, so its next action time is always in the future; a query for
+	// ScheduleNextActionTime > createTime must therefore eventually return this
+	// schedule. (The SA is indexed/queryable but not surfaced on the list entry,
+	// so we assert via the query rather than by reading the entry's SAs.)
+	query := fmt.Sprintf(`%s > "%s"`,
+		chasmscheduler.ScheduleNextActionTimeName,
+		createTime.UTC().Format(time.RFC3339Nano),
+	)
+
+	require.Eventually(t, func() bool {
+		listResp, err := s.FrontendClient().ListSchedules(v2Ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 100,
+			Query:           query,
 		})
-		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == v2Sid {
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 1*time.Second,
+		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
+		v2Sid, query)
+}
+
+// TestScheduleCountsVisibility asserts that the CHASM scheduler's
+// ScheduleRunningWorkflowCount and ScheduleBufferedStartsCount search attributes
+// are published to visibility and queryable through the frontend ListSchedules
+// API. A schedule that fires every second under BUFFER_ONE, started with a
+// workflow that blocks, settles into one running workflow with one fire buffered
+// behind it. The counts aren't surfaced on the list entry, so we assert via the
+// query rather than by reading the entry's SAs.
+func TestScheduleCountsVisibility(t *testing.T) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	newContext := chasmContextFactory
+
+	sid := testcore.RandomizeStr("sched-counts-v2")
+	wid := testcore.RandomizeStr("sched-counts-wf")
+	wt := testcore.RandomizeStr("sched-counts-wt")
+
+	// A workflow that holds open so a fire stays running while later fires buffer.
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			return workflow.Sleep(ctx, time.Hour)
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+		},
 	}
 
-	paused := func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetPaused()
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// matchesQuery reports whether the schedule is returned when filtering on the
+	// given search-attribute query.
+	matchesQuery := func(query string) bool {
+		listResp, listErr := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 5,
+			Query:           query,
+		})
+		if listErr != nil {
+			return false
+		}
+		for _, ent := range listResp.Schedules {
+			if ent.ScheduleId == sid {
+				return true
+			}
+		}
+		return false
 	}
 
-	// V2: TemporalScheduleNextActionTime must be present and decode to a
-	// timestamp at or after the create time.
-	v2Entry := getScheduleEntryFromVisibility(s, v2Sid, chasmContextFactory, paused)
-	s.NotNil(v2Entry)
-	v2Pl := v2Entry.GetSearchAttributes().GetIndexedFields()[chasmscheduler.ScheduleNextActionTimeName]
+	// Starting the workflow and buffering the next fire takes a few seconds on top
+	// of visibility propagation, so allow 30s for each count to become queryable.
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
 
-	var v2Next time.Time
-	s.NoError(payload.Decode(v2Pl, &v2Next))
-	require.Equal(t, 23, v2Next.Minute()) // see the 'Phase' section of the spec
-	s.NotNil(v2Pl, "V2 schedule must publish TemporalScheduleNextActionTime")
-	s.True(v2Next.After(createTime.Add(-time.Second)),
-		"next action time must be >= createTime; got %v, createTime %v", v2Next, createTime)
+	require.Eventually(t, func() bool {
+		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName))
+	}, 30*time.Second, 500*time.Millisecond,
+		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
 }
