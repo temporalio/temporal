@@ -27,15 +27,7 @@ const (
 	summaryOutputDirFlag  = "--summary-output-dir="
 	crashReportNameFlag   = "--crashreportname="
 	gotestsumPathFlag     = "--gotestsum-path="
-
-	// goTestTimeoutFlag is the go test flag whose value is also used as the
-	// testrunner's total-run deadline (so results are flushed before an external
-	// kill such as a GitHub Actions timeout).
-	goTestTimeoutFlagEq = "-timeout="
-
-	// goTestTimeoutGrace lets go test print its timeout panic before the
-	// testrunner kills gotestsum and writes partial results.
-	goTestTimeoutGrace = 30 * time.Second
+	totalTimeoutFlag      = "--total-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
@@ -85,7 +77,7 @@ type runner struct {
 	junitGlob        string
 	summaryOutputDir string
 	alerts           []alert
-	totalTimeout     time.Duration // derived from the -timeout go test flag
+	totalTimeout     time.Duration
 }
 
 func newRunner() *runner {
@@ -97,17 +89,6 @@ func newRunner() *runner {
 
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
-	// Pre-pass: read the go test -timeout value and use it as the testrunner's
-	// total deadline so results are flushed before an external kill (e.g. GitHub
-	// Actions timeout). The flag is NOT consumed — it still passes through to gotestsum.
-	for _, arg := range args {
-		if strings.HasPrefix(arg, goTestTimeoutFlagEq) {
-			if d, err := time.ParseDuration(strings.TrimPrefix(arg, goTestTimeoutFlagEq)); err == nil {
-				r.totalTimeout = d + goTestTimeoutGrace
-			}
-		}
-	}
-
 	var sanitizedArgs []string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
@@ -120,6 +101,18 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
 			}
 			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if strings.HasPrefix(arg, totalTimeoutFlag) {
+			var err error
+			r.totalTimeout, err = time.ParseDuration(strings.TrimPrefix(arg, totalTimeoutFlag))
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %q: %w", totalTimeoutFlag, err)
+			}
+			if r.totalTimeout == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", totalTimeoutFlag)
+			}
+			continue
 		}
 
 		if strings.HasPrefix(arg, gotestsumPathFlag) {
