@@ -247,17 +247,16 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	worker1Key := s.tv.WorkerIdentity()
-	worker2Key := s.tv.WorkerIdentity() + "_2"
-	sysWorkerKey := s.tv.WorkerIdentity() + "_sys"
-	sharedTaskQueue := s.tv.TaskQueue().Name
-	otherTaskQueue := s.tv.WithTaskQueueNumber(2).TaskQueue().Name
+	worker1Key := env.Tv().WorkerIdentity()
+	worker2Key := env.Tv().WorkerIdentity() + "_2"
+	sysWorkerKey := env.Tv().WorkerIdentity() + "_sys"
+	sharedTaskQueue := env.Tv().TaskQueue().Name
+	otherTaskQueue := env.Tv().WithTaskQueueNumber(2).TaskQueue().Name
 
-	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-		Namespace: s.Namespace().String(),
+	hbResp, err := env.FrontendClient().RecordWorkerHeartbeat(s.Context(), &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: env.Namespace().String(),
 		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
 			{
 				WorkerInstanceKey: worker1Key,
@@ -273,56 +272,56 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_CountWorkers() {
 			},
 		},
 	})
-	s.Require().NoError(err)
-	s.Require().NotNil(hbResp)
+	s.NoError(err)
+	s.NotNil(hbResp)
 
 	// Count all user workers (excludes system workers by default)
 	{
-		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace: env.Namespace().String(),
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(int64(2), resp.GetCount())
+		s.NoError(err)
+		s.Equal(int64(2), resp.GetCount())
 	}
 
 	// Count all workers including system workers
 	{
-		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
-			Namespace:            s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace:            env.Namespace().String(),
 			IncludeSystemWorkers: true,
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(int64(3), resp.GetCount())
+		s.NoError(err)
+		s.Equal(int64(3), resp.GetCount())
 	}
 
 	// Count with query filter
 	{
-		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue),
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(int64(1), resp.GetCount())
+		s.NoError(err)
+		s.Equal(int64(1), resp.GetCount())
 	}
 
 	// Count with query that matches no workers
 	{
-		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "WorkerInstanceKey='nonexistent'",
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(int64(0), resp.GetCount())
+		s.NoError(err)
+		s.Equal(int64(0), resp.GetCount())
 	}
 
 	// Count with unknown field in query matches nothing (no error)
 	{
-		resp, err := s.FrontendClient().CountWorkers(ctx, &workflowservice.CountWorkersRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkers(s.Context(), &workflowservice.CountWorkersRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "InvalidField='foo'",
 		})
-		s.Require().NoError(err)
-		s.Require().Equal(int64(0), resp.GetCount())
+		s.NoError(err)
+		s.Equal(int64(0), resp.GetCount())
 	}
 }
 

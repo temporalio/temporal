@@ -78,7 +78,7 @@ func (b *BackfillerTaskHandler) Execute(
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
+	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	invoker := scheduler.Invoker.Get(ctx)
 

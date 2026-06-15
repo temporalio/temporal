@@ -102,7 +102,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow(enableUnifiedQueryConvert
 	tl := "es-functional-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(env, id, wt, tl)
 
-	attrPayload, _ := payload.Encode(testSearchAttributeVal)
+	attrPayload := sadefs.MustEncodeValue(testSearchAttributeVal, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			testSearchAttributeKey: attrPayload,
@@ -215,7 +215,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute(enableUnified
 	tl := "es-functional-list-workflow-by-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(env, id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
+	attrValBytes := sadefs.MustEncodeValue(testSearchAttributeVal, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			testSearchAttributeKey: attrValBytes,
@@ -332,7 +332,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery(enableUnifiedQueryCon
 
 	// start 3 workflows
 	key := "CustomIntField"
-	attrValBytes, _ := payload.Encode(1)
+	attrValBytes := sadefs.MustEncodeValue(1, enumspb.INDEXED_VALUE_TYPE_INT)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			key: attrValBytes,
@@ -344,14 +344,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery(enableUnifiedQueryCon
 
 	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-2"
-	attrValBytes, _ = payload.Encode(2)
+	attrValBytes = sadefs.MustEncodeValue(2, enumspb.INDEXED_VALUE_TYPE_INT)
 	searchAttr.IndexedFields[key] = attrValBytes
 	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-3"
-	attrValBytes, _ = payload.Encode(3)
+	attrValBytes = sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT)
 	searchAttr.IndexedFields[key] = attrValBytes
 	we3, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
@@ -533,7 +533,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery(enableUnifiedQuer
 
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": payload.EncodeString("nothing else matters"),
+			"CustomTextField": sadefs.MustEncodeValue("nothing else matters", enumspb.INDEXED_VALUE_TYPE_TEXT),
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -654,10 +654,10 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy(enableUnifiedQueryCon
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 
 		if i < testcore.DefaultPageSize-1 { // 4 workflows have search attributes.
-			intVal, _ := payload.Encode(i)
-			doubleVal, _ := payload.Encode(float64(i))
-			strVal, _ := payload.Encode(strconv.Itoa(i))
-			timeVal, _ := payload.Encode(initialTime.Add(time.Duration(i)))
+			intVal := sadefs.MustEncodeValue(int64(i), enumspb.INDEXED_VALUE_TYPE_INT)
+			doubleVal := sadefs.MustEncodeValue(float64(i), enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+			strVal := sadefs.MustEncodeValue(strconv.Itoa(i), enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+			timeVal := sadefs.MustEncodeValue(initialTime.Add(time.Duration(i)), enumspb.INDEXED_VALUE_TYPE_DATETIME)
 			startRequest.SearchAttributes = &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomIntField":      intVal,
@@ -669,7 +669,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy(enableUnifiedQueryCon
 		} else {
 			// To sort on CustomDatetimeField in single shard index on ES 7.10, there must be no null values in that field.
 			// Otherwise, ES returns internal server error.
-			timeVal, _ := payload.Encode(initialTime.Add(time.Duration(i)))
+			timeVal := sadefs.MustEncodeValue(initialTime.Add(time.Duration(i)), enumspb.INDEXED_VALUE_TYPE_DATETIME)
 			startRequest.SearchAttributes = &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomDatetimeField": timeVal,
@@ -908,7 +908,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow(enableUnifiedQueryConverter 
 	tl := "es-functional-count-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(env, id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
+	attrValBytes := sadefs.MustEncodeValue(testSearchAttributeVal, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			testSearchAttributeKey: attrValBytes,
@@ -1081,7 +1081,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes(en
 		// handle first upsert
 		if commandCount == 0 {
 			commandCount++
-			attrValPayload, _ := payload.Encode(testSearchAttributeVal)
+			attrValPayload := sadefs.MustEncodeValue(testSearchAttributeVal, enumspb.INDEXED_VALUE_TYPE_TEXT)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					testSearchAttributeKey: attrValPayload,
@@ -2590,7 +2590,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes(enable
 	schedule.ScheduleId = customScheduleID
 	schedule.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			sadefs.ScheduleID: payload.EncodeString(customSearchAttrValue),
+			sadefs.ScheduleID: sadefs.MustEncodeValue(customSearchAttrValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 
