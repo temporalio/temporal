@@ -194,6 +194,27 @@ func TestIntegration(t *testing.T) {
 
 	})
 
+	t.Run("failure: package-level failure", func(t *testing.T) {
+		t.Parallel()
+
+		res := runIntegTest(t, []string{"./testpkg/packagefail"}, "--group-by=test", "--max-attempts=2")
+		require.NoError(t, res.err, "package-level failure should pass on retry")
+
+		assertJUnit(t, res,
+			failed("TestPackageLevelFailure (process failure)", "Process exited with code 1"),
+			passed("TestPackageLevelFailure"),
+			passed("TestPackageLevelFailure (retry 1)"),
+		)
+		assertConsole(t, res,
+			printed("$", ".test", "-test.run ^TestPackageLevelFailure$"),
+			printed("❌️", "TestPackageLevelFailure", "attempt=1", "passed=1/2", "failure=failed"),
+			printed("🔄 scheduling retry:", "^TestPackageLevelFailure$"),
+			printed("$", ".test", "-test.run ^TestPackageLevelFailure$"),
+			printed("✅ [1/1]", "TestPackageLevelFailure", "attempt=2, retry 1", "passed=1/1"),
+			printed("test run completed"),
+		)
+	})
+
 	t.Run("failure: flaky subtest", func(t *testing.T) {
 		t.Parallel()
 
@@ -733,7 +754,7 @@ func assertJUnit(t require.TestingT, res integResult, opts ...junitOpt) {
 	var gotPassed, gotFailed []string
 	for tc := range jr.testcases() {
 		switch {
-		case tc.Failure != nil:
+		case tc.Failure != nil || tc.Error != nil:
 			gotFailed = append(gotFailed, tc.Name)
 		case tc.Error == nil:
 			gotPassed = append(gotPassed, tc.Name)
@@ -771,12 +792,16 @@ func assertJUnit(t require.TestingT, res integResult, opts ...junitOpt) {
 			continue
 		}
 		for tc := range jr.testcases() {
-			if tc.Name != ft.name || tc.Failure == nil {
+			result := tc.Failure
+			if result == nil {
+				result = tc.Error
+			}
+			if tc.Name != ft.name || result == nil {
 				continue
 			}
 			matched := false
 			for _, msg := range ft.msgs {
-				if strings.Contains(tc.Failure.Message, msg) {
+				if strings.Contains(result.Message, msg) {
 					matched = true
 					break
 				}
@@ -784,7 +809,7 @@ func assertJUnit(t require.TestingT, res integResult, opts ...junitOpt) {
 			if !matched {
 				require.Fail(t, fmt.Sprintf(
 					"test %s: expected failure message containing one of %v, got: %q",
-					ft.name, ft.msgs, tc.Failure.Message))
+					ft.name, ft.msgs, result.Message))
 			}
 		}
 	}

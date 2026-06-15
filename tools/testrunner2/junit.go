@@ -107,6 +107,27 @@ func (j *junitReport) appendAlerts(alerts alerts) {
 	j.Tests += suite.Tests
 }
 
+func (j *junitReport) appendProcessFailure(name string, exitCode int) {
+	if len(j.Suites) == 0 {
+		j.Suites = append(j.Suites, junit.Testsuite{Name: name})
+	}
+
+	suite := &j.Suites[0]
+	suite.Testcases = append(suite.Testcases, junit.Testcase{
+		Classname: suite.Name,
+		Name:      name + " (process failure)",
+		Failure: &junit.Result{
+			Message: fmt.Sprintf("Process exited with code %d without testcase failure details", exitCode),
+			Type:    string(failureTypeFailed),
+			Data:    noFailureDetails,
+		},
+	})
+	suite.Tests++
+	suite.Failures++
+	j.Tests++
+	j.Failures++
+}
+
 // testcases iterates over all test cases across all suites.
 func (j *junitReport) testcases() iter.Seq[junit.Testcase] {
 	return func(yield func(junit.Testcase) bool) {
@@ -131,7 +152,7 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
 	for tc := range j.testcases() {
-		if tc.Failure != nil {
+		if hasTestCaseFailure(tc) {
 			failures = append(failures, tc.Name)
 		}
 	}
@@ -143,7 +164,7 @@ func (j *junitReport) collectTestCaseFailureRefs() []testFailureRef {
 	byPackage := make(map[string][]string)
 	for _, suite := range j.Suites {
 		for _, tc := range suite.Testcases {
-			if tc.Failure == nil {
+			if !hasTestCaseFailure(tc) {
 				continue
 			}
 			pkg := tc.Classname
@@ -212,10 +233,12 @@ func retrySuffix(attempt int) string {
 }
 
 func mergeSuite(suite junit.Testsuite, suffix string) (junit.Testsuite, bool) {
-	if len(suite.Testcases) == 0 {
+	if len(suite.Testcases) == 0 && suite.Failures+suite.Errors == 0 {
 		return junit.Testsuite{}, false
 	}
 
+	missingFailures := suite.Failures - countTestCaseFailures(suite.Testcases)
+	missingErrors := suite.Errors - countTestCaseErrors(suite.Testcases)
 	testcases := slices.Clone(suite.Testcases)
 	slices.SortFunc(testcases, func(a, b junit.Testcase) int {
 		return strings.Compare(a.Name, b.Name)
@@ -234,7 +257,104 @@ func mergeSuite(suite junit.Testsuite, suffix string) (junit.Testsuite, bool) {
 		}
 		merged.Testcases = append(merged.Testcases, mergeTestCase(testCase, suite.Name, suffix))
 	}
+	merged.Testcases = append(merged.Testcases, suiteLevelTestCases(suite, suffix, missingFailures, missingErrors)...)
 	return merged, true
+}
+
+func countTestCaseFailures(testcases []junit.Testcase) int {
+	var count int
+	for _, tc := range testcases {
+		if tc.Failure != nil {
+			count++
+		}
+	}
+	return count
+}
+
+func countTestCaseErrors(testcases []junit.Testcase) int {
+	var count int
+	for _, tc := range testcases {
+		if tc.Error != nil {
+			count++
+		}
+	}
+	return count
+}
+
+func hasTestCaseFailure(tc junit.Testcase) bool {
+	return tc.Failure != nil || tc.Error != nil
+}
+
+func suiteLevelTestCases(suite junit.Testsuite, suffix string, missingFailures, missingErrors int) []junit.Testcase {
+	var testcases []junit.Testcase
+	name := inferredSuiteName(suite)
+	details := suiteLevelDetails(suite)
+	for i := range missingFailures {
+		testcases = append(testcases, junit.Testcase{
+			Classname: suite.Name,
+			Name:      suiteLevelName(name, "failure", i, missingFailures) + suffix,
+			Failure: &junit.Result{
+				Message: fmt.Sprintf("Suite reported %d failure(s) without testcase details", missingFailures),
+				Type:    string(failureTypeFailed),
+				Data:    details,
+			},
+		})
+	}
+	for i := range missingErrors {
+		testcases = append(testcases, junit.Testcase{
+			Classname: suite.Name,
+			Name:      suiteLevelName(name, "error", i, missingErrors) + suffix,
+			Error: &junit.Result{
+				Message: fmt.Sprintf("Suite reported %d error(s) without testcase details", missingErrors),
+				Type:    string(failureTypeCrash),
+				Data:    details,
+			},
+		})
+	}
+	return testcases
+}
+
+func inferredSuiteName(suite junit.Testsuite) string {
+	if suite.Name != "" {
+		return suite.Name
+	}
+	var roots []string
+	seen := make(map[string]struct{})
+	for _, tc := range suite.Testcases {
+		root := tc.Name
+		if idx := strings.IndexByte(root, '/'); idx >= 0 {
+			root = root[:idx]
+		}
+		if root == "" {
+			continue
+		}
+		if _, ok := seen[root]; ok {
+			continue
+		}
+		seen[root] = struct{}{}
+		roots = append(roots, root)
+	}
+	if len(roots) == 1 {
+		return roots[0]
+	}
+	return "suite"
+}
+
+func suiteLevelName(name, kind string, index, total int) string {
+	if total == 1 {
+		return fmt.Sprintf("%s (%s)", name, kind)
+	}
+	return fmt.Sprintf("%s (%s %d)", name, kind, index+1)
+}
+
+func suiteLevelDetails(suite junit.Testsuite) string {
+	if suite.SystemErr != nil && suite.SystemErr.Data != "" {
+		return suite.SystemErr.Data
+	}
+	if suite.SystemOut != nil && suite.SystemOut.Data != "" {
+		return suite.SystemOut.Data
+	}
+	return noFailureDetails
 }
 
 func leafTestCaseSet(testcases []junit.Testcase) map[string]struct{} {
@@ -254,6 +374,9 @@ func mergeTestCase(testCase junit.Testcase, suiteName, suffix string) junit.Test
 	testCase.SystemErr = nil
 	if testCase.Failure != nil {
 		normalizeFailure(testCase.Failure, suiteName)
+	}
+	if testCase.Error != nil {
+		normalizeFailure(testCase.Error, alertsSuiteName)
 	}
 	testCase.Name += suffix
 	return testCase
