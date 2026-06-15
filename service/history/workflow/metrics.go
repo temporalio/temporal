@@ -96,9 +96,6 @@ func getArchetypeMetricTag(
 		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
 	}
 
-	if chasmRegistry == nil {
-		return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
-	}
 	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
 		return metrics.ArchetypeTag(name), true
 	}
