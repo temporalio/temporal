@@ -103,6 +103,15 @@ func (b *EventStore) add(
 	return event, batchID
 }
 
+// LatestEventBatchID returns the first event ID of the batch currently being built, or
+// common.EmptyEventID if the current batch is empty, e.g. after a Flush.
+func (b *EventStore) LatestEventBatchID() int64 {
+	if len(b.memLatestBatch) > 0 {
+		return b.memLatestBatch[0].EventId
+	}
+	return common.EmptyEventID
+}
+
 // appendToLatestBatch appends event to memLatestBatch, rolling into a new batch
 // first if the additional event would push the current batch over
 // maxEventBatchSizeInBytes. A value of <= 0 disables the check.
