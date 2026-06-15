@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -800,6 +799,83 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 		})
 	}
+}
+
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_HistorySizeNotDoubleCountedOnReuse() {
+	// Reusing a workflow ID after the previous run has closed goes through createBrandNew
+	// (which fails because the closed run is still the "current" record) and falls back to
+	// createAsCurrent. A bug previously leaked the failed attempt's first-batch HistorySize
+	// increment into the retry, so the reused-ID run double-counted its first event batch in
+	// ExecutionStats.HistorySize. A reused-ID run has byte-identical history to a fresh run, so
+	// its reported HistorySizeBytes must match a fresh control run.
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+
+	tv := testvars.New(s.T())
+
+	startRun := func(wfID string) string {
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:             uuid.NewString(),
+			Namespace:             env.Namespace().String(),
+			WorkflowId:            wfID,
+			WorkflowType:          tv.WorkflowType(),
+			TaskQueue:             tv.TaskQueue(),
+			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+			Identity:              tv.WorkerIdentity(),
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		})
+		s.NoError(err)
+		return we.RunId
+	}
+	historySize := func(wfID, runID string) int64 {
+		descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
+		})
+		s.NoError(err)
+		return descResp.WorkflowExecutionInfo.GetHistorySizeBytes()
+	}
+	terminate := func(wfID, runID string) {
+		_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
+			Reason:            "test cleanup",
+		})
+		s.NoError(err)
+	}
+
+	// Control: a brand-new workflow ID. createBrandNew succeeds on the first attempt.
+	freshWfID := tv.WorkflowID() + "-fresh"
+	freshRunID := startRun(freshWfID)
+	freshAfterStart := historySize(freshWfID, freshRunID) // size of batch 1 ([Started, WFTScheduled])
+	terminate(freshWfID, freshRunID)
+	freshFinal := historySize(freshWfID, freshRunID) // batch1 + batch2 (terminated)
+
+	// Repro: reuse the same workflow ID after the first run is closed.
+	reuseWfID := tv.WorkflowID() + "-reuse"
+	run1ID := startRun(reuseWfID)
+	run1AfterStart := historySize(reuseWfID, run1ID)
+	terminate(reuseWfID, run1ID)
+
+	run2ID := startRun(reuseWfID)
+	run2AfterStart := historySize(reuseWfID, run2ID)
+	terminate(reuseWfID, run2ID)
+	run2Final := historySize(reuseWfID, run2ID)
+
+	s.T().Logf("history size: fresh afterStart=%d final=%d; reuse run1AfterStart=%d run2AfterStart=%d run2Final=%d",
+		freshAfterStart, freshFinal, run1AfterStart, run2AfterStart, run2Final)
+
+	s.Positive(freshAfterStart)
+	// Structurally identical runs can differ by a few bytes (varint-encoded task IDs and
+	// timestamps), so compare with a small tolerance. The bug inflated the reused-ID run by a
+	// whole extra first batch (run1AfterStart bytes, hundreds), far outside this tolerance.
+	const tolerance = 32.0
+	// run1 and run2 share the workflow ID; run1 is a clean create, run2 reuses the closed ID.
+	// They must report essentially the same size — not ~2x.
+	s.InDelta(run1AfterStart, run2AfterStart, tolerance,
+		"reused-ID run must not double-count its first event batch in ExecutionStats.HistorySize")
+	// Cross-check the reused-ID run against an independent fresh run.
+	s.InDelta(freshAfterStart, run2AfterStart, tolerance, "reused-ID run should match a fresh run after start")
+	s.InDelta(freshFinal, run2Final, tolerance, "reused-ID run should match a fresh run after terminate")
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
@@ -1692,7 +1768,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 			Identity:           tv.WorkerIdentity(),
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					saFieldName: payload.EncodeString("1.0.0"),
+					saFieldName: sadefs.MustEncodeValue("1.0.0", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
 			},
 		}

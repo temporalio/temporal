@@ -37,7 +37,7 @@ jobs:
       runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -217,19 +217,19 @@ jobs:
     needs: test-setup
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
         id: restore-deps
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
@@ -237,14 +237,14 @@ jobs:
       - run: make pre-build-functional-test-coverage
 
       - name: Save dependencies
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
 
       - name: Save build outputs
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -254,31 +254,31 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
           working_directory: .github
           install_args: protoc
@@ -294,24 +294,24 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -336,7 +336,7 @@ jobs:
     env:
       CONTAINERS: cassandra mysql postgresql
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -347,19 +347,19 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -407,7 +407,7 @@ jobs:
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -419,19 +419,19 @@ jobs:
           services: ${{ env.CONTAINERS }}
           cache: true
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -447,7 +447,9 @@ jobs:
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
-        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$((${{ matrix.github_timeout }} - 1))m"
+          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
@@ -482,7 +484,7 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -493,19 +495,19 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: false
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -576,10 +578,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: true

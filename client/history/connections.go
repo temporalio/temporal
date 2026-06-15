@@ -1,11 +1,20 @@
 package history
 
 import (
+	"context"
+	"fmt"
+	"runtime"
 	"sync"
+	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
 )
+
+const evictionCheckInterval = 30 * time.Second
 
 type (
 	clientConnection[C any] struct {
@@ -16,14 +25,11 @@ type (
 	rpcAddress string
 
 	connectionPoolImpl[C any] struct {
-		mu struct {
-			sync.RWMutex
-			conns map[rpcAddress]clientConnection[C]
-		}
-
+		conns                  *sync.Map // rpcAddress -> clientConnection[C]
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             RPCFactory
 		clientCtor             func(grpc.ClientConnInterface) C
+		logger                 log.Logger
 	}
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
@@ -42,37 +48,109 @@ func NewConnectionPool[C any](
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
+	logger log.Logger,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) *connectionPoolImpl[C] {
+	conns := &sync.Map{}
+
 	c := &connectionPoolImpl[C]{
+		conns:                  conns,
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
 		clientCtor:             clientCtor,
+		logger:                 logger,
 	}
-	c.mu.conns = make(map[rpcAddress]clientConnection[C])
+
+	// Close cached conns whose host leaves the membership ring.
+	ctx, cancel := context.WithCancel(context.Background())
+	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
+	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 	return c
 }
 
+func watchMembershipForClose[C any](
+	ctx context.Context,
+	resolver membership.ServiceResolver,
+	logger log.Logger,
+	conns *sync.Map,
+	connectionCloseDelay dynamicconfig.DurationPropertyFn,
+) {
+	listenerName := fmt.Sprintf("%p", conns)
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := resolver.AddListener(listenerName, ch); err != nil {
+		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+		return
+	}
+	defer func() { _ = resolver.RemoveListener(listenerName) }()
+
+	// Reap departed hosts via a per-address deadline checked by a single ticker;
+	// a re-add resets it to the latest removal.
+	evictAt := make(map[rpcAddress]time.Time)
+	ticker := time.NewTicker(evictionCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-ch:
+			for _, h := range event.HostsRemoved {
+				evictAt[rpcAddress(h.GetAddress())] = time.Now().Add(connectionCloseDelay())
+			}
+			for _, h := range event.HostsAdded {
+				delete(evictAt, rpcAddress(h.GetAddress()))
+			}
+		case <-ticker.C:
+			reapClosableConns[C](resolver, logger, conns, evictAt)
+		}
+	}
+}
+
+func reapClosableConns[C any](
+	resolver membership.ServiceResolver,
+	logger log.Logger,
+	conns *sync.Map,
+	evictAt map[rpcAddress]time.Time,
+) {
+	if len(evictAt) == 0 {
+		return
+	}
+	members := make(map[rpcAddress]struct{})
+	for _, m := range resolver.Members() {
+		members[rpcAddress(m.GetAddress())] = struct{}{}
+	}
+	now := time.Now()
+	for addr, deadline := range evictAt {
+		if _, ok := members[addr]; ok {
+			delete(evictAt, addr) // back in the ring; cancel the eviction
+			continue
+		}
+		if now.Before(deadline) {
+			continue
+		}
+		if v, ok := conns.LoadAndDelete(addr); ok {
+			if err := v.(clientConnection[C]).grpcConn.Close(); err != nil {
+				logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
+			}
+		}
+		delete(evictAt, addr)
+	}
+}
+
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
-	c.mu.RLock()
-	cc, ok := c.mu.conns[addr]
-	c.mu.RUnlock()
-	if ok {
-		return cc
+	if v, ok := c.conns.Load(addr); ok {
+		return v.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if cc, ok = c.mu.conns[addr]; ok {
-		return cc
-	}
 	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
-	cc = clientConnection[C]{
+	cc := clientConnection[C]{
 		grpcClient: c.clientCtor(grpcConn),
 		grpcConn:   grpcConn,
 	}
 
-	c.mu.conns[addr] = cc
+	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
+		_ = grpcConn.Close()
+		return actual.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+	}
 	return cc
 }
 

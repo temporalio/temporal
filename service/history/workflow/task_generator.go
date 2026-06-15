@@ -584,7 +584,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
-	if !r.config.EnableCancelActivityWorkerCommand() {
+	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
 		return nil
 	}
 

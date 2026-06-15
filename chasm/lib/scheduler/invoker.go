@@ -65,10 +65,12 @@ type processBufferResult struct {
 	discardStarts []*schedulespb.BufferedStart
 
 	// Number of buffered starts dropped due to overlap policy during processing.
-	overlapSkipped int64
+	overlapSkipped         int64
+	overlapSkippedByPolicy map[enumspb.ScheduleOverlapPolicy]int64
 
-	// Nunmber of buffered starts dropped from missing the catchup window.
-	missedCatchupWindow int64
+	// Number of buffered starts dropped from missing the catchup window,
+	// bucketed by whether a running action contributed to the miss.
+	missedCatchupByActionRunning map[bool]int64
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
@@ -85,6 +87,8 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 
 	// Drop discarded starts, and update requested starts for execution.
 	var starts []*schedulespb.BufferedStart
+	readiedStarts := 0
+	deferredStarts := 0
 	for _, start := range i.GetBufferedStarts() {
 		if discards[start.RequestId] {
 			continue
@@ -93,15 +97,22 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 		// Starts ready for execution are set to their first attempt.
 		if ready[start.RequestId] && start.Attempt < 1 {
 			start.Attempt = 1
+			readiedStarts++
 		} else if start.Attempt == 0 {
 			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
 			// Mark as deferred (-1) to distinguish from newly-enqueued starts so addTasks
 			// won't schedule an immediate ProcessBuffer task for them - they wait on
 			// recordCompletedAction to re-enable.
 			start.Attempt = -1
+			deferredStarts++
 		}
 
 		starts = append(starts, start)
+	}
+
+	if readiedStarts > 0 || deferredStarts > 0 {
+		i.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("recordProcessBufferResult readied %d starts, deferred %d starts", readiedStarts, deferredStarts))
 	}
 
 	// Update internal state.
@@ -170,13 +181,18 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	}
 
 	// Remove failed (non-retryable) starts from the buffer.
+	removedStarts := 0
+	retriedStarts := 0
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+		removedStarts++
 		return failed[start.RequestId]
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
+		removedStarts++
 		return canceled[we.RunId]
 	})
 	i.TerminateWorkflows = slices.DeleteFunc(i.GetTerminateWorkflows(), func(we *commonpb.WorkflowExecution) bool {
+		removedStarts++
 		return terminated[we.RunId]
 	})
 
@@ -197,8 +213,15 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		if retry, ok := retryable[start.RequestId]; ok {
 			start.Attempt++
 			start.BackoffTime = retry.GetBackoffTime()
+			retriedStarts++
 		}
 	}
+
+	i.EventLog.Get(ctx).LogEvent(ctx,
+		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
+			newlyStarted,
+			removedStarts,
+			retriedStarts))
 
 	i.addTasks(ctx)
 	return newlyStarted, droppedDuplicates
@@ -225,6 +248,8 @@ func (i *Invoker) recordCompletedAction(
 	completed *schedulespb.CompletedResult,
 	requestID string,
 ) (scheduleTime time.Time) {
+	i.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("recording completed action: %s", requestID))
+
 	// Find the BufferedStart and mark it as completed.
 	for _, start := range i.BufferedStarts {
 		if start.GetRequestId() == requestID {
@@ -245,8 +270,10 @@ func (i *Invoker) recordCompletedAction(
 
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
-	// completing one start and kicking off the next). We set that on the first start
-	// pending execution.
+	// completing one start and kicking off the next). It also signals in processBuffer
+	// that this start was blocked behind a running action: if DesiredTime (the previous
+	// action's CloseTime) is past the start's catchup deadline, the previous action's
+	// duration caused the miss.
 	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0
 	})
@@ -270,10 +297,13 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
 	// have starts that are backing off, add a timer task for the earliest backoff time.
 	if i.hasUnprocessedStarts() {
+		i.EventLog.Get(ctx).LogEvent(ctx, "scheduled processBufferTask immediately")
 		ctx.AddTask(i, chasm.TaskAttributes{
 			ScheduledTime: chasm.TaskScheduledTimeImmediate,
 		}, &schedulerpb.InvokerProcessBufferTask{})
 	} else if deadline := i.nextBackoffDeadline(); !deadline.IsZero() {
+		i.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("scheduled processBufferTask for %s", deadline.Format(time.RFC3339)))
 		ctx.AddTask(i, chasm.TaskAttributes{
 			ScheduledTime: deadline,
 		}, &schedulerpb.InvokerProcessBufferTask{})
@@ -284,6 +314,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	if len(i.GetCancelWorkflows()) > 0 ||
 		len(i.GetTerminateWorkflows()) > 0 ||
 		len(i.getEligibleBufferedStarts()) > 0 {
+		i.EventLog.Get(ctx).LogEvent(ctx, "scheduled executeTask")
 		ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	}
 }

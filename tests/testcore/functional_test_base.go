@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -47,8 +48,6 @@ import (
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -158,7 +157,7 @@ func WithArchivalEnabled() TestClusterOption {
 	}
 }
 
-func WithMTLS() TestClusterOption {
+func withMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
 	}
@@ -284,8 +283,8 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Acquire a slot from the dedicated test cluster pool.
-	testClusterPool.dedicated.acquireSlot(s.T())
+	// Reserve a slot from the dedicated test cluster pool.
+	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 }
 
@@ -329,8 +328,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
+		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
 		s.isShared = true
 	}
 
@@ -361,6 +359,14 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 }
 
+func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
+	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		return *persistencetests.GetSQLiteFileTestClusterOption()
+	}
+	return defaults
+}
+
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
 // call this testcore FunctionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
@@ -370,11 +376,6 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
-		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
-	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -425,13 +426,6 @@ func (s *FunctionalTestBase) setupSdk() {
 
 	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-	}
-
-	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
 	}
 
 	var err error
@@ -491,7 +485,6 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
-	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
@@ -758,7 +751,7 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
 // fails t if the cluster was poisoned during t's window. This fails all active tests
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
-// The pool's slot reference is replaced as soon as poison is observed.
+// The cluster pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	if s.t != nil {
 		s.t.addTest(t)

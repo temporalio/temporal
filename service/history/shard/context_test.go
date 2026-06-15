@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -203,7 +202,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 
 	s.NoError(err)
@@ -229,7 +230,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -244,7 +247,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -258,7 +263,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -283,7 +290,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -297,7 +306,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication|tasks.DeleteWorkflowExecutionStageCurrent, stage)
@@ -311,7 +322,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -324,7 +337,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -351,9 +366,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflow
 func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 	workflowActiveCluster string,
 ) *persistence.AddHistoryTasksRequest {
-	// Enable the dynamic-config gate the producer checks.
-	s.mockShard.GetConfig().EnableDeleteWorkflowExecutionReplication = dynamicconfig.GetBoolPropertyFn(true)
-
 	nsID := namespace.NewID()
 	nsEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: nsID.String(), Name: "global-ns-for-delete-replication"},
@@ -394,7 +406,9 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		[]byte("branchToken"),
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Require().NotNil(captured, "AddHistoryTasks was never called")
@@ -419,7 +433,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageNone, stage)
@@ -435,7 +451,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)

@@ -471,6 +471,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
 	}
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
+	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues)
 	ctx := env.Context()
 
 	callerTQ := testcore.RandomizeStr(s.T().Name() + "-caller")

@@ -74,6 +74,7 @@ type (
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
+		PartitionScalerFactory        PartitionScalerFactory
 	}
 )
 
@@ -117,6 +118,7 @@ func NewHandler(
 			params.RateLimiter,
 			params.Serializer,
 			params.TaskHookFactories,
+			params.PartitionScalerFactory,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -648,6 +650,20 @@ func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerLis
 		Plugins:           hb.GetPlugins(),
 		Drivers:           hb.GetDrivers(),
 	}
+}
+
+func (h *Handler) CountWorkers(
+	_ context.Context, request *matchingservice.CountWorkersRequest,
+) (*matchingservice.CountWorkersResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	countRequest := request.GetCountRequest()
+	count, err := h.workersRegistry.CountWorkers(nsID, countRequest.GetQuery(), countRequest.GetIncludeSystemWorkers())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CountWorkersResponse{
+		Count: count,
+	}, nil
 }
 
 func (h *Handler) UpdateFairnessState(

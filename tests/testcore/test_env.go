@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -47,7 +46,9 @@ var (
 )
 
 type Env interface {
-	// T returns the *testing.T. Deprecated: use the suite's T() method instead.
+	// T returns the *testing.T.
+	//
+	// Deprecated: use the suite's T() method instead.
 	T() *testing.T
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
@@ -95,6 +96,7 @@ type testOptions struct {
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
+	testVars                 func(*testvars.TestVars) *testvars.TestVars
 }
 
 type dynamicConfigOverride struct {
@@ -130,6 +132,13 @@ func WithSdkWorker() TestOption {
 	}
 }
 
+// WithTestVars customizes the default test variables for the environment.
+func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
+	return func(o *testOptions) {
+		o.testVars = fn
+	}
+}
+
 // WithFxOptions appends fx options to a specific service's fx graph. This
 // implies a dedicated cluster because custom fx options cannot be shared
 // across tests.
@@ -148,6 +157,16 @@ func WithWorkerService(reason string) TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
 		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithMTLS enables mutual TLS on the test's cluster. This implies a dedicated
+// cluster, since the TLS configuration cannot be shared across tests.
+func WithMTLS() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withMTLS())
+		o.dedicatedReason = "mTLS enabled"
 	}
 }
 
@@ -224,8 +243,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		}
 	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	// Obtain the test cluster from the router.
+	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -242,6 +261,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	tv := testvars.New(t)
+	if options.testVars != nil {
+		tv = options.testVars(tv)
+	}
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -251,7 +275,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
-		tv:                 testvars.New(t),
+		tv:                 tv,
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
@@ -343,6 +367,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 }
 
 // NoError asserts that err is nil.
+//
 // Deprecated: use require.NoError with the parent test or suite instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
@@ -350,6 +375,7 @@ func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 }
 
 // Error asserts that err is not nil.
+//
 // Deprecated: use require.Error with the parent test or suite instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) Error(err error, msgAndArgs ...any) {
@@ -357,13 +383,16 @@ func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 }
 
 // Run executes a subtest.
+//
 // Deprecated: use the suite's Run method instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) Run(name string, subtest func()) bool {
 	return e.FunctionalTestBase.Run(name, subtest)
 }
 
-// T returns the *testing.T. Deprecated: use the suite's T() method instead.
+// T returns the *testing.T.
+//
+// Deprecated: use the suite's T() method instead.
 func (e *TestEnv) T() *testing.T {
 	return e.t
 }
@@ -415,13 +444,6 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 
 		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-		}
-
-		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(interceptor.Unary()),
-				grpc.WithStreamInterceptor(interceptor.Stream()),
-			}
 		}
 
 		var err error
