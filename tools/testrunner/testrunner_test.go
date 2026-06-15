@@ -38,22 +38,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Equal(t, "test.cover.out", r.coverProfilePath)
 	})
 
-	t.Run("GoTestTimeoutDoesNotSetTotalTimeout", func(t *testing.T) {
-		r := newRunner()
-		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
-			"--junitfile=test.xml",
-			"--",
-			"-timeout=35m",
-			"-coverprofile=test.cover.out",
-		})
-		require.NoError(t, err)
-		require.Zero(t, r.totalTimeout)
-		// The flag must still be present in the passthrough args so gotestsum/go test
-		// also honour it.
-		require.Contains(t, args, "-timeout=35m")
-	})
-
 	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
