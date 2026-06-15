@@ -95,9 +95,9 @@ func findTestPackages(dirs []string) ([]string, error) {
 // test names. Returns one test name per line, skipping summary lines.
 func listTestsFromBinary(ctx context.Context, execFn execFunc, binaryPath string) ([]string, error) {
 	var buf bytes.Buffer
-	exitCode := execFn(ctx, "", binaryPath, []string{"-test.list", ".*"}, nil, &buf, nil)
-	if exitCode != 0 {
-		return nil, fmt.Errorf("test list failed (exit code %d): %s", exitCode, buf.String())
+	result := execFn(ctx, "", binaryPath, []string{"-test.list", ".*"}, nil, &buf)
+	if result.exitCode != 0 {
+		return nil, fmt.Errorf("test list failed (exit code %d): %s", result.exitCode, buf.String())
 	}
 
 	var tests []string

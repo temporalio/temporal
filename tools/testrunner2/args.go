@@ -33,7 +33,7 @@ const (
 type config struct {
 	log              func(format string, v ...any)
 	exec             execFunc
-	memorySampler    processMemorySampler
+	memoryMonitor    *processMemoryMonitor
 	junitReportPath  string
 	coverProfilePath string
 	buildTags        string
@@ -182,7 +182,7 @@ func defaultConfig() config {
 		parallelism:   runtime.NumCPU(),
 		totalShards:   1,
 		shardIndex:    0,
-		memorySampler: realProcessMemorySampler,
+		memoryMonitor: newProcessMemoryMonitor(time.Second),
 	}
 
 	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {

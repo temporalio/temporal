@@ -134,21 +134,12 @@ func resultFailureType(result *junit.Result, defaultType failureType) failureTyp
 
 func suiteLevelSummaryRows(suite junit.Testsuite, testCaseFailures, testCaseErrors int) []summaryRow {
 	var rows []summaryRow
-	for _, tc := range suiteLevelTestCases(suite, "", suite.Failures-testCaseFailures, suite.Errors-testCaseErrors) {
-		if tc.Failure != nil {
-			rows = append(rows, summaryRow{
-				kind:    resultFailureType(tc.Failure, failureTypeFailed),
-				name:    tc.Name,
-				details: tc.Failure.Data,
-			})
-		}
-		if tc.Error != nil {
-			rows = append(rows, summaryRow{
-				kind:    resultFailureType(tc.Error, failureTypeCrash),
-				name:    tc.Name,
-				details: tc.Error.Data,
-			})
-		}
+	for _, failure := range suiteLevelFailures(suite, "", suite.Failures-testCaseFailures, suite.Errors-testCaseErrors) {
+		rows = append(rows, summaryRow{
+			kind:    failure.kind,
+			name:    failure.name,
+			details: failure.details,
+		})
 	}
 	return rows
 }

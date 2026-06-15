@@ -137,10 +137,10 @@ func (r *runner) nextRetryOrdinal(attempt int) int {
 }
 
 func newRunner(cfg config) *runner {
-	cfg.exec = defaultExec
-	if cfg.memorySampler == nil {
-		cfg.memorySampler = realProcessMemorySampler
+	if cfg.memoryMonitor == nil {
+		cfg.memoryMonitor = newProcessMemoryMonitor(time.Second)
 	}
+	cfg.exec = execWithMemoryMonitor(cfg.memoryMonitor)
 	return &runner{
 		config:  cfg,
 		console: &consoleWriter{mu: &sync.Mutex{}, w: os.Stdout},
@@ -243,11 +243,6 @@ type execConfig struct {
 	compiledBinaryPath string
 }
 
-type execResult struct {
-	exitCode  int
-	peakRSSKB int64
-}
-
 func (cfg execConfig) displayAttempt() string {
 	return displayAttempt(cfg.attempt, cfg.retryOrdinal)
 }
@@ -261,6 +256,7 @@ func displayAttempt(attempt, retryOrdinal int) string {
 
 func (r *runner) newExecItem(cfg execConfig) *queueItem {
 	return &queueItem{
+		exclusive: cfg.isolated,
 		onEnqueue: func() {
 			r.tracker.beginAttempt(cfg.unit.rootName)
 		},
@@ -382,9 +378,7 @@ func (r *runner) scheduleRetry(cfg execConfig, failedNames, skipNames []string, 
 		runTests:    failedNames,
 		skipTests:   skipNames,
 	}
-	item := r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal, isolated))
-	item.exclusive = isolated
-	emit(item)
+	emit(r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal, isolated)))
 }
 
 // passedSiblings returns passed tests that can be skipped when retrying testName.

@@ -7,23 +7,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-type processMemorySampler func(pid int) processMemorySample
+const memorySummaryLimit = 10
 
 type processMemorySample interface {
 	stop() int64
-}
-
-type realMemorySample struct {
-	pid  int
-	peak atomic.Int64
-
-	stopOnce sync.Once
-	stopCh   chan struct{}
-	doneCh   chan struct{}
 }
 
 type memoryRecord struct {
@@ -34,68 +24,141 @@ type memoryRecord struct {
 	peakRSSKB   int64
 }
 
-func realProcessMemorySampler(pid int) processMemorySample {
-	s := &realMemorySample{
-		pid:    pid,
-		stopCh: make(chan struct{}),
-		doneCh: make(chan struct{}),
-	}
-	go s.run()
-	return s
+type processMemoryMonitor struct {
+	mu           sync.Mutex
+	interval     time.Duration
+	processTable func() processTable
+	records      map[int]*processMemoryRecord
+	stopCh       chan struct{}
 }
 
-func (s *realMemorySample) run() {
-	defer close(s.doneCh)
-	s.sample()
+type processMemoryRecord struct {
+	peakRSSKB int64
+}
 
-	ticker := time.NewTicker(time.Second)
+type processMemoryLease struct {
+	monitor *processMemoryMonitor
+	pid     int
+}
+
+type processInfo struct {
+	ppid  int
+	rssKB int64
+}
+
+type processTable map[int]processInfo
+
+func newProcessMemoryMonitor(interval time.Duration) *processMemoryMonitor {
+	if interval <= 0 {
+		interval = time.Second
+	}
+	return &processMemoryMonitor{
+		interval:     interval,
+		processTable: readProcessTable,
+	}
+}
+
+func (m *processMemoryMonitor) start(pid int) processMemorySample {
+	if m == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	if m.records == nil {
+		m.records = make(map[int]*processMemoryRecord)
+	}
+	m.records[pid] = &processMemoryRecord{}
+	if m.stopCh == nil {
+		m.stopCh = make(chan struct{})
+		go m.run(m.stopCh)
+	}
+	m.mu.Unlock()
+
+	m.sample()
+	return &processMemoryLease{monitor: m, pid: pid}
+}
+
+func (m *processMemoryMonitor) run(stopCh <-chan struct{}) {
+	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			s.sample()
-		case <-s.stopCh:
-			s.sample()
+			m.sample()
+		case <-stopCh:
 			return
 		}
 	}
 }
 
-func (s *realMemorySample) sample() {
-	rssKB := readRSSKB(s.pid)
-	for {
-		peak := s.peak.Load()
-		if rssKB <= peak || s.peak.CompareAndSwap(peak, rssKB) {
-			return
-		}
+func (m *processMemoryMonitor) sample() {
+	if m.processTable == nil {
+		return
+	}
+	table := m.processTable()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for pid, record := range m.records {
+		record.peakRSSKB = max(record.peakRSSKB, table.treeRSSKB(pid))
 	}
 }
 
-func (s *realMemorySample) stop() int64 {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-		<-s.doneCh
-	})
-	return s.peak.Load()
-}
-
-func readRSSKB(pid int) int64 {
-	out, err := exec.Command("ps", "-o", "rss=", "-p", strconv.Itoa(pid)).Output()
-	if err != nil {
+func (l *processMemoryLease) stop() int64 {
+	if l == nil || l.monitor == nil {
 		return 0
 	}
-	rssKB, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return rssKB
+
+	l.monitor.sample()
+	return l.monitor.stop(l.pid)
 }
 
-func (r *runner) startMemorySample(pid int) processMemorySample {
-	if r.memorySampler == nil {
+func (m *processMemoryMonitor) stop(pid int) int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	record := m.records[pid]
+	delete(m.records, pid)
+	if len(m.records) == 0 && m.stopCh != nil {
+		close(m.stopCh)
+		m.stopCh = nil
+	}
+	if record == nil {
+		return 0
+	}
+	return record.peakRSSKB
+}
+
+func readProcessTable() processTable {
+	out, err := exec.Command("ps", "-axo", "pid=,ppid=,rss=").Output()
+	if err != nil {
 		return nil
 	}
-	return r.memorySampler(pid)
+
+	table := make(processTable)
+	for line := range strings.SplitSeq(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 3 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		rssKB, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil {
+			continue
+		}
+		table[pid] = processInfo{
+			ppid:  ppid,
+			rssKB: rssKB,
+		}
+	}
+	return table
 }
 
 func stopMemorySample(sample processMemorySample) int64 {
@@ -103,6 +166,36 @@ func stopMemorySample(sample processMemorySample) int64 {
 		return 0
 	}
 	return sample.stop()
+}
+
+func (t processTable) treeRSSKB(root int) int64 {
+	if len(t) == 0 {
+		return 0
+	}
+
+	children := make(map[int][]int, len(t))
+	for pid, info := range t {
+		children[info.ppid] = append(children[info.ppid], pid)
+	}
+
+	var total int64
+	seen := make(map[int]struct{})
+	stack := []int{root}
+	for len(stack) > 0 {
+		pid := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+
+		info, ok := t[pid]
+		if ok {
+			total += info.rssKB
+		}
+		stack = append(stack, children[pid]...)
+	}
+	return total
 }
 
 func (r *runner) addMemoryRecord(record memoryRecord) {
@@ -134,8 +227,8 @@ func (r *runner) logMemorySummary() {
 			return 0
 		}
 	})
-	if len(records) > 10 {
-		records = records[:10]
+	if len(records) > memorySummaryLimit {
+		records = records[:memorySummaryLimit]
 	}
 
 	var body strings.Builder

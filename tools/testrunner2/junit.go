@@ -35,6 +35,15 @@ type testFailureRef struct {
 	name string
 }
 
+type suiteLevelFailure struct {
+	classname string
+	name      string
+	kind      failureType
+	message   string
+	details   string
+	isError   bool
+}
+
 func (j *junitReport) read() error {
 	f, err := os.Open(j.path)
 	if err != nil {
@@ -237,8 +246,7 @@ func mergeSuite(suite junit.Testsuite, suffix string) (junit.Testsuite, bool) {
 		return junit.Testsuite{}, false
 	}
 
-	missingFailures := suite.Failures - countTestCaseFailures(suite.Testcases)
-	missingErrors := suite.Errors - countTestCaseErrors(suite.Testcases)
+	missingFailures, missingErrors := missingSuiteLevelResults(suite)
 	testcases := slices.Clone(suite.Testcases)
 	slices.SortFunc(testcases, func(a, b junit.Testcase) int {
 		return strings.Compare(a.Name, b.Name)
@@ -257,8 +265,13 @@ func mergeSuite(suite junit.Testsuite, suffix string) (junit.Testsuite, bool) {
 		}
 		merged.Testcases = append(merged.Testcases, mergeTestCase(testCase, suite.Name, suffix))
 	}
-	merged.Testcases = append(merged.Testcases, suiteLevelTestCases(suite, suffix, missingFailures, missingErrors)...)
+	merged.Testcases = append(merged.Testcases, suiteLevelTestCases(suiteLevelFailures(suite, suffix, missingFailures, missingErrors))...)
 	return merged, true
+}
+
+func missingSuiteLevelResults(suite junit.Testsuite) (failureCount, errorCount int) {
+	return max(0, suite.Failures-countTestCaseFailures(suite.Testcases)),
+		max(0, suite.Errors-countTestCaseErrors(suite.Testcases))
 }
 
 func countTestCaseFailures(testcases []junit.Testcase) int {
@@ -285,31 +298,53 @@ func hasTestCaseFailure(tc junit.Testcase) bool {
 	return tc.Failure != nil || tc.Error != nil
 }
 
-func suiteLevelTestCases(suite junit.Testsuite, suffix string, missingFailures, missingErrors int) []junit.Testcase {
-	var testcases []junit.Testcase
+func suiteLevelFailures(suite junit.Testsuite, suffix string, missingFailures, missingErrors int) []suiteLevelFailure {
+	missingFailures = max(0, missingFailures)
+	missingErrors = max(0, missingErrors)
+
+	var failures []suiteLevelFailure
 	name := inferredSuiteName(suite)
 	details := suiteLevelDetails(suite)
 	for i := range missingFailures {
-		testcases = append(testcases, junit.Testcase{
-			Classname: suite.Name,
-			Name:      suiteLevelName(name, "failure", i, missingFailures) + suffix,
-			Failure: &junit.Result{
-				Message: fmt.Sprintf("Suite reported %d failure(s) without testcase details", missingFailures),
-				Type:    string(failureTypeFailed),
-				Data:    details,
-			},
+		failures = append(failures, suiteLevelFailure{
+			classname: suite.Name,
+			name:      suiteLevelName(name, "failure", i, missingFailures) + suffix,
+			kind:      failureTypeFailed,
+			message:   fmt.Sprintf("Suite reported %d failure(s) without testcase details", missingFailures),
+			details:   details,
 		})
 	}
 	for i := range missingErrors {
-		testcases = append(testcases, junit.Testcase{
-			Classname: suite.Name,
-			Name:      suiteLevelName(name, "error", i, missingErrors) + suffix,
-			Error: &junit.Result{
-				Message: fmt.Sprintf("Suite reported %d error(s) without testcase details", missingErrors),
-				Type:    string(failureTypeCrash),
-				Data:    details,
-			},
+		failures = append(failures, suiteLevelFailure{
+			classname: suite.Name,
+			name:      suiteLevelName(name, "error", i, missingErrors) + suffix,
+			kind:      failureTypeCrash,
+			message:   fmt.Sprintf("Suite reported %d error(s) without testcase details", missingErrors),
+			details:   details,
+			isError:   true,
 		})
+	}
+	return failures
+}
+
+func suiteLevelTestCases(failures []suiteLevelFailure) []junit.Testcase {
+	testcases := make([]junit.Testcase, 0, len(failures))
+	for _, failure := range failures {
+		testCase := junit.Testcase{
+			Classname: failure.classname,
+			Name:      failure.name,
+		}
+		result := &junit.Result{
+			Message: failure.message,
+			Type:    string(failure.kind),
+			Data:    failure.details,
+		}
+		if failure.isError {
+			testCase.Error = result
+		} else {
+			testCase.Failure = result
+		}
+		testcases = append(testcases, testCase)
 	}
 	return testcases
 }

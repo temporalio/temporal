@@ -16,11 +16,26 @@ import (
 	"github.com/google/uuid"
 )
 
-// execFunc executes a command and returns the exit code.
-type execFunc func(ctx context.Context, dir, name string, args, env []string, output io.Writer, onStart func(pid int)) int
+// execFunc executes a command and returns its result.
+type execFunc func(ctx context.Context, dir, name string, args, env []string, output io.Writer) execResult
+
+type execResult struct {
+	exitCode  int
+	peakRSSKB int64
+}
 
 // defaultExec runs a command and returns its exit code.
-func defaultExec(ctx context.Context, dir, name string, args, env []string, output io.Writer, onStart func(pid int)) int {
+func defaultExec(ctx context.Context, dir, name string, args, env []string, output io.Writer) execResult {
+	return execWithMemoryMonitor(nil)(ctx, dir, name, args, env, output)
+}
+
+func execWithMemoryMonitor(monitor *processMemoryMonitor) execFunc {
+	return func(ctx context.Context, dir, name string, args, env []string, output io.Writer) execResult {
+		return runCommand(ctx, dir, name, args, env, output, monitor)
+	}
+}
+
+func runCommand(ctx context.Context, dir, name string, args, env []string, output io.Writer, monitor *processMemoryMonitor) execResult {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = output
@@ -37,18 +52,28 @@ func defaultExec(ctx context.Context, dir, name string, args, env []string, outp
 	cmd.WaitDelay = 5 * time.Second
 
 	if err := cmd.Start(); err != nil {
-		return 1
+		return execResult{exitCode: 1}
 	}
-	if onStart != nil && cmd.Process != nil {
-		onStart(cmd.Process.Pid)
+	var sample processMemorySample
+	if monitor != nil && cmd.Process != nil {
+		sample = monitor.start(cmd.Process.Pid)
 	}
 	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+			return execResult{
+				exitCode:  exitErr.ExitCode(),
+				peakRSSKB: stopMemorySample(sample),
+			}
 		}
-		return 1
+		return execResult{
+			exitCode:  1,
+			peakRSSKB: stopMemorySample(sample),
+		}
 	}
-	return 0
+	return execResult{
+		exitCode:  0,
+		peakRSSKB: stopMemorySample(sample),
+	}
 }
 
 // compileTestInput holds the input for compileTest.
@@ -89,7 +114,7 @@ func compileTest(ctx context.Context, execFn execFunc, req compileTestInput, onC
 		onCommand(command)
 	}
 
-	return execFn(ctx, "", "go", args, req.env, req.output, nil)
+	return execFn(ctx, "", "go", args, req.env, req.output).exitCode
 }
 
 // executeTestInput holds the input for executeTest.
@@ -103,10 +128,9 @@ type executeTestInput struct {
 	extraArgs    []string // args to pass after -args (e.g., -persistenceType=xxx)
 	env          []string
 	output       io.Writer
-	onStart      func(pid int)
 }
 
-func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onCommand func(string)) int {
+func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onCommand func(string)) execResult {
 	args := []string{
 		"-test.v=test2json",
 	}
@@ -129,7 +153,7 @@ func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onC
 		onCommand(command)
 	}
 
-	return execFn(ctx, req.pkgDir, req.binary, args, req.env, req.output, req.onStart)
+	return execFn(ctx, req.pkgDir, req.binary, args, req.env, req.output)
 }
 
 // execLogger returns an onCommand callback that logs the command to the console.
@@ -166,8 +190,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 
 	return execConfig{
 		startProcess: func(ctx context.Context, output io.Writer) execResult {
-			var sample processMemorySample
-			exitCode := executeTest(ctx, r.exec, executeTestInput{
+			return executeTest(ctx, r.exec, executeTestInput{
 				binary:       binaryPath,
 				pkgDir:       unit.pkg,
 				tests:        unit.runTests,
@@ -176,14 +199,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 				extraArgs:    r.testBinaryArgs,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
 				output:       output,
-				onStart: func(pid int) {
-					sample = r.startMemorySample(pid)
-				},
 			}, r.execLogger(unit.displayName, displayAttempt(attempt, retryOrdinal), isolated))
-			return execResult{
-				exitCode:  exitCode,
-				peakRSSKB: stopMemorySample(sample),
-			}
 		},
 		unit:         unit,
 		attempt:      attempt,
