@@ -14,6 +14,12 @@ func TestFlaky(t *testing.T) {
 	}
 }
 
+func TestFailsTwice(t *testing.T) {
+	if os.Getenv("TEMPORAL_TEST_ATTEMPT") != "3" {
+		t.Fatal("intentional failure before final attempt")
+	}
+}
+
 // TestSuite has subtests where FailChild fails on the first attempt.
 // PassChild runs first and passes, so the retry should skip it via -test.skip.
 func TestSuite(t *testing.T) {

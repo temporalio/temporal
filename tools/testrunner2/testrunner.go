@@ -95,10 +95,11 @@ type runner struct {
 	retryOrdinals  map[int]int
 	tracker        workTracker
 
-	mu           sync.Mutex
-	junitReports []*junitReport
-	alerts       []alert
-	errors       []error
+	mu            sync.Mutex
+	junitReports  []*junitReport
+	alerts        []alert
+	errors        []error
+	memoryRecords []memoryRecord
 }
 
 func (r *runner) addReport(jr *junitReport) {
@@ -137,6 +138,9 @@ func (r *runner) nextRetryOrdinal(attempt int) int {
 
 func newRunner(cfg config) *runner {
 	cfg.exec = defaultExec
+	if cfg.memorySampler == nil {
+		cfg.memorySampler = realProcessMemorySampler
+	}
 	return &runner{
 		config:  cfg,
 		console: &consoleWriter{mu: &sync.Mutex{}, w: os.Stdout},
@@ -198,6 +202,7 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	r.junitReports = nil
 	r.alerts = nil
 	r.errors = nil
+	r.memoryRecords = nil
 	r.tracker.reset()
 	r.resetRetryOrdinals()
 	if initialTotal > 0 {
@@ -224,17 +229,23 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 }
 
 type execConfig struct {
-	startProcess func(ctx context.Context, output io.Writer) int
+	startProcess func(ctx context.Context, output io.Writer) execResult
 
 	unit         workUnit
 	attempt      int
 	retryOrdinal int
+	isolated     bool
 
 	logPath   string
 	junitPath string
 	logHeader *logFileHeader
 
 	compiledBinaryPath string
+}
+
+type execResult struct {
+	exitCode  int
+	peakRSSKB int64
 }
 
 func (cfg execConfig) displayAttempt() string {
@@ -285,25 +296,33 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			})
 			defer stream.Close()
 
-			exitCode := cfg.startProcess(testCtx, stream)
+			result := cfg.startProcess(testCtx, stream)
 			_ = lc.Close()
+			runtime := time.Since(start).Round(time.Second)
+			r.addMemoryRecord(memoryRecord{
+				displayName: cfg.unit.displayName,
+				attempt:     cfg.displayAttempt(),
+				isolated:    cfg.isolated,
+				runtime:     runtime,
+				peakRSSKB:   result.peakRSSKB,
+			})
 
 			results := newJUnitReport(cfg.logPath, cfg.junitPath)
 			detectedAlerts := r.collectAlertsFromFile(cfg.logPath, stream)
-			if terminationAlert, ok := terminatedProcessAlert(exitCode, stream.RunningTests()); ok {
+			if terminationAlert, ok := terminatedProcessAlert(result.exitCode, stream.RunningTests()); ok {
 				detectedAlerts = append(detectedAlerts, terminationAlert)
 				r.addAlerts([]alert{terminationAlert})
 			}
-			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, exitCode, detectedAlerts)
+			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result.exitCode, detectedAlerts)
 
-			failed := exitCode != 0 || numFailedTests > 0 || numTests == 0
+			failed := result.exitCode != 0 || numFailedTests > 0 || numTests == 0
 			if failed {
-				writeConsoleResult(r, cfg, exitCode, numTests, numFailedTests,
-					failureKind, detectedAlerts, results, start, 0, 0, false)
+				writeConsoleResult(r, cfg, result.exitCode, numTests, numFailedTests,
+					failureKind, detectedAlerts, results, runtime, result.peakRSSKB, 0, 0, false)
 			} else {
 				progress := r.tracker.finishAttempt(cfg.unit.rootName, true)
-				writeConsoleResult(r, cfg, exitCode, numTests, numFailedTests,
-					failureKind, detectedAlerts, results, start, progress.completed, progress.total, progress.done)
+				writeConsoleResult(r, cfg, result.exitCode, numTests, numFailedTests,
+					failureKind, detectedAlerts, results, runtime, result.peakRSSKB, progress.completed, progress.total, progress.done)
 				_ = os.Remove(cfg.logPath)
 			}
 
@@ -349,7 +368,12 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 func (r *runner) scheduleRetry(cfg execConfig, failedNames, skipNames []string, emit func(...*queueItem)) {
 	nextAttempt := cfg.attempt + 1
 	retryOrdinal := r.nextRetryOrdinal(nextAttempt)
-	r.log("🔄 scheduling retry: %s (attempt %s)", buildTestFilterPattern(failedNames), displayAttempt(nextAttempt, retryOrdinal))
+	isolated := nextAttempt == r.maxAttempts
+	retryLabel := "🔄 scheduling retry"
+	if isolated {
+		retryLabel = "🔄 scheduling isolated final retry"
+	}
+	r.log("%s: %s (attempt %s)", retryLabel, buildTestFilterPattern(failedNames), displayAttempt(nextAttempt, retryOrdinal))
 
 	unit := workUnit{
 		pkg:         cfg.unit.pkg,
@@ -358,7 +382,9 @@ func (r *runner) scheduleRetry(cfg execConfig, failedNames, skipNames []string, 
 		runTests:    failedNames,
 		skipTests:   skipNames,
 	}
-	emit(r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal)))
+	item := r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal, isolated))
+	item.exclusive = isolated
+	emit(item)
 }
 
 // passedSiblings returns passed tests that can be skipped when retrying testName.
@@ -478,6 +504,7 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 		mergedReport.Failures,
 		mergedReport.Errors,
 		mergedReport.Skipped)
+	r.logMemorySummary()
 
 	if len(mergedReport.reportingErrs) > 0 && r.tracker.allSuccessful() {
 		r.log("warning: ignoring retry report validation after all scheduled tests passed: %v", errors.Join(mergedReport.reportingErrs...))
@@ -488,7 +515,7 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 
 func writeConsoleResult(r *runner, cfg execConfig, exitCode int,
 	numTests, numFailed int, failureKind string, detectedAlerts alerts,
-	results testResults, start time.Time, progressCompleted, progressTotal int, progressDone bool) {
+	results testResults, runtime time.Duration, peakRSSKB int64, progressCompleted, progressTotal int, progressDone bool) {
 
 	failed := exitCode != 0 || numFailed > 0 || numTests == 0
 	status := "❌️"
@@ -509,9 +536,9 @@ func writeConsoleResult(r *runner, cfg execConfig, exitCode int,
 	if failureKind != "" {
 		totalStr = "?"
 	}
-	header := fmt.Sprintf("%s%s %s %s (attempt=%s, passed=%d/%s%s, runtime=%v)",
+	header := fmt.Sprintf("%s%s %s %s (attempt=%s, passed=%d/%s%s, runtime=%v%s)",
 		logPrefix, time.Now().Format("15:04:05"), status, cfg.unit.displayName, cfg.displayAttempt(),
-		passedTests, totalStr, failureInfo, time.Since(start).Round(time.Second))
+		passedTests, totalStr, failureInfo, runtime, peakRSSInfo(peakRSSKB))
 
 	var body strings.Builder
 

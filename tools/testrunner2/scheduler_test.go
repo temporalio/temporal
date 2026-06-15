@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +67,88 @@ func TestScheduler_ContextCancellation(t *testing.T) {
 
 	s.run(ctx, items)
 	// With cancelled context, should exit quickly (may process 0-2 items)
+}
+
+func TestScheduler_ExclusiveWaitsForActiveWork(t *testing.T) {
+	t.Parallel()
+
+	s := newScheduler(2)
+
+	normalStarted := make(chan struct{})
+	releaseNormal := make(chan struct{})
+	exclusiveStarted := make(chan struct{})
+
+	items := []*queueItem{
+		{run: func(ctx context.Context, emit func(...*queueItem)) {
+			close(normalStarted)
+			emit(&queueItem{exclusive: true, run: func(ctx context.Context, emit func(...*queueItem)) {
+				close(exclusiveStarted)
+			}})
+			<-releaseNormal
+		}},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.run(context.Background(), items)
+		close(done)
+	}()
+
+	<-normalStarted
+	select {
+	case <-exclusiveStarted:
+		t.Fatal("exclusive work started before normal work drained")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releaseNormal)
+	select {
+	case <-exclusiveStarted:
+	case <-time.After(time.Second):
+		t.Fatal("exclusive work did not start")
+	}
+	<-done
+}
+
+func TestScheduler_NormalWorkWaitsForExclusiveWork(t *testing.T) {
+	t.Parallel()
+
+	s := newScheduler(2)
+
+	exclusiveStarted := make(chan struct{})
+	releaseExclusive := make(chan struct{})
+	normalStarted := make(chan struct{})
+
+	items := []*queueItem{
+		{exclusive: true, run: func(ctx context.Context, emit func(...*queueItem)) {
+			close(exclusiveStarted)
+			<-releaseExclusive
+		}},
+		{run: func(ctx context.Context, emit func(...*queueItem)) {
+			close(normalStarted)
+		}},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.run(context.Background(), items)
+		close(done)
+	}()
+
+	<-exclusiveStarted
+	select {
+	case <-normalStarted:
+		t.Fatal("normal work started while exclusive work was active")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releaseExclusive)
+	select {
+	case <-normalStarted:
+	case <-time.After(time.Second):
+		t.Fatal("normal work did not start")
+	}
+	<-done
 }
 
 func TestRunnerResultCollection(t *testing.T) {
