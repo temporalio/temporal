@@ -133,11 +133,7 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 		fmt.Sprintf("%s%s 🚀 go test packages (attempt %d)", logPrefix, time.Now().Format("15:04:05"), attempt),
 		"$ go "+strings.Join(goArgs, " ")+"\n",
 	)
-	var sample processMemorySample
-	exitCode := r.exec(ctx, "", "go", goArgs, append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)), writer, func(pid int) {
-		sample = r.startMemorySample(pid)
-	})
-	peakRSSKB := stopMemorySample(sample)
+	result := r.exec(ctx, "", "go", goArgs, append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)), writer)
 	writer.Close()
 	_ = lc.Close()
 
@@ -148,7 +144,7 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 	}
 
 	status := "✅"
-	if exitCode != 0 || report.Failures > 0 || report.Errors > 0 {
+	if result.exitCode != 0 || report.Failures > 0 || report.Errors > 0 {
 		status = "❌️"
 	}
 	runtime := time.Since(start).Round(time.Second)
@@ -156,7 +152,7 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 		displayName: "go test packages",
 		attempt:     fmt.Sprintf("%d", attempt),
 		runtime:     runtime,
-		peakRSSKB:   peakRSSKB,
+		peakRSSKB:   result.peakRSSKB,
 	})
 
 	r.log("%s package attempt %d (passed=%d/%d, failed=%d, errors=%d, runtime=%v%s)",
@@ -167,15 +163,15 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 		report.Failures,
 		report.Errors,
 		runtime,
-		peakRSSInfo(peakRSSKB),
+		peakRSSInfo(result.peakRSSKB),
 	)
 
-	if exitCode != 0 && len(results.failures) > 0 {
+	if result.exitCode != 0 && len(results.failures) > 0 {
 		writePackageFailures(r, results)
 	}
 
 	return packageAttemptResult{
-		exitCode: exitCode,
+		exitCode: result.exitCode,
 		logPath:  logPath,
 		report:   report,
 		alerts:   parseAlerts(writer.PlainOutput()),
