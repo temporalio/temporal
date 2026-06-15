@@ -205,6 +205,20 @@ func TestWriteCurrentReport(t *testing.T) {
 	require.Len(t, result2.Suites, 2)
 }
 
+func TestTotalTimeoutFailureDetail(t *testing.T) {
+	detail := totalTimeoutFailureDetail(35*time.Minute, "=== RUN   TestExample\npartial log\u0001\n")
+	require.Contains(t, detail, "test-runner total timeout (35m0s) reached before all tests completed")
+	require.Contains(t, detail, "Captured output before timeout:")
+	require.Contains(t, detail, "=== RUN   TestExample")
+	require.Contains(t, detail, "partial log")
+	require.NotContains(t, detail, "\u0001")
+}
+
+func TestTotalTimeoutFailureDetailWithoutOutput(t *testing.T) {
+	detail := totalTimeoutFailureDetail(35*time.Minute, "")
+	require.Equal(t, "test-runner total timeout (35m0s) reached before all tests completed", detail)
+}
+
 func TestRunnerReportCrash(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "junit-report.xml")
