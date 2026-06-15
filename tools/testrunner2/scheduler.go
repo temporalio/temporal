@@ -9,6 +9,7 @@ import (
 type queueItem struct {
 	run       func(ctx context.Context, emit func(...*queueItem))
 	onEnqueue func()
+	exclusive bool
 }
 
 type scheduler struct {
@@ -17,8 +18,10 @@ type scheduler struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
 	queue  []*queueItem
-	active int  // number of workers currently running an item
-	done   bool // set when all work is complete
+	active int // number of workers currently running an item
+
+	exclusiveActive bool
+	done            bool // set when all work is complete
 }
 
 func newScheduler(parallelism int) *scheduler {
@@ -54,7 +57,7 @@ func (s *scheduler) worker(ctx context.Context) {
 		}
 
 		item.run(ctx, s.enqueue)
-		s.workerDone()
+		s.workerDone(item)
 	}
 }
 
@@ -63,22 +66,50 @@ func (s *scheduler) dequeue(ctx context.Context) *queueItem {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for len(s.queue) == 0 && !s.done {
-		// Check context while waiting
+	for {
 		if ctx.Err() != nil {
 			return nil
 		}
+
+		if s.done {
+			return nil
+		}
+
+		if s.exclusiveActive {
+			s.cond.Wait()
+			continue
+		}
+
+		if idx := s.exclusiveIndex(); idx >= 0 {
+			if s.active == 0 {
+				item := s.queue[idx]
+				s.queue = append(s.queue[:idx], s.queue[idx+1:]...)
+				s.active++
+				s.exclusiveActive = true
+				return item
+			}
+			s.cond.Wait()
+			continue
+		}
+
+		if len(s.queue) > 0 {
+			item := s.queue[0]
+			s.queue = s.queue[1:]
+			s.active++
+			return item
+		}
+
 		s.cond.Wait()
 	}
+}
 
-	if len(s.queue) == 0 {
-		return nil
+func (s *scheduler) exclusiveIndex() int {
+	for i, item := range s.queue {
+		if item.exclusive {
+			return i
+		}
 	}
-
-	item := s.queue[0]
-	s.queue = s.queue[1:]
-	s.active++
-	return item
+	return -1
 }
 
 // enqueue adds items to the queue. Safe to call from any goroutine.
@@ -98,12 +129,15 @@ func (s *scheduler) enqueue(items ...*queueItem) {
 }
 
 // workerDone signals that a worker has finished processing its item.
-func (s *scheduler) workerDone() {
+func (s *scheduler) workerDone(item *queueItem) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.active--
+	if item.exclusive {
+		s.exclusiveActive = false
+	}
 	if s.active == 0 && len(s.queue) == 0 {
 		s.done = true
-		s.cond.Broadcast()
 	}
+	s.cond.Broadcast()
 }

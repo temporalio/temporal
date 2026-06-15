@@ -17,10 +17,10 @@ import (
 )
 
 // execFunc executes a command and returns the exit code.
-type execFunc func(ctx context.Context, dir, name string, args, env []string, output io.Writer) int
+type execFunc func(ctx context.Context, dir, name string, args, env []string, output io.Writer, onStart func(pid int)) int
 
 // defaultExec runs a command and returns its exit code.
-func defaultExec(ctx context.Context, dir, name string, args, env []string, output io.Writer) int {
+func defaultExec(ctx context.Context, dir, name string, args, env []string, output io.Writer, onStart func(pid int)) int {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = output
@@ -36,7 +36,13 @@ func defaultExec(ctx context.Context, dir, name string, args, env []string, outp
 	}
 	cmd.WaitDelay = 5 * time.Second
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return 1
+	}
+	if onStart != nil && cmd.Process != nil {
+		onStart(cmd.Process.Pid)
+	}
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -83,7 +89,7 @@ func compileTest(ctx context.Context, execFn execFunc, req compileTestInput, onC
 		onCommand(command)
 	}
 
-	return execFn(ctx, "", "go", args, req.env, req.output)
+	return execFn(ctx, "", "go", args, req.env, req.output, nil)
 }
 
 // executeTestInput holds the input for executeTest.
@@ -97,6 +103,7 @@ type executeTestInput struct {
 	extraArgs    []string // args to pass after -args (e.g., -persistenceType=xxx)
 	env          []string
 	output       io.Writer
+	onStart      func(pid int)
 }
 
 func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onCommand func(string)) int {
@@ -122,14 +129,18 @@ func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onC
 		onCommand(command)
 	}
 
-	return execFn(ctx, req.pkgDir, req.binary, args, req.env, req.output)
+	return execFn(ctx, req.pkgDir, req.binary, args, req.env, req.output, req.onStart)
 }
 
 // execLogger returns an onCommand callback that logs the command to the console.
-func (r *runner) execLogger(desc, attempt string) func(string) {
+func (r *runner) execLogger(desc, attempt string, isolated bool) func(string) {
 	return func(command string) {
+		isolatedLabel := ""
+		if isolated {
+			isolatedLabel = ", isolated"
+		}
 		r.console.WriteGrouped(
-			fmt.Sprintf("%s%s 🚀 %s (attempt %s)", logPrefix, time.Now().Format("15:04:05"), desc, attempt),
+			fmt.Sprintf("%s%s 🚀 %s (attempt %s%s)", logPrefix, time.Now().Format("15:04:05"), desc, attempt, isolatedLabel),
 			"$ "+command+"\n",
 		)
 	}
@@ -137,7 +148,7 @@ func (r *runner) execLogger(desc, attempt string) func(string) {
 
 // --- compiled mode (compile + run per test) ---
 
-func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, retryOrdinal int) execConfig {
+func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, retryOrdinal int, isolated bool) execConfig {
 	runSuffix := fmt.Sprintf("%d", attempt)
 	if retryOrdinal > 0 {
 		runSuffix = fmt.Sprintf("%d_%d", attempt, retryOrdinal)
@@ -154,8 +165,9 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, unit.displayName, attempt))
 
 	return execConfig{
-		startProcess: func(ctx context.Context, output io.Writer) int {
-			return executeTest(ctx, r.exec, executeTestInput{
+		startProcess: func(ctx context.Context, output io.Writer) execResult {
+			var sample processMemorySample
+			exitCode := executeTest(ctx, r.exec, executeTestInput{
 				binary:       binaryPath,
 				pkgDir:       unit.pkg,
 				tests:        unit.runTests,
@@ -164,11 +176,19 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 				extraArgs:    r.testBinaryArgs,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
 				output:       output,
-			}, r.execLogger(unit.displayName, displayAttempt(attempt, retryOrdinal)))
+				onStart: func(pid int) {
+					sample = r.startMemorySample(pid)
+				},
+			}, r.execLogger(unit.displayName, displayAttempt(attempt, retryOrdinal), isolated))
+			return execResult{
+				exitCode:  exitCode,
+				peakRSSKB: stopMemorySample(sample),
+			}
 		},
 		unit:         unit,
 		attempt:      attempt,
 		retryOrdinal: retryOrdinal,
+		isolated:     isolated,
 		logPath:      logPath,
 		junitPath:    junitPath,
 		logHeader: &logFileHeader{
@@ -263,7 +283,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 
 			var items []*queueItem
 			for _, unit := range units {
-				items = append(items, r.newExecItem(r.compiledExecConfig(unit, binaryPath, 1, 0)))
+				items = append(items, r.newExecItem(r.compiledExecConfig(unit, binaryPath, 1, 0, false)))
 			}
 			emit(items...)
 		},

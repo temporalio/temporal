@@ -33,6 +33,7 @@ const (
 type config struct {
 	log              func(format string, v ...any)
 	exec             execFunc
+	memorySampler    processMemorySampler
 	junitReportPath  string
 	coverProfilePath string
 	buildTags        string
@@ -177,10 +178,11 @@ var flagDefinitions = map[string]flagDefinition{
 // and values from environment variables
 func defaultConfig() config {
 	cfg := config{
-		maxAttempts: 1,
-		parallelism: runtime.NumCPU(),
-		totalShards: 1,
-		shardIndex:  0,
+		maxAttempts:   1,
+		parallelism:   runtime.NumCPU(),
+		totalShards:   1,
+		shardIndex:    0,
+		memorySampler: realProcessMemorySampler,
 	}
 
 	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
