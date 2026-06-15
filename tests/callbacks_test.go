@@ -12,13 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -70,6 +73,113 @@ func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestE
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 	return env
+}
+
+func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
+	testOpts := append([]testcore.TestOption{}, opts...)
+	testOpts = append(
+		testOpts,
+		scheduleCommonOpts(s.T())...,
+	)
+	testOpts = append(
+		testOpts,
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, false),
+	)
+	env := testcore.NewEnv(s.T(), testOpts...)
+
+	ctx := s.Context()
+	sid := testcore.RandomizeStr("sched-token-migration")
+	wid := testcore.RandomizeStr("sched-token-migration-wf")
+	wt := testcore.RandomizeStr("sched-token-migration-wt")
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+		},
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	_, err := env.FrontendClient().CreateSchedule(chasmContextFactory(ctx), &workflowservice.CreateScheduleRequest{
+		Namespace:  env.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	var startedWFID string
+	await.RequireTruef(s.T(), func() bool {
+		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if wfid := a.GetStartWorkflowResult().GetWorkflowId(); wfid != "" {
+				startedWFID = wfid
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 200*time.Millisecond, "scheduler should start a scheduled action")
+	s.NotEmpty(startedWFID)
+
+	var token string
+	for _, e := range env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: startedWFID}) {
+		for _, cb := range e.GetWorkflowExecutionStartedEventAttributes().GetCompletionCallbacks() {
+			if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+				token = nexus.Header(cb.GetNexus().GetHeader()).Get(commonnexus.CallbackTokenHeader)
+			}
+		}
+	}
+	s.NotEmpty(token, "scheduled workflow must carry an internal completion callback token")
+	_, reqID, decErr := chasm.UnpackNexusCallbackToken(token)
+	s.NoError(decErr)
+	s.Empty(reqID, "gate OFF must write a legacy token with no embedded request ID")
+
+	env.OverrideDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true)
+
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: startedWFID},
+		SignalName:        "continue",
+	})
+	s.NoError(err)
+
+	await.RequireTruef(s.T(), func() bool {
+		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		for _, a := range desc.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowResult().GetWorkflowId() == startedWFID &&
+				a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				return true
+			}
+		}
+		return false
+	}, 20*time.Second, 200*time.Millisecond,
+		"scheduler must observe completion of the legacy-token action after enabling the envelope gate")
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.TestOption) {
