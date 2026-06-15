@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payload"
@@ -67,15 +66,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered(
 	})
 	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(attrs)
 
@@ -134,15 +125,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilSearchAttributesFilter
 	})
 	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(attrs)
 	s.Nil(attrs.SearchAttributes, "SearchAttributes should be nil when all values are nil")
@@ -254,15 +237,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilMemoFiltered() {
 	})
 	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(attrs)
 
@@ -315,15 +290,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilMemoFiltered() {
 	})
 	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(attrs)
 	s.Nil(attrs.Memo, "Memo should be nil when all values are nil")
