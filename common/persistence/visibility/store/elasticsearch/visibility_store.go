@@ -739,7 +739,7 @@ func (s *VisibilityStore) convertQuery(
 	queryString string,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	archetypeID chasm.ArchetypeID,
-	anchor time.Time,
+	queryTime time.Time,
 ) (res *esQueryParams, err error) {
 	defer func() {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
@@ -763,7 +763,7 @@ func (s *VisibilityStore) convertQuery(
 	c := query.NewQueryConverter(&queryConverter{}, namespaceName, saTypeMap, saMapper).
 		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID).
-		WithQueryTime(anchor)
+		WithQueryTime(queryTime)
 
 	queryParams, err := c.Convert(queryString)
 	if err != nil {
@@ -811,7 +811,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 	requestQueryStr string,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	archetypeID chasm.ArchetypeID,
-	anchor time.Time,
+	queryTime time.Time,
 ) (*query.QueryParamsLegacy, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
@@ -823,7 +823,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger),
 		saTypeMap,
 		chasmMapper,
-	).WithQueryTime(anchor)
+	).WithQueryTime(queryTime)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).

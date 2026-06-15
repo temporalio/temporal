@@ -953,12 +953,12 @@ func buildQueryParams(
 	saMapper searchattribute.Mapper,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	archetypeID chasm.ArchetypeID,
-	anchor time.Time,
+	queryTime time.Time,
 ) (*query.QueryParams[sqlparser.Expr], error) {
 	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper).
 		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID).
-		WithQueryTime(anchor)
+		WithQueryTime(queryTime)
 
 	queryParams, err := c.Convert(queryString)
 	if err != nil {

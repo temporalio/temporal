@@ -81,7 +81,6 @@ type page struct {
 	submittedCount int
 	successCount   int
 	errorCount     int
-	pageToken      []byte
 	nextPageToken  []byte
 	pageNumber     int
 	prev, next     *page
@@ -143,7 +142,6 @@ func fetchPage(
 		// No query provided, return empty page
 		return &page{
 			executionInfos: []*workflowpb.WorkflowExecutionInfo{},
-			pageToken:      pageToken,
 			nextPageToken:  []byte{},
 			pageNumber:     pageNumber,
 		}, nil
@@ -169,7 +167,6 @@ func fetchPage(
 
 	return &page{
 		executionInfos: executionInfos,
-		pageToken:      pageToken,
 		nextPageToken:  resp.NextPageToken,
 		pageNumber:     pageNumber,
 	}, nil
@@ -214,7 +211,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 		p = &page{
 			executionInfos: executionInfos,
-			pageToken:      config.initialPageToken,
 			nextPageToken:  config.initialPageToken,
 			pageNumber:     hbd.CurrentPage,
 		}
@@ -281,35 +277,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	}
 
 	return hbd, nil
-}
-
-// updateHeartbeatCheckpoint advances the heartbeat checkpoint to the next unprocessed page
-// once completedPage and all its predecessors are done. Returns true if the checkpoint changed.
-func updateHeartbeatCheckpoint(hbd *HeartBeatDetails, completedPage *page) bool {
-	if completedPage == nil || hbd == nil {
-		return false
-	}
-
-	var nextPage int
-	var nextToken []byte
-	switch {
-	case completedPage.next != nil:
-		nextPage = completedPage.next.pageNumber
-		nextToken = completedPage.next.pageToken
-	case completedPage.hasNext():
-		nextPage = completedPage.pageNumber + 1
-		nextToken = completedPage.nextPageToken
-	default:
-		nextPage = completedPage.pageNumber
-		nextToken = nil
-	}
-
-	if hbd.CurrentPage == nextPage && slices.Equal(hbd.PageToken, nextToken) {
-		return false
-	}
-	hbd.CurrentPage = nextPage
-	hbd.PageToken = nextToken
-	return true
 }
 
 type activities struct {
@@ -449,7 +416,7 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-// resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the anchor.
+// resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the reference time.
 // Returns the query unchanged if BatchStartTime is not set or the query contains no NOW().
 // Uses a query converter to validate that NOW() is only used with DateTime search attributes,
 // ensuring consistent behavior with regular visibility queries.

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.uber.org/mock/gomock"
-	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -910,88 +909,6 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
-}
-
-func (s *activitiesSuite) TestUpdateHeartbeatCheckpoint() {
-	firstToken := []byte("page-1")
-	secondToken := []byte("page-2")
-	thirdToken := []byte("page-3")
-
-	tests := []struct {
-		name           string
-		hbd            HeartBeatDetails
-		completedPage  *page
-		expectedPage   int
-		expectedToken  []byte
-		expectedChange bool
-	}{
-		{
-			name: "advance to prefetched page token",
-			hbd:  HeartBeatDetails{},
-			completedPage: &page{
-				pageNumber:    0,
-				nextPageToken: secondToken,
-				next: &page{
-					pageNumber: 1,
-					pageToken:  firstToken,
-				},
-			},
-			expectedPage:   1,
-			expectedToken:  firstToken,
-			expectedChange: true,
-		},
-		{
-			name: "advance to unfetched next page",
-			hbd:  HeartBeatDetails{},
-			completedPage: &page{
-				pageNumber:    2,
-				nextPageToken: thirdToken,
-			},
-			expectedPage:   3,
-			expectedToken:  thirdToken,
-			expectedChange: true,
-		},
-		{
-			name: "clear token on final page",
-			hbd: HeartBeatDetails{
-				CurrentPage: 2,
-				PageToken:   secondToken,
-			},
-			completedPage: &page{
-				pageNumber: 2,
-			},
-			expectedPage:   2,
-			expectedToken:  nil,
-			expectedChange: true,
-		},
-		{
-			name: "no change when checkpoint unchanged",
-			hbd: HeartBeatDetails{
-				CurrentPage: 1,
-				PageToken:   firstToken,
-			},
-			completedPage: &page{
-				pageNumber:    0,
-				nextPageToken: secondToken,
-				next: &page{
-					pageNumber: 1,
-					pageToken:  firstToken,
-				},
-			},
-			expectedPage:   1,
-			expectedToken:  firstToken,
-			expectedChange: false,
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			changed := updateHeartbeatCheckpoint(&tc.hbd, tc.completedPage)
-			s.Equal(tc.expectedChange, changed)
-			s.Equal(tc.expectedPage, tc.hbd.CurrentPage)
-			s.Equal(tc.expectedToken, tc.hbd.PageToken)
-		})
-	}
 }
 
 // TestBatchActivityWithProtobuf_ResolvesRelativeTimestamps verifies that the activity resolves
