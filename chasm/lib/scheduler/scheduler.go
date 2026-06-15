@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -649,7 +650,11 @@ func (s *Scheduler) Describe(
 	}
 
 	visibility := s.Visibility.Get(ctx)
-	memo := visibility.CustomMemo(ctx)
+	// CustomMemo/CustomSearchAttributes return the component's live maps by reference.
+	// Clone before mutating or returning: the response is marshalled after the read lease
+	// is released, so an aliased map can be iterated by gRPC while a concurrent operation
+	// mutates it, tripping "concurrent map iteration and map write".
+	memo := maps.Clone(visibility.CustomMemo(ctx))
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
@@ -690,7 +695,7 @@ func (s *Scheduler) Describe(
 			Info:             info,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: maps.Clone(visibility.CustomSearchAttributes(ctx))},
 		},
 	}, nil
 }
