@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/quotastest"
 	"go.temporal.io/server/common/testing/temporalapi"
 )
 
@@ -25,13 +26,7 @@ type (
 		suite.Suite
 		*require.Assertions
 	}
-
-	testMemberCounter int
 )
-
-func (t testMemberCounter) AvailableMemberCount() int {
-	return int(t)
-}
 
 func TestQuotasSuite(t *testing.T) {
 	s := new(quotasSuite)
@@ -198,7 +193,7 @@ func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 
 func (s *quotasSuite) TestGlobalNamespaceRateLimiterUsesConfiguredBurstRatio() {
 	limiter := NewGlobalNamespaceRateLimiter(
-		testMemberCounter(2),
+		quotastest.NewFakeMemberCounter(2),
 		func(namespace string) int {
 			s.Equal("test-namespace", namespace)
 			return 10
