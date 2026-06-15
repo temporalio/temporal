@@ -48,8 +48,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 		})
 		require.NoError(t, err)
-		// The testrunner should derive its total deadline from the go test -timeout flag.
-		require.Equal(t, 35*time.Minute, r.totalTimeout)
+		// The testrunner should derive its total deadline from the go test -timeout flag,
+		// with grace for go test to print its timeout panic before gotestsum is killed.
+		require.Equal(t, 36*time.Minute, r.totalTimeout)
 		// The flag must still be present in the passthrough args so gotestsum/go test
 		// also honour it.
 		require.Contains(t, args, "-timeout=35m")

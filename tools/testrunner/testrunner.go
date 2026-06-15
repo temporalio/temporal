@@ -33,6 +33,10 @@ const (
 	// kill such as a GitHub Actions timeout).
 	goTestTimeoutFlagEq = "-timeout="
 
+	// goTestTimeoutGrace lets go test print its timeout panic before the
+	// testrunner kills gotestsum and writes partial results.
+	goTestTimeoutGrace = time.Minute
+
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
 	fullRerunThreshold = 20
@@ -99,7 +103,7 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 	for _, arg := range args {
 		if strings.HasPrefix(arg, goTestTimeoutFlagEq) {
 			if d, err := time.ParseDuration(strings.TrimPrefix(arg, goTestTimeoutFlagEq)); err == nil {
-				r.totalTimeout = d
+				r.totalTimeout = d + goTestTimeoutGrace
 			}
 		}
 	}
