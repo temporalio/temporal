@@ -42,6 +42,7 @@ func (r *runner) runPackageTests(ctx context.Context, args []string) error {
 	r.junitReports = nil
 	r.alerts = nil
 	r.errors = nil
+	r.memoryRecords = nil
 	r.tracker.reset()
 	r.resetRetryOrdinals()
 
@@ -132,7 +133,11 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 		fmt.Sprintf("%s%s 🚀 go test packages (attempt %d)", logPrefix, time.Now().Format("15:04:05"), attempt),
 		"$ go "+strings.Join(goArgs, " ")+"\n",
 	)
-	exitCode := r.exec(ctx, "", "go", goArgs, append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)), writer)
+	var sample processMemorySample
+	exitCode := r.exec(ctx, "", "go", goArgs, append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)), writer, func(pid int) {
+		sample = r.startMemorySample(pid)
+	})
+	peakRSSKB := stopMemorySample(sample)
 	writer.Close()
 	_ = lc.Close()
 
@@ -146,14 +151,23 @@ func (r *runner) runPackageAttempt(ctx context.Context, args []string, attempt i
 	if exitCode != 0 || report.Failures > 0 || report.Errors > 0 {
 		status = "❌️"
 	}
-	r.log("%s package attempt %d (passed=%d/%d, failed=%d, errors=%d, runtime=%v)",
+	runtime := time.Since(start).Round(time.Second)
+	r.addMemoryRecord(memoryRecord{
+		displayName: "go test packages",
+		attempt:     fmt.Sprintf("%d", attempt),
+		runtime:     runtime,
+		peakRSSKB:   peakRSSKB,
+	})
+
+	r.log("%s package attempt %d (passed=%d/%d, failed=%d, errors=%d, runtime=%v%s)",
 		status,
 		attempt,
 		report.Tests-report.Failures-report.Errors,
 		report.Tests,
 		report.Failures,
 		report.Errors,
-		time.Since(start).Round(time.Second),
+		runtime,
+		peakRSSInfo(peakRSSKB),
 	)
 
 	if exitCode != 0 && len(results.failures) > 0 {

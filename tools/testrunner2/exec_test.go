@@ -11,7 +11,7 @@ import (
 
 // mockExec captures the args passed to the exec function.
 func mockExec(captured *[]string) execFunc {
-	return func(ctx context.Context, dir, name string, args, env []string, output io.Writer) int {
+	return func(ctx context.Context, dir, name string, args, env []string, output io.Writer, onStart func(pid int)) int {
 		all := append([]string{name}, args...)
 		*captured = append(*captured, all...)
 		return 0
@@ -22,7 +22,7 @@ func TestExecuteTest_EscapesSpecialCharsInSubtestNames(t *testing.T) {
 	t.Parallel()
 
 	var args []string
-	executeTest(context.Background(), func(ctx context.Context, dir, name string, a, env []string, output io.Writer) int {
+	executeTest(context.Background(), func(ctx context.Context, dir, name string, a, env []string, output io.Writer, onStart func(pid int)) int {
 		args = a
 		return 0
 	}, executeTestInput{
