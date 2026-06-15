@@ -15,10 +15,11 @@ type queueItem struct {
 type scheduler struct {
 	parallelism int
 
-	mu     sync.Mutex
-	cond   *sync.Cond
-	queue  []*queueItem
-	active int // number of workers currently running an item
+	mu             sync.Mutex
+	cond           *sync.Cond
+	queue          []*queueItem
+	exclusiveQueue []*queueItem
+	active         int // number of workers currently running an item
 
 	exclusiveActive bool
 	done            bool // set when all work is complete
@@ -80,10 +81,10 @@ func (s *scheduler) dequeue(ctx context.Context) *queueItem {
 			continue
 		}
 
-		if idx := s.exclusiveIndex(); idx >= 0 {
+		if len(s.exclusiveQueue) > 0 {
 			if s.active == 0 {
-				item := s.queue[idx]
-				s.queue = append(s.queue[:idx], s.queue[idx+1:]...)
+				item := s.exclusiveQueue[0]
+				s.exclusiveQueue = s.exclusiveQueue[1:]
 				s.active++
 				s.exclusiveActive = true
 				return item
@@ -103,15 +104,6 @@ func (s *scheduler) dequeue(ctx context.Context) *queueItem {
 	}
 }
 
-func (s *scheduler) exclusiveIndex() int {
-	for i, item := range s.queue {
-		if item.exclusive {
-			return i
-		}
-	}
-	return -1
-}
-
 // enqueue adds items to the queue. Safe to call from any goroutine.
 func (s *scheduler) enqueue(items ...*queueItem) {
 	if len(items) == 0 {
@@ -124,7 +116,13 @@ func (s *scheduler) enqueue(items ...*queueItem) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queue = append(s.queue, items...)
+	for _, item := range items {
+		if item.exclusive {
+			s.exclusiveQueue = append(s.exclusiveQueue, item)
+		} else {
+			s.queue = append(s.queue, item)
+		}
+	}
 	s.cond.Broadcast()
 }
 
@@ -136,7 +134,7 @@ func (s *scheduler) workerDone(item *queueItem) {
 	if item.exclusive {
 		s.exclusiveActive = false
 	}
-	if s.active == 0 && len(s.queue) == 0 {
+	if s.active == 0 && len(s.queue) == 0 && len(s.exclusiveQueue) == 0 {
 		s.done = true
 	}
 	s.cond.Broadcast()

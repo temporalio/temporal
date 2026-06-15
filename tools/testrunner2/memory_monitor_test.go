@@ -19,6 +19,20 @@ func TestFormatRSS(t *testing.T) {
 	require.Equal(t, "1.5GiB", formatRSS(1536*1024))
 }
 
+func TestProcessTableTreeRSS(t *testing.T) {
+	t.Parallel()
+
+	table := processTable{
+		10: {rssKB: 100},
+		11: {ppid: 10, rssKB: 200},
+		12: {ppid: 11, rssKB: 300},
+		13: {ppid: 99, rssKB: 400},
+	}
+
+	require.EqualValues(t, 600, table.treeRSSKB(10))
+	require.EqualValues(t, 400, table.treeRSSKB(99))
+}
+
 func TestRunnerLogMemorySummary(t *testing.T) {
 	t.Parallel()
 
