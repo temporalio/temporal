@@ -3,12 +3,16 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -351,6 +355,73 @@ func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.
 	snap := capture.Snapshot()
 	require.Equal(t, 1, len(snap["test"]))
 	require.Equal(t, map[string]string{"outcome": "unsupported_client"}, snap["test"][0].Tags)
+}
+
+// TestStartInboundSpan_SetsTemporalAttributes verifies the application-frame inbound span contains the expected data.
+func TestStartInboundSpan_SetsTemporalAttributes(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+
+	h := &nexusHandler{
+		tracer: tp.Tracer(nexusTracerScope),
+	}
+	oc := &operationContext{
+		method: "StartNexusOperation",
+		nexusContext: &nexusContext{
+			namespaceName: "test-namespace",
+			endpointName:  "test-endpoint",
+		},
+	}
+
+	_, span := h.startInboundSpan(context.Background(), oc, "svc", "op")
+	span.End()
+
+	ended := recorder.Ended()
+	require.Len(t, ended, 1)
+	s := ended[0]
+	require.Equal(t, "StartNexusOperation", s.Name())
+	require.Equal(t, "server", s.SpanKind().String())
+
+	attrs := map[string]string{}
+	for _, kv := range s.Attributes() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	require.Equal(t, "test-namespace", attrs[attrTemporalNamespace])
+	require.Equal(t, "test-endpoint", attrs[attrTemporalNexusEndpoint])
+	require.Equal(t, "svc", attrs[attrTemporalNexusService])
+	require.Equal(t, "op", attrs[attrTemporalNexusOperation])
+}
+
+// TestEndInboundSpan_RecordsError verifies that endInboundSpan records a non-nil error on
+// the span and sets status=error. A nil error pointer is a no-op.
+func TestEndInboundSpan_RecordsError(t *testing.T) {
+	t.Run("WithError", func(t *testing.T) {
+		recorder := tracetest.NewSpanRecorder()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+		_, span := tp.Tracer("test").Start(context.Background(), "op")
+
+		err := fmt.Errorf("boom")
+		endInboundSpan(span, &err)
+
+		ended := recorder.Ended()
+		require.Len(t, ended, 1)
+		require.Equal(t, otelcodes.Error, ended[0].Status().Code)
+		require.Equal(t, "boom", ended[0].Status().Description)
+		require.Len(t, ended[0].Events(), 1, "expected one error event")
+	})
+	t.Run("WithNilError", func(t *testing.T) {
+		recorder := tracetest.NewSpanRecorder()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+		_, span := tp.Tracer("test").Start(context.Background(), "op")
+
+		var err error
+		endInboundSpan(span, &err)
+
+		ended := recorder.Ended()
+		require.Len(t, ended, 1)
+		require.Equal(t, otelcodes.Unset, ended[0].Status().Code)
+		require.Empty(t, ended[0].Events())
+	})
 }
 
 func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {

@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -35,6 +38,20 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// nexusTracerScope is the OpenTelemetry instrumentation library name reported on spans
+// produced by the inbound Nexus HTTP handlers.
+const nexusTracerScope = "go.temporal.io/server/service/frontend/nexus"
+
+// OpenTelemetry attribute keys for Nexus inbound spans. Standard http.* attributes are set by
+// the otelhttp wrapper on the outer span; the temporal.* attributes are set on the inner
+// application-frame span to carry Temporal-domain semantics.
+const (
+	attrTemporalNamespace      = "temporal.namespace"
+	attrTemporalNexusEndpoint  = "temporal.nexus.endpoint"
+	attrTemporalNexusService   = "temporal.nexus.service"
+	attrTemporalNexusOperation = "temporal.nexus.operation"
 )
 
 const (
@@ -331,6 +348,39 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	tracer                        trace.Tracer
+}
+
+// startInboundSpan opens an application-frame server span for an inbound Nexus request and
+// sets Temporal-domain attributes from the resolved operation context.
+//
+// The returned span must be ended by the caller; callers should also call endInboundSpan
+// to record terminal status.
+func (h *nexusHandler) startInboundSpan(
+	ctx context.Context,
+	oc *operationContext,
+	service, operation string,
+) (context.Context, trace.Span) {
+	spanName := oc.method // e.g. "StartOperation"
+	ctx, span := h.tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindServer))
+	span.SetAttributes(
+		attribute.String(attrTemporalNamespace, oc.namespaceName),
+		attribute.String(attrTemporalNexusEndpoint, oc.endpointName),
+		attribute.String(attrTemporalNexusService, service),
+		attribute.String(attrTemporalNexusOperation, operation),
+	)
+	return ctx, span
+}
+
+// endInboundSpan records the terminal status on an inbound Nexus span and ends it. It is
+// designed to be called from deferred statements with a pointer to the handler's named
+// return value so it can see the final error.
+func endInboundSpan(span trace.Span, errPtr *error) {
+	if errPtr != nil && *errPtr != nil {
+		span.RecordError(*errPtr)
+		span.SetStatus(codes.Error, (*errPtr).Error())
+	}
+	span.End()
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -397,6 +447,9 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+
+	ctx, span := h.startInboundSpan(ctx, oc, service, operation)
+	defer endInboundSpan(span, &retErr)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -636,6 +689,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+
+	ctx, span := h.startInboundSpan(ctx, oc, service, operation)
+	defer endInboundSpan(span, &retErr)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{

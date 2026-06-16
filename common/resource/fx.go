@@ -454,7 +454,6 @@ func RPCFactoryProvider(
 		perServiceDialOptions,
 		monitor,
 		tokenProvider,
-		// Enable OTEL tracing for outbound HTTP requests.
 		rpc.WithOTELTracing(tracerProvider, propagator),
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
