@@ -44,11 +44,12 @@ func emitMutableStateStatus(
 		return
 	}
 
+	mutableStateMetricsHandler := metricsHandler
 	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, archetypeID); ok {
-		metricsHandler = metricsHandler.WithTags(archetypeTag)
+		mutableStateMetricsHandler = mutableStateMetricsHandler.WithTags(archetypeTag)
 	}
 
-	batchHandler := metricsHandler.StartBatch("mutable_state_status")
+	batchHandler := mutableStateMetricsHandler.StartBatch("mutable_state_status")
 	defer batchHandler.Close()
 	metrics.MutableStateSize.With(batchHandler).Record(int64(stats.TotalSize))
 	metrics.ExecutionInfoSize.With(batchHandler).Record(int64(stats.ExecutionInfoSize))
@@ -76,8 +77,8 @@ func emitMutableStateStatus(
 	metrics.ChasmTotalSize.With(batchHandler).Record(int64(stats.ChasmTotalSize))
 
 	if stats.HistoryStatistics != nil {
-		metrics.HistorySize.With(batchHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
-		metrics.HistoryCount.With(batchHandler).Record(int64(stats.HistoryStatistics.CountDiff))
+		metrics.HistorySize.With(metricsHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
+		metrics.HistoryCount.With(metricsHandler).Record(int64(stats.HistoryStatistics.CountDiff))
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {

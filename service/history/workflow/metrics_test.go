@@ -72,6 +72,10 @@ func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
 		chasm.WorkflowArchetypeID,
 		&persistence.MutableStateStatistics{
 			TotalSize: 42,
+			HistoryStatistics: &persistence.HistoryStatistics{
+				SizeDiff:  100,
+				CountDiff: 3,
+			},
 		},
 	)
 
@@ -80,6 +84,16 @@ func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
 	require.Len(t, recordings, 1)
 	require.Equal(t, int64(42), recordings[0].Value)
 	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+
+	recordings = snapshot[metrics.HistorySize.Name()]
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(100), recordings[0].Value)
+	require.NotContains(t, recordings[0].Tags, metrics.ArchetypeTagName)
+
+	recordings = snapshot[metrics.HistoryCount.Name()]
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(3), recordings[0].Value)
+	require.NotContains(t, recordings[0].Tags, metrics.ArchetypeTagName)
 }
 
 func TestGetArchetypeMetricTag(t *testing.T) {
