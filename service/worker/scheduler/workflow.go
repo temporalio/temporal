@@ -32,6 +32,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// SchedulerWorkflowVersion gates changes to scheduler workflow logic. The scheduler runs as a
+// long-lived workflow, so its history must replay deterministically under newer server binaries:
+// every behavior change is gated behind a version below and guarded with hasMinVersion, so a run
+// keeps the behavior it started with. The active version is recorded each iteration in the
+// "tweakables" MutableSideEffect (TweakablePolicies.Version). worker.schedulerVersionCeiling can
+// clamp the recorded version (see clampVersion) so a newer cluster writes history an older
+// replication peer can still replay after failover plus rollback.
 type SchedulerWorkflowVersion int64
 
 const (
@@ -115,6 +122,9 @@ type (
 		specBuilder          *SpecBuilder
 		cspec                *CompiledSpec
 		enableCHASMMigration bool
+		// versionCeiling is re-evaluated every iteration inside the "tweakables"
+		// MutableSideEffect; nil defaults to no clamp.
+		versionCeiling func() int
 
 		tweakables TweakablePolicies
 
@@ -224,10 +234,10 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false, func() int { return 0 })
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool, versionCeiling func() int) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -239,6 +249,7 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		}),
 		specBuilder:          specBuilder,
 		enableCHASMMigration: enableCHASMMigration,
+		versionCeiling:       versionCeiling,
 	}
 	return scheduler.run()
 }
@@ -325,7 +336,10 @@ func (s *scheduler) run() error {
 		if s.tweakables.EnableCHASMMigration {
 			s.State.PendingMigration = true
 		}
-		if s.State.PendingMigration {
+		// Defer migration on a version-clamped run: the rollback peer the ceiling protects has
+		// no CHASM scheduler. PendingMigration stays set, so migration resumes once the ceiling
+		// lifts. This also covers the migrate-to-chasm signal, which sets PendingMigration directly.
+		if s.State.PendingMigration && s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			err := s.executeMigration()
 			if err == nil {
 				s.logger.Info("Migration to CHASM succeeded, closing V1 workflow",
@@ -1268,7 +1282,12 @@ func (s *scheduler) updateTweakables() {
 	enableCHASMMigration := s.enableCHASMMigration
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		p.EnableCHASMMigration = enableCHASMMigration
+		// Clamp the recorded version when a per-namespace ceiling is set, read here so the
+		// clamp is deterministic and recorded in the marker.
+		p.Version = clampVersion(p.Version, s.versionCeiling())
+		// CHASM migration is gated at TriggerImmediatelyTimestamp; a run clamped below it must
+		// not migrate, since the rollback peer the ceiling protects has no CHASM scheduler.
+		p.EnableCHASMMigration = enableCHASMMigration && p.Version >= TriggerImmediatelyTimestamp
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
@@ -1663,18 +1682,31 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
 }
 
+// clampVersion lowers v to ceiling, treating a non-positive ceiling as unset (no clamp).
+func clampVersion(v SchedulerWorkflowVersion, ceiling int) SchedulerWorkflowVersion {
+	if ceiling <= 0 {
+		return v
+	}
+	return min(v, SchedulerWorkflowVersion(ceiling))
+}
+
 func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-func GetListInfoFromStartArgs(args *schedulespb.StartScheduleArgs, now time.Time, specBuilder *SpecBuilder) *schedulepb.ScheduleListInfo {
+func GetListInfoFromStartArgs(args *schedulespb.StartScheduleArgs, now time.Time, specBuilder *SpecBuilder, versionCeiling int) *schedulepb.ScheduleListInfo {
 	// Create a scheduler outside of workflow context with just the fields we need to call
 	// getListInfo. Note that this does not take into account InitialPatch.
+	//
+	// The caller passes the namespace's worker.schedulerVersionCeiling so the memo is computed
+	// at the same recorded version the workflow will write.
+	tweakables := CurrentTweakablePolicies
+	tweakables.Version = clampVersion(tweakables.Version, versionCeiling)
 	s := &scheduler{
 		StartScheduleArgs: args,
-		tweakables:        CurrentTweakablePolicies,
+		tweakables:        tweakables,
 		specBuilder:       specBuilder,
 	}
 	s.ensureFields()

@@ -53,6 +53,7 @@ type (
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableCHASMMigration     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		schedulerVersionCeiling  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -89,6 +90,7 @@ func NewResult(
 			activityDeps:             params,
 			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
 			enableCHASMMigration:     dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
+			schedulerVersionCeiling:  dynamicconfig.SchedulerVersionCeiling.Get(dc),
 			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -104,8 +106,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	enableMigration := s.enableCHASMMigration(ns.Name().String())
+	versionCeiling := func() int { return s.schedulerVersionCeiling(ns.Name().String()) }
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, versionCeiling)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 
