@@ -88,15 +88,8 @@ func (s *ActivityAPIBatchSecurityTestSuite) TestScheduleActivityOnPerNSTQ_Blocke
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
-	var foundTaskFailed bool
-	for _, event := range historyEvents {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-			foundTaskFailed = true
-			attrs := event.GetWorkflowTaskFailedEventAttributes()
-			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, attrs.GetCause())
-			s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
-			break
-		}
-	}
-	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
+	taskFailedEvent := s.RequireHistoryEvent(historyEvents, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+	attrs := taskFailedEvent.GetWorkflowTaskFailedEventAttributes()
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, attrs.GetCause())
+	s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
 }
