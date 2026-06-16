@@ -2,8 +2,10 @@
 #
 # Memory Monitor
 #
-# Takes periodic memory snapshots. Captures system memory stats, top processes,
-# and for Go processes, heap profiles via pprof.
+# Polls memory usage and writes the highest-memory snapshot to a file. When
+# usage crosses PROFILE_CAPTURE_THRESHOLD, captures pprof and process memory
+# diagnostics in MEMORY_DIAGNOSTICS_DIR, then repeats every
+# PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
 # Usage:
 #   ./memory_monitor.sh <snapshot-file>
