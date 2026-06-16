@@ -110,7 +110,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
-		// todo@time-skipping: replication. The disable-after-bound transition is emitted
+		// todo@time-skipping: replication. The disable-after-fast-forward transition is emitted
 		// on the active side and will replicate; standby drops the local task.
 		err = nil
 	default:

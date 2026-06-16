@@ -4145,56 +4145,55 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 	s.Equal(createRequestID, ci.CreateRequestId)
 }
 
-// TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot verifies that
-// AddStartChildWorkflowExecutionInitiatedEvent snapshots the parent's TimeSkippingInfo
-// into the event attributes at command time. The transfer task that later starts the
-// child reads this snapshot off the event (see transfer_queue_active_task_executor.go),
-// so the snapshot must faithfully represent what the parent workflow observed.
 func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot() {
 	cases := []struct {
 		name              string
 		parentTSI         *persistencespb.TimeSkippingInfo
 		expectNilCfg      bool
-		expectCfg         *workflowpb.TimeSkippingConfig
+		expectCfg         *commonpb.TimeSkippingConfig
 		expectInitialSkip *durationpb.Duration
 	}{
 		{
-			name:         "no TimeSkippingInfo on parent → no snapshot on event",
+			name:         "no TimeSkippingInfo on parent",
 			parentTSI:    nil,
 			expectNilCfg: true,
 		},
 		{
-			name: "config only, no accumulated skip → config cloned verbatim, no initial skip",
+			name: "config only",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config: &commonpb.TimeSkippingConfig{Enabled: true},
 			},
-			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: nil,
 		},
 		{
-			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
+			name: "config + accumulated skip",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
-			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: true},
 			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "multi-generation: parent's accumulated (which already includes grandparent's contribution) becomes InitialSkippedDuration",
+			name: "accumulated skip only",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
-			},
-			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
-			expectInitialSkip: durationpb.New(2 * time.Hour),
-		},
-		{
-			name: "accumulated skip only, no config (corrupt-ish but handled) → no config snapshot, just InitialSkippedDuration",
-			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
 			expectNilCfg:      true,
 			expectInitialSkip: durationpb.New(15 * time.Minute),
+		},
+		{
+			name: "MaxElapsedDuration is never propagated to children → cleared from child snapshot",
+			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: durationpb.New(3 * time.Hour)},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(time.Hour),
 		},
 	}
 
@@ -4214,9 +4213,13 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			s.NoError(err)
 
 			gotAttrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-			gotTSC := gotAttrs.GetTimeSkippingConfig()
-			gotInitialSkip := gotAttrs.GetInitialSkippedDuration()
 
+			// forever nil
+			gotFastForward := gotAttrs.GetTimeSkippingStatePropagation().GetFastForwardTargetTime()
+			s.Nil(gotFastForward)
+
+			gotTSC := gotAttrs.GetTimeSkippingConfig()
+			gotInitialSkip := gotAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration()
 			if tc.expectInitialSkip == nil {
 				s.Nil(gotInitialSkip)
 			} else {
@@ -6732,7 +6735,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("FalseWhenConfigDisabled", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: false},
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
@@ -6742,7 +6745,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
@@ -6750,7 +6753,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("FalseWhenPendingWorkflowTask", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
@@ -6760,7 +6763,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("FalseWhenPendingActivity", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
@@ -6769,7 +6772,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("FalseWhenPendingChildExecution", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
@@ -6778,7 +6781,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("FalseWhenPendingNexusOperation", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
@@ -6791,45 +6794,41 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("FalseWhenNoPendingTimersAndNoBound", func() {
+	s.Run("FalseWhenNoPendingTimersAndNoFastForward", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("TrueWhenPendingTimerAndNoBound", func() {
+	s.Run("TrueWhenPendingTimerAndNoFastForward", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.True(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("TrueWhenBoundAndNoPendingTimer", func() {
+	s.Run("TrueWhenFastForwardAndNoPendingTimer", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: durationpb.New(time.Hour),
-				},
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
 			},
-			CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
 			},
 		}
 		s.True(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("TrueWhenBoundAndPendingTimer", func() {
+	s.Run("TrueWhenFastForwardAndPendingTimer", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: durationpb.New(time.Hour),
-				},
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
 			},
-			CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
 			},
 		}
@@ -6840,7 +6839,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 	s.Run("FalseWhenPaused", func() {
 		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
@@ -6848,7 +6847,7 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 
 	s.Run("TrueWhenOnlyActivityInRetryBackoff", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		now := s.mutableState.Now()
 		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
@@ -6867,7 +6866,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 
 	makeEvent := func(eventTime time.Time, targetTime *time.Time, disabledAfterBound bool) *historypb.HistoryEvent {
 		attr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
-			DisabledAfterBound: disabledAfterBound,
+			DisabledAfterFastForward: disabledAfterBound,
 		}
 		if targetTime != nil {
 			attr.TargetTime = timestamppb.New(*targetTime)
@@ -6891,9 +6890,9 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		s.Require().Error(err)
 	})
 
-	s.Run("AccumulatesDurationFirstTime", func() {
+	s.Run("AccumulatesDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.timeSkippingInfoUpdated = false
 		targetTime := baseTime.Add(2 * time.Hour)
@@ -6905,15 +6904,13 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		s.Require().NoError(err)
 
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-		s.Require().NotNil(accumulated)
 		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
-		s.Require().True(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
 		s.Require().True(s.mutableState.timeSkippingInfoUpdated)
 	})
 
 	s.Run("AccumulatesDurationAdditively", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
 		targetTime := baseTime.Add(2 * time.Hour)
@@ -6930,9 +6927,9 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 
 	s.Run("ErrorWhenNilTargetTimeAndNotDisabledAfterBound", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-
+		s.mutableState.timeSkippingInfoUpdated = false
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			context.Background(),
 			makeEvent(baseTime, nil, false),
@@ -6942,10 +6939,10 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 
 	s.Run("NilTargetTimeWithDisabledAfterBoundDoesNotAccumulateDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-
+		s.mutableState.timeSkippingInfoUpdated = false
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			context.Background(),
 			makeEvent(baseTime, nil, true),
@@ -6955,11 +6952,12 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().Equal(time.Hour, accumulated.AsDuration())
 		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		s.Require().True(s.mutableState.timeSkippingInfoUpdated)
 	})
 
 	s.Run("DisabledAfterBoundDisablesConfigAndAccumulatesDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		targetTime := baseTime.Add(2 * time.Hour)
 
@@ -7143,9 +7141,11 @@ func (s *mutableStateSuite) TestAddCompletedWorkflowEvent_ArchivalConvertsVirtua
 		},
 		&historyservice.StartWorkflowExecutionRequest{
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 			},
-			InitialSkippedDuration: durationpb.New(skipped),
+			TimeSkippingStatePropagation: &commonpb.TimeSkippingStatePropagation{
+				InitialSkippedDuration: durationpb.New(skipped),
+			},
 		},
 	)
 	s.NoError(err)
@@ -7291,7 +7291,7 @@ func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 		// with already-stamped events / tasks.
 		skipped := 17 * time.Minute
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: false},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(skipped),
 		}
 		s.Equal(skipped, s.mutableState.accumulatedSkippedDuration())
@@ -7335,7 +7335,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 				WorkflowTypeName:                 "testWorkflowType",
 				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-					Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+					Config: &commonpb.TimeSkippingConfig{Enabled: true},
 				},
 				VersionHistories: &historyspb.VersionHistories{
 					Histories: []*historyspb.VersionHistory{
@@ -7489,7 +7489,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 
 	s.Run("Active_NoPendingTimers_NoEvent", func() {
 		// ShouldExecuteTimeSkipping returns false when there are no pending timers and no
-		// time bound configured.  No event should be emitted.
+		// time fast-forward configured.  No event should be emitted.
 		now := s.mockShard.GetTimeSource().Now()
 
 		dbState := buildEligibleState(now.Add(time.Hour))
@@ -7769,7 +7769,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		// runtime dedup handles the duplicate.
 		dbState := buildRunningState()
 		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 
@@ -7801,7 +7801,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		// generates the time-shifted task.  Only the time-skipped task appears.
 		dbState := buildRunningState()
 		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
 
@@ -7831,15 +7831,17 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 // executionInfo.TimeSkippingInfo. This is the code path exercised by all mutable-state
 // rebuild flows.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
-	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-	}
+	inputConfig := &commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour)}
 
 	testCases := []struct {
-		name               string
-		timeSkippingConfig *workflowpb.TimeSkippingConfig
-		wantConfig         *workflowpb.TimeSkippingConfig
+		name                         string
+		timeSkippingConfig           *commonpb.TimeSkippingConfig
+		timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation
+		wantTSInfoNil                bool
+		wantConfig                   *commonpb.TimeSkippingConfig
+		wantAccum                    time.Duration
 	}{
 		{
 			name:               "with config",
@@ -7847,9 +7849,18 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 			wantConfig:         inputConfig,
 		},
 		{
-			name:               "without config",
-			timeSkippingConfig: nil,
-			wantConfig:         nil,
+			name:          "without config and no inherited skip",
+			wantTSInfoNil: true,
+		},
+		{
+			// A child that opted out of config propagation arrives with a nil config but a
+			// positive InitialSkippedDuration: virtual time must still be seeded.
+			name: "nil config with inherited virtual time",
+			timeSkippingStatePropagation: &commonpb.TimeSkippingStatePropagation{
+				InitialSkippedDuration: durationpb.New(2 * time.Hour),
+			},
+			wantConfig: nil,
+			wantAccum:  2 * time.Hour,
 		},
 	}
 
@@ -7867,12 +7878,13 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-						FirstExecutionRunId: tests.RunID,
-						TimeSkippingConfig:  tc.timeSkippingConfig,
+						WorkflowType:                 &commonpb.WorkflowType{Name: "test-workflow-type"},
+						TaskQueue:                    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+						WorkflowRunTimeout:           durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout:          durationpb.New(10 * time.Second),
+						FirstExecutionRunId:          tests.RunID,
+						TimeSkippingConfig:           tc.timeSkippingConfig,
+						TimeSkippingStatePropagation: tc.timeSkippingStatePropagation,
 					},
 				},
 			}
@@ -7885,11 +7897,14 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 			)
 			s.NoError(err)
 
-			if tc.wantConfig == nil {
-				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
-			} else {
-				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+			tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+			if tc.wantTSInfoNil {
+				s.Nil(tsi)
+				return
 			}
+			s.Require().NotNil(tsi)
+			s.True(proto.Equal(tc.wantConfig, tsi.GetConfig()))
+			s.Equal(tc.wantAccum, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		})
 	}
 }
@@ -7899,20 +7914,18 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 // or overwrites executionInfo.TimeSkippingInfo. This is the rebuild path for
 // time-skipping config that is set or changed after workflow start.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
-	initialConfig := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-	}
-	updatedConfig := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-	}
+	initialConfig := &commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour)}
+	updatedConfig := &commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(2 * time.Hour)}
 
 	testCases := []struct {
 		name          string
-		existing      *workflowpb.TimeSkippingConfig
-		eventConfig   *workflowpb.TimeSkippingConfig
-		wantConfig    *workflowpb.TimeSkippingConfig
+		existing      *commonpb.TimeSkippingConfig
+		eventConfig   *commonpb.TimeSkippingConfig
+		wantConfig    *commonpb.TimeSkippingConfig
 		wantInfoIsNil bool
 	}{
 		{
@@ -8149,305 +8162,231 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	}
 }
 
-// TestApplyTimeSkippingBound covers the full branch table of applyTimeSkippingBound:
-// MaxElapsedDuration set / nil duration / nil bound / nil config / Enabled=false.
+// TestApplyFastForward covers the full branch table of applyFastForward:
+// MaxElapsedDuration set / nil duration / nil fast-forward / nil config / Enabled=false.
 // The first-init virtual-time path is covered separately in
-// TestInitTimeSkippingInfo_VirtualTimeBound.
-func (s *mutableStateSuite) TestApplyTimeSkippingBound() {
-	const (
-		eventID  = int64(42)
-		maxLapse = 3 * time.Hour
-	)
+// TestInitTimeSkippingInfo_VirtualTime.
+func (s *mutableStateSuite) TestApplyFastForward() {
+	s.Run("FastForward_WithNoPropagatedTargetTime", func() {
 
-	// findBoundTask returns the most-recently-emitted TimeSkippingTimerTask in InsertTasks
-	// (CategoryTimer slot), or nil if none.
-	findBoundTask := func(ms *MutableStateImpl) *tasks.TimeSkippingTimerTask {
-		for _, t := range ms.InsertTasks[tasks.CategoryTimer] {
-			if bt, ok := t.(*tasks.TimeSkippingTimerTask); ok {
-				return bt
-			}
-		}
-		return nil
-	}
+		fastForwardDuration := 3 * time.Hour
+		eventID := int64(1)
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
 
-	s.Run("MaxElapsedDuration_SetsBoundAndEmitsTask", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(maxLapse)},
-			},
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(fastForwardDuration)},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-		before := s.mutableState.Now()
-		s.mutableState.applyTimeSkippingBound(eventID)
+		s.mutableState.applyFastForward(eventID, nil)
+		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
+		s.Require().NotNil(fastForward)
+		s.Equal(eventID, fastForward.GetSourceEventId())
+		s.False(fastForward.GetHasReached())
+		s.WithinDuration(fastForward.GetTargetTime().AsTime(), baseTime.Add(fastForwardDuration), 1*time.Second)
+	})
 
-		boundInfo := s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound()
-		s.Require().NotNil(boundInfo)
-		s.Equal(eventID, boundInfo.GetSourceEventId())
-		s.False(boundInfo.GetHasReached())
-		s.GreaterOrEqual(boundInfo.GetTargetTime().AsTime(), before.Add(maxLapse))
-
-		task := findBoundTask(s.mutableState)
-		s.Require().NotNil(task)
-		s.Equal(eventID, task.EventID)
-		s.Equal(boundInfo.GetTargetTime().AsTime(), task.VisibilityTimestamp,
-			"task VisibilityTimestamp must equal stored bound TargetTime (single ms.Now() read)")
+	s.Run("FastForward_WithPropagatedTargetTime", func() {
+		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+		eventID := int64(1)
+		propagatedTarget := fixed.Add(2 * time.Hour)
+		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(3 * time.Hour)},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.applyFastForward(eventID, timestamppb.New(propagatedTarget))
+		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
+		s.Require().NotNil(fastForward)
+		s.Equal(propagatedTarget, fastForward.GetTargetTime().AsTime(),
+			"propagated target used directly, not recomputed from ff duration")
 	})
 
 	s.Run("MaxElapsedDuration_NilDuration_NoOp", func() {
+		eventID := int64(1)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: nil},
-			},
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled: true},
 		}
-		s.mutableState.applyTimeSkippingBound(eventID)
-
-		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound())
-		s.Nil(findBoundTask(s.mutableState))
+		s.mutableState.applyFastForward(eventID, nil)
+		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo())
 	})
 
-	s.Run("NilBound_ClearsStaleElapsedBound", func() {
+	s.Run("FastForward_ClearsExistingInfo", func() {
+		eventID := int64(1)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-			CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime:    timestamppb.New(s.mutableState.Now().Add(time.Hour)),
 				SourceEventId: 7,
 			},
 		}
-		s.mutableState.applyTimeSkippingBound(eventID)
-
-		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound())
-		s.Nil(findBoundTask(s.mutableState))
+		s.mutableState.applyFastForward(eventID, nil)
+		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo())
 	})
 
-	s.Run("NilConfig_ReturnsSilently", func() {
+	s.Run("FastForward_OverridesExistingInfo", func() {
+		eventID := int64(1)
+		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: nil,
-			CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-				TargetTime:    timestamppb.New(s.mutableState.Now().Add(time.Hour)),
+			Config: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(time.Hour)},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime:    timestamppb.New(fixed),
 				SourceEventId: 7,
 			},
 		}
-		s.mutableState.applyTimeSkippingBound(eventID)
-
-		// Nil config short-circuits without touching state — preserves whatever was there.
-		s.NotNil(s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound())
-		s.Nil(findBoundTask(s.mutableState))
-	})
-
-	s.Run("EnabledFalse_SuppressesTaskEmission", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: false,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(maxLapse)},
-			},
-		}
-		s.mutableState.applyTimeSkippingBound(eventID)
-
-		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound())
-		s.Nil(findBoundTask(s.mutableState))
-	})
-
-	s.Run("MaxElapsedDuration_NoOpWhenTargetTimeUnchanged", func() {
-		// Pin the time source so the seeded TargetTime exactly matches the value
-		// applyTimeSkippingBound will compute on this transaction.
-		fixed := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
-
-		target := fixed.Add(maxLapse)
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(maxLapse)},
-			},
-			CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-				TargetTime:    timestamppb.New(target),
-				SourceEventId: 7,
-			},
-		}
-		s.mutableState.applyTimeSkippingBound(eventID)
-
-		// SourceEventId must NOT change — the no-op short-circuit protects no-op
-		// UpdateWorkflowExecutionOptions from invalidating still-pending wake-up tasks.
-		s.Equal(int64(7), s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound().GetSourceEventId())
-		s.Nil(findBoundTask(s.mutableState))
+		newTarget := s.mutableState.Now().Add(time.Hour)
+		s.mutableState.applyFastForward(eventID, nil)
+		s.WithinDuration(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo().GetTargetTime().AsTime(), newTarget, 1*time.Second)
 	})
 }
 
-// TestInitTimeSkippingInfo verifies the time-shift block and the virtual-time bound
-// computation in initTimeSkippingInfo (B1 fix).
+// TestInitTimeSkippingInfo covers 3 basic scenarios this function is called.
 func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
-	const (
-		eventID    = int64(11)
-		initialDur = 50 * time.Minute
-		maxLapse   = time.Hour
-	)
-	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	s.Run("ZeroInitialSkip_TimestampsUnchanged", func() {
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
-		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
-		runExp := baseTime.Add(24 * time.Hour)
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExp)
-
-		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
-		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(0), eventID)
-
-		s.Equal(baseTime, s.mutableState.executionInfo.StartTime.AsTime())
-		s.Equal(baseTime, s.mutableState.executionInfo.ExecutionTime.AsTime())
-		s.Equal(baseTime, s.mutableState.executionState.StartTime.AsTime())
-		s.Equal(runExp, s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime())
-	})
-
-	s.Run("PositiveInitialSkip_NilTimestamps_NoPanic", func() {
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = nil
-		s.mutableState.executionInfo.ExecutionTime = nil
-		s.mutableState.executionState.StartTime = nil
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = nil
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = nil
-
-		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+	s.Run("InitWithNil_ForExecutionsWithoutTS", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
 		s.NotPanics(func() {
-			s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), eventID)
+			s.mutableState.initTimeSkippingInfo(nil, nil, 0)
 		})
-		s.Nil(s.mutableState.executionInfo.StartTime)
-		s.Nil(s.mutableState.executionInfo.ExecutionTime)
+		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo)
+		s.Equal(baseTime, s.mutableState.Now())
 	})
 
-	s.Run("PositiveInitialSkip_TimestampsShifted", func() {
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
-		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
-		runExp := baseTime.Add(24 * time.Hour)
-		execExp := baseTime.Add(48 * time.Hour)
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExp)
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(execExp)
+	s.Run("InitWithConfigOnly_ForExecutionsWithTSStartedByUser", func() {
+		eventID := int64(1)
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
+		cfg := &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(3 * time.Hour)}
 
-		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
-		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), eventID)
-
-		s.Equal(baseTime.Add(initialDur), s.mutableState.executionInfo.StartTime.AsTime())
-		s.Equal(baseTime.Add(initialDur), s.mutableState.executionInfo.ExecutionTime.AsTime())
-		s.Equal(baseTime.Add(initialDur), s.mutableState.executionState.StartTime.AsTime())
-		s.Equal(runExp.Add(initialDur), s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime())
-		s.Equal(execExp.Add(initialDur), s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime())
+		s.mutableState.initTimeSkippingInfo(cfg, nil, eventID)
+		s.Equal(baseTime, s.mutableState.Now())
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(cfg, tsi.GetConfig()))
+		s.Require().NotNil(tsi.GetFastForwardInfo())
+		s.Require().Nil(tsi.GetAccumulatedSkippedDuration())
+		// timestamppb translates to UTC time
+		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
+			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 	})
 
-	s.Run("VirtualTimeBound_TargetUsesAccumulatedSkip", func() {
-		// Verifies B1 fix: applyTimeSkippingBound runs after the time source is wrapped
-		// and the time-shift block, so ms.Now() reflects virtual time. The bound's
-		// TargetTime must equal wall_now + accum + maxElapsed (not wall_now + maxElapsed).
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
-		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
+	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
 
-		cfg := &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(maxLapse)},
+		// all local time
+		baseTime := s.mutableState.timeSource.Now()
+		targetTime := baseTime.Add(3 * time.Hour)
+
+		hasSkipped := 2 * time.Hour
+		fastForward := 3 * time.Hour
+		eventID := int64(1)
+
+		cfg := &commonpb.TimeSkippingConfig{
+			Enabled:                 true,
+			FastForward:             durationpb.New(fastForward),
+			DisableChildPropagation: true,
 		}
-		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), eventID)
+		propagation := &commonpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(hasSkipped),
+			FastForwardTargetTime:  timestamppb.New(targetTime),
+		}
+		s.mutableState.initTimeSkippingInfo(cfg, propagation, eventID)
 
-		boundInfo := s.mutableState.executionInfo.TimeSkippingInfo.GetCurrentElapsedDurationBound()
-		s.Require().NotNil(boundInfo)
-		// Virtual now = baseTime + initialDur, target = virtual_now + maxLapse.
-		s.Equal(baseTime.Add(initialDur).Add(maxLapse), boundInfo.GetTargetTime().AsTime())
-		s.Equal(eventID, boundInfo.GetSourceEventId())
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(baseTime.Add(hasSkipped), s.mutableState.Now())
+		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.Equal(targetTime.UTC(),
+			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 	})
 }
 
-// TestTimeSkippingPreservesUnboundedExpiration locks down the invariant that
-// time skipping never turns an unbounded workflow (no execution / run timeout)
-// into a bounded one. The only write path under skip that touches
-// WorkflowExecutionExpirationTime / WorkflowRunExpirationTime is
-// shiftWorkflowTimes (driven by initTimeSkippingInfo for propagated runs),
-// which gates per-field on timeNotSet — so nil/zero inputs must round-trip
-// unchanged. RefreshExpirationTimeoutTask has its own pre-skipping guards
-// (weTimeout > 0 / wrTimeout != 0) that are independent of time-skipping
-// state. The companion read path ToRealTime is covered by
-// TestToRealTime/ZeroInputReturnedUnchangedEvenUnderSkip.
-func (s *mutableStateSuite) TestTimeSkippingPreservesUnboundedExpiration() {
-	const initialDur = 50 * time.Minute
-	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-
-	s.Run("NilExpiration_StaysNil_AfterPositiveInitialSkip", func() {
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
-		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = nil
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = nil
-
-		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
-		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), 1)
-
-		s.Nil(s.mutableState.executionInfo.WorkflowRunExpirationTime)
-		s.Nil(s.mutableState.executionInfo.WorkflowExecutionExpirationTime)
-	})
-
-	s.Run("ZeroExpiration_StaysZero_AfterPositiveInitialSkip", func() {
-		// A proto-wrapped zero time is the second flavor of "not set" — timeNotSet
-		// treats it the same as nil, so shiftWorkflowTimes must leave it at zero.
-		s.mutableState.timeSource = clock.NewEventTimeSource().Update(baseTime)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime)
-		s.mutableState.executionState.StartTime = timestamppb.New(baseTime)
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(time.Time{})
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
-
-		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
-		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(initialDur), 1)
-
-		s.True(s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime().IsZero())
-		s.True(s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime().IsZero())
-	})
-
-	s.Run("ShiftWorkflowTimes_DirectCall_NilAndZero_NotShifted", func() {
-		// Directly exercise shiftWorkflowTimes to pin the contract independent of
-		// the initTimeSkippingInfo wrapper. accum > 0 must be a no-op on
-		// unset expiration fields regardless of how it was invoked.
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = nil
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
-		s.mutableState.shiftWorkflowTimes(durationpb.New(2 * time.Hour))
-		s.Nil(s.mutableState.executionInfo.WorkflowRunExpirationTime)
-		s.True(s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime().IsZero())
-	})
-
-}
-
-// TestUpdateTimeSkippingInfo verifies updateTimeSkippingInfo replaces Config but
-// preserves AccumulatedSkippedDuration, and re-runs applyTimeSkippingBound.
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
-	const eventID = int64(33)
-	prevAccum := 15 * time.Minute
+	s.Run("UpdateTimeSkippingInfo_EnableTS", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
+		currentTSI := persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled: false,
+			},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
 
-	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-		},
-		AccumulatedSkippedDuration: durationpb.New(prevAccum),
-	}
+		// new config
+		newConfig := &commonpb.TimeSkippingConfig{
+			Enabled:                 true,
+			FastForward:             durationpb.New(2 * time.Hour),
+			DisableChildPropagation: true,
+		}
+		newEventID := int64(8)
+		s.mutableState.updateTimeSkippingInfo(newConfig, newEventID)
+		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
-	newConfig := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-	}
-	s.mutableState.updateTimeSkippingInfo(newConfig, eventID)
+		s.Require().NotNil(newTSI)
+		s.True(proto.Equal(newConfig, newTSI.GetConfig()))
+		s.Require().NotNil(newTSI.GetFastForwardInfo())
+		s.Equal(newEventID, newTSI.GetFastForwardInfo().GetSourceEventId())
+		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
+		s.False(newTSI.GetFastForwardInfo().GetHasReached())
+		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())
+	})
 
-	tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
-	s.True(proto.Equal(newConfig, tsi.GetConfig()))
-	s.Require().NotNil(tsi.GetAccumulatedSkippedDuration())
-	s.Equal(prevAccum, tsi.GetAccumulatedSkippedDuration().AsDuration(),
-		"AccumulatedSkippedDuration must be preserved across config update")
-	// applyTimeSkippingBound was invoked: a new MaxElapsedDuration bound is installed.
-	boundInfo := tsi.GetCurrentElapsedDurationBound()
-	s.Require().NotNil(boundInfo)
-	s.Equal(eventID, boundInfo.GetSourceEventId())
+	s.Run("UpdateTimeSkippingInfo_OverrideFFThenTurnOff", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
+		currentTSI := persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
+			},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime:    timestamppb.New(baseTime.Add(time.Hour)),
+				SourceEventId: 7,
+				HasReached:    false,
+			},
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
+
+		// update with new config with a new FF
+		tsc2 := &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(2 * time.Hour),
+		}
+		newEventID := int64(8)
+		s.mutableState.updateTimeSkippingInfo(tsc2, newEventID)
+		tsc2TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
+
+		s.Require().NotNil(tsc2TSI)
+		s.True(proto.Equal(tsc2, tsc2TSI.GetConfig()))
+		s.Require().NotNil(tsc2TSI.GetFastForwardInfo())
+		s.Equal(newEventID, tsc2TSI.GetFastForwardInfo().GetSourceEventId())
+		s.Equal(baseTime.Add(2*time.Hour).UTC(), tsc2TSI.GetFastForwardInfo().GetTargetTime().AsTime())
+		s.False(tsc2TSI.GetFastForwardInfo().GetHasReached())
+		s.Equal(time.Hour, tsc2TSI.GetAccumulatedSkippedDuration().AsDuration())
+
+		// disable the time skipping
+		tsc3 := &commonpb.TimeSkippingConfig{
+			Enabled: false,
+		}
+		s.mutableState.updateTimeSkippingInfo(tsc3, newEventID)
+		tsc3TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsc3TSI)
+		s.True(proto.Equal(tsc3, tsc3TSI.GetConfig()))
+		s.Nil(tsc3TSI.GetFastForwardInfo())
+		s.Equal(time.Hour, tsc3TSI.GetAccumulatedSkippedDuration().AsDuration())
+
+	})
+
 }
 
 // TestCalculateTimeSkippingTransition exercises the full candidate-selection
@@ -8469,7 +8408,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		s.mutableState.pendingTimerInfoIDs = make(map[string]*persistencespb.TimerInfo)
 		s.mutableState.pendingActivityInfoIDs = make(map[int64]*persistencespb.ActivityInfo)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		// Default: workflow has had a workflow task, so the backoff branch is skipped.
 		s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime)
@@ -8492,7 +8431,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		t, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(t1, t.targetTime)
-		s.False(t.disabledAfterBound)
+		s.False(t.disabledAfterFastForward)
 	})
 
 	s.Run("TwoUserTimers_TargetIsEarliest", func() {
@@ -8505,35 +8444,34 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(t1, tr.targetTime)
-		s.False(tr.disabledAfterBound)
+		s.False(tr.disabledAfterFastForward)
 	})
 
-	s.Run("UserTimer_PlusEarlierElapsedBound_TargetIsBound", func() {
+	s.Run("UserTimer_PlusEarlierFastForward_TargetIsFastForward", func() {
 		resetMS()
 		t1 := baseTime.Add(3 * time.Hour)
-		boundTarget := baseTime.Add(time.Hour)
+		fastForwardTarget := baseTime.Add(time.Hour)
 		addTimer("t1", t1)
-		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}
-		s.mutableState.executionInfo.TimeSkippingInfo.CurrentElapsedDurationBound =
-			&persistencespb.TimeSkippingBoundInfo{TargetTime: timestamppb.New(boundTarget)}
+		s.mutableState.executionInfo.TimeSkippingInfo.Config.FastForward = durationpb.New(time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo =
+			&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(fastForwardTarget)}
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
-		s.Equal(boundTarget, tr.targetTime)
-		s.True(tr.disabledAfterBound)
+		s.Equal(fastForwardTarget, tr.targetTime)
+		s.True(tr.disabledAfterFastForward)
 	})
 
-	s.Run("MaxElapsed_NilCurrentBound_InternalError", func() {
+	s.Run("ZeroFastForward_NilTarget_NoErrorNoCandidate", func() {
 		resetMS()
-		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)}
-		// CurrentElapsedDurationBound deliberately not set.
+		// A zero max_elapsed_duration is treated as no fast-forward: it contributes no candidate
+		// and must NOT trip the nil-fast-forward corruption check.
+		s.mutableState.executionInfo.TimeSkippingInfo.Config.FastForward = durationpb.New(0)
+		// FastForward persistence deliberately not set.
 
-		_, err := s.mutableState.calculateTimeSkippingTransition()
-		s.Require().Error(err)
-		var internalErr *serviceerror.Internal
-		s.Require().ErrorAs(err, &internalErr)
+		tr, err := s.mutableState.calculateTimeSkippingTransition()
+		s.Require().NoError(err)
+		s.False(tr.isValid())
 	})
 
 	s.Run("Backoff_NotChildAndExecutionTimeFuture_IsCandidate", func() {
@@ -8548,7 +8486,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(execTime, tr.targetTime)
-		s.False(tr.disabledAfterBound)
+		s.False(tr.disabledAfterFastForward)
 	})
 
 	s.Run("Backoff_ChildWFCase_NotCandidate", func() {
@@ -8598,7 +8536,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(schedTime, tr.targetTime)
-		s.False(tr.disabledAfterBound)
+		s.False(tr.disabledAfterFastForward)
 	})
 
 	s.Run("TwoActivitiesInBackoff_TargetIsEarliest", func() {
@@ -8636,69 +8574,68 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 
 	// Universal cap: skip target must not exceed the run/execution timeout.
 	// MaxElapsedDuration's value is irrelevant to calculateTimeSkippingTransition;
-	// only CurrentElapsedDurationBound.TargetTime is read. We use a large dummy
-	// duration solely to configure the bound type.
-	const largeBound = 24 * time.Hour
-	setBoundAt := func(target time.Time) {
-		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(largeBound)}
-		s.mutableState.executionInfo.TimeSkippingInfo.CurrentElapsedDurationBound =
-			&persistencespb.TimeSkippingBoundInfo{TargetTime: timestamppb.New(target)}
+	// only FastForward.TargetTime is read. We use a large dummy
+	// duration solely to configure the fast-forward.
+	const largeFastForward = 24 * time.Hour
+	setFastForwardAt := func(target time.Time) {
+		s.mutableState.executionInfo.TimeSkippingInfo.Config.FastForward = durationpb.New(largeFastForward)
+		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo =
+			&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(target)}
 	}
 
-	s.Run("Bound_LargerThanRunTimeout_CappedAtRunTimeout", func() {
+	s.Run("FastForward_LargerThanRunTimeout_CappedAtRunTimeout", func() {
 		resetMS()
 		runExpiry := baseTime.Add(30 * time.Minute)
-		boundTarget := baseTime.Add(2 * time.Hour) // bound > run timeout
-		setBoundAt(boundTarget)
+		fastForwardTarget := baseTime.Add(2 * time.Hour) // fast-forward > run timeout
+		setFastForwardAt(fastForwardTarget)
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExpiry)
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(runExpiry, tr.targetTime, "skip must be capped at run timeout")
-		s.False(tr.disabledAfterBound, "cap fires before bound; bound must not be marked reached")
+		s.False(tr.disabledAfterFastForward, "cap fires before fast-forward; fast-forward must not be marked reached")
 	})
 
-	s.Run("Bound_SmallerThanRunTimeout_NoCap_TargetIsBound", func() {
+	s.Run("FastForward_SmallerThanRunTimeout_NoCap_TargetIsFastForward", func() {
 		resetMS()
-		boundTarget := baseTime.Add(30 * time.Minute)
-		runExpiry := baseTime.Add(2 * time.Hour) // run timeout > bound, no cap needed
-		setBoundAt(boundTarget)
+		fastForwardTarget := baseTime.Add(30 * time.Minute)
+		runExpiry := baseTime.Add(2 * time.Hour) // run timeout > fast-forward, no cap needed
+		setFastForwardAt(fastForwardTarget)
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runExpiry)
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
-		s.Equal(boundTarget, tr.targetTime, "bound is minimum; no cap applies")
-		s.True(tr.disabledAfterBound, "bound fires before run timeout; bound must be marked reached")
+		s.Equal(fastForwardTarget, tr.targetTime, "fast-forward is minimum; no cap applies")
+		s.True(tr.disabledAfterFastForward, "fast-forward fires before run timeout; fast-forward must be marked reached")
 	})
 
-	s.Run("Bound_LargerThanExecTimeout_NoRunTimeout_CappedAtExecTimeout", func() {
+	s.Run("FastForward_LargerThanExecTimeout_NoRunTimeout_CappedAtExecTimeout", func() {
 		resetMS()
 		execExpiry := baseTime.Add(30 * time.Minute)
-		boundTarget := baseTime.Add(2 * time.Hour) // bound > execution timeout
-		setBoundAt(boundTarget)
+		fastForwardTarget := baseTime.Add(2 * time.Hour) // fast-forward > execution timeout
+		setFastForwardAt(fastForwardTarget)
 		// No WorkflowRunExpirationTime; only execution timeout.
 		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(execExpiry)
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
 		s.Equal(execExpiry, tr.targetTime, "skip must be capped at execution timeout")
-		s.False(tr.disabledAfterBound, "cap fires before bound; bound must not be marked reached")
+		s.False(tr.disabledAfterFastForward, "cap fires before fast-forward; fast-forward must not be marked reached")
 	})
 
-	s.Run("Bound_ZeroRunTimeout_TreatedAsNoTimeout_NoCap", func() {
+	s.Run("FastForward_ZeroRunTimeout_TreatedAsNoTimeout_NoCap", func() {
 		// A zero-value timestamp means "no timeout configured". The cap must not
-		// fire: the bound target should be the skip destination unchanged.
+		// fire: the fast-forward target should be the skip destination unchanged.
 		resetMS()
-		boundTarget := baseTime.Add(time.Hour)
-		setBoundAt(boundTarget)
+		fastForwardTarget := baseTime.Add(time.Hour)
+		setFastForwardAt(fastForwardTarget)
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(time.Time{})
 		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(time.Time{})
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
-		s.Equal(boundTarget, tr.targetTime, "zero timeout must not cap the skip")
-		s.True(tr.disabledAfterBound)
+		s.Equal(fastForwardTarget, tr.targetTime, "zero timeout must not cap the skip")
+		s.True(tr.disabledAfterFastForward)
 	})
 }
 
@@ -8712,21 +8649,21 @@ func (s *mutableStateSuite) TestToRealTime() {
 	})
 	s.Run("IdentityWhenTimeSkippingInfoWithNilAccumulatedSkippedDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.Equal(virtualTime, s.mutableState.ToRealTime(virtualTime))
 	})
 	s.Run("SubtractsAccumulatedSkip", func() {
 		accum := time.Hour
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: false},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(accum),
 		}
 		s.Equal(virtualTime.Add(-accum), s.mutableState.ToRealTime(virtualTime))
 	})
 	s.Run("ZeroInputReturnedUnchangedEvenUnderSkip", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
 		s.True(s.mutableState.ToRealTime(time.Time{}).IsZero())
@@ -8835,7 +8772,7 @@ func (s *mutableStateSuite) TestMutableStateImpl_Now() {
 		const skip = time.Hour
 		s.mutableState.timeSource = fixedTimeSource()
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: false},
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(skip),
 		}
 		s.mutableState.wrapTimeSourceWithTimeSkipping()
