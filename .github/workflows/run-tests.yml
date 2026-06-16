@@ -279,6 +279,9 @@ jobs:
     name: Unit test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      TEST_TIMEOUT: 15m
+      GITHUB_TIMEOUT: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -289,8 +292,10 @@ jobs:
         uses: ./.github/actions/prepare-go
 
       - name: Run unit tests
-        timeout-minutes: 20
-        run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make unit-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -307,6 +312,8 @@ jobs:
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
       CONTAINERS: cassandra mysql postgresql
+      TEST_TIMEOUT: 10m
+      GITHUB_TIMEOUT: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -329,8 +336,10 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
-        timeout-minutes: 15
-        run: ./develop/github/monitor_test.sh make integration-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make integration-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -363,6 +372,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      GITHUB_TIMEOUT: ${{ matrix.github_timeout }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -390,9 +400,9 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
-        timeout-minutes: ${{ matrix.github_timeout }}
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
-          export TEST_RUNNER_TIMEOUT="$((${{ matrix.github_timeout }} - 1))m"
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
