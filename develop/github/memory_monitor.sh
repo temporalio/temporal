@@ -26,7 +26,6 @@ PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
 HIGH_WATER_MARK=0
 LAST_PROFILE_TIME=0
-LAST_REPORT=""
 CAPTURED_THRESHOLDS=" "
 
 # Clear history on start
@@ -167,7 +166,7 @@ EOF
 }
 
 snapshot() {
-  local memtotal_kb memavail_kb memused_kb memused_mb pct
+  local memtotal_kb memavail_kb memused_kb memused_mb pct report
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memavail_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
   memused_kb=$(( memtotal_kb - memavail_kb ))
@@ -182,8 +181,8 @@ snapshot() {
   timestamp="$(date '+%H:%M:%S')"
 
   # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
-  printf "%s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
-    "$timestamp" "$pct" "$memused_mb" "?" "$top_procs" | tee -a "$HISTORY_FILE"
+  printf "%s used=%s%% mem=%sMB procs=[%s]\n" \
+    "$timestamp" "$pct" "$memused_mb" "$top_procs" | tee -a "$HISTORY_FILE"
 
   local now
   now="$(date +%s)"
@@ -201,16 +200,8 @@ snapshot() {
     save_pprof_profiles "$diagnostic_prefix"
     save_process_memory "$go_pid" "$diagnostic_prefix"
 
-    LAST_REPORT="$(cat <<EOF
-Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
-
-$(cat "$HISTORY_FILE")
-
---- Top Processes ---
-$(ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20)
-
---- Memory Summary ---
-$(free -m)
+    report="$(build_light_report "$pct"
+cat <<EOF
 
 Captured goroutines: $goroutine_count
 
@@ -222,25 +213,25 @@ $goroutine_output
 EOF
 )"
   else
-    LAST_REPORT="$(build_light_report "$pct")"
+    report="$(build_light_report "$pct")"
   fi
 
   # Print report to stdout when memory threshold is reached (only once per run).
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
-    echo "$LAST_REPORT"
+    echo "$report"
     echo ""
     HEAP_PRINTED=true
   fi
 
   # Write report to disk only if memory usage is at or above high water mark.
   if [[ "$pct" -ge "$HIGH_WATER_MARK" ]]; then
-    echo "$LAST_REPORT" > "$SNAPSHOT_FILE"
+    echo "$report" > "$SNAPSHOT_FILE"
     HIGH_WATER_MARK="$pct"
   fi
 }
 
-# Take cheap snapshots frequently until killed.
+# Take snapshots until killed.
 while true; do
   snapshot
   sleep "$POLL_INTERVAL_SECONDS"
