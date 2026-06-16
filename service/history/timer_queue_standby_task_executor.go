@@ -137,20 +137,9 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 		err := t.executeChasmPureTimers(
 			mutableState,
 			task,
-			func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error) {
-				ok, err := node.ValidatePureTask(ctx, taskAttributes, task)
-				if err != nil {
-					return false, err
-				}
-
-				// When Validate succeeds, the task is still expected to run. Return ErrTaskRetry
-				// to wait for the task to complete on the active cluster, after which Validate
-				// will begin returning false.
-				if ok {
-					return false, consts.ErrTaskRetry
-				}
-
-				return false, nil
+			func(_ chasm.NodePureTask, _ chasm.TaskAttributes, _ any) (bool, error) {
+				// Any task present means replication has not yet removed it — retry.
+				return false, consts.ErrTaskRetry
 			},
 		)
 		if err != nil && errors.Is(err, consts.ErrTaskRetry) {
@@ -183,10 +172,17 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		valid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil || !valid {
+		isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil {
 			return nil, err
 		}
+		if !isTaskInTree {
+			// Replication has removed the logical task — drop the physical task.
+			return nil, nil
+		}
+
+		// Task still exists in the tree; retry until the active cluster executes
+		// and replicates the resulting state change.
 		return ms.ChasmTree(), nil
 	}
 
