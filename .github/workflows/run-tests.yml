@@ -447,7 +447,9 @@ jobs:
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
-        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$((${{ matrix.github_timeout }} - 1))m"
+          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
