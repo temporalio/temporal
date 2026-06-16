@@ -26,6 +26,7 @@ PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
 HIGH_WATER_MARK=0
 LAST_PROFILE_TIME=0
+ABOVE_PROFILE_THRESHOLD=false
 
 # Clear history on start
 : > "$HISTORY_FILE"
@@ -137,8 +138,14 @@ should_capture_profile() {
   local pct="$1"
   local now="$2"
 
-  [[ "$pct" -ge "$PROFILE_THRESHOLD" ]] || return 1
-  [[ "$LAST_PROFILE_TIME" -eq 0 ]] && return 0
+  if [[ "$pct" -lt "$PROFILE_THRESHOLD" ]]; then
+    ABOVE_PROFILE_THRESHOLD=false
+    return 1
+  fi
+  if [[ "$ABOVE_PROFILE_THRESHOLD" == "false" ]]; then
+    ABOVE_PROFILE_THRESHOLD=true
+    return 0
+  fi
 
   [[ $(( now - LAST_PROFILE_TIME )) -ge "$PROFILE_INTERVAL_SECONDS" ]]
 }
