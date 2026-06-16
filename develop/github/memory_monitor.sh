@@ -9,31 +9,43 @@
 #
 # 2. Profile capture:
 #       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
-#       pprof and process profiles in PROFILE_OUTPUT_DIR, then repeats every
-#       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
+#       pprof and process profiles in PROFILE_OUTPUT_DIR before running
+#       analysis, then repeats every PROFILE_INTERVAL_SECONDS while usage
+#       remains above the threshold.
+#
+# 3. OOM prevention:
+#       When usage crosses OOM_TERMINATION_THRESHOLD, captures a final profile
+#       if needed, writes the latest snapshot and a synthetic JUnit report,
+#       then terminates the monitored test process group so post-test artifact
+#       upload can still run.
 #
 # Usage:
-#   ./memory_monitor.sh <snapshot-file>
+#   ./memory_monitor.sh [snapshot-file]
 #
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <snapshot-file>" >&2
+if [[ $# -gt 1 ]]; then
+  echo "Usage: $0 [snapshot-file]" >&2
   exit 1
 fi
 
 # Snapshot config.
+MEMORY_OUTPUT_DIR="${MEMORY_OUTPUT_DIR:-.testoutput/memory}"
 SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
-SNAPSHOT_FILE="$1"
-SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-.testoutput/memory/snapshot-history.txt}"
+SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/snapshot.txt}}"
+SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-history.txt}"
 SNAPSHOT_PRINT_THRESHOLD=95
 
 # Profile config.
 PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
-PROFILE_CAPTURE_THRESHOLD="${PROFILE_CAPTURE_THRESHOLD:-85}"
-PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-.testoutput/memory/profile}"
+PROFILE_CAPTURE_THRESHOLD="${PROFILE_CAPTURE_THRESHOLD:-90}"
+PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
+
+# OOM prevention config.
+OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-97}"
+OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
 SNAPSHOT_PRINTED=false
@@ -41,8 +53,10 @@ SNAPSHOT_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
 LAST_PROFILE_CAPTURE_TIME=0
 WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
+OOM_TERMINATED=false
 
 # Clear history on start
+mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
 : > "$SNAPSHOT_HISTORY_FILE"
 
 # Fetch a pprof profile and save to file
@@ -66,39 +80,41 @@ pprof_top() {
 
 # Print goroutine profile analysis.
 print_goroutines() {
-  local tmp_file
-  tmp_file="$(mktemp)"
-  trap 'rm -f "$tmp_file"' RETURN
+  local profile_file="$1"
 
-  if fetch_pprof "goroutine" "$tmp_file"; then
+  if [[ -s "$profile_file" ]]; then
     echo "=== top functions by goroutine count ==="
-    pprof_top "$tmp_file" 30
+    pprof_top "$profile_file" 30
+  else
+    echo "(goroutine profile not available)"
   fi
 }
 
-# Extract goroutine count from pprof output ("... of N total").
+# Extract goroutine count from the saved goroutine debug profile.
 count_goroutines() {
-  sed -n 's/.*of \([0-9]*\) total.*/\1/p' | head -1 || echo '?'
+  local profile_file="$1"
+  local count
+
+  count="$(grep -c '^goroutine ' "$profile_file" 2>/dev/null || true)"
+  echo "${count:-?}"
 }
 
 # Print heap profile analysis.
 print_heap() {
-  local tmp_file
-  tmp_file="$(mktemp)"
-  trap 'rm -f "$tmp_file"' RETURN
+  local profile_file="$1"
 
   echo "--- Go Heap Profile ---"
-  if fetch_pprof "heap" "$tmp_file"; then
+  if [[ -s "$profile_file" ]]; then
     echo "=== inuse_space (what's currently held) ==="
-    pprof_top "$tmp_file" 30 -inuse_space
+    pprof_top "$profile_file" 30 -inuse_space
     echo ""
     echo "=== alloc_space (total allocations) ==="
-    pprof_top "$tmp_file" 30 -alloc_space
+    pprof_top "$profile_file" 30 -alloc_space
     echo ""
     echo "=== alloc_objects (total objects allocated) ==="
-    pprof_top "$tmp_file" 30 -alloc_objects
+    pprof_top "$profile_file" 30 -alloc_objects
   else
-    echo "(pprof endpoint not available)"
+    echo "(heap profile not available)"
   fi
 }
 
@@ -108,20 +124,21 @@ test_binary_pid() {
 
 format_process_profile() {
   local pid="$1"
+  local prefix="$2"
 
-  if [[ -z "$pid" ]] || [[ ! -d "/proc/$pid" ]]; then
+  if [[ -z "$pid" ]] || [[ ! -s "${prefix}.status.txt" ]]; then
     echo "(tests.test process not found)"
     return
   fi
 
   echo "--- tests.test /proc/$pid/status ---"
-  cat "/proc/$pid/status" 2>/dev/null || true
+  cat "${prefix}.status.txt" 2>/dev/null || true
   echo ""
   echo "--- tests.test /proc/$pid/smaps_rollup ---"
-  cat "/proc/$pid/smaps_rollup" 2>/dev/null || true
+  cat "${prefix}.smaps_rollup.txt" 2>/dev/null || true
   echo ""
   echo "--- tests.test pmap ---"
-  pmap -x "$pid" 2>/dev/null | tail -40 || true
+  tail -40 "${prefix}.pmap.txt" 2>/dev/null || true
 }
 
 save_process_profile_files() {
@@ -140,7 +157,7 @@ save_process_profile_files() {
 save_pprof_files() {
   local prefix="$1"
 
-  mkdir -p "$PROFILE_OUTPUT_DIR"
+  mkdir -p "$(dirname "$prefix")"
   fetch_pprof "heap" "${prefix}.heap.pb.gz" || true
   fetch_pprof "allocs" "${prefix}.allocs.pb.gz" || true
   fetch_pprof "goroutine" "${prefix}.goroutine.pb.gz" || true
@@ -162,6 +179,39 @@ should_capture_profile() {
   fi
 
   [[ $(( now - LAST_PROFILE_CAPTURE_TIME )) -ge "$PROFILE_INTERVAL_SECONDS" ]]
+}
+
+terminate_monitored_processes() {
+  local pct="$1"
+
+  if [[ -n "${MONITORED_PROCESS_GROUP:-}" ]]; then
+    echo "Terminating monitored process group ${MONITORED_PROCESS_GROUP} at ${pct}% memory to preserve diagnostics artifacts."
+    kill -TERM "-$MONITORED_PROCESS_GROUP" 2>/dev/null || true
+    return
+  fi
+
+  local test_pid
+  test_pid="$(test_binary_pid)"
+  if [[ -n "$test_pid" ]]; then
+    echo "Terminating tests.test process ${test_pid} at ${pct}% memory to preserve diagnostics artifacts."
+    kill -TERM "$test_pid" 2>/dev/null || true
+  fi
+}
+
+write_oom_junit() {
+  local pct="$1"
+
+  mkdir -p "$(dirname "$OOM_JUNIT_FILE")"
+  cat > "$OOM_JUNIT_FILE" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" skipped="0" time="0">
+  <testsuite name="memory_monitor" tests="1" failures="1" errors="0" skipped="0" time="0">
+    <testcase classname="memory_monitor" name="OOM prevention" time="0">
+      <failure type="OOM" message="OOM prevention threshold reached">Memory monitor terminated the test process at ${pct}% memory before the runner OOM kill. See memory diagnostics artifacts.</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+EOF
 }
 
 build_snapshot_report() {
@@ -196,14 +246,14 @@ capture_profile() {
   local pct="$1"
   local goroutine_output goroutine_count pprof_output test_pid profile_prefix process_profile_output
 
-  goroutine_output="$(print_goroutines)"
-  goroutine_count="$(count_goroutines <<< "$goroutine_output")"
-  pprof_output="$(print_heap)"
-  test_pid="$(test_binary_pid)"
-  process_profile_output="$(format_process_profile "$test_pid")"
   profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
+  test_pid="$(test_binary_pid)"
   save_pprof_files "$profile_prefix"
   save_process_profile_files "$test_pid" "$profile_prefix"
+  goroutine_output="$(print_goroutines "${profile_prefix}.goroutine.pb.gz")"
+  goroutine_count="$(count_goroutines "${profile_prefix}.goroutine-debug-2.txt")"
+  pprof_output="$(print_heap "${profile_prefix}.heap.pb.gz")"
+  process_profile_output="$(format_process_profile "$test_pid" "$profile_prefix")"
 
   cat <<EOF
 
@@ -218,7 +268,7 @@ EOF
 }
 
 snapshot() {
-  local memtotal_kb memavail_kb memused_kb memused_mb pct report
+  local memtotal_kb memavail_kb memused_kb memused_mb pct profile_report report should_terminate
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memavail_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
   memused_kb=$(( memtotal_kb - memavail_kb ))
@@ -240,13 +290,22 @@ snapshot() {
   now="$(date +%s)"
   print_snapshot_status "$now" "$status_line"
 
-  report="$(build_snapshot_report "$pct")"
+  profile_report=""
+  should_terminate=false
+  if [[ "$pct" -ge "$OOM_TERMINATION_THRESHOLD" ]] && [[ "$OOM_TERMINATED" == "false" ]]; then
+    should_terminate=true
+  fi
+
   if should_capture_profile "$pct" "$now"; then
     LAST_PROFILE_CAPTURE_TIME="$now"
-
-    # Collect pprof data only when thresholds are crossed, or periodically after that.
-    report+=$(capture_profile "$pct")
+    profile_report="$(capture_profile "$pct")"
+  elif [[ "$should_terminate" == "true" ]]; then
+    LAST_PROFILE_CAPTURE_TIME="$now"
+    profile_report="$(capture_profile "$pct")"
   fi
+
+  report="$(build_snapshot_report "$pct")"
+  report+="$profile_report"
 
   # Print report to stdout when memory threshold is reached (only once per run).
   if [[ "$pct" -ge "$SNAPSHOT_PRINT_THRESHOLD" ]] && [[ "$SNAPSHOT_PRINTED" == "false" ]]; then
@@ -260,6 +319,12 @@ snapshot() {
   if [[ "$pct" -ge "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
     echo "$report" > "$SNAPSHOT_FILE"
     SNAPSHOT_HIGH_WATER_MARK="$pct"
+  fi
+
+  if [[ "$should_terminate" == "true" ]]; then
+    OOM_TERMINATED=true
+    write_oom_junit "$pct"
+    terminate_monitored_processes "$pct"
   fi
 }
 
