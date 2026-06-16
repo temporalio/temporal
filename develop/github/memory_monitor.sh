@@ -2,11 +2,11 @@
 #
 # Memory Monitor
 #
-# Logs cheap memory status every POLL_INTERVAL_SECONDS and writes the
-# highest-memory snapshot to a file. When usage crosses PROFILE_CAPTURE_THRESHOLD,
-# captures pprof and process memory diagnostics in MEMORY_DIAGNOSTICS_DIR, then
-# repeats diagnostic capture every PROFILE_INTERVAL_SECONDS while usage remains
-# above the threshold.
+# 1. Snapshot status: logs cheap memory status every SNAPSHOT_INTERVAL_SECONDS and
+#    writes the highest-memory snapshot to a file.
+# 2. Profile capture: when usage crosses PROFILE_CAPTURE_THRESHOLD, captures
+#    pprof and process profiles in PROFILE_OUTPUT_DIR, then repeats every
+#    PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
 # Usage:
 #   ./memory_monitor.sh <snapshot-file>
@@ -18,21 +18,26 @@ if [[ $# -lt 1 ]]; then
   exit 1
 fi
 
+# Snapshot config.
+SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
 SNAPSHOT_FILE="$1"
-HISTORY_FILE="/tmp/memory_history.txt"
-POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-5}"
+SNAPSHOT_HISTORY_FILE="/tmp/memory_history.txt"
+SNAPSHOT_PRINT_THRESHOLD=95
+
+# Profile config.
 PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
 PROFILE_CAPTURE_THRESHOLD="${PROFILE_CAPTURE_THRESHOLD:-85}"
-MEMORY_DIAGNOSTICS_DIR="${MEMORY_DIAGNOSTICS_DIR:-.testoutput/memory}"
-REPORT_PRINT_THRESHOLD=95
+PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-.testoutput/memory}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
-REPORT_PRINTED=false
+
+# State.
+SNAPSHOT_PRINTED=false
 SNAPSHOT_HIGH_WATER_MARK=0
 LAST_PROFILE_CAPTURE_TIME=0
 WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
 
 # Clear history on start
-: > "$HISTORY_FILE"
+: > "$SNAPSHOT_HISTORY_FILE"
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <profile_type> <output_file>
@@ -95,7 +100,7 @@ test_binary_pid() {
   ps -eo pid=,rss=,comm= --sort=-rss | awk '$3 == "tests.test" {print $1; exit}'
 }
 
-format_process_memory() {
+format_process_profile() {
   local pid="$1"
 
   if [[ -z "$pid" ]] || [[ ! -d "/proc/$pid" ]]; then
@@ -113,7 +118,7 @@ format_process_memory() {
   pmap -x "$pid" 2>/dev/null | tail -40 || true
 }
 
-save_process_memory_files() {
+save_process_profile_files() {
   local pid="$1"
   local prefix="$2"
 
@@ -129,7 +134,7 @@ save_process_memory_files() {
 save_pprof_files() {
   local prefix="$1"
 
-  mkdir -p "$MEMORY_DIAGNOSTICS_DIR"
+  mkdir -p "$PROFILE_OUTPUT_DIR"
   fetch_pprof "heap" "${prefix}.heap.pb.gz" || true
   fetch_pprof "allocs" "${prefix}.allocs.pb.gz" || true
   fetch_pprof "goroutine" "${prefix}.goroutine.pb.gz" || true
@@ -159,7 +164,7 @@ build_snapshot_report() {
   cat <<EOF
 Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
 
-$(cat "$HISTORY_FILE")
+$(cat "$SNAPSHOT_HISTORY_FILE")
 
 --- Top Processes ---
 $(ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20)
@@ -169,24 +174,24 @@ $(free -m)
 EOF
 }
 
-capture_diagnostics() {
+capture_profile() {
   local pct="$1"
-  local goroutine_output goroutine_count pprof_output test_pid diagnostic_prefix process_memory_output
+  local goroutine_output goroutine_count pprof_output test_pid profile_prefix process_profile_output
 
   goroutine_output="$(print_goroutines)"
   goroutine_count="$(count_goroutines <<< "$goroutine_output")"
   pprof_output="$(print_heap)"
   test_pid="$(test_binary_pid)"
-  process_memory_output="$(format_process_memory "$test_pid")"
-  diagnostic_prefix="$MEMORY_DIAGNOSTICS_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
-  save_pprof_files "$diagnostic_prefix"
-  save_process_memory_files "$test_pid" "$diagnostic_prefix"
+  process_profile_output="$(format_process_profile "$test_pid")"
+  profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
+  save_pprof_files "$profile_prefix"
+  save_process_profile_files "$test_pid" "$profile_prefix"
 
   cat <<EOF
 
 Captured goroutines: $goroutine_count
 
-$process_memory_output
+$process_profile_output
 
 $pprof_output
 
@@ -211,7 +216,7 @@ snapshot() {
 
   # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
   printf "%s used=%s%% mem=%sMB procs=[%s]\n" \
-    "$timestamp" "$pct" "$memused_mb" "$top_procs" | tee -a "$HISTORY_FILE"
+    "$timestamp" "$pct" "$memused_mb" "$top_procs" | tee -a "$SNAPSHOT_HISTORY_FILE"
 
   local now
   now="$(date +%s)"
@@ -220,15 +225,15 @@ snapshot() {
     LAST_PROFILE_CAPTURE_TIME="$now"
 
     # Collect pprof data only when thresholds are crossed, or periodically after that.
-    report+=$(capture_diagnostics "$pct")
+    report+=$(capture_profile "$pct")
   fi
 
   # Print report to stdout when memory threshold is reached (only once per run).
-  if [[ "$pct" -ge "$REPORT_PRINT_THRESHOLD" ]] && [[ "$REPORT_PRINTED" == "false" ]]; then
+  if [[ "$pct" -ge "$SNAPSHOT_PRINT_THRESHOLD" ]] && [[ "$SNAPSHOT_PRINTED" == "false" ]]; then
     echo ""
     echo "$report"
     echo ""
-    REPORT_PRINTED=true
+    SNAPSHOT_PRINTED=true
   fi
 
   # Write report to disk only if memory usage is at or above high water mark.
@@ -241,5 +246,5 @@ snapshot() {
 # Take snapshots until killed.
 while true; do
   snapshot
-  sleep "$POLL_INTERVAL_SECONDS"
+  sleep "$SNAPSHOT_INTERVAL_SECONDS"
 done
