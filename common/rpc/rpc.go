@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -24,6 +26,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -33,6 +36,18 @@ import (
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
+
+// Option defines a function type to modify an RPCFactory instance.
+type Option func(*RPCFactory)
+
+func WithOTELTracing(
+	provider trace.TracerProvider,
+	propagator propagation.TextMapPropagator) Option {
+	return func(r *RPCFactory) {
+		r.otelTracerProvider = provider
+		r.otelPropagator = propagator
+	}
+}
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
@@ -60,10 +75,14 @@ type RPCFactory struct {
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
+
+	// otelTracerProvider and otelPropagator are used to instrument the local frontend HTTP
+	// client constructed by CreateLocalFrontendHTTPClient. Set via WithOTELTracing().
+	otelTracerProvider trace.TracerProvider
+	otelPropagator     propagation.TextMapPropagator
 }
 
-// NewFactory builds a new RPCFactory
-// conforming to the underlying configuration
+// NewFactory builds a new RPCFactory conforming to the underlying configuration.
 func NewFactory(
 	cfg *config.Config,
 	sName primitives.ServiceName,
@@ -78,6 +97,7 @@ func NewFactory(
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	tokenProvider auth.TokenProvider,
+	opts ...Option,
 ) *RPCFactory {
 	authHeaderName := "authorization"
 	requireRemoteClusterAuth := false
@@ -104,6 +124,12 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+
+	// Apply various Option functions to set any additional fields.
+	for _, opt := range opts {
+		opt(f)
+	}
+
 	return f
 }
 
@@ -340,8 +366,6 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-	client := http.Client{}
-
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
@@ -350,8 +374,9 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	}
 
 	var address string
+	var clientTransport http.RoundTripper
 	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
-		client.Transport = &roundTripper{
+		clientTransport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
 			httpPort:   d.frontendHTTPPort,
@@ -359,8 +384,11 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = "internal" // This will be replaced by the roundTripper
 	} else {
 		// Use the URL as-is and leave the transport unmodified.
-		client.Transport = transport
+		clientTransport = transport
 		address = d.frontendHTTPURL
+	}
+	client := http.Client{
+		Transport: d.wrapWithOTEL(clientTransport),
 	}
 
 	return &common.FrontendHTTPClient{
@@ -368,6 +396,12 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		Address: address,
 		Scheme:  scheme,
 	}, nil
+}
+
+// wrapWithOTEL wraps an HTTP RoundTripper so outbound requests sent through the local
+// client will carry TraceContext headers and produce a client span.
+func (d *RPCFactory) wrapWithOTEL(rt http.RoundTripper) http.RoundTripper {
+	return telemetry.NewHTTPClientTransport(rt, d.otelTracerProvider, d.otelPropagator)
 }
 
 type roundTripper struct {
