@@ -50,6 +50,10 @@ func buildServer(t *testing.T, srcDir, outputPath string) {
 		"./cmd/server",
 	)
 	cmd.Dir = srcDir
+	// Allow Go to auto-download a newer toolchain when the source we're
+	// building requires a newer version than the runner's setup-go installed.
+	// setup-go sets GOTOOLCHAIN=local in the env which would otherwise block this.
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "build server binary failed:\n%s", out)
 }

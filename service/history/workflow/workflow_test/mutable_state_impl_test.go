@@ -23,6 +23,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -478,8 +479,9 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 	branchToken, err := ms.GetCurrentBranchToken()
 	require.NoError(t, err)
 	firstEventID := event.EventId
+	require.Equal(t, common.FirstEventID, firstEventID)
 
-	token, err := hsm.GenerateEventLoadToken(event)
+	token, err := ms.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 
 	wfKey := ms.GetWorkflowKey()
