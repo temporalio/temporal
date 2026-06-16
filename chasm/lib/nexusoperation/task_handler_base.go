@@ -9,6 +9,7 @@ import (
 	"text/template"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -20,6 +21,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
 )
 
@@ -164,6 +166,13 @@ func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, timeout tim
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 	return callCtx, cancel
+}
+
+func contextWithNexusOriginNamespace(ctx context.Context, namespaceName string) context.Context {
+	return telemetry.ContextWithHTTPSpanAttributes(
+		ctx,
+		attribute.String(telemetry.NexusOriginNamespaceKey, namespaceName),
+	)
 }
 
 // recordCallOutcome records metrics and logs errors for the outcome of an outbound Nexus call.

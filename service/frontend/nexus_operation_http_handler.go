@@ -10,7 +10,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	otelnoop "go.opentelemetry.io/otel/trace/noop"
@@ -29,6 +28,7 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -134,11 +134,11 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 // TraceContext into the request's context. The span name matches the Nexus route's
 // representation, mirroring the gRPC stats handler that names spans after the RPC method.
 func (h *NexusOperationHTTPHandler) wrapWithTracing(handler http.Handler, route string) http.Handler {
-	return otelhttp.NewHandler(
+	return telemetry.NewHTTPHandler(
 		handler,
 		route,
-		otelhttp.WithTracerProvider(h.tracerProvider),
-		otelhttp.WithPropagators(h.propagator),
+		h.tracerProvider,
+		h.propagator,
 	)
 }
 

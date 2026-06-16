@@ -13,4 +13,6 @@ const (
 	WorkflowIDKey = "temporalWorkflowID"
 	BusinessIDKey = "temporalBusinessID"
 	RunIDKey      = "temporalRunID"
+
+	NexusOriginNamespaceKey = "temporal.nexus.origin_namespace"
 )
