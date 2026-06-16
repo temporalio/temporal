@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
@@ -885,7 +886,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.NoError(t, err)
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
-		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
+		protoassert.ProtoElementsMatch(t, expected, descResp.GetInfo().GetLinks())
 	})
 
 	t.Run("AttachLinksOnConflictStoresRawInput", func(t *testing.T) {
