@@ -1009,6 +1009,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
+	firedNoPollerHook := false
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -1032,6 +1033,7 @@ reredirectTask:
 		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		firedNoPollerHook = true
 	}
 
 	dbq := pm.defaultQueue()
@@ -1048,8 +1050,10 @@ reredirectTask:
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
 	}
-	// Report a sync match when the query was dispatched locally
-	if err == nil && res == nil && request.ForwardInfo == nil {
+	// Report a sync match when the query was dispatched locally. Skip if we already
+	// fired a no-poller hook for this query — the two signals are contradictory for
+	// the same task dispatch.
+	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
@@ -1089,6 +1093,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
+	firedNoPollerHook := false
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -1111,6 +1116,7 @@ reredirectTask:
 		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		firedNoPollerHook = true
 	}
 
 	dbq := pm.defaultQueue()
@@ -1127,8 +1133,10 @@ reredirectTask:
 		// We get this if userdata changed while the task was blocked in DispatchNexusTask
 		goto reredirectTask
 	}
-	// Report a sync match when the task was dispatched locally.
-	if err == nil && res == nil && request.ForwardInfo == nil {
+	// Report a sync match when the task was dispatched locally. Skip if we already
+	// fired a no-poller hook for this task — the two signals are contradictory for
+	// the same task dispatch.
+	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
 		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
 		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
