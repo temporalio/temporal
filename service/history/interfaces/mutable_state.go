@@ -180,6 +180,7 @@ type (
 		GetLastEventVersion() (int64, error)
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
+		ExecutionStateUpdated() bool
 		GetStartedWorkflowTask() *WorkflowTaskInfo
 		GetPendingWorkflowTask() *WorkflowTaskInfo
 		GetLastFirstEventIDTxnID() (int64, int64)
