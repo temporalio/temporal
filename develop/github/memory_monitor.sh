@@ -21,7 +21,7 @@ fi
 # Snapshot config.
 SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
 SNAPSHOT_FILE="$1"
-SNAPSHOT_HISTORY_FILE="/tmp/memory_history.txt"
+SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-.testoutput/memory/snapshot-history.txt}"
 SNAPSHOT_PRINT_THRESHOLD=95
 
 # Profile config.
