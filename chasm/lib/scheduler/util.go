@@ -56,6 +56,13 @@ const (
 	outcomeInvalidated = "invalidated"
 )
 
+// reasonNone is the ReasonTag value emitted on the "fired" outcome. Prometheus
+// binds a fixed label set to a metric name, so the fired and invalidated paths
+// of a counter must carry the same labels; the invalidated path always sets a
+// ReasonTag, so the fired path sets this sentinel to keep the label set
+// identical.
+const reasonNone metrics.ReasonString = "none"
+
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.
 // Immediate tasks (zero scheduled time) are always valid since they execute inline.

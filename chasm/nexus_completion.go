@@ -23,13 +23,24 @@ type NexusCompletionHandler interface {
 }
 
 // GenerateNexusCallback builds a Nexus completion callback targeting the CHASM component identified by
-// serializedRef (obtained from Context.Ref). The request ID is packed into the callback token, so the
-// completion is matched by a request ID that rides in the callback header and survives
-// continue-as-new, rather than one read from mutable state.
-func GenerateNexusCallback(serializedRef []byte, requestID string) (*commonpb.Callback, error) {
-	token, err := packNexusCallbackToken(serializedRef, requestID)
-	if err != nil {
-		return nil, err
+// serializedRef (obtained from Context.Ref). When encodeToken is true, the request ID is packed into
+// the callback token (a NexusOperationCompletion envelope), so the completion is matched by a request
+// ID that rides in the callback header and survives continue-as-new, rather than one read from mutable
+// state. When encodeToken is false, the legacy format is emitted: the token is the bare base64-encoded
+// ChasmComponentRef with no request ID. The caller chooses encodeToken (e.g. gated behind dynamic
+// config) to keep the envelope format off the wire until the whole fleet can read it. Either format is
+// always decodable by UnpackNexusCallbackToken.
+func GenerateNexusCallback(serializedRef []byte, requestID string, encodeToken bool) (*commonpb.Callback, error) {
+	var token string
+	if encodeToken {
+		var err error
+		token, err = packNexusCallbackToken(serializedRef, requestID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Legacy format: the token is the bare base64-encoded ChasmComponentRef.
+		token = base64.RawURLEncoding.EncodeToString(serializedRef)
 	}
 	return &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
@@ -54,8 +65,9 @@ func packNexusCallbackToken(componentRef []byte, requestID string) (string, erro
 }
 
 // UnpackNexusCallbackToken decodes a callback token produced by GenerateNexusCallback, returning the
-// component ref and request ID. For backward compatibility it also accepts the legacy format where the
-// token is the bare base64-encoded ChasmComponentRef (in which case the request ID is empty).
+// component ref and request ID. It accepts both token formats regardless of how the token was written:
+// the NexusOperationCompletion envelope, and (for backward compatibility) the legacy bare base64-encoded
+// ChasmComponentRef, in which case the request ID is empty.
 func UnpackNexusCallbackToken(encoded string) (componentRef []byte, requestID string, err error) {
 	raw, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil {

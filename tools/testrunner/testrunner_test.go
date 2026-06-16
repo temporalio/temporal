@@ -38,20 +38,19 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Equal(t, "test.cover.out", r.coverProfilePath)
 	})
 
-	t.Run("TotalTimeoutDerivedFromGoTestTimeout", func(t *testing.T) {
+	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
+			"--total-timeout=39m",
 			"--",
 			"-timeout=35m",
 			"-coverprofile=test.cover.out",
 		})
 		require.NoError(t, err)
-		// The testrunner should derive its total deadline from the go test -timeout flag.
-		require.Equal(t, 35*time.Minute, r.totalTimeout)
-		// The flag must still be present in the passthrough args so gotestsum/go test
-		// also honour it.
+		require.Equal(t, 39*time.Minute, r.totalTimeout)
+		require.NotContains(t, args, "--total-timeout=39m")
 		require.Contains(t, args, "-timeout=35m")
 	})
 
@@ -65,6 +64,18 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Zero(t, r.totalTimeout)
+	})
+
+	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
+			"--junitfile=test.xml",
+			"--total-timeout=invalid",
+			"--",
+			"-coverprofile=test.cover.out",
+		})
+		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
 	t.Run("GoTestSumPathMissing", func(t *testing.T) {
