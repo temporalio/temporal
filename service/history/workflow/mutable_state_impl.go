@@ -274,6 +274,11 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
+
+		// replayEventBatchID is the first event ID of the history batch currently being applied
+		// during replay, set via SetReplayEventBatchID by the rebuilder. It is common.EmptyEventID
+		// on the live path, where the batch ID is derived from the batch being built instead.
+		replayEventBatchID int64
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -1361,33 +1366,36 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
+// SetReplayEventBatchID records the first event ID of the history batch that subsequent
+// GenerateEventLoadToken calls should reference. Only needed during replay. The rebuilder sets it
+// for each batch before applying its events.
+func (ms *MutableStateImpl) SetReplayEventBatchID(batchID int64) {
+	ms.replayEventBatchID = batchID
+}
+
 // GenerateEventLoadToken generates a token for loading a history event at a later time. The token encodes the event ID
 // and the batch ID (if applicable) which can be used to load the event from the events cache.
 func (ms *MutableStateImpl) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
+	if event.EventId == common.BufferedEventID {
+		return nil, serviceerror.NewInternalf("cannot reference buffered event: %v", event.EventType)
 	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default, events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+	batchID := ms.hBuilder.LatestEventBatchID()
+	if batchID == common.EmptyEventID {
+		batchID = ms.replayEventBatchID
+	}
+	if batchID == common.EmptyEventID {
 		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
+	}
+	if batchID > event.EventId {
+		// The batch ID is the first event ID of the event's own batch, so it can never exceed the
+		// event's ID.
+		return nil, serviceerror.NewInternalf(
+			"event load token batch ID %d exceeds event ID %d",
+			batchID, event.EventId)
 	}
 	ref := &tokenspb.HistoryEventRef{
 		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
+		EventBatchId: batchID,
 	}
 	return proto.Marshal(ref)
 }
@@ -4672,7 +4680,7 @@ func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCo
 // GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
 // in-flight activities that have a worker control queue.
 func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
-	if !ms.config.EnableCancelActivityWorkerCommand() {
+	if !ms.config.EnableCancelActivityWorkerCommand(ms.namespaceEntry.Name().String()) {
 		return nil
 	}
 
@@ -4926,7 +4934,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
-	firstEventID int64,
 	retryState enumspb.RetryState,
 	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
@@ -4935,8 +4942,8 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
-	if err := ms.ApplyWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
+	if err := ms.ApplyWorkflowExecutionTimedoutEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -4951,7 +4958,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4960,7 +4967,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5541,7 +5548,6 @@ func (ms *MutableStateImpl) AddRecordMarkerEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
@@ -5553,8 +5559,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
-	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
+	if err := ms.ApplyWorkflowExecutionTerminatedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -6077,7 +6083,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6086,7 +6092,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -6183,7 +6189,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 
 func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	ctx context.Context,
-	firstEventID int64,
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
@@ -6224,7 +6229,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		}
 	}
 
-	continueAsNewEvent := ms.hBuilder.AddContinuedAsNewEvent(
+	continueAsNewEvent, batchID := ms.hBuilder.AddContinuedAsNewEvent(
 		workflowTaskCompletedEventID,
 		newRunID,
 		command,
@@ -6277,7 +6282,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if err = ms.ApplyWorkflowExecutionContinuedAsNewEvent(
-		firstEventID,
+		batchID,
 		continueAsNewEvent,
 	); err != nil {
 		return nil, nil, err
@@ -6320,7 +6325,7 @@ func rolloverAutoResetPointsWithExpiringTime(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
-	firstEventID int64,
+	batchID int64,
 	continueAsNewEvent *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6329,7 +6334,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -8348,6 +8353,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
 	ms.reapplyEventsCandidate = nil
 	ms.subStateMachineDeleted = false
+	ms.replayEventBatchID = common.EmptyEventID
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()

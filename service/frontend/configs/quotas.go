@@ -214,6 +214,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,

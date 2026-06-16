@@ -1295,7 +1295,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	// workflow closed && child started && parent close policy is abandon
 	event, err = mutableState.AddTimeoutWorkflowEvent(
-		mutableState.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)

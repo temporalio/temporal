@@ -1276,7 +1276,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 
 	taskID := s.mustGenerateTaskID()
 	// Simulate termination due to reset.
-	event, err = mutableState.AddWorkflowExecutionTerminatedEvent(event.GetEventId(), "some reason", nil, consts.IdentityResetter, false, nil)
+	event, err = mutableState.AddWorkflowExecutionTerminatedEvent("some reason", nil, consts.IdentityResetter, false, nil)
 	s.NoError(err)
 
 	transferTask := &tasks.CloseExecutionTask{

@@ -48,6 +48,7 @@ import (
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -195,6 +196,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			config.VisibilityAllowList,
 		),
 		config.SuppressErrorSetSystemSearchAttribute,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 	return NewWorkflowHandler(
 		cbValidator,
@@ -2479,7 +2482,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2541,7 +2547,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2606,7 +2615,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2680,7 +2692,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2738,7 +2753,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2802,7 +2820,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.ProtoEqual(
+				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
+			)
 
 			// Decode the input and verify PostResetOperations are correctly set
 			var batchParams batchspb.BatchOperationInput
@@ -3398,6 +3419,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	var unimplementedErr *serviceerror.Unimplemented
+	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
@@ -3415,6 +3437,12 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=true and dynamic config enabled is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: false, Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true, Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Second * -10)}}, s.testNamespace), &invalidArgumentErr)
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

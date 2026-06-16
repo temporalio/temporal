@@ -20,9 +20,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -65,6 +65,7 @@ const (
 	SyncVersionSummarySignal    = "sync-version-summary"
 	PropagationCompleteSignal   = "propagation-complete"
 	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
+	DemoteVersionSignalName     = "demote-version"     // for Worker Deployment Version wfs
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -436,7 +437,10 @@ func makeStartRequest(
 
 func buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&sa,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(WorkerDeploymentNamespaceDivision),
+	)
 	return sa
 }
 

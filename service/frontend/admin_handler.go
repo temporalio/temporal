@@ -220,6 +220,8 @@ func NewAdminHandler(
 				args.Config.VisibilityAllowList,
 			),
 			args.Config.SuppressErrorSetSystemSearchAttribute,
+			args.MetricsHandler,
+			args.Logger,
 		),
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
@@ -1663,8 +1665,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	}
 
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,

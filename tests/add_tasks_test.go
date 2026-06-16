@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -130,5 +131,6 @@ func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 		ShardId: 0,
 	})
 	s.Error(err)
-	s.Contains(strings.ToLower(err.Error()), "invalid shardid")
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	s.Contains(strings.ToLower(err.Error()), "shard id cannot be equal or lower than zero")
 }

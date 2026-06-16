@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,11 +73,15 @@ var (
 
 const ScheduleNextActionTimeName = "ScheduleNextActionTime"
 const ScheduleIdleCloseTimeName = "ScheduleIdleCloseTime"
+const ScheduleRunningWorkflowCountName = "ScheduleRunningWorkflowCount"
+const ScheduleBufferedStartsCountName = "ScheduleBufferedStartsCount"
 
 var (
-	executionStatusSearchAttribute        = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	scheduleNextActionTimeSearchAttribute = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
-	scheduleIdleCloseTimeSearchAttribute  = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+	executionStatusSearchAttribute              = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	scheduleNextActionTimeSearchAttribute       = chasm.NewSearchAttributeDateTime(ScheduleNextActionTimeName, chasm.SearchAttributeFieldDateTime01)
+	scheduleIdleCloseTimeSearchAttribute        = chasm.NewSearchAttributeDateTime(ScheduleIdleCloseTimeName, chasm.SearchAttributeFieldDateTime02)
+	scheduleRunningWorkflowCountSearchAttribute = chasm.NewSearchAttributeInt(ScheduleRunningWorkflowCountName, chasm.SearchAttributeFieldInt01)
+	scheduleBufferedStartsCountSearchAttribute  = chasm.NewSearchAttributeInt(ScheduleBufferedStartsCountName, chasm.SearchAttributeFieldInt02)
 )
 
 var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
@@ -566,6 +572,10 @@ func (s *Scheduler) HandleNexusCompletion(
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
+		msg := "handled Nexus completion with an unrecognized request ID"
+		s.EventLog.Get(ctx).LogEvent(ctx,
+			fmt.Sprintf("%s: %s", msg, info.RequestId))
+		ctx.Logger().Warn(msg, tag.RequestID(info.RequestId))
 		return nil
 	}
 
@@ -640,7 +650,11 @@ func (s *Scheduler) Describe(
 	}
 
 	visibility := s.Visibility.Get(ctx)
-	memo := visibility.CustomMemo(ctx)
+	// CustomMemo/CustomSearchAttributes return the component's live maps by reference.
+	// Clone before mutating or returning: the response is marshalled after the read lease
+	// is released, so an aliased map can be iterated by gRPC while a concurrent operation
+	// mutates it, tripping "concurrent map iteration and map write".
+	memo := maps.Clone(visibility.CustomMemo(ctx))
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
@@ -681,7 +695,7 @@ func (s *Scheduler) Describe(
 			Info:             info,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: maps.Clone(visibility.CustomSearchAttributes(ctx))},
 		},
 	}, nil
 }
@@ -949,6 +963,16 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 		if s.IdleCloseTime != nil {
 			out = append(out, scheduleIdleCloseTimeSearchAttribute.Value(s.IdleCloseTime.AsTime()))
 		}
+
+		invoker := s.Invoker.Get(ctx)
+		runningWorkflowCount := int64(len(invoker.runningWorkflowExecutions()))
+		bufferedStartsCount := int64(len(invoker.GetBufferedStarts()) - len(invoker.recentActions()))
+
+		// Emitted even when zero so that exact and range queries both work.
+		out = append(out,
+			scheduleRunningWorkflowCountSearchAttribute.Value(runningWorkflowCount),
+			scheduleBufferedStartsCountSearchAttribute.Value(bufferedStartsCount),
+		)
 	}
 	return out
 }

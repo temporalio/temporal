@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
@@ -31,16 +30,19 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &WorkflowAliasSearchAttributeTestSuite{})
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
+func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker-deployment version workflows must run for versioned-poller membership checks"),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters.
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("alias-sa").WithBuildID("v1")
+		}),
 	}, opts...)
 
 	env := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowFunc)
-	// Keep the deployment version short because its system workflow ID must fit into 255 characters.
-	tv := env.Tv().WithDeploymentSeries("alias-sa").WithBuildID("v1")
-	return env, tv
+	return env
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
@@ -125,9 +127,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
-	env, tv := s.newTestEnv()
+	env := s.newTestEnv()
 
-	_, err := s.createWorkflow(env, tv, nil)
+	_, err := s.createWorkflow(env, env.Tv(), nil)
 	s.NoError(err)
 
 	s.EventuallyWithT(
@@ -166,7 +168,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
-	env, tv := s.newTestEnv()
+	env := s.newTestEnv()
 
 	_, err := env.SdkClient().OperatorService().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
 		Namespace: env.Namespace().String(),
@@ -178,11 +180,11 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"WorkflowVersioningBehavior": payload.EncodeString("user-defined"),
+			"WorkflowVersioningBehavior": sadefs.MustEncodeValue("user-defined", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 
-	_, err = s.createWorkflow(env, tv, sa)
+	_, err = s.createWorkflow(env, env.Tv(), sa)
 	s.NoError(err)
 
 	s.EventuallyWithT(
