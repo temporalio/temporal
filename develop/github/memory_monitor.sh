@@ -19,14 +19,13 @@ SNAPSHOT_FILE="$1"
 HISTORY_FILE="/tmp/memory_history.txt"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-5}"
 PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
-PROFILE_THRESHOLDS="${PROFILE_THRESHOLDS:-85 90 95}"
+PROFILE_THRESHOLD="${PROFILE_THRESHOLD:-85}"
 MEMORY_DIAGNOSTICS_DIR="${MEMORY_DIAGNOSTICS_DIR:-.testoutput/memory}"
 HIGH_MEMORY_THRESHOLD=95
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
 HIGH_WATER_MARK=0
 LAST_PROFILE_TIME=0
-CAPTURED_THRESHOLDS=" "
 
 # Clear history on start
 : > "$HISTORY_FILE"
@@ -137,16 +136,11 @@ save_pprof_profiles() {
 should_capture_profile() {
   local pct="$1"
   local now="$2"
-  local threshold
 
-  for threshold in $PROFILE_THRESHOLDS; do
-    if [[ "$pct" -ge "$threshold" ]] && [[ "$CAPTURED_THRESHOLDS" != *" $threshold "* ]]; then
-      CAPTURED_THRESHOLDS+="$threshold "
-      return 0
-    fi
-  done
+  [[ "$pct" -ge "$PROFILE_THRESHOLD" ]] || return 1
+  [[ "$LAST_PROFILE_TIME" -eq 0 ]] && return 0
 
-  [[ "$LAST_PROFILE_TIME" -ne 0 ]] && [[ $(( now - LAST_PROFILE_TIME )) -ge "$PROFILE_INTERVAL_SECONDS" ]]
+  [[ $(( now - LAST_PROFILE_TIME )) -ge "$PROFILE_INTERVAL_SECONDS" ]]
 }
 
 build_light_report() {
