@@ -54,7 +54,7 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 // GetCassandraTestClusterOption returns test options
 func GetCassandraTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		DBName:    "test_" + GenerateRandomDBName(3),
+		DBName:    GenerateRandomDBName(),
 		DBHost:    environment.GetCassandraAddress(),
 		DBPort:    environment.GetCassandraPort(),
 		SchemaDir: testCassandraSchemaDir,
@@ -66,7 +66,7 @@ func GetCassandraTestClusterOption() *TestBaseOptions {
 func GetMySQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: mysql.PluginName,
-		DBName:          "test_" + GenerateRandomDBName(3),
+		DBName:          GenerateRandomDBName(),
 		DBUsername:      testMySQLUser,
 		DBPassword:      testMySQLPassword,
 		DBHost:          environment.GetMySQLAddress(),
@@ -94,7 +94,7 @@ func GetPostgreSQLTestClusterOption(
 	}
 	return &TestBaseOptions{
 		SQLDBPluginName:   pluginName,
-		DBName:            "test_" + GenerateRandomDBName(3),
+		DBName:            GenerateRandomDBName(),
 		DBUsername:        testPostgreSQLUser,
 		DBPassword:        testPostgreSQLPassword,
 		DBHost:            environment.GetPostgreSQLAddress(),
@@ -109,7 +109,7 @@ func GetPostgreSQLTestClusterOption(
 func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: sqlite.PluginName,
-		DBName:          filepath.Join(os.TempDir(), "test_"+GenerateRandomDBName(3)), // put files in temp to avoid cluttering the project
+		DBName:          filepath.Join(os.TempDir(), GenerateRandomDBName()), // put files in temp to avoid cluttering the project
 		DBUsername:      testSQLiteUser,
 		DBPassword:      testSQLitePassword,
 		DBHost:          environment.GetLocalhostIP(),
@@ -129,7 +129,7 @@ func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
-		DBName:            "test_" + GenerateRandomDBName(3),
+		DBName:            GenerateRandomDBName(),
 		DBUsername:        testSQLiteUser,
 		DBPassword:        testSQLitePassword,
 		DBHost:            environment.GetLocalhostIP(),

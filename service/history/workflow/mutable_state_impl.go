@@ -5841,6 +5841,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
@@ -5855,6 +5856,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		timeSkippingConfigUpdated,
 		workflowUpdateOptions,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
@@ -5943,8 +5945,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
-	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
+	// this flag of timeSkippingConfigUpdated is the source of the truth for if the TSC is updated or not
+	// the contents of the config cannot be used to judge if the config is updated or not, examples:
+	// (1) TSC=nil in handleUseExistingWorkflowOnConflictOptions means nothing is changed
+	// but TSC=nil in MergeAndApplyWorkflowExecutionOptions with update masks means users want to remove the TSC
+	// (2) same TSC with fast-forward in MergeAndApplyWorkflowExecutionOptions logic may
+	// either indicate the TSC is untouched or updated to the same value and should refresh related timer tasks
+	if attributes.GetTimeSkippingConfigUpdated() {
+		tsc := attributes.GetTimeSkippingConfig()
+		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+		if tsi == nil {
 			ms.initTimeSkippingInfo(tsc, nil, event.GetEventId())
 		} else {
 			ms.updateTimeSkippingInfo(tsc, event.GetEventId())
@@ -10005,6 +10015,9 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.timeSkippingInfoUpdated = true
 }
 
+// updateTimeSkippingInfo updates the time skipping info with
+// with new config and the event ID that updates the config
+// we allow updating the config to nil when users want to remove the TSC
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	currentEventID int64,
