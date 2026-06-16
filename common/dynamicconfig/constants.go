@@ -3179,6 +3179,14 @@ When enabled, the scavenger will delete completed workflow execution data that a
 		30.0,
 		`SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules`,
 	)
+	SchedulerVersionCeiling = NewNamespaceIntSetting(
+		"worker.schedulerVersionCeiling",
+		0,
+		`SchedulerVersionCeiling clamps the recorded version (TweakablePolicies.Version) of the
+scheduler workflow: when set to N > 0, the workflow runs at min(current, N). Intended for
+cross-version multi-cluster topologies that must survive failover plus rollback: set it on the
+newer cluster so the history it writes stays replayable by the older peer. 0 means unset (no clamp).`,
+	)
 	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
 		"worker.schedulerLocalActivitySleepLimit",
 		5*time.Second,
