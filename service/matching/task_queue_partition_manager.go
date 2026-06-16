@@ -614,7 +614,9 @@ reredirectTask:
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if !forwarded {
-				pm.processTaskAddHooks(ctx, targetVersion, outcome)
+				// We should not use targetVersion because targetVersion is always routing-config-deriven.
+				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
+				pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
 			}
 
 			syncMatchResult := metrics.TaskAddResultSyncMatch
@@ -651,7 +653,13 @@ reredirectTask:
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
 		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
-		pm.processTaskAddHooks(ctx, targetVersion, outcome)
+		// We should not use targetVersion because targetVersion is always routing-config-deriven.
+		// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
+		// Also, note that we use syncMatchQueue's version, and not spoolQueue's version. This is
+		// because for unpinned tasks spoolQueue is always the default (unversioned) queue.
+		// Unpinned tasks are written to the default queue for late binding, in case target version
+		// changes by the time they can be dispatched.
+		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
 	} else {
 		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
