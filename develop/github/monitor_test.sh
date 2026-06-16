@@ -18,11 +18,12 @@ if [[ $# -lt 1 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SNAPSHOT_FILE=".testoutput/memory/snapshot.txt"
-mkdir -p "$(dirname "$SNAPSHOT_FILE")"
+MEMORY_OUTPUT_DIR=".testoutput/memory"
+SNAPSHOT_FILE="$MEMORY_OUTPUT_DIR/snapshot.txt"
+mkdir -p "$MEMORY_OUTPUT_DIR"
 
 # Start monitor
-"$SCRIPT_DIR/memory_monitor.sh" "$SNAPSHOT_FILE" &
+SNAPSHOT_HISTORY_FILE="$MEMORY_OUTPUT_DIR/snapshot-history.txt" "$SCRIPT_DIR/memory_monitor.sh" "$SNAPSHOT_FILE" &
 MONITOR_PID=$!
 trap 'kill "$MONITOR_PID" 2>/dev/null' EXIT
 
