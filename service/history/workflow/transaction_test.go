@@ -60,6 +60,7 @@ func (s *transactionSuite) SetupTest() {
 	s.mockShard.EXPECT().GetEngine(gomock.Any()).Return(s.mockEngine, nil).AnyTimes()
 	s.mockShard.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceCache).AnyTimes()
 	s.mockShard.EXPECT().GetLogger().Return(s.logger).AnyTimes()
+	s.mockShard.EXPECT().ChasmRegistry().Return(chasm.NewRegistry(s.logger)).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	s.transaction = NewTransaction(s.mockShard)

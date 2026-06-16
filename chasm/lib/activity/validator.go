@@ -226,6 +226,31 @@ func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionReq
 	return nil
 }
 
+// validateOnConflictOptions validates the on_conflict_options of a start request:
+//   - attach_completion_callbacks requires attach_request_id. A completion callback is recorded
+//     against the request ID (see addCompletionCallbacks, which keys the callback by request ID).
+//   - attach_request_id requires at least one completion callback or link, since attaching a
+//     request ID is only meaningful alongside something to attach.
+//
+// attach_links is independent and may be set on its own.
+func validateOnConflictOptions(req *workflowservice.StartActivityExecutionRequest) error {
+	onConflictOptions := req.GetOnConflictOptions()
+	if onConflictOptions == nil {
+		return nil
+	}
+	if onConflictOptions.GetAttachCompletionCallbacks() && !onConflictOptions.GetAttachRequestId() {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_completion_callbacks requires attach_request_id to be set")
+	}
+	if onConflictOptions.GetAttachRequestId() &&
+		len(req.GetCompletionCallbacks()) == 0 &&
+		len(req.GetLinks()) == 0 {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_request_id requires at least one completion callback or link")
+	}
+	return nil
+}
+
 func validateBlobSize(
 	activityID string,
 	blobSizeViolationTagValue string,
