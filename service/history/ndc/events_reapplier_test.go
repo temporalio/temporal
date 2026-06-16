@@ -114,6 +114,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		attr.GetTimeSkippingConfig(),
+		attr.GetTimeSkippingConfigUpdated(),
 		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
@@ -163,6 +164,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		timeSkippingConfig,
+		attr.GetTimeSkippingConfigUpdated(),
 		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
