@@ -219,6 +219,8 @@ func (s *engine2Suite) SetupTest() {
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			metrics.NoopMetricsHandler,
+			log.NewNoopLogger(),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,

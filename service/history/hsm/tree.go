@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/service/history/consts"
@@ -154,6 +152,9 @@ func (ol OperationLog) String() string {
 type NodeBackend interface {
 	// AddHistoryEvent adds a history event to be committed at the end of the current transaction.
 	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	// GenerateEventLoadToken generates a token for loading the given history event later via LoadHistoryEvent.
+	// Must be called for an event that was just added.
+	GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 	// LoadHistoryEvent loads a history event by token generated via [GenerateEventLoadToken].
 	LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 	// GetCurrentVersion returns the current namespace failover version.
@@ -443,6 +444,13 @@ func (n *Node) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historyp
 	return n.backend.AddHistoryEvent(t, setAttributes)
 }
 
+// GenerateEventLoadToken generates a token for loading the given history event via [LoadHistoryEvent].
+// Must be called within an [Environment.Access] function block for an event that was just added or is currently
+// being applied in the active transaction.
+func (n *Node) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	return n.backend.GenerateEventLoadToken(event)
+}
+
 // Load a history event by token generated via [GenerateEventLoadToken].
 // Must be called within an [Environment.Access] function block with either read or write access.
 func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
@@ -688,37 +696,6 @@ func (c Collection[T]) Transition(stateMachineID string, transitionFn func(T) (T
 		return err
 	}
 	return MachineTransition(node, transitionFn)
-}
-
-// GenerateEventLoadToken generates a token for loading a history event from an [Environment].
-// Events should typically be immutable making this function safe to call outside of an [Environment.Access] call.
-func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
-	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default, events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
-		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
-	}
-	ref := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
-	}
-	return proto.Marshal(ref)
 }
 
 func (n *Node) root() *Node {

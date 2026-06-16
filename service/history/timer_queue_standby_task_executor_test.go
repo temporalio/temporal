@@ -2296,11 +2296,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(isValid bool, err error) {
+	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
-		).Times(1).Return(isValid, err)
+		).Times(1).Return(isTaskInTree, isValidByComponent, err)
 	}
 
 	// Mock mutable state.
@@ -2352,21 +2352,27 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
-	// Validation succeeds, task should retry.
-	expectValidate(true, nil)
+	// Task in tree and valid by component — retry.
+	expectValidate(true, true, nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
-	expectValidate(false, nil)
+	// Task in tree but component says invalid (e.g. code-deployment) — still retry.
+	expectValidate(true, false, nil)
+	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// Task not in tree — replication removed it, drop the physical task.
+	expectValidate(false, false, nil)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
-	// Validation fails, processing should fail.
+	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
-	expectValidate(false, expectedErr)
+	expectValidate(false, false, expectedErr)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
@@ -2433,7 +2439,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
-	// All tasks were invalid.
+	// No tasks found — EachPureTask completed without invoking the callback.
 	expectEachPureTask(nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
@@ -2501,7 +2507,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)

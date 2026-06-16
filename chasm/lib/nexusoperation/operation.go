@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -541,7 +542,10 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		StateTransitionCount:    ctx.ExecutionInfo().StateTransitionCount,
 		StateSizeBytes:          int64(ctx.ExecutionInfo().ApproximateStateSize),
 		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: o.Visibility.Get(ctx).CustomSearchAttributes(ctx),
+			// CustomSearchAttributes returns the component's live map by reference; the
+			// describe response is marshalled after the read lease is released, so clone it
+			// to avoid racing a concurrent mutation (see Scheduler.Describe for the same fix).
+			IndexedFields: maps.Clone(o.Visibility.Get(ctx).CustomSearchAttributes(ctx)),
 		},
 		NexusHeader:  requestData.GetNexusHeader(),
 		UserMetadata: requestData.GetUserMetadata(),

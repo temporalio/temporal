@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
@@ -99,6 +100,8 @@ func Invoke(
 				}, nil
 			}
 
+			ret.UpdateTime = timestamppb.New(mutableState.Now())
+
 			// Store versioning override to send reactivation signal after successful persistence
 			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
 
@@ -173,7 +176,7 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		}
 	}
 	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
-		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*workflowpb.TimeSkippingConfig); ok {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*commonpb.TimeSkippingConfig); ok {
 			opts.TimeSkippingConfig = cloned
 		}
 	}
@@ -245,18 +248,16 @@ func mergeWorkflowExecutionOptions(
 
 	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+			mergeInto.TimeSkippingConfig = &commonpb.TimeSkippingConfig{}
 		}
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
+	if _, ok := updateFields["timeSkippingConfig.fastForward"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+			mergeInto.TimeSkippingConfig = &commonpb.TimeSkippingConfig{}
 		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
-		}
+		mergeInto.TimeSkippingConfig.FastForward = mergeFrom.GetTimeSkippingConfig().GetFastForward()
 	}
 
 	return mergeInto, nil
