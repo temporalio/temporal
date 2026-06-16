@@ -166,6 +166,31 @@ $(free -m)
 EOF
 }
 
+capture_profile_report() {
+  local pct="$1"
+  local goroutine_output goroutine_count pprof_output go_pid diagnostic_prefix process_memory_output
+
+  goroutine_output="$(print_goroutines)"
+  goroutine_count="$(count_goroutines <<< "$goroutine_output")"
+  pprof_output="$(print_heap)"
+  go_pid="$(top_go_pid)"
+  process_memory_output="$(print_process_memory "$go_pid")"
+  diagnostic_prefix="$MEMORY_DIAGNOSTICS_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
+  save_pprof_profiles "$diagnostic_prefix"
+  save_process_memory "$go_pid" "$diagnostic_prefix"
+
+  cat <<EOF
+
+Captured goroutines: $goroutine_count
+
+$process_memory_output
+
+$pprof_output
+
+$goroutine_output
+EOF
+}
+
 snapshot() {
   local memtotal_kb memavail_kb memused_kb memused_mb pct report
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
@@ -187,34 +212,12 @@ snapshot() {
 
   local now
   now="$(date +%s)"
+  report="$(build_light_report "$pct")"
   if should_capture_profile "$pct" "$now"; then
     LAST_PROFILE_TIME="$now"
 
     # Collect pprof data only when thresholds are crossed, or periodically after that.
-    local goroutine_output goroutine_count pprof_output go_pid diagnostic_prefix process_memory_output
-    goroutine_output="$(print_goroutines)"
-    goroutine_count="$(count_goroutines <<< "$goroutine_output")"
-    pprof_output="$(print_heap)"
-    go_pid="$(top_go_pid)"
-    process_memory_output="$(print_process_memory "$go_pid")"
-    diagnostic_prefix="$MEMORY_DIAGNOSTICS_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
-    save_pprof_profiles "$diagnostic_prefix"
-    save_process_memory "$go_pid" "$diagnostic_prefix"
-
-    report="$(build_light_report "$pct"
-cat <<EOF
-
-Captured goroutines: $goroutine_count
-
-$process_memory_output
-
-$pprof_output
-
-$goroutine_output
-EOF
-)"
-  else
-    report="$(build_light_report "$pct")"
+    report+=$(capture_profile_report "$pct")
   fi
 
   # Print report to stdout when memory threshold is reached (only once per run).
