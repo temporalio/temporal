@@ -11,9 +11,9 @@
 #
 # 2. Profile capture:
 #       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
-#       pprof and process profiles in PROFILE_OUTPUT_DIR before running
-#       analysis, then repeats every PROFILE_INTERVAL_SECONDS while usage
-#       remains above the threshold.
+#       pprof, debug, process, and system profiles in PROFILE_OUTPUT_DIR
+#       before running analysis, then repeats every PROFILE_INTERVAL_SECONDS
+#       while usage remains above the threshold.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, captures a final profile
@@ -68,6 +68,15 @@ fetch_pprof() {
   local profile_type="$1"
   local output_file="$2"
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${profile_type}" -o "$output_file" 2>/dev/null
+}
+
+# Fetch a debug endpoint and save to file
+# Usage: fetch_debug <endpoint> <output_file>
+# Returns 0 on success, 1 on failure
+fetch_debug() {
+  local endpoint="$1"
+  local output_file="$2"
+  curl -s --max-time 10 "http://${PPROF_HOST}/debug/${endpoint}" -o "$output_file" 2>/dev/null
 }
 
 # Print pprof top analysis.
@@ -152,8 +161,46 @@ save_process_profile_files() {
   fi
 
   cat "/proc/$pid/status" > "${prefix}.status.txt" 2>/dev/null || true
+  cat "/proc/$pid/maps" > "${prefix}.maps.txt" 2>/dev/null || true
+  cat "/proc/$pid/smaps" > "${prefix}.smaps.txt" 2>/dev/null || true
   cat "/proc/$pid/smaps_rollup" > "${prefix}.smaps_rollup.txt" 2>/dev/null || true
   pmap -x "$pid" > "${prefix}.pmap.txt" 2>/dev/null || true
+}
+
+save_system_profile_files() {
+  local prefix="$1"
+  local cgroup_file="${prefix}.system-cgroup-memory.txt"
+
+  mkdir -p "$(dirname "$prefix")"
+  ps -eo pid,ppid,pgid,%mem,rss,vsz,comm,args --sort=-rss > "${prefix}.system-processes.txt" 2>/dev/null || true
+  free -m > "${prefix}.system-free.txt" 2>/dev/null || true
+  cat /proc/meminfo > "${prefix}.system-meminfo.txt" 2>/dev/null || true
+  cat /proc/vmstat > "${prefix}.system-vmstat.txt" 2>/dev/null || true
+  cat /proc/self/cgroup > "${prefix}.system-cgroup.txt" 2>/dev/null || true
+
+  : > "$cgroup_file"
+  for file in \
+    /sys/fs/cgroup/memory.current \
+    /sys/fs/cgroup/memory.max \
+    /sys/fs/cgroup/memory.events \
+    /sys/fs/cgroup/memory.stat \
+    /sys/fs/cgroup/memory.swap.current \
+    /sys/fs/cgroup/memory.swap.max; do
+    if [[ -r "$file" ]]; then
+      {
+        echo "=== $file ==="
+        cat "$file"
+        echo ""
+      } >> "$cgroup_file" 2>/dev/null || true
+    fi
+  done
+}
+
+save_debug_files() {
+  local prefix="$1"
+
+  mkdir -p "$(dirname "$prefix")"
+  fetch_debug "vars" "${prefix}.debug-vars.json" || true
 }
 
 save_pprof_files() {
@@ -252,7 +299,9 @@ capture_profile() {
   profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
   test_pid="$(test_binary_pid)"
   save_pprof_files "$profile_prefix"
+  save_debug_files "$profile_prefix"
   save_process_profile_files "$test_pid" "$profile_prefix"
+  save_system_profile_files "$profile_prefix"
   goroutine_output="$(print_goroutines "${profile_prefix}.goroutine.pb.gz")"
   goroutine_count="$(count_goroutines "${profile_prefix}.goroutine-debug-2.txt")"
   pprof_output="$(print_heap "${profile_prefix}.heap.pb.gz")"
