@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -22,23 +23,27 @@ var _ NodeBackend = (*MockNodeBackend)(nil)
 // fields (thread-safe).
 type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
-	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
-	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
-	HandleGetCurrentVersion           func() int64
-	HandleNextTransitionCount         func() int64
-	HandleGetApproximatePersistedSize func() int
-	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
-	HandleGetWorkflowKey              func() definition.WorkflowKey
-	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
-	HandleIsWorkflow                  func() bool
-	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
-	HandleGetNexusUpdateCompletion    func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
-	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
-	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
-	HandleGenerateEventLoadToken      func(event *historypb.HistoryEvent) ([]byte, error)
-	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
-	HandleGetNamespaceEntry           func() *namespace.Namespace
-	HandleEndpointRegistry            func() EndpointRegistry
+	HandleGetExecutionState            func() *persistencespb.WorkflowExecutionState
+	HandleGetExecutionInfo             func() *persistencespb.WorkflowExecutionInfo
+	HandleGetCurrentVersion            func() int64
+	HandleNextTransitionCount          func() int64
+	HandleGetApproximatePersistedSize  func() int
+	HandleCurrentVersionedTransition   func() *persistencespb.VersionedTransition
+	HandleGetWorkflowKey               func() definition.WorkflowKey
+	HandleUpdateWorkflowStateStatus    func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
+	HandleIsWorkflow                   func() bool
+	HandleGetNexusCompletion           func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleGetNexusUpdateCompletion     func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleAddHistoryEvent              func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleLoadHistoryEvent             func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	HandleGenerateEventLoadToken       func(event *historypb.HistoryEvent) ([]byte, error)
+	HandleHasAnyBufferedEvent          func(filter func(*historypb.HistoryEvent) bool) bool
+	HandleGetNamespaceEntry            func() *namespace.Namespace
+	HandleEndpointRegistry             func() EndpointRegistry
+	HandleInitTimeSkippingConfig       func(config *commonpb.TimeSkippingConfig)
+	HandleUpdateTimeSkippingConfig     func(config *commonpb.TimeSkippingConfig)
+	HandleGetTimeSkippingInfo          func() *persistencespb.TimeSkippingInfo
+	HandleRecordTimeSkippingTransition func(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -109,6 +114,32 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 		category := task.GetCategory()
 		m.TasksByCategory[category] = append(m.TasksByCategory[category], task)
 	}
+}
+
+func (m *MockNodeBackend) InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if m.HandleInitTimeSkippingConfig != nil {
+		m.HandleInitTimeSkippingConfig(config)
+	}
+}
+
+func (m *MockNodeBackend) UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if m.HandleUpdateTimeSkippingConfig != nil {
+		m.HandleUpdateTimeSkippingConfig(config)
+	}
+}
+
+func (m *MockNodeBackend) GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo {
+	if m.HandleGetTimeSkippingInfo != nil {
+		return m.HandleGetTimeSkippingInfo()
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) RecordTimeSkippingTransition(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error {
+	if m.HandleRecordTimeSkippingTransition != nil {
+		return m.HandleRecordTimeSkippingTransition(ctx, transition, archetype)
+	}
+	return nil
 }
 
 func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {

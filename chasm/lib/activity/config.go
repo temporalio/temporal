@@ -53,6 +53,7 @@ type Config struct {
 	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	StartDelayEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingEnabled         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
@@ -68,6 +69,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:           StartDelayEnabled.Get(dc),
+		TimeSkippingEnabled:         dynamicconfig.TimeSkippingEnabled.Get(dc),
 		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}

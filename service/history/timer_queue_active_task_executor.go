@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -937,9 +936,13 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return errNoTimerFired
 	}
 
-	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-		ctx, time.Time{}, true)
-	if err != nil {
+	// Disable time skipping through the archetype-aware sink: workflows record a history event; CHASM
+	// (and other archetypes) apply the disable-only transition directly to the TimeSkippingInfo.
+	if err = mutableState.RecordTimeSkippingTransition(
+		ctx,
+		chasm.TimeSkippingTransition{DisabledAfterFastForward: true},
+		mutableState.ChasmTree().ArchetypeID(),
+	); err != nil {
 		return err
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)

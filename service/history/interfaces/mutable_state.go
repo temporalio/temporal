@@ -424,5 +424,8 @@ type (
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
+		// RecordTimeSkippingTransition is the archetype-aware time-skipping sink: workflows record a
+		// history event, other archetypes apply the transition to the TimeSkippingInfo directly.
+		RecordTimeSkippingTransition(ctx context.Context, transition chasm.TimeSkippingTransition, archetype chasm.ArchetypeID) error
 	}
 )

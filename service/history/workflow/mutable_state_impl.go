@@ -7688,6 +7688,8 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
+	// todo@time-skipping:  chasm close transaction logic is after isStateDirty,
+	// need to check if this impacts chasm time skipping logic
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
@@ -8140,6 +8142,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	if err := ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy); err != nil {
 		return err
 	}
+	// todo: this is only for workflows not for chasm-based executions
 	if regenerateTimerTasksForTimeSkipping {
 		if err := ms.closeTransactionRegenTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
 			return err

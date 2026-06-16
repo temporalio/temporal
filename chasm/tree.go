@@ -234,6 +234,30 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+
+		// Time-skipping backend surface. The component-facing config control (GetTimeSkippingConfig)
+		// is exposed to executions through MutableContext, which delegates the mutators here; the
+		// framework itself reads the full TimeSkippingInfo (config AND fast-forward info) via
+		// GetTimeSkippingInfo.
+		InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo
+		// RecordTimeSkippingTransition records a single time-skipping transition for the execution: it
+		// advances the virtual clock to transition.TargetTime (and disables time skipping when the
+		// fast-forward target was reached). The caller (the framework's closeTransactionHandleTimeSkipping,
+		// or the workflow event path) is responsible for computing the final transition — including the
+		// min of the component candidate and the fast-forward target. archetype selects how the skip is
+		// recorded: the workflow archetype records a history event, others apply it directly to the TSI.
+		RecordTimeSkippingTransition(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error
+	}
+
+	// nowProvider is an optional capability of a NodeBackend: a backend that owns its own clock
+	// (mutable state, whose clock reflects the execution's time-skipping offset) implements it so
+	// that Node.Now() reads a single, time-skipping-aware clock shared with the rest of the
+	// execution. Backends that do not implement it (e.g. bare test mocks) cause Node.Now() to fall
+	// back to the tree's own timeSource.
+	nowProvider interface {
+		Now() time.Time
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -1642,7 +1666,15 @@ func (n *Node) dataNodePath(
 func (n *Node) Now(
 	_ Component,
 ) time.Time {
+	// Delegate to the backend when it owns a (time-skipping-aware) clock so that CHASM and the rest
+	// of the execution share a single clock; mutable state's clock reflects the execution's
+	// time-skipping offset. Fall back to the tree's own timeSource for backends that don't provide
+	// one (e.g. bare test mocks).
+	//
 	// TODO: Now() could be different for components after we support Pause for CHASM components.
+	if np, ok := n.backend.(nowProvider); ok {
+		return np.Now()
+	}
 	return n.timeSource.Now()
 }
 
@@ -1713,6 +1745,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionHandleTimeSkipping(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -2083,6 +2119,152 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		firstPureTaskNode,
 		archetypeID,
 	)
+}
+
+func (n *Node) closeTransactionHandleTimeSkipping() error {
+	// step1: time skipping only works on the root node
+	// todo@time-skipping: it seems CloseTransaction is only a method reasonable for the root node
+	// but currently the framework doesn't enforce this contract
+	if !softassert.That(n.logger, n.parent == nil, "closeTransactionHandleTimeSkipping must run on the root node") {
+		return nil
+	}
+	if n.ArchetypeID() == WorkflowArchetypeID {
+		// todo: removed when workflows are migrated to use chasm
+		return nil
+	}
+	tsi := n.backend.GetTimeSkippingInfo()
+	if !tsi.GetConfig().GetEnabled() {
+		return nil
+	}
+
+	// The chasm framework distinguishes active vs passive via isActiveStateDirty: it is set only for
+	// active-cluster user-data mutations and is never set by replication (ApplyMutation/ApplySnapshot)
+	// — see its declaration and the same "active cluster" gate in closeTransactionUpdateComponentTasks.
+	//
+	// NOTE: isActiveStateDirty tracks chasm component user-data changes only. It does NOT track
+	// TimeSkippingInfo changes — TimeSkippingInfo lives in mutable state's WorkflowExecutionInfo (not a
+	// chasm node) and is tracked separately by MutableStateImpl.timeSkippingInfoUpdated. That is fine
+	// here: the decision is driven by the component work that schedules a future task worth skipping to
+	// (which sets isActiveStateDirty), and the skip the decision records marks the TimeSkippingInfo
+	// dirty via its own flag. The one implication is that a transaction which only changes
+	// TimeSkippingInfo (e.g. UpdateTimeSkippingConfig) without touching chasm state won't trigger the
+	// decision; it is picked up on the next active transaction.
+	if !n.isActiveStateDirty {
+		// Passive cluster: the active cluster already made the time-skipping decision and replicated the
+		// resulting TimeSkippingInfo (including the new accumulatedSkippedDuration). We must NOT re-run
+		// the decision here — recording another skip on top of the replicated one would diverge from
+		// the active cluster.
+		//
+		// TODO(time-skipping/chasm): on the passive cluster, detect that the replicated
+		// accumulatedSkippedDuration changed since the physical timer tasks were last generated and, if
+		// so, re-stamp them via regenerateTasksForTimeSkipping (the same no-break CategoryTimer
+		// regeneration the active path uses) — comparing the current accumulatedSkippedDuration against
+		// a baseline captured at tree load and refreshed each CloseTransaction. Until then, passive
+		// timer tasks are only re-stamped on the full-refresh replication path (taskRefresher.Refresh ->
+		// ChasmTree().RefreshTasks()); the incremental path (PartialRefresh, a no-op for CHASM) leaves
+		// them stale. State-based time-skipping replication is currently out of scope.
+		return nil
+	}
+
+	// Active cluster: make and apply the time-skipping decision.
+	immutableContext := NewContext(context.Background(), n)
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	tsRoot, ok := rootComponent.(TimeSkippable)
+	if !ok {
+		n.logger.Error(
+			"root component does not implement TimeSkippable when executions have turned on time skipping",
+			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
+		return nil
+	}
+
+	// step2: call the component to find the next target time
+	now := n.Now(nil)
+	ff := tsi.GetFastForwardInfo()
+	var transition *TimeSkippingTransition
+	if !tsRoot.HasInflightWork(immutableContext) {
+		nextTargetTime := &TimeSkippingTargetTime{}
+		if IsActiveFastForward(ff) {
+			nextTargetTime.CompareAndSet(ff.GetTargetTime().AsTime())
+		}
+		tsRoot.FindNextTargetTime(immutableContext, nextTargetTime)
+		if !nextTargetTime.IsZero() {
+			transition = buildTimeSkippingTransition(now, nextTargetTime, ff.TargetTime.AsTime())
+		}
+	}
+
+	// step3: if a time skipping transition is needed
+	if transition.IsValid() {
+		// record the transition
+		if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
+			return err
+		}
+		// regenerate timer tasks
+		if err := n.regenerateTasksForTimeSkipping(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// regenerateTasksForTimeSkipping re-emits physical timer tasks after a time-skipping transition
+// so their wall-clock visibility reflects the new accumulated skip.
+//
+// "Regenerate all" by default: every CategoryTimer task (pure and side-effect) across the tree is
+// reset to physicalTaskStatusNone and re-generated. BOTH pure and side-effect tasks can be
+// future-scheduled (CategoryTimer) tasks that need re-stamping, for example:
+//   - a side-effect activity retry timer task — the ActivityDispatchTask that fires to dispatch the
+//     next attempt after a retry backoff (or initial start delay); and
+//   - a pure start-workflow task — a pure timer that fires to schedule the workflow task after a
+//     start delay/backoff.
+//
+// Immediate Transfer/Outbound/Visibility tasks are left untouched — they fire at wall-clock now and
+// are unaffected by accumulated skip. This default is deliberately broad so the process stays correct
+// even as the set of skippable/in-flight tasks evolves; narrowing to only the tasks that actually need
+// re-stamping is a future optimization.
+//
+// Physical tasks generated for the same logical tasks earlier this transaction (pre-skip, with the old
+// accumulated skip) become stale; they fire early and no-op when their executor re-checks state. This
+// matches the workflow RegenerateTimerTasksForTimeSkipping model (re-stamp, tolerate stale duplicates).
+func (n *Node) regenerateTasksForTimeSkipping() error {
+	archetypeID := n.ArchetypeID()
+
+	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
+	var firstPureTaskNode *Node
+
+	for nodePath, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		// Side-effect timer tasks: reset and re-generate each one. Unlike the normal generation loop
+		// in closeTransactionUpdateComponentTasks, there is no early break on physicalTaskStatusCreated
+		// — we re-stamp every CategoryTimer task regardless of prior status.
+		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
+			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
+				continue
+			}
+			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
+			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
+		}
+
+		// Pure tasks are always future-scheduled (CategoryTimer). Reset them all, and track the earliest
+		// across the tree; closeTransactionGeneratePhysicalPureTask emits the single earliest one.
+		pureTasks := componentAttr.GetPureTasks()
+		for _, pureTask := range pureTasks {
+			pureTask.PhysicalTaskStatus = physicalTaskStatusNone
+		}
+		if len(pureTasks) > 0 &&
+			(firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0) {
+			firstPureTask = pureTasks[0]
+			firstPureTaskNode = node
+		}
+	}
+
+	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
 }
 
 func (n *Node) deserializeComponentTask(
@@ -2701,6 +2883,13 @@ func (n *Node) applyUpdates(
 	return nil
 }
 
+// RefreshTasks resets the physical task status of every task in the tree so they are re-generated on
+// the next CloseTransaction. It needs no time-skipping-specific logic: regeneration re-emits each task
+// through MutableState.AddTasks, which applies ToRealTime to scheduled (CategoryTimer) tasks — i.e. it
+// subtracts the execution's current accumulatedSkippedDuration (already in mutable state). So a refresh
+// naturally re-stamps timer tasks at the correct wall-clock fire time for time skipping, just as the
+// scoped closeTransactionRegenerateTimerTasks does after a skip; both rely on the same AddTasks ->
+// ToRealTime conversion.
 func (n *Node) RefreshTasks() error {
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when

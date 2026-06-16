@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -114,6 +116,129 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.StartDelayEnabled, nsValues(true))
 	return env
+}
+
+// getMutableState loads the persisted mutable state of a standalone activity execution, so tests can
+// inspect server-internal state such as the time-skipping info.
+func (env *standaloneActivityEnv) getMutableState(t *testing.T, activityID, runID string) *persistence.GetWorkflowExecutionResponse {
+	shardID := common.WorkflowIDToHistoryShard(
+		env.NamespaceID().String(),
+		activityID,
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+	)
+	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(testcore.NewContext(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  activityID,
+		RunID:       runID,
+		ArchetypeID: activity.ArchetypeID,
+	})
+	require.NoError(t, err)
+	return ms
+}
+
+// TestTimeSkipping_StartDelayAndRetryBackoff verifies that a standalone activity, which opts into
+// time skipping, fast-forwards both its start delay and its retry backoff while idle. With a 1h
+// fast-forward budget, a 20m start delay plus a 20m retry backoff (~40m of virtual time) are skipped,
+// so the run completes in seconds of wall clock and the accumulated skipped duration reflects the
+// skipped delays.
+func (s *standaloneActivityTestSuite) TestTimeSkipping_StartDelayAndRetryBackoff() {
+	env := s.newTestEnv()
+	t := s.T()
+
+	// Standalone activities only opt into time skipping when the namespace flag is on.
+	env.GetTestCluster().OverrideDynamicConfig(t, dynamicconfig.TimeSkippingEnabled, []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
+	})
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	const startDelay = 20 * time.Minute
+	const retryBackoff = 20 * time.Minute
+
+	wallStart := time.Now()
+
+	startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+		Namespace:              env.Namespace().String(),
+		ActivityId:             activityID,
+		ActivityType:           env.Tv().ActivityType(),
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+		Input:                  defaultInput,
+		StartToCloseTimeout:    durationpb.New(time.Minute),
+		ScheduleToCloseTimeout: durationpb.New(2 * time.Hour), // comfortably exceeds delay + backoff
+		StartDelay:             durationpb.New(startDelay),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(retryBackoff),
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    2,
+		},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(time.Hour),
+		},
+	})
+	require.NoError(t, err)
+	runID := startResp.RunId
+
+	pollTaskQueue := func() *workflowservice.PollActivityTaskQueueResponse {
+		resp, pollErr := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, pollErr)
+		return resp
+	}
+
+	// Attempt 1's dispatch is deferred 20m by the start delay. Time skipping fast-forwards virtual
+	// time to the dispatch, so the task becomes pollable within seconds of wall clock rather than
+	// after 20m. (Without skipping this poll would block out its long-poll window and return empty.)
+	attempt1 := pollTaskQueue()
+	require.EqualValues(t, 1, attempt1.Attempt)
+
+	// Fail attempt 1 retryably; the 20m retry backoff is likewise fast-forwarded.
+	_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: attempt1.TaskToken,
+		Failure: &failurepb.Failure{
+			Message:     "retryable failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false}},
+		},
+	})
+	require.NoError(t, err)
+
+	attempt2 := pollTaskQueue()
+	require.EqualValues(t, 2, attempt2.Attempt)
+
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: attempt2.TaskToken,
+		Result:    defaultResult,
+	})
+	require.NoError(t, err)
+
+	wallElapsed := time.Since(wallStart)
+
+	// The run spanned ~40m of virtual time (start delay + retry backoff) but finished in seconds of
+	// wall clock — proof that both delays were skipped rather than waited out.
+	require.Less(t, wallElapsed, startDelay, "run should finish in well under the virtual start delay; took %v", wallElapsed)
+
+	// The activity completed on its second attempt.
+	desc, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, desc.GetInfo().GetStatus())
+	require.EqualValues(t, 2, desc.GetInfo().GetAttempt())
+
+	// The accumulated skipped duration reflects the skipped start delay + retry backoff (~40m). Time
+	// skipping then ends because the activity is closed (no further pending timers to skip to).
+	ms := env.getMutableState(t, activityID, runID)
+	accumulated := ms.State.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	require.InDelta(t, float64(startDelay+retryBackoff), float64(accumulated), float64(time.Minute),
+		"accumulated skipped duration %v should be ~%v", accumulated, startDelay+retryBackoff)
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {

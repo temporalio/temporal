@@ -797,6 +797,20 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTimeSkippingTransiti
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionTimeSkippingTransitionedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionTimeSkippingTransitionedEvent), ctx, targetTime, disabledAfterFastForward)
 }
 
+// RecordTimeSkippingTransition mocks base method.
+func (m *MockMutableState) RecordTimeSkippingTransition(ctx context.Context, transition chasm.TimeSkippingTransition, archetype chasm.ArchetypeID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordTimeSkippingTransition", ctx, transition, archetype)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordTimeSkippingTransition indicates an expected call of RecordTimeSkippingTransition.
+func (mr *MockMutableStateMockRecorder) RecordTimeSkippingTransition(ctx, transition, archetype any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTimeSkippingTransition", reflect.TypeOf((*MockMutableState)(nil).RecordTimeSkippingTransition), ctx, transition, archetype)
+}
+
 // AddWorkflowExecutionUnpausedEvent mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()

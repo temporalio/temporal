@@ -124,6 +124,53 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
+// HasInflightWork implements chasm.TimeSkippable. It reports whether advancing virtual time would
+// skip past real work, gating the framework's per-transaction time-skipping decision.
+//
+// Only the activity attempt is considered: it is in flight unless the activity is SCHEDULED and
+// still waiting for its next dispatch — out of a start delay or retry backoff with the next-attempt
+// time strictly in the (virtual) future. Once that time arrives (dispatch pushed to matching,
+// waiting for a poller), the attempt is running (STARTED) or being cancelled (CANCEL_REQUESTED), or
+// the activity has closed, this returns true. This mirrors the workflow time-skipping rule for
+// activities, and means a closed activity is never time-skipped.
+func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		return true
+	}
+	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
+	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
+		return true
+	}
+	return false
+}
+
+// FindNextTargetTime implements chasm.TimeSkippable. The framework calls it after HasInflightWork has
+// reported the activity is idle; the activity contributes its candidate virtual time by calling
+// targetTime, leaving it untouched if it has nothing of its own to skip to. Today that is only the next
+// attempt dispatch (start-delay end on the first attempt, retry-backoff end on a retry) while the
+// activity is SCHEDULED-and-waiting, gated by the schedule-to-close deadline (the execution timeout) so
+// we never skip past it.
+//
+// The framework pre-seeds targetTime with the configured fast-forward target, so the activity only
+// contributes its own next-wake time; CompareAndSet keeps the minimum and the framework decides whether
+// the fast-forward budget was reached.
+//
+// TODO(time-skipping): completion callback retry backoff
+func (a *Activity) FindNextTargetTime(
+	ctx chasm.Context,
+	targetTime *chasm.TimeSkippingTargetTime,
+) {
+	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
+	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
+		return
+	}
+	targetTime.CompareAndSet(nextDispatch.AsTime())
+	// Gate by the schedule-to-close deadline (execution timeout) so we never skip past it.
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		targetTime.GateByExecutionTimeout(deadline)
+	}
+}
+
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
 	md := make(map[string]string, 2)
 	if actType := a.GetActivityType().GetName(); actType != "" {
