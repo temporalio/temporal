@@ -197,10 +197,10 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
-		false,
+		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
-	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
@@ -602,6 +602,16 @@ is currently processing a task.
 		"worker.buildIdScavengerVisibilityRPS",
 		1.0,
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
+	)
+
+	ScheduleInvariantsScannerOptions = NewGlobalTypedSetting(
+		"worker.scheduleInvariantsScannerOptions",
+		DefaultScheduleInvariantsScannerParams,
+		`ScheduleInvariantsScannerOptions configures the schedule-invariants scanners.
+Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled (per-invariant
+toggles, all default false), OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+VisibilityRPS, ScanInterval, and StuckOpenIdleTimeBufferMultiplier. See
+ScheduleInvariantsScannerParams comments for details.`,
 	)
 
 	// keys for frontend
@@ -1038,6 +1048,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.maxlinksPerRequest",
 		10,
 		`Maximum number of links allowed to be attached via a single API request.`,
+	)
+	MaxLinksPerComponent = NewNamespaceIntSetting(
+		"chasm.maxLinksPerComponent",
+		2000,
+		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1531,6 +1546,16 @@ default as namespace cardinality can be high and this requires a metrics collect
 		},
 		`How far off client partition scale values have to be to reject RPCs.`,
 	)
+	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
+		"matching.partitionScaleManager",
+		PartitionScaleManagerSettings{
+			MaxRate:            0.33,
+			BatchSize:          100,
+			BackgroundInterval: 23 * time.Second,
+			DrainBufferTime:    15 * time.Second,
+		},
+		`Settings for partition scale manager.`,
+	)
 
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
@@ -1573,6 +1598,12 @@ to remove expired entries. Should be shorter than EntryTTL for timely cleanup. L
 Don't change this on a live cluster without using the gradual change mechanism.
 `,
 	)
+	MatchingConnectionCloseDelay = NewGlobalDurationSetting(
+		"matching.connectionCloseDelay",
+		30*time.Second,
+		`MatchingConnectionCloseDelay delays closing a cached matching client connection after its host
+leaves the membership ring, giving in-flight long-polls time to drain before the connection is closed.`,
+	)
 
 	// keys for history
 
@@ -1596,13 +1627,6 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
 [go.temporal.io/server/common/persistence.QueueV2]`,
-	)
-
-	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
-		"history.enableDeleteWorkflowExecutionReplication",
-		false,
-		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
-execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -1798,6 +1822,12 @@ to this require a restart to take effect.`,
 		30*time.Second,
 		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
 for cached shard ownership entries after a membership update.`,
+	)
+	HistoryConnectionCloseDelay = NewGlobalDurationSetting(
+		"history.connectionCloseDelay",
+		30*time.Second,
+		`HistoryConnectionCloseDelay delays closing a cached history connection after its host leaves
+the membership ring, giving in-flight RPCs time to drain before the connection is closed.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
@@ -2418,6 +2448,15 @@ archivalQueueProcessor`,
 		`MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
 state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.`,
 	)
+	MaximumEventBatchSizeInBytes = NewGlobalIntSetting(
+		"history.maximumEventBatchSizeInBytes",
+		0,
+		`This is EXPERIMENTAL feature that is under development. Things can break if you use it.
+MaximumEventBatchSizeInBytes is the size threshold (in bytes) at which the EventStore rolls the
+current in-memory batch and starts a new one. A single oversized event may cause a batch to
+exceed this size. A value of 0 disables the check. This value should stay below
+system.transactionSizeLimit, since each batch is persisted within a single transaction.`,
+	)
 	MaximumSignalsPerExecution = NewNamespaceIntSetting(
 		"history.maximumSignalsPerExecution",
 		10000,
@@ -2976,6 +3015,14 @@ EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
 scheduler workflow starts or continues-as-new.`,
 	)
 
+	EnableCHASMSchedulerMigrationWithRunningWorkflows = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerMigrationWithRunningWorkflows",
+		false,
+		`EnableCHASMSchedulerMigrationWithRunningWorkflows, when set to false, prevents schedules with
+running workflows from being migrated. This works around a known bug in 3P SDKs involving updating
+existing workflows to attach callbacks.`,
+	)
+
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerSentinels",
 		true,
@@ -3212,12 +3259,24 @@ When enabled, the scavenger will delete completed workflow execution data that a
 	BatcherRPS = NewNamespaceIntSetting(
 		"worker.batcherRPS",
 		50,
-		`BatcherRPS controls number the rps of batch operations`,
+		`BatcherRPS controls number the rps of one batch operation`,
 	)
 	BatcherConcurrency = NewNamespaceIntSetting(
 		"worker.batcherConcurrency",
 		5,
-		`BatcherConcurrency controls the concurrency of one batch operation`,
+		`BatcherConcurrency controls the concurrency of one batch or admin batch operation`,
+	)
+	AdminBatcherHostRPS = NewGlobalIntSetting(
+		"worker.adminBatcherHostRPS",
+		100,
+		`AdminBatcherHostRPS controls the rps of all admin batch operations per host`,
+	)
+	AdminBatcherGlobalRPS = NewGlobalIntSetting(
+		"worker.adminBatcherGlobalRPS",
+		0,
+		`AdminBatcherGlobalRPS controls the rps of all admin batch operations across all worker hosts.
+The configured value will be divided by the number of worker hosts to get the per host rps limit. 
+0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ParentCloseMaxConcurrentActivityExecutionSize",

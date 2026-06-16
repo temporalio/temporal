@@ -37,3 +37,16 @@ func (s *Scheduler) RecordCompletedAction(
 func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
+
+// RecordExecuteResult exposes recordExecuteResult so tests can pin the
+// per-RequestId idempotency guard against concurrent ExecuteTasks.
+func (i *Invoker) RecordExecuteResult(
+	ctx chasm.MutableContext,
+	completed []*schedulespb.BufferedStart,
+	retryable []*schedulespb.BufferedStart,
+) (newlyStarted, droppedDuplicates int) {
+	return i.recordExecuteResult(ctx, &executeResult{
+		CompletedStarts: completed,
+		RetryableStarts: retryable,
+	})
+}

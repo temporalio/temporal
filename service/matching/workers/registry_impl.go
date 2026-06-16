@@ -302,6 +302,23 @@ func (m *registryImpl) recordEvictionMetric() {
 	}
 }
 
+// recordWorkerCountMetric emits a gauge per namespace. When a namespace moves to a different
+// matching node, the old node's gauge goes stale until its entries are evicted (up to TTL).
+// Use max by (namespace) when querying to get the correct value.
+func (m *registryImpl) recordWorkerCountMetric() {
+	for _, b := range m.buckets {
+		b.mu.Lock()
+		for _, ns := range b.namespaces {
+			if len(ns.workers) == 0 {
+				continue
+			}
+			metrics.WorkerRegistryWorkerCount.With(m.metricsHandler).
+				Record(float64(len(ns.workers)), metrics.NamespaceTag(string(ns.name)))
+		}
+		b.mu.Unlock()
+	}
+}
+
 // filterWorkers returns all WorkerHeartbeats in a namespace
 // for which predicate(hb) returns true. System workers are excluded
 // unless includeSystemWorkers is true.
@@ -326,6 +343,7 @@ func (m *registryImpl) evictLoop() {
 			m.evictByTTL()
 			m.evictByCapacity()
 			m.recordUtilizationMetric()
+			m.recordWorkerCountMetric()
 		case <-m.quit:
 			return
 		}
@@ -392,25 +410,37 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
-	// Build the predicate for filtering
-	var predicate func(*workerpb.WorkerHeartbeat) bool
-	if params.Query == "" {
-		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
-	} else {
-		queryEngine, err := newWorkerQueryEngine(nsID.String(), params.Query)
-		if err != nil {
-			return ListWorkersResponse{}, err
-		}
-		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
-			result, err := queryEngine.EvaluateWorker(heartbeat)
-			return err == nil && result
-		}
+func buildQueryPredicate(nsID namespace.ID, query string) (func(*workerpb.WorkerHeartbeat) bool, error) {
+	if query == "" {
+		return func(_ *workerpb.WorkerHeartbeat) bool { return true }, nil
 	}
+	queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+	return func(heartbeat *workerpb.WorkerHeartbeat) bool {
+		result, err := queryEngine.EvaluateWorker(heartbeat)
+		return err == nil && result
+	}, nil
+}
 
-	// Get all matching workers and paginate
+func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
+	predicate, err := buildQueryPredicate(nsID, params.Query)
+	if err != nil {
+		return ListWorkersResponse{}, err
+	}
 	workers := m.filterWorkers(nsID, params.IncludeSystemWorkers, predicate)
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
+}
+
+func (m *registryImpl) CountWorkers(nsID namespace.ID, query string, includeSystemWorkers bool) (int64, error) {
+	predicate, err := buildQueryPredicate(nsID, query)
+	if err != nil {
+		return 0, err
+	}
+	// Reuses filterWorkers (collects the full slice) for simplicity since the registry is in-memory.
+	workers := m.filterWorkers(nsID, includeSystemWorkers, predicate)
+	return int64(len(workers)), nil
 }
 
 // paginateWorkers applies cursor-based pagination to a list of workers.

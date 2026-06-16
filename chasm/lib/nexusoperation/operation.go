@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -345,7 +346,7 @@ func (o *Operation) saveInvocationResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
-		links := convertResponseLinks(r.response.Links, ctx.Logger())
+		links := commonnexus.ConvertNexusLinksToProtoLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
@@ -541,12 +542,27 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		StateTransitionCount:    ctx.ExecutionInfo().StateTransitionCount,
 		StateSizeBytes:          int64(ctx.ExecutionInfo().ApproximateStateSize),
 		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: o.Visibility.Get(ctx).CustomSearchAttributes(ctx),
+			// CustomSearchAttributes returns the component's live map by reference; the
+			// describe response is marshalled after the read lease is released, so clone it
+			// to avoid racing a concurrent mutation (see Scheduler.Describe for the same fix).
+			IndexedFields: maps.Clone(o.Visibility.Get(ctx).CustomSearchAttributes(ctx)),
 		},
 		NexusHeader:  requestData.GetNexusHeader(),
 		UserMetadata: requestData.GetUserMetadata(),
 		Links:        o.Links,
 		Identity:     requestData.GetIdentity(),
+	}
+
+	if cancellation, ok := o.Cancellation.TryGet(ctx); ok {
+		info.CancellationInfo = &nexuspb.NexusOperationExecutionCancellationInfo{
+			RequestedTime:           cancellation.RequestedTime,
+			State:                   CancellationAPIState(cancellation.Status),
+			Attempt:                 cancellation.Attempt,
+			LastAttemptCompleteTime: cancellation.LastAttemptCompleteTime,
+			LastAttemptFailure:      cancellation.LastAttemptFailure,
+			NextAttemptScheduleTime: cancellation.NextAttemptScheduleTime,
+			Reason:                  cancellation.Reason,
+		}
 	}
 
 	if o.ScheduledTime != nil {

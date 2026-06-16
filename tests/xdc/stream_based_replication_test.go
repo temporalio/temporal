@@ -1105,6 +1105,10 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.NoError(err)
 	defer sdkWorker.Stop()
 
+	// Override dynamic config to disable eager activity execution since we are asserting transfer active task creation in this test.
+	cleanup := s.clusters[0].OverrideDynamicConfig(s.T(), dynamicconfig.EnableActivityEagerExecution, false)
+	defer cleanup()
+
 	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
 		TaskQueue:          taskQueue,

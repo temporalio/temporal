@@ -584,7 +584,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
-	if !r.config.EnableCancelActivityWorkerCommand() {
+	if !r.config.EnableCancelActivityWorkerCommand(r.mutableState.GetNamespaceEntry().Name().String()) {
 		return nil
 	}
 
@@ -1091,17 +1091,17 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		})
 	}
 
-	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
+	// (3) fast-forward timer — regenerate when configured so its real-time
 	// VisibilityTimestamp tracks the new accumulated skip.
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi.GetConfig().GetEnabled() {
-		boundInfo := tsi.GetCurrentElapsedDurationBound()
-		if boundInfo != nil && !boundInfo.GetHasReached() {
+		fastForward := tsi.GetFastForwardInfo()
+		if fastForward != nil && !fastForward.GetHasReached() {
 			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
-				EventID:             boundInfo.GetSourceEventId(),
+				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
+				EventID:             fastForward.GetSourceEventId(),
 			})
 		}
 	}

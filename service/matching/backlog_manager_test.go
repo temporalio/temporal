@@ -85,6 +85,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
+	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())

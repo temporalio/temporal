@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -413,6 +414,7 @@ func (wh *WorkflowHandler) Start() {
 
 			if ns.IsGlobalNamespace() &&
 				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+				//nolint:forbidigo // namespace state-change callback; cancels all pollers on ns deactivation
 				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
@@ -687,7 +689,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	for _, cb := range request.GetCompletionCallbacks() {
 		allLinks = append(allLinks, cb.GetLinks()...)
 	}
-	if err := wh.validator.ValidateLinks(namespaceName.String(), allLinks); err != nil {
+	if err := commonlinks.Validate(allLinks, wh.config.MaxLinksPerRequest(namespaceName.String()), wh.config.LinkMaxSize(namespaceName.String())); err != nil {
 		return nil, err
 	}
 
@@ -698,19 +700,28 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
-	namespaceName namespace.Name,
+	tsc *commonpb.TimeSkippingConfig,
+	ns namespace.Name,
 ) error {
-	if timeSkippingConfig == nil {
+	if tsc == nil {
 		return nil
 	}
-
 	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+	if !wh.config.TimeSkippingEnabled(ns.String()) {
 		return serviceerror.NewUnimplementedf(
 			"The Time-Skipping feature is not enabled for namespace %s",
-			namespaceName,
+			ns.String(),
 		)
+	}
+
+	if !tsc.GetEnabled() {
+		if tsc.GetFastForward() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+		}
+		return nil
+	}
+	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
+		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
 	}
 
 	return nil
@@ -2222,7 +2233,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2267,7 +2278,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errRequestIDTooLong
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2331,7 +2342,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -2425,7 +2436,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
-	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+	if err := commonlinks.Validate(request.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -3553,9 +3564,17 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// Phase 2: Write real V1 scheduler workflow.
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	saMap := payload.MergeMapOfPayload(
+		request.SearchAttributes.GetIndexedFields(),
+		map[string]*commonpb.Payload{
+			sadefs.TemporalNamespaceDivision: payload.EncodeString(scheduler.NamespaceDivision),
+		},
+	)
 
-	sa, err := wh.validator.UnaliasedSearchAttributesFrom(request.GetSearchAttributes(), request.Namespace)
+	sa, err := wh.validator.UnaliasedSearchAttributesFrom(
+		&commonpb.SearchAttributes{IndexedFields: saMap},
+		request.Namespace,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -5050,10 +5069,22 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
 
+		// On the CHASM path the scheduler publishes search attributes (e.g.
+		// ScheduleNextActionTime) registered on the Scheduler archetype rather
+		// than as namespace search attributes. Supply that mapper so queries can
+		// filter on them; without it the validator rejects them as unknown.
+		var chasmMapper *chasm.VisibilitySearchAttributesMapper
+		if chasmEnabled {
+			if rc, ok := wh.registry.ComponentByID(chasm.SchedulerArchetypeID); ok {
+				chasmMapper = rc.SearchAttributesMapper()
+			}
+		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
+			chasmMapper,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 		); err != nil {
@@ -5736,10 +5767,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		},
 	}
 
-	// Add pre-define search attributes
+	// Add predefined search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.NamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -6315,55 +6349,6 @@ func dedupLinksFromCallbacks(
 		}
 	}
 	return res
-}
-
-func (wh *WorkflowHandler) validateLinks(
-	ns namespace.Name,
-	links []*commonpb.Link,
-) error {
-	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
-	if len(links) > maxAllowedLinks {
-		return serviceerror.NewInvalidArgumentf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links))
-	}
-
-	maxSize := wh.config.LinkMaxSize(ns.String())
-	for _, l := range links {
-		if l.Size() > maxSize {
-			return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
-		}
-		switch t := l.Variant.(type) {
-		case *commonpb.Link_WorkflowEvent_:
-			if t.WorkflowEvent.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
-			}
-			if t.WorkflowEvent.GetWorkflowId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
-			}
-			if t.WorkflowEvent.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
-			}
-			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
-				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
-			}
-		case *commonpb.Link_BatchJob_:
-			if t.BatchJob.GetJobId() == "" {
-				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
-			}
-		case *commonpb.Link_NexusOperation_:
-			if t.NexusOperation.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty namespace field")
-			}
-			if t.NexusOperation.GetOperationId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty operation ID field")
-			}
-			if t.NexusOperation.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty run ID field")
-			}
-		default:
-			return serviceerror.NewInvalidArgument("unsupported link variant")
-		}
-	}
-	return nil
 }
 
 type buildIdAndFlag interface {
@@ -7122,6 +7107,28 @@ func (wh *WorkflowHandler) ListWorkers(
 		WorkersInfo:   resp.GetWorkersInfo(),
 		Workers:       resp.GetWorkers(),
 		NextPageToken: resp.GetNextPageToken(),
+	}, nil
+}
+
+func (wh *WorkflowHandler) CountWorkers(
+	ctx context.Context, request *workflowservice.CountWorkersRequest,
+) (*workflowservice.CountWorkersResponse, error) {
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.CountWorkers(ctx, &matchingservice.CountWorkersRequest{
+		NamespaceId:  namespaceID.String(),
+		CountRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CountWorkersResponse{
+		Count: resp.GetCount(),
 	}, nil
 }
 

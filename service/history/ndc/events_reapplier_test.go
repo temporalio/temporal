@@ -13,7 +13,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -136,7 +135,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 	execution := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId: uuid.NewString(),
 	}
-	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	timeSkippingConfig := &commonpb.TimeSkippingConfig{Enabled: true}
 	event := &historypb.HistoryEvent{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
@@ -454,10 +453,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
-	msCurrent.EXPECT().GetNextEventID().Return(int64(2))
 	msCurrent.EXPECT().GetStartedWorkflowTask().Return(nil)
 	msCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		int64(2),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetReason(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetDetails(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetIdentity(),

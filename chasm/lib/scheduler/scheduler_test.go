@@ -16,9 +16,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -457,6 +459,114 @@ func TestSearchAttributes_IdleCloseTime(t *testing.T) {
 	})
 }
 
+func TestSearchAttributes_RunningWorkflowCount(t *testing.T) {
+
+	t.Run("counts only started, not-yet-completed workflows", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		invoker := sched.Invoker.Get(ctx)
+		invoker.BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+			{RequestId: "running-1", RunId: "run-1"},
+			{RequestId: "running-2", RunId: "run-2"},
+			{RequestId: "done-1", RunId: "run-3", Completed: &schedulespb.CompletedResult{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleRunningWorkflowCountName)
+		require.Equal(t, int64(2), val)
+	})
+
+	t.Run("emits zero when there are no running workflows", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Invoker.Get(ctx).BufferedStarts = nil
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.True(t, ok, "expected %s to be present even when zero", scheduler.ScheduleRunningWorkflowCountName)
+		require.Equal(t, int64(0), val)
+	})
+
+	t.Run("closed does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "running-1", RunId: "run-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.False(t, ok, "expected %s to be absent once closed", scheduler.ScheduleRunningWorkflowCountName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleRunningWorkflowCountName)
+		require.False(t, ok)
+	})
+}
+
+func TestSearchAttributes_BufferedStartsCount(t *testing.T) {
+
+	t.Run("counts only the not-yet-started backlog", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		invoker := sched.Invoker.Get(ctx)
+		invoker.BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+			{RequestId: "waiting-2"},
+			{RequestId: "running-1", RunId: "run-1"},
+			{RequestId: "done-1", RunId: "run-2", Completed: &schedulespb.CompletedResult{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			}},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.True(t, ok, "expected %s to be present", scheduler.ScheduleBufferedStartsCountName)
+		require.Equal(t, int64(2), val)
+	})
+
+	t.Run("emits zero when nothing is buffered", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "running-1", RunId: "run-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		val, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.True(t, ok, "expected %s to be present even when zero", scheduler.ScheduleBufferedStartsCountName)
+		require.Equal(t, int64(0), val)
+	})
+
+	t.Run("closed does not emit", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		sched.Closed = true
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "waiting-1"},
+		}
+
+		sas := sched.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.False(t, ok, "expected %s to be absent once closed", scheduler.ScheduleBufferedStartsCountName)
+	})
+
+	t.Run("sentinel does not emit", func(t *testing.T) {
+		sentinel, ctx, _ := setupSentinelForTest(t)
+
+		sas := sentinel.SearchAttributes(ctx)
+		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
+		require.False(t, ok)
+	})
+}
+
 func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
 	t.Helper()
 	for _, sa := range sas {
@@ -485,4 +595,46 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err := node.CloseTransaction()
 	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
+}
+
+// TestScheduler_Describe_ReturnsIsolatedVisibilityMaps proves that DescribeSchedule
+// returns isolated copies of the Visibility component's memo and search-attribute maps.
+//
+// CustomMemo/CustomSearchAttributes return the Visibility component's live maps by
+// reference. DescribeSchedule's response is marshalled by gRPC after the read lease is
+// released, so if those maps are aliased into the response, a concurrent operation that
+// mutates them races the marshal and trips "concurrent map iteration and map write".
+//
+// Rather than race the panic (which is nondeterministic), we test the positive invariant:
+// the response carries independent copies, so mutating the response leaves the live
+// component maps untouched. Before the fix this assertion fails because the maps are shared.
+func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	specBuilder := legacyscheduler.NewSpecBuilder()
+
+	vis := sched.Visibility.Get(ctx)
+	vis.MergeCustomMemo(ctx, map[string]*commonpb.Payload{"memoKey": payload.EncodeString("v")})
+	vis.MergeCustomSearchAttributes(ctx, map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")})
+
+	resp, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	}, specBuilder)
+	require.NoError(t, err)
+
+	fr := resp.GetFrontendResponse()
+	require.Contains(t, fr.GetMemo().GetFields(), "memoKey")
+	require.Contains(t, fr.GetSearchAttributes().GetIndexedFields(), "saKey")
+
+	// Mutating the response must not reach back into the live component maps.
+	fr.GetMemo().GetFields()["injectedMemo"] = payload.EncodeString("x")
+	fr.GetSearchAttributes().GetIndexedFields()["injectedSA"] = payload.EncodeString("x")
+
+	require.NotContains(t, vis.CustomMemo(ctx), "injectedMemo",
+		"DescribeSchedule response Memo must be a copy, not the live Visibility map")
+	require.NotContains(t, vis.CustomSearchAttributes(ctx), "injectedSA",
+		"DescribeSchedule response SearchAttributes must be a copy, not the live Visibility map")
 }

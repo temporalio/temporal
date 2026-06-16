@@ -11,7 +11,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -161,10 +160,10 @@ func TestMergeOptions_FooMask(t *testing.T) {
 
 func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
-	cfgA := &workflowpb.TimeSkippingConfig{Enabled: true}
-	cfgB := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+	cfgA := &commonpb.TimeSkippingConfig{Enabled: true}
+	cfgB := &commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour),
 	}
 
 	tcs := []struct {
@@ -172,7 +171,7 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 		current     *workflowpb.WorkflowExecutionOptions
 		update      *workflowpb.WorkflowExecutionOptions
 		wantChanged bool
-		wantConfig  *workflowpb.TimeSkippingConfig
+		wantConfig  *commonpb.TimeSkippingConfig
 	}{
 		// nil update means "don't touch" even when mask is present
 		{
@@ -305,6 +304,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		IsMember: true,
 	}, nil)
 	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "", expectedOverrideOptions.Priority, expectedOverrideOptions.TimeSkippingConfig, nil).Return(&historypb.HistoryEvent{}, nil)
+	s.currentMutableState.EXPECT().Now().Return(time.Time{})
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
 	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
@@ -334,58 +334,6 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 	proto.Equal(expectedOverrideOptions, resp.GetWorkflowExecutionOptions())
 }
 
-func TestValidateTimeSkippingConfig(t *testing.T) {
-	tenMin := durationpb.New(10 * time.Minute)
-	negativeElapsed := durationpb.New(-1 * time.Minute)
-	maxElapsedTen := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: tenMin}
-	maxElapsedNegative := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: negativeElapsed}
-
-	tcs := []struct {
-		name    string
-		config  *workflowpb.TimeSkippingConfig
-		wantErr bool
-	}{
-		{
-			name:   "nil config",
-			config: nil,
-		},
-		{
-			name:    "disabled with bound is rejected",
-			config:  &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxElapsedTen},
-			wantErr: true,
-		},
-		{
-			name:   "disabled with no bound",
-			config: &workflowpb.TimeSkippingConfig{Enabled: false},
-		},
-		{
-			name:   "enabled, no bound",
-			config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		},
-		{
-			name:   "enabled, positive max_elapsed_duration",
-			config: &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedTen},
-		},
-		{
-			name:    "enabled, negative max_elapsed_duration",
-			config:  &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedNegative},
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateTimeSkippingConfig(tc.config)
-			if tc.wantErr {
-				var invalidArg *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArg)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
 func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 	oneHour := durationpb.New(time.Hour)
 	twoHours := durationpb.New(2 * time.Hour)
@@ -393,73 +341,63 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		initialConfig  *workflowpb.TimeSkippingConfig
+		initialConfig  *commonpb.TimeSkippingConfig
 		updateOptions  *workflowpb.WorkflowExecutionOptions
 		updateMask     *fieldmaskpb.FieldMask
-		expectedConfig *workflowpb.TimeSkippingConfig
+		expectedConfig *commonpb.TimeSkippingConfig
 	}{
 		{
 			name: "update max_elapsed_duration while enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: oneHour,
-				},
+			initialConfig: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: oneHour,
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-						MaxElapsedDuration: twoHours,
-					},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: twoHours,
 				},
 			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: twoHours,
-				},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.fast_forward"}},
+			expectedConfig: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: twoHours,
 			},
 		},
 		{
-			name: "change bound type to max_elapsed_duration while enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
+			name: "set max_elapsed_duration while enabled",
+			initialConfig: &commonpb.TimeSkippingConfig{
 				Enabled: true,
 			},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-						MaxElapsedDuration: thirtyMin,
-					},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: thirtyMin,
 				},
 			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: thirtyMin,
-				},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.fast_forward"}},
+			expectedConfig: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: thirtyMin,
 			},
 		},
 		{
 			name:          "enable from nil config",
 			initialConfig: nil,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectedConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 		},
 		{
 			name:          "disable from enabled config",
-			initialConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: false},
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+			expectedConfig: &commonpb.TimeSkippingConfig{Enabled: false},
 		},
 	}
 
