@@ -1707,7 +1707,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 }
 
 func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTimeSkippingConfig() {
-	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	timeSkippingConfig := &commonpb.TimeSkippingConfig{Enabled: true}
 	event := &historypb.HistoryEvent{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
