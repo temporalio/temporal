@@ -700,7 +700,7 @@ used here will be the effective RPS from global and per-instance limits. The val
 	)
 	FrontendGlobalWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadBurstRatio",
-		6,
+		10,
 		`FrontendGlobalWorkerDeploymentReadBurstRatio is the burst limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion) as a ratio of FrontendGlobalWorkerDeploymentReadRPS. The RPS used here is the effective per-instance RPS after distributing the global limit among available frontend service instances. The value must be 1 or higher.`,
 	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
