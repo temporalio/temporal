@@ -56,8 +56,12 @@ LAST_PROFILE_CAPTURE_TIME=0
 WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
 OOM_TERMINATED=false
 
+ensure_snapshot_dirs() {
+  mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")" "$(dirname "$SNAPSHOT_STATUS_HISTORY_FILE")"
+}
+
 # Clear history on start
-mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")" "$(dirname "$SNAPSHOT_STATUS_HISTORY_FILE")"
+ensure_snapshot_dirs
 : > "$SNAPSHOT_HISTORY_FILE"
 : > "$SNAPSHOT_STATUS_HISTORY_FILE"
 
@@ -321,6 +325,8 @@ EOF
 
 snapshot() {
   local memtotal_kb memavail_kb memused_kb memused_mb pct profile_report report should_terminate
+  ensure_snapshot_dirs
+
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memavail_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
   memused_kb=$(( memtotal_kb - memavail_kb ))
