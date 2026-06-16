@@ -474,6 +474,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
@@ -485,6 +486,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		timeSkippingConfigUpdated,
 		workflowUpdateOptions,
 	)
 	event, _ = b.add(event)
