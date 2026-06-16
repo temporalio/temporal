@@ -320,7 +320,7 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run unit tests
-        timeout-minutes: 20
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh make unit-test-coverage
@@ -378,7 +378,7 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
-        timeout-minutes: 15
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh make integration-test-coverage
@@ -456,7 +456,7 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
-        timeout-minutes: ${{ matrix.github_timeout }}
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh ${{ matrix.cmd }}
