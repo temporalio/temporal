@@ -3220,12 +3220,13 @@ func (s *nodeSuite) testComponentTree() *Node {
 	return node // maybe tc too
 }
 
-func (s *nodeSuite) TestMutableContextNowStableWithinContext() {
+func (s *nodeSuite) TestContextNowStableWithinContext() {
 	root := s.testComponentTree()
 
 	startTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
 	updatedTime := startTime.Add(time.Minute)
 	laterTime := updatedTime.Add(time.Minute)
+	finalTime := laterTime.Add(time.Minute)
 
 	s.timeSource.Update(startTime)
 
@@ -3234,8 +3235,7 @@ func (s *nodeSuite) TestMutableContextNowStableWithinContext() {
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
-	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
-	s.Equal(startTime, contextWithValue.Now(component))
+	s.Equal(startTime, mutableContext.Now(component))
 
 	s.timeSource.Update(updatedTime)
 	s.Equal(startTime, mutableContext.Now(component))
@@ -3243,13 +3243,18 @@ func (s *nodeSuite) TestMutableContextNowStableWithinContext() {
 	childComponent := testComponent.SubComponent1.Get(mutableContext)
 	s.Equal(startTime, mutableContext.Now(childComponent))
 
-	newMutableContext := NewMutableContext(context.Background(), root)
-	s.Equal(updatedTime, newMutableContext.Now(component))
-
-	immutableContext := NewContext(context.Background(), root)
-	s.Equal(updatedTime, immutableContext.Now(component))
+	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
+	s.Equal("test-value", contextWithValue.Value("test-key"))
+	s.Equal(updatedTime, contextWithValue.Now(component))
 
 	s.timeSource.Update(laterTime)
+	s.Equal(updatedTime, contextWithValue.Now(component))
+	s.Equal(laterTime, NewMutableContext(context.Background(), root).Now(component))
+
+	immutableContext := NewContext(context.Background(), root)
+	s.Equal(laterTime, immutableContext.Now(component))
+
+	s.timeSource.Update(finalTime)
 	s.Equal(laterTime, immutableContext.Now(component))
 }
 
