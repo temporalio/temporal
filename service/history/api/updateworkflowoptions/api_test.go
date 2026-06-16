@@ -107,36 +107,36 @@ func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	input := emptyOptions
 
 	// Merge unpinned into empty options
-	merged, recomputedEffects, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
+	merged, optionsToReapply, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Merge pinned_A into unpinned options
-	merged, recomputedEffects, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Merge pinned_B into pinned_A options
-	merged, recomputedEffects, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Unset versioning override
-	merged, recomputedEffects, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, emptyOptions, merged)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 }
 
 func TestMergeOptions_PartialMask(t *testing.T) {
@@ -166,15 +166,15 @@ func TestMergeOptions_EmptyMask(t *testing.T) {
 	input := pinnedOverrideOptionsB
 
 	// Don't merge anything
-	merged, recomputedEffects, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
+	merged, optionsToReapply, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
 	require.NoError(t, err)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 	require.EqualExportedValues(t, input, merged)
 
 	// Don't merge anything
-	merged, recomputedEffects, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
 	require.NoError(t, err)
-	require.False(t, recomputedEffects.hasChanges())
+	require.False(t, optionsToReapply.hasChanges())
 	require.EqualExportedValues(t, input, merged)
 }
 
@@ -459,7 +459,7 @@ func TestMergeAndApply(t *testing.T) {
 			needCheckResultTSC:       true,
 		},
 		{
-			name:          "recompute: TSC updated with same fast-forward",
+			name:          "reapply: TSC updated with same fast-forward",
 			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
 				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
