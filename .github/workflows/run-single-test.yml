@@ -64,7 +64,9 @@ jobs:
 
       - name: Run unit test
         timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
-        run: make unit-test-coverage
+        run: |
+          export TEST_RUNNER_TIMEOUT="$((${{ inputs.timeout_minutes }} - 1))m"
+          make unit-test-coverage
         env:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
           TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
@@ -154,7 +156,9 @@ jobs:
       - name: Run functional test
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
-        run: make functional-test-coverage
+        run: |
+          export TEST_RUNNER_TIMEOUT="$((${{ inputs.timeout_minutes }} - 1))m"
+          make functional-test-coverage
         env:
           TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"

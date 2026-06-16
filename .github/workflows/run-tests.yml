@@ -153,20 +153,24 @@ jobs:
             functest:
               cmd: make functional-test-coverage
               test_timeout: 35m
+              test_runner_timeout: 39m
               github_timeout: 40
               sharded: true
             smoke:
               cmd: make functional-test-coverage
               test_timeout: 5m
+              test_runner_timeout: 9m
               github_timeout: 10
               test_args: '"-run=TestActivityTestSuite|TestSignalWorkflowTestSuite|TestWorkflowTestSuite"'
             ndc:
               cmd: make functional-test-ndc-coverage
               test_timeout: 10m
+              test_runner_timeout: 14m
               github_timeout: 15
             xdc:
               cmd: make functional-test-xdc-coverage
               test_timeout: 30m
+              test_runner_timeout: 34m
               github_timeout: 35
         run: |
           # Convert YAML inputs to JSON for jq.
@@ -293,6 +297,9 @@ jobs:
     name: Unit test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      TEST_TIMEOUT: 15m
+      TEST_RUNNER_TIMEOUT: 19m
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -318,7 +325,7 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
+        run: ./develop/github/monitor_test.sh make unit-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -335,6 +342,7 @@ jobs:
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
       CONTAINERS: cassandra mysql postgresql
+      TEST_RUNNER_TIMEOUT: 14m
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -405,6 +413,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      TEST_RUNNER_TIMEOUT: ${{ matrix.test_runner_timeout }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -447,9 +456,7 @@ jobs:
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
-        run: |
-          export TEST_RUNNER_TIMEOUT="$((${{ matrix.github_timeout }} - 1))m"
-          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
