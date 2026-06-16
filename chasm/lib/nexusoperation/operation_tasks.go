@@ -174,7 +174,6 @@ func (h *operationInvocationTaskHandler) Execute(
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot
 	// access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
-	callCtx = contextWithNexusOriginNamespace(callCtx, ns.Name().String())
 
 	options := nexus.StartOperationOptions{
 		Header:      header,

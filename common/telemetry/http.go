@@ -23,7 +23,12 @@ type debugHTTPHandler struct {
 	handler http.Handler
 }
 
-type httpSpanAttributesKey struct{}
+type nexusHTTPRequestKey struct{}
+
+type nexusHTTPRequestAttrs struct {
+	namespaceName       string
+	targetNamespaceName string
+}
 
 // NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
 // carry TraceContext headers and produce a client span.
@@ -46,22 +51,6 @@ func NewHTTPClientTransport(
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 	)
-}
-
-// ContextWithHTTPSpanAttributes adds attributes to the HTTP client span created
-// for requests sent with NewHTTPClientTransport.
-func ContextWithHTTPSpanAttributes(
-	ctx context.Context,
-	attrs ...attribute.KeyValue,
-) context.Context {
-	if len(attrs) == 0 {
-		return ctx
-	}
-	existing, _ := ctx.Value(httpSpanAttributesKey{}).([]attribute.KeyValue)
-	next := make([]attribute.KeyValue, 0, len(existing)+len(attrs))
-	next = append(next, existing...)
-	next = append(next, attrs...)
-	return context.WithValue(ctx, httpSpanAttributesKey{}, next)
 }
 
 // NewHTTPHandler wraps an HTTP handler with otelhttp so inbound requests extract
@@ -91,9 +80,7 @@ func NewHTTPHandler(
 
 func (t *httpClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
-	if attrs, ok := req.Context().Value(httpSpanAttributesKey{}).([]attribute.KeyValue); ok {
-		span.SetAttributes(attrs...)
-	}
+	annotateNexusHTTPRequest(span, req)
 	if t.isDebug {
 		annotateHTTPHeaders(span, "http.request.headers.", req.Header)
 		if payload, ok := captureBody(&req.Body, &req.GetBody); ok {
@@ -117,6 +104,31 @@ func (t *httpClientTransport) RoundTrip(req *http.Request) (*http.Response, erro
 		}
 	}
 	return resp, err
+}
+
+// MarkNexusHTTPRequest annotates the HTTP client span for a Nexus request.
+func MarkNexusHTTPRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
+	*req = *req.WithContext(context.WithValue(req.Context(), nexusHTTPRequestKey{}, nexusHTTPRequestAttrs{
+		namespaceName:       namespaceName,
+		targetNamespaceName: targetNamespaceName,
+	}))
+}
+
+func annotateNexusHTTPRequest(span trace.Span, req *http.Request) {
+	nexusAttrs, ok := req.Context().Value(nexusHTTPRequestKey{}).(nexusHTTPRequestAttrs)
+	if !ok {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attribute.Bool("temporal.nexus.request", true),
+	}
+	if nexusAttrs.namespaceName != "" {
+		attrs = append(attrs, attribute.String("temporal.namespace", nexusAttrs.namespaceName))
+	}
+	if nexusAttrs.targetNamespaceName != "" {
+		attrs = append(attrs, attribute.String("temporal.nexus.namespace", nexusAttrs.targetNamespaceName))
+	}
+	span.SetAttributes(attrs...)
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/attribute"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -16,7 +15,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/telemetry"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
@@ -58,10 +56,6 @@ func (n invocableOutbound) Invoke(
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
 	}
-	ctx = telemetry.ContextWithHTTPSpanAttributes(
-		ctx,
-		attribute.String(telemetry.NexusOriginNamespaceKey, ns.Name().String()),
-	)
 
 	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		HTTPCaller: h.httpCallerProvider(queuescommon.NamespaceIDAndDestination{

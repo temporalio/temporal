@@ -48,7 +48,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.NotEmpty(t, recorder.Ended())
 	})
 
-	t.Run("AnnotatesContextAttributes", func(t *testing.T) {
+	t.Run("AnnotatesNexusRequest", func(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 
@@ -63,17 +63,16 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
 		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-		req = req.WithContext(telemetry.ContextWithHTTPSpanAttributes(
-			req.Context(),
-			attribute.String(telemetry.NexusOriginNamespaceKey, "caller-namespace"),
-		))
+		telemetry.MarkNexusHTTPRequest(req, "caller-namespace", "target-namespace")
 
 		resp, err := wrapped.RoundTrip(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
 		attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
-		require.Equal(t, "caller-namespace", attrs[telemetry.NexusOriginNamespaceKey].Value.AsString())
+		require.True(t, attrs["temporal.nexus.request"].Value.AsBool())
+		require.Equal(t, "caller-namespace", attrs["temporal.namespace"].Value.AsString())
+		require.Equal(t, "target-namespace", attrs["temporal.nexus.namespace"].Value.AsString())
 	})
 
 	t.Run("AnnotatesHeadersAndPayloadsInDebugMode", func(t *testing.T) {

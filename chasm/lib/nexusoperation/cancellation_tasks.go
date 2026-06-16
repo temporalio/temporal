@@ -138,7 +138,6 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
 	defer cancel()
-	callCtx = contextWithNexusOriginNamespace(callCtx, ns.Name().String())
 
 	inv, err := h.newInvocation(
 		callCtx, ns, endpoint, args.endpointName, args.service,

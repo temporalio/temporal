@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/attribute"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -32,7 +31,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -259,10 +257,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	defer cancel()
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
-	callCtx = telemetry.ContextWithHTTPSpanAttributes(
-		callCtx,
-		attribute.String(telemetry.NexusOriginNamespaceKey, ns.Name().String()),
-	)
 
 	options := nexus.StartOperationOptions{
 		Header:      header,
@@ -647,10 +641,6 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
-	callCtx = telemetry.ContextWithHTTPSpanAttributes(
-		callCtx,
-		attribute.String(telemetry.NexusOriginNamespaceKey, ns.Name().String()),
-	)
 
 	var callErr error
 	var startTime time.Time
