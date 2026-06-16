@@ -40,7 +40,7 @@ func httpCallerProviderProvider(
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
 	defaultClient := &http.Client{
-		Transport: telemetry.NewHTTPClientTransport(http.DefaultTransport, tracerProvider, propagator),
+		Transport: telemetry.NewHTTPClientTransport(nil, tracerProvider, propagator),
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
