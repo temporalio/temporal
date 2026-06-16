@@ -163,7 +163,7 @@ func TestProtoElementsMatch(t *testing.T) {
 			mt := &mockT{}
 			protorequire.ProtoElementsMatch(mt, tc.A, tc.B)
 			if mt.failed {
-				t.Errorf("expected equality")
+				t.Error("expected equality")
 			}
 		})
 	}
