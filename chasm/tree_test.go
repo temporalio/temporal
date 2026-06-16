@@ -3231,13 +3231,13 @@ func (s *nodeSuite) TestContextNowStableWithinContext() {
 	s.timeSource.Update(startTime)
 
 	mutableContext := NewMutableContext(context.Background(), root)
+	s.timeSource.Update(updatedTime)
+
 	component, err := root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
 	s.Equal(startTime, mutableContext.Now(component))
-
-	s.timeSource.Update(updatedTime)
 	s.Equal(startTime, mutableContext.Now(component))
 
 	childComponent := testComponent.SubComponent1.Get(mutableContext)
