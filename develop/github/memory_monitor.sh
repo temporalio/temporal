@@ -2,11 +2,15 @@
 #
 # Memory Monitor
 #
-# 1. Snapshot status: logs cheap memory status every SNAPSHOT_INTERVAL_SECONDS and
-#    writes the highest-memory snapshot to a file.
-# 2. Profile capture: when usage crosses PROFILE_CAPTURE_THRESHOLD, captures
-#    pprof and process profiles in PROFILE_OUTPUT_DIR, then repeats every
-#    PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
+# 1. Snapshot status:
+#       Samples memory every SNAPSHOT_INTERVAL_SECONDS, logs status
+#       every SNAPSHOT_PRINT_INTERVAL_SECONDS, and writes the highest-memory
+#       snapshot to a file.
+#
+# 2. Profile capture:
+#       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
+#       pprof and process profiles in PROFILE_OUTPUT_DIR, then repeats every
+#       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
 # Usage:
 #   ./memory_monitor.sh <snapshot-file>
@@ -20,6 +24,7 @@ fi
 
 # Snapshot config.
 SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
+SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="$1"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-.testoutput/memory/snapshot-history.txt}"
 SNAPSHOT_PRINT_THRESHOLD=95
@@ -33,6 +38,7 @@ PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 # State.
 SNAPSHOT_PRINTED=false
 SNAPSHOT_HIGH_WATER_MARK=0
+LAST_SNAPSHOT_PRINT_TIME=0
 LAST_PROFILE_CAPTURE_TIME=0
 WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
 
@@ -174,6 +180,18 @@ $(free -m)
 EOF
 }
 
+print_snapshot_status() {
+  local now="$1"
+  local line="$2"
+
+  if [[ $(( now - LAST_SNAPSHOT_PRINT_TIME )) -lt "$SNAPSHOT_PRINT_INTERVAL_SECONDS" ]]; then
+    return
+  fi
+
+  echo "$line"
+  LAST_SNAPSHOT_PRINT_TIME="$now"
+}
+
 capture_profile() {
   local pct="$1"
   local goroutine_output goroutine_count pprof_output test_pid profile_prefix process_profile_output
@@ -214,12 +232,14 @@ snapshot() {
   local timestamp
   timestamp="$(date '+%H:%M:%S')"
 
-  # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
-  printf "%s used=%s%% mem=%sMB procs=[%s]\n" \
-    "$timestamp" "$pct" "$memused_mb" "$top_procs" | tee -a "$SNAPSHOT_HISTORY_FILE"
+  local status_line
+  status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$top_procs")"
+  echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
 
   local now
   now="$(date +%s)"
+  print_snapshot_status "$now" "$status_line"
+
   report="$(build_snapshot_report "$pct")"
   if should_capture_profile "$pct" "$now"; then
     LAST_PROFILE_CAPTURE_TIME="$now"
