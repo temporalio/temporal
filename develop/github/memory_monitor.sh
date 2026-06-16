@@ -3,9 +3,11 @@
 # Memory Monitor
 #
 # 1. Snapshot status:
-#       Samples memory every SNAPSHOT_INTERVAL_SECONDS, logs status
-#       every SNAPSHOT_PRINT_INTERVAL_SECONDS, and writes the highest-memory
-#       snapshot to a file.
+#       Samples memory every SNAPSHOT_INTERVAL_SECONDS and writes every sample
+#       to SNAPSHOT_HISTORY_FILE. Logs status every
+#       SNAPSHOT_PRINT_INTERVAL_SECONDS, records those lines in
+#       SNAPSHOT_STATUS_HISTORY_FILE, and writes the highest-memory snapshot
+#       report to SNAPSHOT_FILE.
 #
 # 2. Profile capture:
 #       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
@@ -35,7 +37,7 @@ SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-history.txt}"
-SNAPSHOT_PRINT_THRESHOLD=95
+SNAPSHOT_STATUS_HISTORY_FILE="${SNAPSHOT_STATUS_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-status-history.txt}"
 
 # Profile config.
 PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
@@ -48,7 +50,6 @@ OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-97}"
 OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
-SNAPSHOT_PRINTED=false
 SNAPSHOT_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
 LAST_PROFILE_CAPTURE_TIME=0
@@ -56,8 +57,9 @@ WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
 OOM_TERMINATED=false
 
 # Clear history on start
-mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
+mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")" "$(dirname "$SNAPSHOT_STATUS_HISTORY_FILE")"
 : > "$SNAPSHOT_HISTORY_FILE"
+: > "$SNAPSHOT_STATUS_HISTORY_FILE"
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <profile_type> <output_file>
@@ -220,7 +222,7 @@ build_snapshot_report() {
   cat <<EOF
 Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
 
-$(cat "$SNAPSHOT_HISTORY_FILE")
+$(cat "$SNAPSHOT_STATUS_HISTORY_FILE")
 
 --- Top Processes ---
 $(ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20)
@@ -239,6 +241,7 @@ print_snapshot_status() {
   fi
 
   echo "$line"
+  echo "$line" >> "$SNAPSHOT_STATUS_HISTORY_FILE"
   LAST_SNAPSHOT_PRINT_TIME="$now"
 }
 
@@ -306,14 +309,6 @@ snapshot() {
 
   report="$(build_snapshot_report "$pct")"
   report+="$profile_report"
-
-  # Print report to stdout when memory threshold is reached (only once per run).
-  if [[ "$pct" -ge "$SNAPSHOT_PRINT_THRESHOLD" ]] && [[ "$SNAPSHOT_PRINTED" == "false" ]]; then
-    echo ""
-    echo "$report"
-    echo ""
-    SNAPSHOT_PRINTED=true
-  fi
 
   # Write report to disk only if memory usage is at or above high water mark.
   if [[ "$pct" -ge "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
