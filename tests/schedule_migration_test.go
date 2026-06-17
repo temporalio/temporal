@@ -24,6 +24,7 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
@@ -208,6 +209,86 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	s.NoError(err)
 }
 
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentinel() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel")
+	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wf")
+	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			nsID,
+			&workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                nsName,
+				WorkflowId:               v1WorkflowID,
+				WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				Identity:                 "test",
+				RequestId:                uuid.NewString(),
+				WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			},
+			nil, nil, time.Now().UTC(),
+		),
+	)
+	s.NoError(err)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+		},
+	)
+	s.NoError(err)
+
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	s.Contains(unavailableErr.Message, "sentinel")
+}
+
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	env := testcore.NewEnv(
 		s.T(),
@@ -333,6 +414,15 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
+
+	// Custom search attributes and memo must survive the migration.
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	schSAKeyword := payload.EncodeString("v1-to-v2 sa value")
+	schSAInt, err := payload.Encode(2025)
+	s.NoError(err)
+	schMemo := payload.EncodeString("v1-to-v2 memo value")
+
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -350,35 +440,26 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		},
 	}
 
-	// Create the V1 (workflow-backed) scheduler directly.
-	startArgs := &schedulespb.StartScheduleArgs{
-		Schedule: sched,
-		State: &schedulespb.InternalState{
-			Namespace:     nsName,
-			NamespaceId:   nsID,
-			ScheduleId:    sid,
-			ConflictToken: scheduler.InitialConflictToken,
+	// Disable CHASM during creation so CreateSchedule routes to the V1 path.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+	_, err = env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAKeyword,
+				csaInt:     schSAInt,
+			},
 		},
-	}
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+		},
+	})
 	s.NoError(err)
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                nsName,
-		WorkflowId:               v1WorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayloads,
-		Identity:                 "test",
-		RequestId:                uuid.NewString(),
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-	}
-	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
-		ctx,
-		common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
-	)
-	s.NoError(err)
 
 	// Wait for the per-namespace worker to pick up the V1 workflow.
 	s.Eventually(func() bool {
@@ -396,9 +477,10 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 			return false
 		}
 		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
 	// Issue migration from V1 to V2.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
@@ -427,8 +509,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// V2 schedule should now exist.
-	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+	v2Desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 		ctx,
 		&schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
@@ -436,6 +517,23 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		},
 	)
 	s.NoError(err)
+	v2SA := v2Desc.GetFrontendResponse().GetSearchAttributes().GetIndexedFields()
+	s.Equal(schSAKeyword.Data, v2SA[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, v2SA[csaInt].GetData())
+	s.Equal(schMemo.Data, v2Desc.GetFrontendResponse().GetMemo().GetFields()["schedmemo1"].GetData())
+
+	// Custom SAs must also be queryable on the CHASM visibility record.
+	var listResp *workflowservice.ListSchedulesResponse
+	s.Eventually(func() bool {
+		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       nsName,
+			MaximumPageSize: 10,
+			Query:           "CustomKeywordField = 'v1-to-v2 sa value'",
+		})
+		return err == nil && len(listResp.GetSchedules()) == 1
+	}, 30*time.Second, 500*time.Millisecond)
+	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
+	s.Equal(schSAKeyword.Data, listResp.GetSchedules()[0].GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
@@ -479,8 +577,16 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		},
 	}
 
+	// Custom search attributes and memo must survive the migration.
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	schSAKeyword := payload.EncodeString("v2-to-v1 sa value")
+	schSAInt, err := payload.Encode(2024)
+	s.NoError(err)
+	schMemo := payload.EncodeString("v2-to-v1 memo value")
+
 	// Create CHASM schedule directly.
-	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
 		ctx,
 		&schedulerpb.CreateScheduleRequest{
 			NamespaceId: nsID,
@@ -490,6 +596,15 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 				Schedule:   sched,
 				Identity:   "test",
 				RequestId:  uuid.NewString(),
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						csaKeyword: schSAKeyword,
+						csaInt:     schSAInt,
+					},
+				},
+				Memo: &commonpb.Memo{
+					Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+				},
 			},
 		},
 	)
@@ -608,6 +723,24 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		return err == nil && len(listResp.GetSchedules()) == 1
 	}, 30*time.Second, 500*time.Millisecond)
 	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
+
+	// Custom SAs and memo must have carried over to the V1 schedule.
+	s.Equal(schSAKeyword.Data, v1Desc.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, v1Desc.GetSearchAttributes().GetIndexedFields()[csaInt].GetData())
+	s.Equal(schMemo.Data, v1Desc.GetMemo().GetFields()["schedmemo1"].GetData())
+
+	entry := listResp.GetSchedules()[0]
+	s.Equal(schSAKeyword.Data, entry.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, entry.GetSearchAttributes().GetIndexedFields()[csaInt].GetData())
+
+	filtered, err := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       nsName,
+		MaximumPageSize: 10,
+		Query:           "CustomKeywordField = 'v2-to-v1 sa value'",
+	})
+	s.NoError(err)
+	s.Len(filtered.GetSchedules(), 1)
+	s.Equal(sid, filtered.GetSchedules()[0].GetScheduleId())
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
