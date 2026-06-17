@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -45,6 +44,7 @@ type (
 )
 
 func NewConnectionPool[C any](
+	ctx context.Context,
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
@@ -61,10 +61,11 @@ func NewConnectionPool[C any](
 		logger:                 logger,
 	}
 
-	// Close cached conns whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
+	// Close cached conns whose host leaves the membership ring. The watcher runs
+	// until ctx is cancelled (i.e. the owning client is shut down). The cached
+	// connections themselves are owned and closed by the RPCFactory that dialed
+	// them.
 	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 	return c
 }
 

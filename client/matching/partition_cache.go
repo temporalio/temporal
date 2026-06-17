@@ -42,11 +42,13 @@ func newPartitionCache(
 	}
 }
 
-func (c *partitionCache) Start() {
+// Start begins periodic cache rotation. The rotation goroutine runs until ctx
+// is cancelled (or Stop is called).
+func (c *partitionCache) Start(ctx context.Context) {
 	for i := range c.shards {
 		c.shards[i].rotate()
 	}
-	c.rotate = goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
+	c.rotate = goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		t := time.NewTicker(partitionCacheRotateInterval / partitionCacheNumShards)
 		defer t.Stop()
 		for i := 0; ; i = (i + 1) % partitionCacheNumShards {

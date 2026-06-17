@@ -249,6 +249,7 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 }
 
 func ClientFactoryProvider(
+	lc fx.Lifecycle,
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
@@ -259,7 +260,7 @@ func ClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 ) client.Factory {
-	return factoryProvider.NewFactory(
+	factory := factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
 		metricsHandler,
@@ -269,6 +270,14 @@ func ClientFactoryProvider(
 		logger,
 		throttledLogger,
 	)
+	// Stop the factory on shutdown so the background goroutines and pooled gRPC
+	// connections owned by the clients it created are released. Stop is not part
+	// of the Factory interface so that third-party implementations are not forced
+	// to implement it; implementations that do have Stop benefit from cleanup.
+	if s, ok := factory.(interface{ Stop() }); ok {
+		lc.Append(fx.StopHook(s.Stop))
+	}
+	return factory
 }
 
 func ClientBeanProvider(
@@ -377,6 +386,7 @@ func ArchiverProviderProvider(
 }
 
 func SdkClientFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
@@ -388,13 +398,17 @@ func SdkClientFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
-	return sdk.NewClientFactory(
+	factory := sdk.NewClientFactory(
 		frontendURL,
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
-	), nil
+	)
+	if c, ok := any(factory).(interface{ Close() }); ok {
+		lc.Append(fx.StopHook(c.Close))
+	}
+	return factory, nil
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {
@@ -413,6 +427,7 @@ func PerServiceDialOptionsProvider(
 }
 
 func RPCFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	svcName primitives.ServiceName,
 	logger log.Logger,
@@ -454,6 +469,12 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	// Close all dialed client connections on shutdown so their gRPC background
+	// goroutines are released. Stop is not part of the RPCFactory interface so
+	// that third-party implementations are not forced to implement it.
+	if s, ok := any(factory).(interface{ Stop() }); ok {
+		lc.Append(fx.StopHook(s.Stop))
+	}
 	return factory, nil
 }
 

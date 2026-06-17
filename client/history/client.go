@@ -44,6 +44,7 @@ type clientImpl struct {
 
 // NewClient creates a new history service gRPC client
 func NewClient(
+	ctx context.Context,
 	dc *dynamicconfig.Collection,
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
@@ -51,7 +52,7 @@ func NewClient(
 	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
+	connections := NewConnectionPool(ctx, historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 
 	var redirector Redirector[historyservice.HistoryServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
