@@ -19,9 +19,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -43,6 +45,7 @@ type BacklogManagerTestSuite struct {
 	cancelCtx  context.CancelFunc
 	taskMgr    *testTaskManager
 	ptqMgr     *MockphysicalTaskQueueManager
+	metricsCap *metricstest.CaptureHandler
 
 	capturedTasksLock  sync.Mutex
 	capturedTasksSlice []*internalTask
@@ -73,6 +76,11 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 		s.taskMgr = newTestTaskManager(s.logger)
 	}
 
+	// A capture handler discards recordings while no capture is active (see
+	// CaptureHandler.record), so it behaves like a noop handler for tests that
+	// don't call StartCapture.
+	s.metricsCap = metricstest.NewCaptureHandler()
+
 	s.cfgcli = dynamicconfig.NewMemoryClient()
 	s.cfgcol = dynamicconfig.NewCollection(s.cfgcli, s.logger)
 
@@ -100,7 +108,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			s.logger,
 			nil,
-			metrics.NoopMetricsHandler,
+			s.metricsCap,
 			func() counter.Counter { return counter.NewMapCounter(1000) },
 			false,
 		)
@@ -113,7 +121,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			s.logger,
 			nil,
-			metrics.NoopMetricsHandler,
+			s.metricsCap,
 			false,
 		)
 	} else {
@@ -125,7 +133,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			s.logger,
 			nil,
-			metrics.NoopMetricsHandler,
+			s.metricsCap,
 		)
 	}
 }
@@ -436,7 +444,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	// - ackLevel gets set to maxReadLevel
 	// - backlog counts reset to 0
 	for _, t := range s.capturedTasks() {
-		t.finish(nil, true)
+		t.finish(taskFinishResult{consumedToken: true})
 	}
 
 	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
@@ -568,7 +576,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 
 	// Complete the delivered tasks.
 	for _, t := range s.capturedTasks() {
-		t.finish(nil, true)
+		t.finish(taskFinishResult{consumedToken: true})
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
@@ -582,6 +590,104 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 		}
 		return db.subqueues[subqueueZero].AckLevel >= lastID
 	}, 2*time.Second, 10*time.Millisecond, "ack level did not advance past all tasks")
+}
+
+// TestExpiredTasksOnRead_EmitTasksDropped verifies tasks_dropped is emitted once per
+// task that has already expired when read from persistence, with reason=expired_read.
+func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
+	const numExpired = 3
+
+	capture := s.metricsCap.StartCapture()
+	defer s.metricsCap.StopCapture(capture)
+
+	droppedReasons := func() []string {
+		var reasons []string
+		for _, r := range capture.Snapshot()[metrics.DroppedTasksCounter.Name()] {
+			reasons = append(reasons, r.Tags["reason"])
+		}
+		return reasons
+	}
+
+	if !s.newMatcher {
+		// Classic reader: drive addTasksToBuffer directly, mirroring
+		// TestReadLevelForAllExpiredTasksInBatch. The emission is synchronous.
+		blm := s.blm.(*backlogManagerImpl)
+		s.Require().NoError(blm.taskWriter.initReadWriteState())
+
+		expired := make([]*persistencespb.AllocatedTaskInfo, numExpired)
+		for i := range expired {
+			expired[i] = &persistencespb.AllocatedTaskInfo{
+				TaskId: int64(i + 1),
+				Data: &persistencespb.TaskInfo{
+					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+					ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				},
+			}
+		}
+		s.Require().NoError(blm.taskReader.addTasksToBuffer(context.TODO(), expired))
+
+		reasons := droppedReasons()
+		s.Require().Len(reasons, numExpired)
+		for _, reason := range reasons {
+			s.Equal(dropReasonExpiredRead.tag().Value, reason)
+		}
+		return
+	}
+
+	// Pri/fair readers read the backlog from the DB asynchronously after Start.
+	// Pre-populate the DB with already-expired tasks plus one valid task (a trailing
+	// valid task keeps this off the priTaskReader all-expired edge case).
+	ctx := context.Background()
+	queue := s.ptqMgr.QueueKey()
+	queueInfo := &persistencespb.TaskQueueInfo{
+		NamespaceId: queue.NamespaceId(),
+		Name:        queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+	}
+	_, err := s.taskMgr.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+		RangeID:       1,
+		TaskQueueInfo: queueInfo,
+	})
+	s.Require().NoError(err)
+
+	var dbTasks []*persistencespb.AllocatedTaskInfo
+	for id := int64(1); id <= numExpired+1; id++ {
+		t := &persistencespb.AllocatedTaskInfo{
+			TaskId: id,
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			},
+		}
+		if id <= numExpired {
+			t.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(-60) // expired
+		} else {
+			t.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(3600) // valid
+		}
+		if s.fairness {
+			t.TaskPass = id * 1000 // spread out pass numbers
+		}
+		dbTasks = append(dbTasks, t)
+	}
+	_, err = s.taskMgr.CreateTasks(ctx, &persistence.CreateTasksRequest{
+		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{Data: queueInfo, RangeID: 1},
+		Tasks:         dbTasks,
+	})
+	s.Require().NoError(err)
+
+	s.setupToCaptureTasks()
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Wait for the expired tasks to be read and dropped.
+	await.RequireTrue(s.T(), func() bool {
+		return len(droppedReasons()) == numExpired
+	}, 2*time.Second, 10*time.Millisecond)
+
+	for _, reason := range droppedReasons() {
+		s.Equal(dropReasonExpiredRead.tag().Value, reason)
+	}
 }
 
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
@@ -836,7 +942,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
-				t.finish(nil, true)
+				t.finish(taskFinishResult{consumedToken: true})
 
 				tindex := t.event.Data.ScheduledEventId
 				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
