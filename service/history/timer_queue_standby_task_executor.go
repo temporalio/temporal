@@ -237,6 +237,7 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
 	timerTask *tasks.TimeSkippingTimerTask,
 ) error {
+
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			return nil, nil

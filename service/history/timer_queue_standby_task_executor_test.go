@@ -2459,107 +2459,109 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
 }
 
-// makeTimeSkippingMS builds a running mutable state, snapshots it to a persistence proto,
-// and returns the persistence proto plus the workflow key. The caller can mutate the returned
-// ExecutionInfo (e.g. set TimeSkippingInfo) before programming GetWorkflowExecution.
-func (s *timerQueueStandbyTaskExecutorSuite) makeTimeSkippingMS() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: "ts-bound-wf-" + uuid.NewString(),
-		RunId:      uuid.NewString(),
-	}
-	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
+	// makeTimeSkippingMS builds a running mutable state, snapshots it to a persistence proto,
+	// and returns the persistence proto plus the workflow key. The caller can mutate the returned
+	// ExecutionInfo (e.g. set TimeSkippingInfo) before programming GetWorkflowExecution.
+	makeTimeSkippingMS := func() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: "ts-bound-wf-" + uuid.NewString(),
+			RunId:      uuid.NewString(),
+		}
+		workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 
-	mutableState := workflow.TestGlobalMutableState(
-		s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
-	event, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:        &commonpb.WorkflowType{Name: "test-wf-type"},
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-tq"},
-				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		mutableState := workflow.TestGlobalMutableState(
+			s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+		event, err := mutableState.AddWorkflowExecutionStartedEvent(
+			execution,
+			&historyservice.StartWorkflowExecutionRequest{
+				Attempt:     1,
+				NamespaceId: s.namespaceID.String(),
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+					WorkflowType:        &commonpb.WorkflowType{Name: "test-wf-type"},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-tq"},
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+				},
 			},
-		},
-	)
-	s.NoError(err)
+		)
+		s.NoError(err)
 
-	pms := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	return pms, workflowKey
-}
-
-// makeTimeSkippingPendingMS builds an MS that puts the standby's action function on
-// the "still waiting" path: fast-forward matches the task's source event and HasReached=false.
-func (s *timerQueueStandbyTaskExecutorSuite) makeTimeSkippingPendingMS() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
-	pms, workflowKey := s.makeTimeSkippingMS()
-	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(time.Hour),
-		},
-		FastForwardInfo: &persistencespb.FastForwardInfo{
-			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
-			SourceEventId: 1,
-		},
+		pms := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+		return pms, workflowKey
 	}
-	return pms, workflowKey
-}
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wait() {
-	pms, workflowKey := s.makeTimeSkippingPendingMS()
-
-	timerTask := &tasks.TimeSkippingTimerTask{
-		WorkflowKey:         workflowKey,
-		TaskID:              s.mustGenerateTaskID(),
-		VisibilityTimestamp: s.now,
-		EventID:             1,
+	// makeTimeSkippingPendingMS builds an MS that puts the standby's action function on
+	// the "still waiting" path: fast-forward matches the task's source event and HasReached=false.
+	makeTimeSkippingPendingMS := func() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
+		pms, workflowKey := makeTimeSkippingMS()
+		pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
+			},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
+				SourceEventId: 1,
+			},
+		}
+		return pms, workflowKey
 	}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
 
-	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
-}
+	s.Run("Wait", func() {
+		pms, workflowKey := makeTimeSkippingPendingMS()
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Ack() {
-	// HasReached=true: active side already replicated the disable transition,
-	// so the standby's action function returns nil and the task is acked.
-	pms, workflowKey := s.makeTimeSkippingPendingMS()
-	pms.ExecutionInfo.TimeSkippingInfo.FastForwardInfo.HasReached = true
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now,
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
 
-	timerTask := &tasks.TimeSkippingTimerTask{
-		WorkflowKey:         workflowKey,
-		TaskID:              s.mustGenerateTaskID(),
-		VisibilityTimestamp: s.now.Add(time.Hour),
-		EventID:             1,
-	}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+		s.mockShard.SetCurrentTime(s.clusterName, s.now)
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	})
 
-	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.NoError(resp.ExecutionErr)
-}
+	s.Run("Ack", func() {
+		// HasReached=true: active side already replicated the disable transition,
+		// so the standby's action function returns nil and the task is acked.
+		pms, workflowKey := makeTimeSkippingPendingMS()
+		pms.ExecutionInfo.TimeSkippingInfo.FastForwardInfo.HasReached = true
 
-func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Discard() {
-	pms, workflowKey := s.makeTimeSkippingPendingMS()
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now.Add(time.Hour),
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
 
-	timerTask := &tasks.TimeSkippingTimerTask{
-		WorkflowKey:         workflowKey,
-		TaskID:              s.mustGenerateTaskID(),
-		VisibilityTimestamp: s.now,
-		EventID:             1,
-	}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+		s.mockShard.SetCurrentTime(s.clusterName, s.now)
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.NoError(resp.ExecutionErr)
+	})
 
-	// Past VisibilityTime + discardDelay: ErrTaskDiscarded.
-	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.Run("Discard", func() {
+		pms, workflowKey := makeTimeSkippingPendingMS()
+
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now,
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+
+		// Past VisibilityTime + discardDelay: ErrTaskDiscarded.
+		s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	})
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
