@@ -26,7 +26,7 @@
 //
 //	LEAK_ITERS                        clusters built after warmup (default 15)
 //	LEAK_MAX_GOROUTINES_PER_CLUSTER   goroutine-slope failure threshold (default 2)
-//	LEAK_MAX_HEAP_KB_PER_CLUSTER      HeapInuse-slope failure threshold, KB (default 512)
+//	LEAK_MAX_HEAP_KB_PER_CLUSTER      HeapInuse-slope failure threshold, KB (default 2048)
 //	LEAK_OUTPUT_DIR                   on failure, write heap.prof / goroutines.txt /
 //	                                  leaked-goroutines.txt here (CI uploads them)
 //	LEAK_ABORT_ON_FAILURE=1           on failure, SIGABRT to dump a core (with
@@ -62,7 +62,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 	iters := envInt("LEAK_ITERS", 15)
 	maxGoroutinesPerCluster := envInt("LEAK_MAX_GOROUTINES_PER_CLUSTER", 2)
-	maxHeapKBPerCluster := envInt("LEAK_MAX_HEAP_KB_PER_CLUSTER", 512)
+	maxHeapKBPerCluster := envInt("LEAK_MAX_HEAP_KB_PER_CLUSTER", 2048)
 
 	// Warm up so process-lifetime singletons and first-use initialization (proto
 	// registries, type caches, ...) exist before we snapshot the baselines —

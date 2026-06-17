@@ -478,6 +478,16 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	}
 	err := s.testCluster.TearDownCluster()
 	s.testCluster = nil
+
+	// Go's testing framework retains every subtest's *T (and its already-run
+	// cleanup closures) for the parent test's lifetime, so any *FunctionalTestBase
+	// captured by those closures stays reachable. Drop the heavy heap-allocated
+	// fields so the retained husk is light — even if the pointer itself stays alive,
+	// the cluster graph and its large singletons (exporters, config maps, ...) can
+	// be collected.
+	s.otelExporter = nil
+	s.testClusterConfig = nil
+
 	return err
 }
 

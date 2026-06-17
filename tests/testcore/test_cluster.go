@@ -578,6 +578,11 @@ func (tc *TestCluster) TearDownCluster() error {
 		}
 	}
 
+	// Drop references to the stopped host and test base so the retained
+	// *TestCluster husk does not pin the whole server fx graph.
+	tc.host = nil
+	tc.testBase = nil
+
 	return errs
 }
 

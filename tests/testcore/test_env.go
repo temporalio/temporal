@@ -298,6 +298,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Cleanup(func() {
 		env.cluster = nil
 		env.taskPoller = nil
+		env.ctx = nil
+		env.tv = nil
 	})
 
 	if options.disableTestloggerFailure {
