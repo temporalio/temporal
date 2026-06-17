@@ -908,6 +908,7 @@ func (d *namespaceHandler) createResponse(
 			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
 			WorkflowUpdateCallbacks:         d.config.EnableWorkflowUpdateCallbacks(info.Name),
 			PollerAutoscaling:               true,
+			PollerAutoscalingAutoEnroll:     d.config.PollerAutoscalingAutoEnroll(info.Name),
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),

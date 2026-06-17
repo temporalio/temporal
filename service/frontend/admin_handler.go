@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
@@ -70,6 +71,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
@@ -220,6 +222,8 @@ func NewAdminHandler(
 				args.Config.VisibilityAllowList,
 			),
 			args.Config.SuppressErrorSetSystemSearchAttribute,
+			args.MetricsHandler,
+			args.Logger,
 		),
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
@@ -2577,7 +2581,40 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	request *adminservice.MigrateScheduleRequest,
 	namespaceID string,
 ) (*adminservice.MigrateScheduleResponse, error) {
-	_, err := adh.schedulerClient.MigrateToWorkflow(ctx,
+	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
+	descResp, err := adh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+		},
+	})
+	switch {
+	case common.IsNotFoundError(err):
+	case err != nil:
+		return nil, err
+	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
+		sentinelIdleTimeRemaining := time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime))
+		if sentinelIdleTimeRemaining < 0 {
+			sentinelIdleTimeRemaining = 0
+		}
+		adh.logger.Warn(
+			"schedule migration to workflow blocked by workflow sentinel",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+		)
+		return nil, chasmscheduler.ErrSentinelBlocked
+	default:
+		adh.logger.Warn(
+			"schedule migration to workflow found existing workflow",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+		)
+	}
+
+	_, err = adh.schedulerClient.MigrateToWorkflow(ctx,
 		&schedulerpb.MigrateToWorkflowRequest{
 			NamespaceId: namespaceID,
 			ScheduleId:  request.GetScheduleId(),
