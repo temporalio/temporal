@@ -4,6 +4,7 @@ package client
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -67,6 +68,10 @@ type (
 		// partition cache and connection eviction). Cancelled by Stop.
 		clientCtx       context.Context
 		clientCtxCancel context.CancelFunc
+		// stoppableMu guards stoppable. Clients that have Stop() are tracked here
+		// so Stop() can drain their goroutines after cancelling clientCtx.
+		stoppableMu sync.Mutex
+		stoppable   []interface{ Stop() }
 	}
 
 	factoryProviderImpl struct {
@@ -110,9 +115,17 @@ func (p *factoryProviderImpl) NewFactory(
 
 // Stop cancels the lifetime context shared by clients created by this
 // factory, terminating their background membership watchers and closing
-// pooled gRPC connections.
+// pooled gRPC connections. It then calls Stop on any tracked clients to
+// wait for their goroutines to drain.
 func (cf *rpcClientFactory) Stop() {
 	cf.clientCtxCancel()
+	cf.stoppableMu.Lock()
+	stoppable := cf.stoppable
+	cf.stoppable = nil
+	cf.stoppableMu.Unlock()
+	for _, s := range stoppable {
+		s.Stop()
+	}
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
@@ -150,7 +163,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
-	client := matching.NewClient(
+	rawClient := matching.NewClient(
 		cf.clientCtx,
 		timeout,
 		longPollTimeout,
@@ -163,8 +176,17 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
+	// Track the underlying client so Stop() can drain its partition-cache
+	// goroutine after cancelling clientCtx.
+	if s, ok := rawClient.(interface{ Stop() }); ok {
+		cf.stoppableMu.Lock()
+		cf.stoppable = append(cf.stoppable, s)
+		cf.stoppableMu.Unlock()
+	}
+
+	client := matchingservice.MatchingServiceClient(rawClient)
 	if cf.metricsHandler != nil {
-		client = matching.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
+		client = matching.NewMetricClient(rawClient, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 

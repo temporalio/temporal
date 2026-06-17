@@ -82,6 +82,14 @@ func NewClient(
 	return c
 }
 
+// Stop waits for the partition-cache rotation goroutine to exit. The goroutine
+// is signalled to stop when the context passed to NewClient is cancelled; Stop
+// blocks until it has actually finished so the factory can confirm clean
+// shutdown. Callers that only cancel the context can ignore Stop entirely.
+func (c *clientImpl) Stop() {
+	c.partitionCache.Stop()
+}
+
 func watchMembershipForEviction(
 	ctx context.Context,
 	resolver membership.ServiceResolver,
