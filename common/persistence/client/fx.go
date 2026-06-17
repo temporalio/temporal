@@ -41,6 +41,7 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
+		Lifecycle                                   fx.Lifecycle
 		DataStoreFactory                            persistence.DataStoreFactory
 		EventBlobCache                              persistence.XDCCache
 		Cfg                                         *config.Persistence
@@ -116,8 +117,9 @@ func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
 	var systemRequestRateLimiter, namespaceRequestRateLimiter, shardRequestRateLimiter quotas.RequestRateLimiter
+	var dynamicRateLimiters []*HealthRequestRateLimiterImpl
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		systemRequestRateLimiter = NewPriorityRateLimiter(
+		systemRequestRateLimiter, dynamicRateLimiters = NewPriorityRateLimiter(
 			params.PersistenceMaxQPS,
 			RequestPriorityFn,
 			params.OperatorRPSRatio,
@@ -141,6 +143,14 @@ func FactoryProvider(
 			params.OperatorRPSRatio,
 			params.PersistenceBurstRatio,
 		)
+	}
+
+	if len(dynamicRateLimiters) > 0 {
+		params.Lifecycle.Append(fx.StopHook(func() {
+			for _, rl := range dynamicRateLimiters {
+				rl.Stop()
+			}
+		}))
 	}
 
 	return NewFactory(

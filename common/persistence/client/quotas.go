@@ -60,6 +60,9 @@ var (
 	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5, 6}
 )
 
+// NewPriorityRateLimiter builds the composite priority rate limiter used by
+// the persistence factory. It returns both the limiter and the underlying
+// HealthRequestRateLimiterImpls; callers must Stop the latter on shutdown.
 func NewPriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
@@ -69,21 +72,22 @@ func NewPriorityRateLimiter(
 	dynamicParams DynamicRateLimitingParams,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) quotas.RequestRateLimiter {
+) (quotas.RequestRateLimiter, []*HealthRequestRateLimiterImpl) {
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
+	dynamic, stoppable := newPriorityDynamicRateLimiter(
+		hostRateFn,
+		requestPriorityFn,
+		operatorRPSRatio,
+		burstRatio,
+		healthSignals,
+		dynamicParams,
+		metricsHandler,
+		logger,
+	)
 	return quotas.NewMultiRequestRateLimiter(
 		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(
-			hostRateFn,
-			requestPriorityFn,
-			operatorRPSRatio,
-			burstRatio,
-			healthSignals,
-			dynamicParams,
-			metricsHandler,
-			logger,
-		),
+		dynamic,
 		// basic host-level rate limiter
 		newPriorityRateLimiter(
 			hostRateFn,
@@ -91,7 +95,7 @@ func NewPriorityRateLimiter(
 			operatorRPSRatio,
 			burstRatio,
 		),
-	)
+	), stoppable
 }
 
 func NewPriorityNamespaceRateLimiter(
@@ -223,6 +227,9 @@ func newPriorityRateLimiter(
 	)
 }
 
+// newPriorityDynamicRateLimiter returns the composite rate limiter and the
+// individual HealthRequestRateLimiterImpls it contains. Callers must call Stop()
+// on each returned limiter when done, to release their background refresh timers.
 func newPriorityDynamicRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
@@ -232,12 +239,14 @@ func newPriorityDynamicRateLimiter(
 	dynamicParams DynamicRateLimitingParams,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) quotas.RequestRateLimiter {
+) (quotas.RequestRateLimiter, []*HealthRequestRateLimiterImpl) {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
+	var stoppable []*HealthRequestRateLimiterImpl
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
+		var rl *HealthRequestRateLimiterImpl
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(
+			rl = NewHealthRequestRateLimiterImpl(
 				healthSignals,
 				operatorRateFn(rateFn, operatorRPSRatio),
 				dynamicParams,
@@ -246,7 +255,7 @@ func newPriorityDynamicRateLimiter(
 				logger,
 			)
 		} else {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(
+			rl = NewHealthRequestRateLimiterImpl(
 				healthSignals,
 				rateFn,
 				dynamicParams,
@@ -255,12 +264,11 @@ func newPriorityDynamicRateLimiter(
 				logger,
 			)
 		}
+		rateLimiters[priority] = rl
+		stoppable = append(stoppable, rl)
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		rateLimiters,
-	)
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters), stoppable
 }
 
 func RequestPriorityFn(req quotas.Request) int {

@@ -148,6 +148,13 @@ func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
 	rl.refreshTimer.Reset(rl.curOptions.Load().RefreshInterval)
 }
 
+// Stop releases the background refresh timer. It must be called when the rate
+// limiter is no longer needed; leaving it running keeps the timer (and the
+// HealthSignalAggregator it references) reachable via the runtime timer heap.
+func (rl *HealthRequestRateLimiterImpl) Stop() {
+	rl.refreshTimer.Stop()
+}
+
 func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {
 	curOptions := *rl.curOptions.Load()
 	return curOptions.LatencyThreshold > 0 && rl.healthSignals.AverageLatency() > curOptions.LatencyThreshold
