@@ -161,21 +161,29 @@ func FactoryProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
 	logger log.ThrottledLogger,
 ) persistence.HealthSignalAggregator {
+	var aggregator persistence.HealthSignalAggregator
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return persistence.NewHealthSignalAggregator(
+		aggregator = persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
 			logger,
 		)
+	} else {
+		aggregator = persistence.NoopHealthSignalAggregator
 	}
 
-	return persistence.NoopHealthSignalAggregator
+	// The aggregator's metrics-emitting goroutine is started lazily by the
+	// persistence factory's initDependencies. Ensure it is stopped on shutdown
+	// (Stop is idempotent). Without this its goroutine leaks per process.
+	lc.Append(fx.StopHook(aggregator.Stop))
+	return aggregator
 }
 
 func DataStoreFactoryProvider(
