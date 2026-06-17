@@ -1,4 +1,4 @@
-// Package memleak hosts a goroutine-leak regression test for the functional
+// Package goleak hosts a goroutine-leak regression test for the functional
 // test infrastructure.
 //
 // The test repeatedly creates and tears down a full test cluster (via the public
@@ -8,30 +8,30 @@
 // released) — the class of bug that drove the functional-test OOMs.
 //
 // It does not run by default: it measures the global goroutine count, so it must
-// run in isolation, and it spins up real clusters. Set RUN_MEMLEAK_TEST=1 to
+// run in isolation, and it spins up real clusters. Set RUN_GOLEAK_TEST=1 to
 // enable it (a dedicated CI job does this). It is intentionally NOT build-tagged,
 // so it stays compiled — and thus protected from rot when testcore changes — in
-// normal builds. The Makefile already excludes tests/memleak from the unit and
+// normal builds. The Makefile already excludes tests/goleak from the unit and
 // functional suites.
 //
 // On failure it writes diagnostics (a goroutine dump, a heap profile, and the
-// leaked-goroutine stacks per goleak) to LEAK_OUTPUT_DIR so CI can upload them
+// leaked-goroutine stacks per goleak) to GOLEAK_OUTPUT_DIR so CI can upload them
 // as artifacts for diagnosis.
 //
 // Run (sqlite => no Docker required):
 //
-//	RUN_MEMLEAK_TEST=1 go test -run TestClusterGoroutineSlope -count=1 -v \
-//	    ./tests/memleak/ -args -persistenceType=sql -persistenceDriver=sqlite
+//	RUN_GOLEAK_TEST=1 go test -run TestClusterGoroutineSlope -count=1 -v \
+//	    ./tests/goleak/ -args -persistenceType=sql -persistenceDriver=sqlite
 //
 // Env knobs (all optional; defaults chosen to be sensible for CI):
 //
-//	RUN_MEMLEAK_TEST=1               enable the test (otherwise skipped)
-//	LEAK_ITERS                       cluster create/teardown iterations (default 12)
-//	LEAK_MAX_GOROUTINES_PER_CLUSTER  slope failure threshold (default 12)
-//	LEAK_SETTLE_SECONDS              max settle wait per measurement (default 2)
-//	LEAK_OUTPUT_DIR                  dir for failure diagnostics (default a temp dir)
+//	RUN_GOLEAK_TEST=1               enable the test (otherwise skipped)
+//	GOLEAK_ITERS                       cluster create/teardown iterations (default 12)
+//	GOLEAK_MAX_GOROUTINES_PER_CLUSTER  slope failure threshold (default 12)
+//	GOLEAK_SETTLE_SECONDS              max settle wait per measurement (default 2)
+//	GOLEAK_OUTPUT_DIR                  dir for failure diagnostics (default a temp dir)
 
-package memleak
+package goleak
 
 import (
 	"fmt"
@@ -62,14 +62,14 @@ func envInt(key string, def int) int {
 // not accumulate per cluster create/teardown. It is robust to legitimate fixed
 // background goroutines (they don't grow per iteration) and needs no ignore-list.
 func TestClusterGoroutineSlope(t *testing.T) {
-	if os.Getenv("RUN_MEMLEAK_TEST") != "1" {
-		t.Skip("set RUN_MEMLEAK_TEST=1 to run the memory-leak regression test (measures global goroutine count; must run in isolation)")
+	if os.Getenv("RUN_GOLEAK_TEST") != "1" {
+		t.Skip("set RUN_GOLEAK_TEST=1 to run the memory-leak regression test (measures global goroutine count; must run in isolation)")
 	}
 
-	iters := envInt("LEAK_ITERS", 12)
-	threshold := envInt("LEAK_MAX_GOROUTINES_PER_CLUSTER", 12)
+	iters := envInt("GOLEAK_ITERS", 12)
+	threshold := envInt("GOLEAK_MAX_GOROUTINES_PER_CLUSTER", 12)
 	if iters <= warmupIters+1 {
-		t.Fatalf("LEAK_ITERS must be > %d", warmupIters+1)
+		t.Fatalf("GOLEAK_ITERS must be > %d", warmupIters+1)
 	}
 
 	var series []int
@@ -105,7 +105,7 @@ func TestClusterGoroutineSlope(t *testing.T) {
 // iteration (rather than a pooled, reused one).
 func runOneCluster(t *testing.T, i int) {
 	t.Run(fmt.Sprintf("iter-%02d", i), func(t *testing.T) {
-		env := testcore.NewEnv(t, testcore.WithWorkerService("memleak regression test"))
+		env := testcore.NewEnv(t, testcore.WithWorkerService("goleak regression test"))
 		_ = env.FrontendClient()
 	})
 }
@@ -113,12 +113,12 @@ func runOneCluster(t *testing.T, i int) {
 // numGoroutines returns the live goroutine count after forcing GC (twice, so the
 // second cycle reclaims finalizer-revived objects) and a short settle so that
 // transient shutdown goroutines don't inflate the reading. The settle loop exits
-// early once the count is stable, so a longer LEAK_SETTLE_SECONDS only matters if
+// early once the count is stable, so a longer GOLEAK_SETTLE_SECONDS only matters if
 // goroutines are still draining.
 func numGoroutines() int {
 	runtime.GC()
 	runtime.GC()
-	deadline := time.Now().Add(time.Duration(envInt("LEAK_SETTLE_SECONDS", 2)) * time.Second)
+	deadline := time.Now().Add(time.Duration(envInt("GOLEAK_SETTLE_SECONDS", 2)) * time.Second)
 	prev := runtime.NumGoroutine()
 	stable := 0
 	for time.Now().Before(deadline) {
@@ -137,12 +137,12 @@ func numGoroutines() int {
 }
 
 // writeDiagnostics dumps a goroutine dump, a heap profile, and the leaked-
-// goroutine stacks (relative to the post-warmup baseline) to LEAK_OUTPUT_DIR so a
+// goroutine stacks (relative to the post-warmup baseline) to GOLEAK_OUTPUT_DIR so a
 // CI job can upload them as artifacts. Returns the directory used.
 func writeDiagnostics(t *testing.T, baseline goleak.Option) string {
-	dir := os.Getenv("LEAK_OUTPUT_DIR")
+	dir := os.Getenv("GOLEAK_OUTPUT_DIR")
 	if dir == "" {
-		dir = filepath.Join(os.TempDir(), "memleak-diagnostics")
+		dir = filepath.Join(os.TempDir(), "goleak-diagnostics")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Logf("failed to create diagnostics dir %s: %v", dir, err)
