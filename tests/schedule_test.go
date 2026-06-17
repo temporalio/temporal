@@ -263,7 +263,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for the first workflow to be reported as RUNNING in ListSchedules.
 	running := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
@@ -280,7 +280,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// While paused, the in-flight workflow eventually completes and the
 	// listed RecentActions entry transitions from RUNNING to COMPLETED.
@@ -337,7 +337,7 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for visibility to surface an initial FutureActionTimes projection.
 	initial := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
@@ -400,7 +400,7 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for the first workflow to start and a second to be buffered behind it.
 	s.Eventually(func() bool {
@@ -3769,7 +3769,7 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool {
 		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -3787,7 +3787,7 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for close - also ensures any post-unpause processing has completed
 	// before the runs assertion below.
@@ -3856,7 +3856,7 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(
 		func() bool { return runs.Load() >= 1 },
@@ -3871,7 +3871,7 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Across a window well past IdleTime, the schedule must never idle-close.
 	s.Never(func() bool {
@@ -3887,7 +3887,7 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.True(desc.Schedule.State.Paused, "paused schedule must stay paused")
 
 	// Stronger check: unpause and verify a fresh run fires, confirming the
@@ -3901,7 +3901,7 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.Eventually(
 		func() bool { return runs.Load() > runsBeforeUnpause },
 		15*time.Second, 200*time.Millisecond,
@@ -3960,7 +3960,7 @@ func testPausedEmptySpecStaysOpen(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// The empty paused spec must not fire any actions on its own.
 	s.Never(func() bool { return runs.Load() > 0 },
@@ -3971,7 +3971,7 @@ func testPausedEmptySpecStaysOpen(t *testing.T, newContext contextFactory) {
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.True(desc.Schedule.State.Paused, "schedule must still be paused")
 
 	// Unpause + TriggerImmediately to sanity-check the schedule is functional,
@@ -3986,7 +3986,7 @@ func testPausedEmptySpecStaysOpen(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(
 		func() bool { return runs.Load() >= 1 },
@@ -4048,7 +4048,7 @@ func testTriggerImmediatelyOnActiveSchedule(t *testing.T, newContext contextFact
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Confirm the schedule reached an active state before triggering.
 	s.Eventually(func() bool {
@@ -4071,7 +4071,7 @@ func testTriggerImmediatelyOnActiveSchedule(t *testing.T, newContext contextFact
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// The only action that can fire in this window is the manual trigger.
 	s.Eventually(
@@ -4084,7 +4084,7 @@ func testTriggerImmediatelyOnActiveSchedule(t *testing.T, newContext contextFact
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
 	s.NotEmpty(desc.Info.FutureActionTimes, "schedule should still have future automated actions planned")
 }
@@ -4128,7 +4128,7 @@ func testTriggerImmediatelyOnPausedSchedule(t *testing.T, newContext contextFact
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Confirm the paused schedule isn't firing on its own.
 	s.Never(func() bool { return runs.Load() > 0 },
@@ -4146,7 +4146,7 @@ func testTriggerImmediatelyOnPausedSchedule(t *testing.T, newContext contextFact
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= 1 },
 		15*time.Second, 200*time.Millisecond,
@@ -4156,7 +4156,7 @@ func testTriggerImmediatelyOnPausedSchedule(t *testing.T, newContext contextFact
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
 	s.True(desc.Schedule.State.Paused, "schedule must still be paused after trigger fires")
 }
@@ -4202,7 +4202,7 @@ func testTriggerImmediatelyAfterActionsExhausted(t *testing.T, newContext contex
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Never(func() bool { return runs.Load() > 0 },
 		2*time.Second, 100*time.Millisecond,
@@ -4219,7 +4219,7 @@ func testTriggerImmediatelyAfterActionsExhausted(t *testing.T, newContext contex
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= 1 },
 		15*time.Second, 200*time.Millisecond,
@@ -4229,7 +4229,7 @@ func testTriggerImmediatelyAfterActionsExhausted(t *testing.T, newContext contex
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
 	s.Equal(int64(0), desc.Schedule.State.RemainingActions,
 		"manual trigger must not consume a LimitedActions slot")
@@ -4289,7 +4289,7 @@ func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -4305,7 +4305,7 @@ func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= 2 },
 		20*time.Second, 200*time.Millisecond,
@@ -4355,7 +4355,7 @@ func testBackfillRangeSmallerThanInterval(t *testing.T, newContext contextFactor
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -4371,7 +4371,7 @@ func testBackfillRangeSmallerThanInterval(t *testing.T, newContext contextFactor
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// No spec tick falls in a 100ms window of a 1-hour interval, so no action fires.
 	s.Never(func() bool { return runs.Load() > 0 },
@@ -4384,7 +4384,7 @@ func testBackfillRangeSmallerThanInterval(t *testing.T, newContext contextFactor
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err, "schedule must remain describable after empty backfill")
+	require.NoError(t, err, "schedule must remain describable after empty backfill")
 }
 
 // testBackfillWithSkipOverlap verifies that SKIP overlap correctly collapses a
@@ -4425,7 +4425,7 @@ func testBackfillWithSkipOverlap(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -4441,7 +4441,7 @@ func testBackfillWithSkipOverlap(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// SKIP collapses the 5-tick backfill to a single fire.
 	s.Eventually(func() bool { return runs.Load() >= 1 },
@@ -4775,7 +4775,7 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory, c sched
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= c.expectedRuns },
 		15*time.Second, 200*time.Millisecond, "expected workflows should have fired")
@@ -4843,7 +4843,7 @@ func testManualOnlyUnpausedClosesFromIdle(t *testing.T, newContext contextFactor
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -4902,7 +4902,7 @@ func testPauseDuringIdleWindow(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= 1 },
 		8*time.Second, 200*time.Millisecond, "action must fire before pausing")
@@ -4914,7 +4914,7 @@ func testPauseDuringIdleWindow(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err, "pause must succeed before the original idle task fires")
+	require.NoError(t, err, "pause must succeed before the original idle task fires")
 
 	// Wait past the original idle deadline; paused must hold the schedule open.
 	// Any in-flight idle task is dropped by Validate with reason=held_open.
@@ -4933,7 +4933,7 @@ func testPauseDuringIdleWindow(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -4995,7 +4995,7 @@ func testUpdateDuringIdleWindow(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	s.Eventually(func() bool { return runs.Load() >= 1 },
 		8*time.Second, 200*time.Millisecond, "action must fire before updating")
@@ -5012,7 +5012,7 @@ func testUpdateDuringIdleWindow(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err, "update must succeed before the original idle task fires")
+	require.NoError(t, err, "update must succeed before the original idle task fires")
 
 	s.Eventually(func() bool {
 		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -5084,7 +5084,7 @@ func testBackfillBlocksIdleClose(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// After the single allowed automated action fires, RemainingActions=0 and
 	// the scheduler is heading toward idle close.
@@ -5110,7 +5110,7 @@ func testBackfillBlocksIdleClose(t *testing.T, newContext contextFactory) {
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Backfill must fire its queued actions. We expect ~5 (one per past tick
 	// in the 5-second window at 1s interval), plus the original automated
@@ -5201,7 +5201,7 @@ func testMultiRangeBackfillCountedExactlyOnce(t *testing.T, newContext contextFa
 		Identity:  "test",
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Expected ActionCount is 4 or 6 depending on the server's interpretation of
 	// inclusive boundaries (see TODO in temporalio/features
@@ -5295,7 +5295,7 @@ func testBackfillOnPausedSchedule(t *testing.T, newContext contextFactory) {
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.NoError(err, "paused schedule must remain describable after backfill drains")
+	require.NoError(t, err, "paused schedule must remain describable after backfill drains")
 	s.True(desc.Schedule.State.Paused, "schedule must still be paused after backfill")
 }
 
