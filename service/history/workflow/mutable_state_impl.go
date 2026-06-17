@@ -7922,9 +7922,6 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
-	// A time-skipping transition mutates only executionInfo.TimeSkippingInfo (a workflow-level
-	// field), not any per-timer entity, so stamp the change here. PartialRefresh uses this to
-	// know that all pending timer tasks must be re-stamped against the new accumulated skip.
 	if ms.timeSkippingInfoUpdated && ms.executionInfo.TimeSkippingInfo != nil {
 		ms.executionInfo.TimeSkippingInfo.LastUpdateVersionedTransition = currentVersionedTransition
 	}
