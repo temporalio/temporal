@@ -18,6 +18,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -57,6 +58,7 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -2468,6 +2470,30 @@ type nexusResult struct {
 	internalError            error
 }
 
+func nexusSpanAttributes(namespaceName, taskQueue string, request *nexuspb.Request) telemetry.NexusSpanAttributes {
+	attrs := telemetry.NexusSpanAttributes{
+		Request:       true,
+		NamespaceName: namespaceName,
+		TaskQueue:     taskQueue,
+	}
+	if request == nil {
+		return attrs
+	}
+	attrs.Endpoint = request.GetEndpoint()
+	if startOperation := request.GetStartOperation(); startOperation != nil {
+		attrs.Service = startOperation.GetService()
+		attrs.Operation = startOperation.GetOperation()
+		attrs.RequestID = startOperation.GetRequestId()
+	} else if cancelOperation := request.GetCancelOperation(); cancelOperation != nil {
+		attrs.Service = cancelOperation.GetService()
+		attrs.Operation = cancelOperation.GetOperation()
+	}
+	if attrs.RequestID == "" {
+		attrs.RequestID = request.GetHeader()[telemetry.NexusRequestIDHeader]
+	}
+	return attrs
+}
+
 func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS)
 	if err != nil {
@@ -2485,6 +2511,11 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
+	telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(
+		ns.Name().String(),
+		request.GetTaskQueue().GetName(),
+		request.GetRequest(),
+	))
 
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
@@ -2588,7 +2619,13 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollNexusTaskQueueResponse(), nil
+			response := task.pollNexusTaskQueueResponse()
+			telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(
+				ns.Name().String(),
+				taskQueueName,
+				response.GetResponse().GetRequest(),
+			))
+			return response, nil
 		}
 
 		task.finish(err, true)
@@ -2615,6 +2652,7 @@ pollLoop:
 		}
 
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
+		telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(ns.Name().String(), taskQueueName, nexusReq))
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,

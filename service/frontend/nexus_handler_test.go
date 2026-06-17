@@ -13,6 +13,7 @@ import (
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -357,14 +358,11 @@ func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.
 	require.Equal(t, map[string]string{"outcome": "unsupported_client"}, snap["test"][0].Tags)
 }
 
-// TestStartInboundSpan_SetsTemporalAttributes verifies the application-frame inbound span contains the expected data.
-func TestStartInboundSpan_SetsTemporalAttributes(t *testing.T) {
+// TestAnnotateInboundSpan_SetsTemporalAttributes verifies the active inbound HTTP span contains the expected data.
+func TestAnnotateInboundSpan_SetsTemporalAttributes(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 
-	h := &nexusHandler{
-		tracer: tp.Tracer(nexusTracerScope),
-	}
 	oc := &operationContext{
 		method: "StartNexusOperation",
 		nexusContext: &nexusContext{
@@ -373,13 +371,14 @@ func TestStartInboundSpan_SetsTemporalAttributes(t *testing.T) {
 		},
 	}
 
-	_, span := h.startInboundSpan(context.Background(), oc, "svc", "op")
+	ctx, span := tp.Tracer("test").Start(context.Background(), "HTTP /nexus", trace.WithSpanKind(trace.SpanKindServer))
+	annotateInboundSpan(ctx, oc, "svc", "op", "request-id")
 	span.End()
 
 	ended := recorder.Ended()
 	require.Len(t, ended, 1)
 	s := ended[0]
-	require.Equal(t, "StartNexusOperation", s.Name())
+	require.Equal(t, "HTTP /nexus", s.Name())
 	require.Equal(t, "server", s.SpanKind().String())
 
 	attrs := map[string]string{}
@@ -390,18 +389,20 @@ func TestStartInboundSpan_SetsTemporalAttributes(t *testing.T) {
 	require.Equal(t, "test-endpoint", attrs[attrTemporalNexusEndpoint])
 	require.Equal(t, "svc", attrs[attrTemporalNexusService])
 	require.Equal(t, "op", attrs[attrTemporalNexusOperation])
+	require.Equal(t, "request-id", attrs[attrTemporalNexusRequestID])
 }
 
-// TestEndInboundSpan_RecordsError verifies that endInboundSpan records a non-nil error on
-// the span and sets status=error. A nil error pointer is a no-op.
-func TestEndInboundSpan_RecordsError(t *testing.T) {
+// TestRecordInboundSpanStatus_RecordsError verifies that recordInboundSpanStatus records a
+// non-nil error on the active span and sets status=error. A nil error pointer is a no-op.
+func TestRecordInboundSpanStatus_RecordsError(t *testing.T) {
 	t.Run("WithError", func(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-		_, span := tp.Tracer("test").Start(context.Background(), "op")
+		ctx, span := tp.Tracer("test").Start(context.Background(), "op")
 
 		err := fmt.Errorf("boom")
-		endInboundSpan(span, &err)
+		recordInboundSpanStatus(ctx, &err)
+		span.End()
 
 		ended := recorder.Ended()
 		require.Len(t, ended, 1)
@@ -412,10 +413,11 @@ func TestEndInboundSpan_RecordsError(t *testing.T) {
 	t.Run("WithNilError", func(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-		_, span := tp.Tracer("test").Start(context.Background(), "op")
+		ctx, span := tp.Tracer("test").Start(context.Background(), "op")
 
 		var err error
-		endInboundSpan(span, &err)
+		recordInboundSpanStatus(ctx, &err)
+		span.End()
 
 		ended := recorder.Ended()
 		require.Len(t, ended, 1)

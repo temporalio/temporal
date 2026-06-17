@@ -113,7 +113,6 @@ func NewNexusOperationHTTPHandler(
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
-				tracer:                        tracerProvider.Tracer(nexusTracerScope),
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

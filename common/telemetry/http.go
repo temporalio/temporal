@@ -119,16 +119,12 @@ func annotateNexusHTTPRequest(span trace.Span, req *http.Request) {
 	if !ok {
 		return
 	}
-	attrs := []attribute.KeyValue{
-		attribute.Bool("temporal.nexus.request", true),
-	}
-	if nexusAttrs.namespaceName != "" {
-		attrs = append(attrs, attribute.String("temporal.namespace", nexusAttrs.namespaceName))
-	}
-	if nexusAttrs.targetNamespaceName != "" {
-		attrs = append(attrs, attribute.String("temporal.nexus.namespace", nexusAttrs.targetNamespaceName))
-	}
-	span.SetAttributes(attrs...)
+	SetNexusSpanAttributes(span, NexusSpanAttributes{
+		Request:             true,
+		NamespaceName:       nexusAttrs.namespaceName,
+		TargetNamespaceName: nexusAttrs.targetNamespaceName,
+		RequestID:           req.Header.Get(NexusRequestIDHeader),
+	})
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -63,6 +63,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
 		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		req.Header.Set(telemetry.NexusRequestIDHeader, "request-id")
 		telemetry.MarkNexusHTTPRequest(req, "caller-namespace", "target-namespace")
 
 		resp, err := wrapped.RoundTrip(req)
@@ -73,6 +74,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.True(t, attrs["temporal.nexus.request"].Value.AsBool())
 		require.Equal(t, "caller-namespace", attrs["temporal.namespace"].Value.AsString())
 		require.Equal(t, "target-namespace", attrs["temporal.nexus.namespace"].Value.AsString())
+		require.Equal(t, "request-id", attrs["temporal.nexus.request_id"].Value.AsString())
 	})
 
 	t.Run("AnnotatesHeadersAndPayloadsInDebugMode", func(t *testing.T) {
