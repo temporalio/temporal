@@ -723,6 +723,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 }
 
 func (c *TemporalImpl) newRPCFactory(
+	lc fx.Lifecycle,
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
@@ -766,7 +767,7 @@ func (c *TemporalImpl) newRPCFactory(
 			},
 		},
 	}
-	return rpc.NewFactory(
+	factory := rpc.NewFactory(
 		cfg,
 		sn,
 		logger,
@@ -780,7 +781,9 @@ func (c *TemporalImpl) newRPCFactory(
 		resource.PerServiceDialOptionsProvider(logger),
 		monitor,
 		c.tokenProvider,
-	), nil
+	)
+	lc.Append(fx.StopHook(factory.Stop))
+	return factory, nil
 }
 
 func (c *TemporalImpl) newClientFactoryProvider(

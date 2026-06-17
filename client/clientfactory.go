@@ -3,6 +3,7 @@
 package client
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -33,6 +34,7 @@ type (
 		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
+		Stop()
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -61,6 +63,11 @@ type (
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
+		// clientCtx bounds the lifetime of background goroutines started by
+		// clients this factory creates (history connection pools, matching
+		// partition cache and connection eviction). Cancelled by Stop.
+		clientCtx       context.Context
+		clientCtxCancel context.CancelFunc
 	}
 
 	factoryProviderImpl struct {
@@ -87,6 +94,7 @@ func (p *factoryProviderImpl) NewFactory(
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) Factory {
+	clientCtx, clientCtxCancel := context.WithCancel(context.Background())
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
@@ -96,7 +104,16 @@ func (p *factoryProviderImpl) NewFactory(
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
+		clientCtx:             clientCtx,
+		clientCtxCancel:       clientCtxCancel,
 	}
+}
+
+// Stop cancels the lifetime context shared by clients created by this
+// factory, terminating their background membership watchers and closing
+// pooled gRPC connections.
+func (cf *rpcClientFactory) Stop() {
+	cf.clientCtxCancel()
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
@@ -105,6 +122,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return nil, err
 	}
 	client := history.NewClient(
+		cf.clientCtx,
 		cf.dynConfig,
 		resolver,
 		cf.logger,
@@ -134,6 +152,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
 	client := matching.NewClient(
+		cf.clientCtx,
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider, cf.logger),

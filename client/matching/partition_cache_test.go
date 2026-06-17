@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -15,7 +16,7 @@ const testNsID = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 func TestPartitionCache_BasicPutLookup(t *testing.T) {
 	t.Parallel()
 	c := newPartitionCache(metrics.NoopMetricsHandler)
-	c.Start()
+	c.Start(context.Background())
 	defer c.Stop()
 
 	key := c.makeKey(testNsID, "my-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -44,7 +45,7 @@ func TestPartitionCache_BasicPutLookup(t *testing.T) {
 func TestPartitionCache_Rotate(t *testing.T) {
 	t.Parallel()
 	c := newPartitionCache(metrics.NoopMetricsHandler)
-	c.Start()
+	c.Start(context.Background())
 	defer c.Stop()
 
 	key := c.makeKey(testNsID, "my-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -78,7 +79,7 @@ func TestPartitionCache_Rotate(t *testing.T) {
 func TestPartitionCache_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	c := newPartitionCache(metrics.NoopMetricsHandler)
-	c.Start()
+	c.Start(context.Background())
 	defer c.Stop()
 
 	var wg sync.WaitGroup
