@@ -962,8 +962,7 @@ func migrateSingleSchedule(
 }
 
 // migrateSchedulesFromVisibility selects schedules via a visibility query and migrates each.
-// When --query is not supplied the default query is chosen from the --target direction (see
-// defaultMigrateQuery).
+// When --query is not supplied the default query is chosen from the --target direction.
 func migrateSchedulesFromVisibility(
 	c *cli.Context,
 	clientFactory ClientFactory,
@@ -975,9 +974,20 @@ func migrateSchedulesFromVisibility(
 		return err
 	}
 
+	// When --query is not supplied the default is chosen from the --target direction: migrating
+	// to CHASM (V2) selects the running V1 (workflow-backed) schedules to move forward, while
+	// migrating to workflow (V1) selects the running V2 (CHASM) schedules to roll back.
 	query := c.String(FlagVisibilityQuery)
 	if query == "" {
-		query = defaultMigrateQuery(target)
+		if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
+			// Forward migration V1 -> V2: all running V1 (workflow-backed) schedules.
+			query = fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+		} else {
+			// Rollback V2 -> V1: all running V2 (CHASM) schedules. The explicit
+			// TemporalNamespaceDivision filter is required, otherwise the visibility query
+			// converter appends "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
+			query = fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+		}
 	}
 
 	execute := c.Bool(FlagExecute)
@@ -1047,21 +1057,6 @@ func migrateSchedulesFromVisibility(
 type migrateJob struct {
 	namespace  string
 	scheduleID string
-}
-
-// defaultMigrateQuery returns the visibility query selecting which schedules to migrate when
-// --query is not supplied. The direction is inferred from --target: migrating to CHASM (V2)
-// selects the running V1 (workflow-backed) schedules to move forward, while migrating to
-// workflow (V1) selects the running V2 (CHASM) schedules to roll back.
-func defaultMigrateQuery(target adminservice.MigrateScheduleRequest_SchedulerTarget) string {
-	if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
-		// Forward migration V1 -> V2: all running V1 (workflow-backed) schedules.
-		return fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
-	}
-	// Rollback V2 -> V1: all running V2 (CHASM) schedules. The explicit TemporalNamespaceDivision
-	// filter is required, otherwise the visibility query converter appends
-	// "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
-	return fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
 }
 
 // openMigrateLog wires summary.logEnc to the --output-log file when the flag is set, returning a
