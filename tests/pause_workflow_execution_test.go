@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -977,6 +978,837 @@ func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
 		},
 		Reason: "cleanup after pause race test",
 	})
+}
+
+// TestUpdateWorkflowWhilePaused asserts that an Update sent to a paused workflow
+// is rejected at the client with a FailedPrecondition error, and that the same
+// update succeeds once the workflow is unpaused.
+func (s *PauseWorkflowExecutionSuite) TestUpdateWorkflowWhilePaused() {
+	env := s.newTestEnv()
+
+	const (
+		updateName         = "pause-update-handler"
+		updateWorkflowName = "pause-update-workflow"
+	)
+	// A workflow that registers an update handler and then blocks on the end
+	// signal. It deliberately has no activity so the update can be processed as
+	// soon as the workflow is unpaused.
+	updateWorkflow := func(ctx workflow.Context) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, updateName, func(ctx workflow.Context, arg string) (string, error) {
+			return "updated:" + arg, nil
+		}); err != nil {
+			return "", err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, env.testEndSignal)
+		var signalPayload string
+		signalCh.Receive(ctx, &signalPayload)
+		return signalPayload, nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(updateWorkflow, workflow.RegisterOptions{Name: updateWorkflowName})
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-update-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, updateWorkflowName)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	// Wait for the first workflow task to complete so the update handler is
+	// registered and the workflow is fully initialized before pausing.
+	s.waitUntilFirstWorkflowTaskCompleted(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// An update sent while paused is rejected with FailedPrecondition.
+	_, err = env.SdkClient().UpdateWorkflow(s.Context(), sdkclient.UpdateWorkflowOptions{
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		UpdateName:   updateName,
+		Args:         []any{"while-paused"},
+		WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
+	})
+	s.Error(err)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+	s.NotNil(failedPreconditionErr)
+	s.Contains(failedPreconditionErr.Error(), "Workflow is paused")
+
+	// Unpause the workflow.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// The same update now succeeds.
+	handle, err := env.SdkClient().UpdateWorkflow(s.Context(), sdkclient.UpdateWorkflowOptions{
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		UpdateName:   updateName,
+		Args:         []any{"after-unpause"},
+		WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
+	})
+	s.NoError(err)
+	var updateResult string
+	s.NoError(handle.Get(s.Context(), &updateResult))
+	s.Equal("updated:after-unpause", updateResult)
+
+	// Complete the workflow.
+	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+}
+
+// TestSignalWithStartWhilePaused asserts that a SignalWithStart targeting an
+// already-running, paused workflow succeeds at the client, the signal is
+// buffered (recorded in history without scheduling a workflow task), and the
+// buffered signal is delivered once the workflow is unpaused.
+func (s *PauseWorkflowExecutionSuite) TestSignalWithStartWhilePaused() {
+	env := s.newTestEnv()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-sws-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilRunningWithPendingActivity(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// SignalWithStart against the existing (paused) run. The workflow is already
+	// running, so this only delivers the signal; it must not start a new run.
+	const signalPayload = "buffered-via-signal-with-start"
+	signalWithStartRun, err := env.SdkClient().SignalWithStartWorkflow(
+		s.Context(),
+		workflowID,
+		env.testEndSignal,
+		signalPayload,
+		workflowOptions,
+		env.workflowFn,
+	)
+	s.NoError(err)
+	s.Equal(runID, signalWithStartRun.GetRunID(), "SignalWithStart must target the existing run, not start a new one")
+
+	// SignalWithStart is synchronous: once it returns, the signal is buffered and
+	// the workflow is still paused with no workflow task scheduled.
+	s.assertWorkflowIsPaused(env, workflowID, runID)
+	s.True(s.historyHasEventType(env, workflowID, runID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED),
+		"signal should be recorded in history while paused")
+
+	// Unpause and unblock the activity so the workflow can drain the buffered
+	// signal and complete.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	env.SendToChannel(env.activityCompletedCh)
+
+	// The buffered signal is delivered: the workflow completes and its result
+	// includes the signal payload.
+	var result string
+	s.NoError(workflowRun.Get(s.Context(), &result))
+	s.Equal(signalPayload+"activity"+"child-workflow", result)
+}
+
+// TestSignalBufferingOrderWhilePaused asserts that multiple signals sent while a
+// workflow is paused are buffered in order and delivered in a single workflow
+// task once the workflow is unpaused.
+func (s *PauseWorkflowExecutionSuite) TestSignalBufferingOrderWhilePaused() {
+	env := s.newTestEnv()
+
+	const (
+		signalName            = "ordered-signal"
+		signalCount           = 5
+		collectorWorkflowName = "pause-signal-collector-workflow"
+	)
+	// A workflow that receives signalCount signals and returns them joined in the
+	// order received.
+	collectorWorkflow := func(ctx workflow.Context) (string, error) {
+		ch := workflow.GetSignalChannel(ctx, signalName)
+		received := make([]string, 0, signalCount)
+		for range signalCount {
+			var v string
+			ch.Receive(ctx, &v)
+			received = append(received, v)
+		}
+		return strings.Join(received, ","), nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(collectorWorkflow, workflow.RegisterOptions{Name: collectorWorkflowName})
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-signal-order-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, collectorWorkflowName)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilFirstWorkflowTaskCompleted(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Send all signals while paused; they should be buffered.
+	expected := make([]string, 0, signalCount)
+	for i := 1; i <= signalCount; i++ {
+		v := fmt.Sprintf("sig-%d", i)
+		expected = append(expected, v)
+		err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, signalName, v)
+		s.NoError(err)
+	}
+
+	// SignalWorkflow is synchronous: once the calls return, all signals are
+	// buffered and the workflow is still paused with no workflow task scheduled.
+	s.assertWorkflowIsPaused(env, workflowID, runID)
+
+	// Unpause; the buffered signals are now delivered.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// The workflow completes and the signals were delivered in order.
+	var result string
+	s.NoError(workflowRun.Get(s.Context(), &result))
+	s.Equal(strings.Join(expected, ","), result)
+
+	// Exactly one workflow task processes all buffered signals after unpause.
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	unpaused := false
+	workflowTasksAfterUnpause := 0
+	for hist.HasNext() {
+		event, herr := hist.Next()
+		s.NoError(herr)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED {
+			unpaused = true
+			continue
+		}
+		if unpaused && event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			workflowTasksAfterUnpause++
+		}
+	}
+	s.Equal(1, workflowTasksAfterUnpause, "buffered signals should be drained in a single workflow task")
+
+	// The workflow has run to completion (its result was retrieved above).
+	desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+}
+
+// TestPauseIdempotentSameRequestId asserts that re-issuing a pause with the same
+// request id is a no-op (succeeds without error and adds no second pause event),
+// unlike a pause with a new request id which fails with "already paused".
+func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
+	env := s.newTestEnv()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-idempotent-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilRunningWithPendingActivity(env, workflowID, runID)
+
+	requestID := uuid.NewString()
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  requestID,
+	}
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Re-issuing the pause with the SAME request id is a no-op.
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	// PauseWorkflowExecution is synchronous: the workflow is still paused and only
+	// a single pause event was ever written.
+	s.assertWorkflowIsPaused(env, workflowID, runID)
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	pauseEvents := 0
+	for hist.HasNext() {
+		event, herr := hist.Next()
+		s.NoError(herr)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
+			pauseEvents++
+		}
+	}
+	s.Equal(1, pauseEvents, "idempotent pause must not add a second pause event")
+
+	// Cleanup: unpause and complete the workflow.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	env.SendToChannel(env.activityCompletedCh)
+	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestTerminateWhilePaused asserts that a paused workflow can still be terminated
+// (terminate is terminal and bypasses workflow-task scheduling).
+func (s *PauseWorkflowExecutionSuite) TestTerminateWhilePaused() {
+	env := s.newTestEnv()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-terminate-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilRunningWithPendingActivity(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Terminate succeeds on a paused workflow.
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Reason: "terminate while paused",
+	})
+	s.NoError(err)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+}
+
+// TestPauseLatestRunEmptyRunId asserts that a pause request with an empty RunId
+// targets the latest run of the workflow: with a continued-as-new chain, only
+// the latest run is paused while the closed original run is unaffected.
+func (s *PauseWorkflowExecutionSuite) TestPauseLatestRunEmptyRunId() {
+	env := s.newTestEnv()
+
+	const latestRunWorkflowName = "pause-latest-run-workflow"
+	// A workflow whose first run immediately continues-as-new, leaving the
+	// WorkflowID with a closed original run and a latest run that blocks on the
+	// end signal.
+	latestRunWorkflow := func(ctx workflow.Context, generation int) error {
+		if generation == 0 {
+			return workflow.NewContinueAsNewError(ctx, latestRunWorkflowName, generation+1)
+		}
+		signalCh := workflow.GetSignalChannel(ctx, env.testEndSignal)
+		var v string
+		signalCh.Receive(ctx, &v)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(latestRunWorkflow, workflow.RegisterOptions{Name: latestRunWorkflowName})
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-empty-runid-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, latestRunWorkflowName, 0)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	originalRunID := workflowRun.GetRunID()
+
+	// Wait for the original run to continue-as-new into the latest run, which is
+	// RUNNING and has completed its first workflow task.
+	var latestRunID string
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, "")
+		s.NoError(err)
+		info := desc.GetWorkflowExecutionInfo()
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		s.NotEqual(originalRunID, info.GetExecution().GetRunId(), "expected continue-as-new to a new run")
+		s.GreaterOrEqual(info.GetHistoryLength(), int64(4), "latest run has not completed its first workflow task")
+		latestRunID = info.GetExecution().GetRunId()
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Pause with an empty RunId; it should target the latest run.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      "",
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, latestRunID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Only the latest run is paused: the original run remains closed as
+	// CONTINUED_AS_NEW.
+	originalDesc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, originalRunID)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, originalDesc.GetWorkflowExecutionInfo().GetStatus())
+
+	// Cleanup: unpause and complete the latest run.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      latestRunID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, latestRunID, env.testEndSignal, "done")
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, latestRunID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestRunTimeoutWhilePaused asserts that a workflow's run timeout is not
+// suppressed by pause: a paused workflow still TIMED_OUT on wall-clock.
+func (s *PauseWorkflowExecutionSuite) TestRunTimeoutWhilePaused() {
+	env := s.newTestEnv()
+	s.assertPausedWorkflowTimesOut(env, sdkclient.StartWorkflowOptions{
+		ID:                 testcore.RandomizeStr("pause-run-timeout-wf-" + s.T().Name()),
+		TaskQueue:          env.WorkerTaskQueue(),
+		WorkflowRunTimeout: 10 * time.Second,
+	})
+}
+
+// TestExecutionTimeoutWhilePaused asserts that a workflow's execution timeout is
+// not suppressed by pause: a paused workflow still TIMED_OUT on wall-clock.
+func (s *PauseWorkflowExecutionSuite) TestExecutionTimeoutWhilePaused() {
+	env := s.newTestEnv()
+	s.assertPausedWorkflowTimesOut(env, sdkclient.StartWorkflowOptions{
+		ID:                       testcore.RandomizeStr("pause-execution-timeout-wf-" + s.T().Name()),
+		TaskQueue:                env.WorkerTaskQueue(),
+		WorkflowExecutionTimeout: 10 * time.Second,
+	})
+}
+
+// TestCancelWhilePaused is a regression test documenting how RequestCancel
+// interacts with pause. The cancel is accepted and recorded while paused, but it
+// is not processed until the workflow is unpaused (workflow-task scheduling is
+// gated by pause). After unpause the workflow observes the cancel and ends
+// CANCELED. This pins the current behavior; the ordering of cancel vs. buffered
+// signals at unpause is an open design question and is intentionally not
+// asserted here.
+func (s *PauseWorkflowExecutionSuite) TestCancelWhilePaused() {
+	env := s.newTestEnv()
+
+	const cancelWorkflowName = "pause-cancel-workflow"
+	// A workflow that blocks until its context is canceled, then returns the
+	// cancellation error so it ends in the CANCELED state.
+	cancelWorkflow := func(ctx workflow.Context) error {
+		ctx.Done().Receive(ctx, nil)
+		return ctx.Err()
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(cancelWorkflow, workflow.RegisterOptions{Name: cancelWorkflowName})
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-cancel-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, cancelWorkflowName)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilFirstWorkflowTaskCompleted(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// RequestCancel while paused succeeds.
+	_, err = env.FrontendClient().RequestCancelWorkflowExecution(s.Context(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Identity:  env.pauseIdentity,
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// RequestCancel is synchronous: once it returns, the cancel is recorded but
+	// deferred. The workflow stays paused with a cancel-requested event written
+	// and no workflow task scheduled.
+	s.assertWorkflowIsPaused(env, workflowID, runID)
+	s.True(s.historyHasEventType(env, workflowID, runID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED),
+		"cancel should be recorded in history while paused")
+
+	// Unpause; the deferred cancel is now processed.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// After unpause the workflow observes the cancel and ends CANCELED.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestResetWhilePaused is a regression test documenting that resetting a paused
+// workflow succeeds and produces a fresh run that is RUNNING — pause is per-run
+// and is not carried onto the reset run — while the original run is terminated
+// by the reset.
+func (s *PauseWorkflowExecutionSuite) TestResetWhilePaused() {
+	env := s.newTestEnv()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-reset-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilRunningWithPendingActivity(env, workflowID, runID)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Find the last completed workflow task to reset to (before the pause event).
+	var resetEventID int64
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, herr := hist.Next()
+		s.NoError(herr)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetEventID = event.GetEventId()
+		}
+	}
+	s.NotZero(resetEventID, "expected a completed workflow task to reset to")
+
+	// Reset succeeds on a paused workflow and returns a fresh run.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Reason:                    "reset while paused",
+		WorkflowTaskFinishEventId: resetEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	newRunID := resetResp.GetRunId()
+	s.NotEmpty(newRunID)
+	s.NotEqual(runID, newRunID)
+
+	// The reset run is RUNNING and not paused: pause is per-run and is not
+	// carried onto the new run.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, newRunID)
+		s.NoError(err)
+		info := desc.GetWorkflowExecutionInfo()
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus(),
+			"reset run should be RUNNING, not paused")
+		s.Nil(desc.GetWorkflowExtendedInfo().GetPauseInfo(), "reset run should not inherit pause info")
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// The original run is terminated by the reset (no longer paused).
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus(),
+			"original run should be terminated by the reset")
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Cleanup: terminate the reset run so it doesn't linger.
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      newRunID,
+		},
+		Reason: "cleanup after reset-while-paused test",
+	})
+}
+
+// TestActivityRetryDeferredWhilePaused validates that pausing a workflow while
+// one of its activities is retrying defers the activity's retries: the pending
+// activity's attempt count stops increasing for the duration of the pause and
+// resumes once the workflow is unpaused. Pausing the workflow invalidates its
+// pending activities by bumping their stamp; it does not mark the activity
+// itself as paused.
+func (s *PauseWorkflowExecutionSuite) TestActivityRetryDeferredWhilePaused() {
+	env := s.newTestEnv()
+	env.activityShouldSucceed.Store(false)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-activity-retry-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowWithFailingActivity)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	// Wait until the activity has failed and retried at least twice, confirming
+	// retries are actively happening before the pause.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Len(desc.PendingActivities, 1)
+		s.NotNil(desc.PendingActivities[0].LastFailure)
+		s.GreaterOrEqual(desc.PendingActivities[0].Attempt, int32(2))
+	}, 15*time.Second, 200*time.Millisecond)
+
+	// Pause the workflow.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Let any in-flight retry settle after the pause, then sample the attempt count.
+	s.NoError(util.InterruptibleSleep(s.Context(), 3*time.Second))
+	descAfterPause, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Len(descAfterPause.PendingActivities, 1)
+	attemptWhilePaused := descAfterPause.PendingActivities[0].Attempt
+	// Workflow pause invalidates the activity via its stamp but does not mark the
+	// activity itself as paused.
+	s.False(descAfterPause.PendingActivities[0].Paused, "workflow pause should not set the activity's Paused flag")
+
+	// Wait across multiple retry intervals; the attempt count must not grow while
+	// the workflow is paused (retries are deferred).
+	s.NoError(util.InterruptibleSleep(s.Context(), 3*time.Second))
+	descStill, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Len(descStill.PendingActivities, 1, "activity should still be pending while paused")
+	s.Equal(attemptWhilePaused, descStill.PendingActivities[0].Attempt, "activity must not retry while the workflow is paused")
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, descStill.GetWorkflowExecutionInfo().GetStatus())
+
+	// Unpause; retries resume and the attempt count climbs again.
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Let the activity succeed so the workflow can complete.
+	env.activityShouldSucceed.Store(true)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 15*time.Second, 200*time.Millisecond)
+}
+
+// assertPausedWorkflowTimesOut starts env.workflowFn (which blocks on its
+// activity), pauses it, and asserts that the configured wall-clock timeout still
+// fires and transitions the paused workflow to TIMED_OUT.
+func (s *PauseWorkflowExecutionSuite) assertPausedWorkflowTimesOut(env *pauseWorkflowExecutionEnv, workflowOptions sdkclient.StartWorkflowOptions) {
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.waitUntilRunningWithPendingActivity(env, workflowID, runID)
+
+	// Pause the workflow well before its timeout fires.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Without unpausing, the wall-clock timeout still fires and times out the
+	// workflow.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, desc.GetWorkflowExecutionInfo().GetStatus(),
+			"paused workflow should still time out on wall-clock")
+	}, 25*time.Second, 500*time.Millisecond)
+}
+
+// waitUntilRunningWithPendingActivity waits until the workflow is RUNNING and has
+// scheduled its activity, so a subsequent pause is applied to a fully
+// initialized workflow.
+func (s *PauseWorkflowExecutionSuite) waitUntilRunningWithPendingActivity(env *pauseWorkflowExecutionEnv, workflowID, runID string) {
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		info := desc.GetWorkflowExecutionInfo()
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		s.NotEmpty(desc.PendingActivities)
+	}, 5*time.Second, 100*time.Millisecond)
+}
+
+// waitUntilFirstWorkflowTaskCompleted waits until the workflow is RUNNING and has
+// completed its first workflow task (so a workflow without an activity is fully
+// initialized before pausing).
+func (s *PauseWorkflowExecutionSuite) waitUntilFirstWorkflowTaskCompleted(env *pauseWorkflowExecutionEnv, workflowID, runID string) {
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		info := desc.GetWorkflowExecutionInfo()
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		s.GreaterOrEqual(info.GetHistoryLength(), int64(4), "first workflow task has not completed yet")
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// historyHasEventType reports whether the workflow's history contains at least
+// one event of the given type.
+func (s *PauseWorkflowExecutionSuite) historyHasEventType(env *pauseWorkflowExecutionEnv, workflowID, runID string, eventType enumspb.EventType) bool {
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 // assertWorkflowIsPaused is a helper method which asserts that,
