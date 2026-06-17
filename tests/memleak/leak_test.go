@@ -1,9 +1,5 @@
-//go:build leakrepro
-
 // Package memleak hosts a goroutine/memory leak regression test for the
-// functional test infrastructure. It is build-tagged with `leakrepro` so it
-// never runs inside the normal functional test shards; a dedicated CI job runs
-// it explicitly (see run-tests.yml).
+// functional test infrastructure.
 //
 // The test repeatedly creates and tears down a full test cluster and asserts
 // that the live goroutine count does not grow per cluster. A non-zero slope is
@@ -12,15 +8,24 @@
 // it prints the goroutine stacks whose counts grew, naming the leaking
 // subsystem.
 //
+// It does not run by default: it measures the global goroutine count, so it must
+// run in isolation, and it spins up real clusters. Set RUN_MEMLEAK_TEST=1 to
+// enable it (a dedicated CI job does this). It is intentionally NOT build-tagged
+// so it stays compiled — and thus protected from rot when testcore changes — in
+// normal builds. The Makefile already excludes tests/memleak from the unit and
+// functional suites.
+//
 // Run (sqlite => no Docker required):
 //
-//	go test -tags leakrepro -run TestClusterGoroutineSlope -count=1 -v \
+//	RUN_MEMLEAK_TEST=1 go test -run TestClusterGoroutineSlope -count=1 -v \
 //	    ./tests/memleak/ -args -persistenceType=sql -persistenceDriver=sqlite
 //
 // Env knobs:
 //
-//	LEAK_ITERS                    cluster create/teardown iterations (default 12)
+//	RUN_MEMLEAK_TEST=1               enable the test (otherwise skipped)
+//	LEAK_ITERS                       cluster create/teardown iterations (default 12)
 //	LEAK_MAX_GOROUTINES_PER_CLUSTER  slope threshold for the gate (default 8)
+//	LEAK_WORKER_SERVICE=1            also exercise the worker-service shutdown path
 
 package memleak
 
@@ -84,6 +89,10 @@ func buildAndTearDownCluster(t *testing.T) {
 // not accumulate per cluster create/teardown. It is robust to legitimate fixed
 // background goroutines (they don't grow per iteration) and needs no ignore-list.
 func TestClusterGoroutineSlope(t *testing.T) {
+	if os.Getenv("RUN_MEMLEAK_TEST") != "1" {
+		t.Skip("set RUN_MEMLEAK_TEST=1 to run the memory-leak regression test (measures global goroutine count; must run in isolation)")
+	}
+
 	iters := envInt("LEAK_ITERS", 12)
 	maxPerCluster := envInt("LEAK_MAX_GOROUTINES_PER_CLUSTER", 8)
 	if iters <= warmupIters+1 {
