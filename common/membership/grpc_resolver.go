@@ -66,12 +66,20 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
 func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) string {
-	return newGRPCResolver(monitor).MakeURL(service)
-}
-
-func newGRPCResolver(monitor Monitor) *GRPCResolver {
 	res := &GRPCResolver{monitor: monitor}
 	globalGrpcBuilder.resolvers.Store(fmt.Sprintf("%p", res), res)
+	return res.MakeURL(service)
+}
+
+func newGRPCResolver(lc fx.Lifecycle, monitor Monitor) *GRPCResolver {
+	res := &GRPCResolver{monitor: monitor}
+	key := fmt.Sprintf("%p", res)
+	// The resolver is held in a process-global map (so a Monitor can be passed
+	// through a string URL to grpc). Delete it on shutdown, otherwise every
+	// server instance pins its Monitor — and transitively its whole object
+	// graph — in the global map for the lifetime of the process.
+	globalGrpcBuilder.resolvers.Store(key, res)
+	lc.Append(fx.StopHook(func() { globalGrpcBuilder.resolvers.Delete(key) }))
 	return res
 }
 
