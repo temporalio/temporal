@@ -61,7 +61,7 @@ func envInt(key string, def int) int {
 func numGoroutines() int {
 	runtime.GC()
 	runtime.GC()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(time.Duration(envInt("LEAK_SETTLE_SECONDS", 2)) * time.Second)
 	prev := runtime.NumGoroutine()
 	stable := 0
 	for time.Now().Before(deadline) {
@@ -102,7 +102,7 @@ func TestClusterGoroutineSlope(t *testing.T) {
 
 	var series []int
 	var baseDump, lastDump string
-	for i := 0; i < iters; i++ {
+	for i := range iters {
 		buildAndTearDownCluster(t)
 		g := numGoroutines()
 		series = append(series, g)
