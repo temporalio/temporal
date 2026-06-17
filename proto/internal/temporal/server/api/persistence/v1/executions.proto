@@ -334,11 +334,12 @@ message TimeSkippingInfo {
   // The current fast-forward info for time skipping.
   FastForwardInfo fast_forward_info = 4;
 
-  // Task regeneration status is used to track the status of the task regeneration.
-  // 0: Not set
-  // 1: Need to regenerate tasks
-  // 2: All tasks regenerated
-  int32 task_regeneration_status = 5;
+  // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
+  // skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
+  // that pending timer tasks must be re-stamped against the new accumulated skip, since a
+  // skip mutates this workflow-level field without bumping any per-timer
+  // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+  VersionedTransition last_update_versioned_transition = 5;
 }
 
 message FastForwardInfo {

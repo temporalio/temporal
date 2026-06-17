@@ -31,12 +31,6 @@ const (
 	TimerTaskStatusCreatedHeartbeat
 )
 
-const (
-	TimerRegenStatusUnset = iota
-	TimerRegenStatusNeeded
-	TimerRegenStatusCompleted
-)
-
 type (
 	// TimerSequenceID represent a in mem timer
 	TimerSequenceID struct {

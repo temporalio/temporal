@@ -39,9 +39,10 @@ func (s *timeSkippingReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.TimeSkippingEnabled.Key(): true,
 	}
-	// Drive the state-based replication path so applyIncomingTimeSkippingInfo runs.
-	// Without this, events alone replicate TimeSkippingInfo via their handlers, and
-	// the state-based merge function added by this commit is never exercised.
+	// Drive the state-based replication path so TimeSkippingInfo replicates via the
+	// generic ExecutionInfo merge and PartialRefresh re-stamps timer tasks on the standby.
+	// Without this, events alone replicate TimeSkippingInfo via their handlers, and the
+	// state-based path is never exercised.
 	s.enableTransitionHistory = true
 	s.logger = log.NewTestLogger()
 	s.setupSuite()
@@ -83,8 +84,8 @@ func (s *timeSkippingReplicationSuite) getExecutionInfoFromCluster(
 }
 
 // waitForTimeSkippingInfoSynced blocks until the standby cluster's TimeSkippingInfo
-// agrees with the active's on Config and AccumulatedSkippedDuration. TaskRegenerationStatus
-// is cluster-local (regen is re-run on standby after replication) and is not asserted.
+// agrees with the active's on Config and AccumulatedSkippedDuration. LastUpdateVersionedTransition
+// replicates verbatim and drives the standby's PartialRefresh re-stamp; it is not asserted here.
 func (s *timeSkippingReplicationSuite) waitForTimeSkippingInfoSynced(
 	ctx context.Context,
 	nsID, wfID, runID string,
@@ -149,8 +150,8 @@ func (s *timeSkippingReplicationSuite) completeFirstWorkflowTask(ns, wfID, tq st
 
 // TestBasicSkipReplicates verifies the core replication contract for time-skipping:
 // a skip transition applied on the active cluster's mutable state replicates to the
-// standby with matching Config and AccumulatedSkippedDuration. TaskRegenerationStatus
-// is cluster-local (the standby re-runs regen after replication) and is not asserted.
+// standby with matching Config and AccumulatedSkippedDuration. LastUpdateVersionedTransition
+// replicates verbatim and drives the standby's PartialRefresh re-stamp; it is not asserted.
 func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

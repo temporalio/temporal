@@ -1032,14 +1032,18 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
-// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
-// Idempotent via TimeSkippingInfo.TaskRegenerationStatus: only emits when the status
-// is Needed, then flips it to Completed. Safe to call in replication context — mirrors
-// the TimerInfo.TaskStatus pattern in CreateNextUserTimer.
+// RegenerateTimerTasksForTimeSkipping force re-stamps every pending timer task against the
+// current accumulated skip. It is content-idempotent but produces fresh TaskIDs per call.
+//
+// It needs no per-task dedup status of its own. Callers gate it on whether a skip actually
+// happened: the active close transaction only invokes it when a skip transition was emitted
+// this transaction (regenerateTimerTasksForTimeSkipping), and PartialRefresh only invokes it
+// when TimeSkippingInfo.LastUpdateVersionedTransition falls within the replicated delta (see
+// refreshTasksForTimeSkipping). The accumulated-skip guard below is the final no-op shortcut.
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi.GetTaskRegenerationStatus() != TimerRegenStatusNeeded {
+	if tsi == nil || tsi.GetAccumulatedSkippedDuration().AsDuration() <= 0 {
 		return nil
 	}
 
@@ -1148,6 +1152,5 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	// todo@time-skipping: ChasmTaskPure is not supported yet.
 
-	tsi.TaskRegenerationStatus = TimerRegenStatusCompleted
 	return nil
 }

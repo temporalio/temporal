@@ -4179,7 +4179,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	if !timeNotSet(attr.TargetTime) {
 		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
-		tsi.TaskRegenerationStatus = TimerRegenStatusNeeded
 	}
 	// update enabled state
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
@@ -7923,6 +7922,13 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
+	// A time-skipping transition mutates only executionInfo.TimeSkippingInfo (a workflow-level
+	// field), not any per-timer entity, so stamp the change here. PartialRefresh uses this to
+	// know that all pending timer tasks must be re-stamped against the new accumulated skip.
+	if ms.timeSkippingInfoUpdated && ms.executionInfo.TimeSkippingInfo != nil {
+		ms.executionInfo.TimeSkippingInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
 	// LastUpdateVersionTransition for CHASM nodes already updated when closing the chasm tree transaction.
 }
@@ -9466,7 +9472,6 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			ms.workflowTaskUpdated = false
 		}
 	}
-	ms.applyIncomingTimeSkippingInfo(current, incoming)
 
 	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
@@ -9501,7 +9506,6 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.StateMachineTimers,
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
-			&info.TimeSkippingInfo,
 		}
 		if !isSnapshot {
 			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
@@ -9516,36 +9520,6 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	ms.ClearStickyTaskQueue()
 
 	return nil
-}
-
-// applyIncomingTimeSkippingInfo is used in state-based replication
-// and merges the incoming TimeSkippingInfo (from a replication mutation/snapshot) into current,
-// and the task regeneration status is maintained locally.
-func (ms *MutableStateImpl) applyIncomingTimeSkippingInfo(
-	current *persistencespb.WorkflowExecutionInfo,
-	incoming *persistencespb.WorkflowExecutionInfo,
-) {
-	if incoming.GetTimeSkippingInfo() == nil {
-		// State-based replication sends the full ExecutionInfo; nil incoming TSI
-		// means the active has no TSI (workflow never enabled time-skipping), so
-		// mirror that on the standby.
-		current.TimeSkippingInfo = nil
-		return
-	}
-	newTSI := common.CloneProto(incoming.TimeSkippingInfo)
-	currentSD := current.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
-	incomingSD := incoming.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
-	// maintain the local task regeneration status
-	if incomingSD != currentSD {
-		newTSI.TaskRegenerationStatus = TimerRegenStatusNeeded
-	} else {
-		if incomingSD == 0 {
-			newTSI.TaskRegenerationStatus = TimerRegenStatusUnset
-		} else {
-			newTSI.TaskRegenerationStatus = TimerRegenStatusCompleted
-		}
-	}
-	current.TimeSkippingInfo = newTSI
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {

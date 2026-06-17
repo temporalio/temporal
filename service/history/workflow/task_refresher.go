@@ -208,6 +208,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	return r.refreshTasksForTimeSkipping(
 		mutableState,
 		taskGenerator,
+		minVersionedTransition,
 	)
 }
 
@@ -470,14 +471,34 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	return err
 }
 
+// refreshTasksForTimeSkipping re-stamps pending timer tasks against the current accumulated
+// skip when a time-skipping transition happened within the replicated delta. A skip mutates
+// only executionInfo.TimeSkippingInfo, never a per-timer entity, so refreshTasksForTimer's
+// per-timer versioned-transition gate cannot see it. We gate instead on TimeSkippingInfo's own
+// LastUpdateVersionedTransition: if it advanced at or after minVersionedTransition, the skip is
+// new to this peer and every pending timer task must be regenerated with the shifted wall-clock
+// VisibilityTimestamp.
 func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
+	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	executionState := mutableState.GetExecutionState()
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
+
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return nil
+	}
+	if transitionhistory.Compare(
+		tsi.GetLastUpdateVersionedTransition(),
+		minVersionedTransition,
+	) < 0 {
+		return nil
+	}
+
 	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 

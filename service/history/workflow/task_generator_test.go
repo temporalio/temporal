@@ -1196,7 +1196,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(skippedDuration),
-			TaskRegenerationStatus:     TimerRegenStatusNeeded,
 		},
 	}).AnyTimes()
 	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
@@ -1246,16 +1245,16 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
 }
 
-// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_MarksStatusAndIsIdempotent
-// asserts that a successful regen flips TaskRegenerationStatus from Needed to
-// Completed, and that a second back-to-back call is a no-op (mirrors the
-// TimerInfo.TaskStatus idempotency in CreateNextUserTimer).
-func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_MarksStatusAndIsIdempotent(t *testing.T) {
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates asserts the
+// contract: regen carries no per-task status of its own and force re-stamps on every call
+// (callers gate it — the active boolean and PartialRefresh's LastUpdateVersionedTransition
+// check). So a second back-to-back call emits the same tasks again, not a no-op. Content is
+// identical; only the shard-assigned TaskID would differ.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(t *testing.T) {
 	t.Parallel()
 
 	tsi := &persistencespb.TimeSkippingInfo{
 		AccumulatedSkippedDuration: durationpb.New(time.Hour),
-		TaskRegenerationStatus:     TimerRegenStatusNeeded,
 	}
 
 	ctrl := gomock.NewController(t)
@@ -1277,16 +1276,14 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_MarksStatusAndIsI
 
 	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
 
-	// First call: emits, flips TaskRegenerationStatus to Completed.
+	// First call emits.
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 	require.Positive(t, emitCount, "first call must emit at least one task")
-	require.Equal(t, int32(TimerRegenStatusCompleted), tsi.TaskRegenerationStatus,
-		"TaskRegenerationStatus must be Completed after first call")
 
-	// Second call: idempotent — no further emissions.
+	// Second call force-regenerates: emits again (no status latch suppresses it).
 	emitsAfterFirst := emitCount
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
-	require.Equal(t, emitsAfterFirst, emitCount, "second call must be a no-op")
+	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
 }
 
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
@@ -1316,25 +1313,12 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 			execInfo: &persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 					AccumulatedSkippedDuration: durationpb.New(time.Hour),
-					// Unmarked detail required so the regen guard passes; with no
-					// pending timers, the function still completes but emits nothing.
-					TaskRegenerationStatus: TimerRegenStatusNeeded,
 				},
 			},
 			setupTimers: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{})
 				// AddTasks must not be called — no expectation set.
 			},
-		},
-		{
-			name: "TaskRegenerationStatus already Completed returns immediately (idempotency)",
-			execInfo: &persistencespb.WorkflowExecutionInfo{
-				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-					AccumulatedSkippedDuration: durationpb.New(time.Hour),
-					TaskRegenerationStatus:     TimerRegenStatusCompleted,
-				},
-			},
-			// GetPendingTimerInfos and AddTasks must not be called — no expectations set.
 		},
 	} {
 		tc := tc
@@ -1414,7 +1398,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 				WorkflowRunExpirationTime:       tc.runExpirationTime,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 					AccumulatedSkippedDuration: durationpb.New(skippedDuration),
-					TaskRegenerationStatus:     TimerRegenStatusNeeded,
 				},
 			}).AnyTimes()
 			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
@@ -1514,7 +1497,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					SourceEventId: 7,
 					HasReached:    false,
 				},
-				TaskRegenerationStatus: TimerRegenStatusNeeded,
 			},
 			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, eventID: 7},
 		},
@@ -1530,7 +1512,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					SourceEventId: 7,
 					HasReached:    true,
 				},
-				TaskRegenerationStatus: TimerRegenStatusNeeded,
 			},
 		},
 		{
@@ -1545,7 +1526,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					SourceEventId: 7,
 					HasReached:    false,
 				},
-				TaskRegenerationStatus: TimerRegenStatusNeeded,
 			},
 		},
 		{
@@ -1553,7 +1533,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			tsi: &persistencespb.TimeSkippingInfo{
 				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				TaskRegenerationStatus:     TimerRegenStatusNeeded,
 			},
 		},
 	} {
@@ -1695,7 +1674,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 				Attempt:       tc.attempt,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 					AccumulatedSkippedDuration: durationpb.New(time.Hour),
-					TaskRegenerationStatus:     TimerRegenStatusNeeded,
 				},
 			}).AnyTimes()
 			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
@@ -1752,7 +1730,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry(t *
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
-			TaskRegenerationStatus:     TimerRegenStatusNeeded,
 		},
 	}).AnyTimes()
 	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
@@ -1821,7 +1798,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_Star
 		Attempt:       1,
 		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
-			TaskRegenerationStatus:     TimerRegenStatusNeeded,
 		},
 	}).AnyTimes()
 	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
