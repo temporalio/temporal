@@ -60,13 +60,6 @@ type RPCFactory struct {
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
-
-	// connsMu guards the set of client connections dialed by this factory so
-	// they can be closed on Stop. Without this, each dialed connection (and its
-	// gRPC background goroutines) would leak until process exit.
-	connsMu sync.Mutex
-	conns   []*grpc.ClientConn
-	stopped bool
 }
 
 // NewFactory builds a new RPCFactory
@@ -304,32 +297,7 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 		return nil
 	}
 
-	d.connsMu.Lock()
-	if d.stopped {
-		// Factory already stopped; don't retain (and leak) this connection.
-		d.connsMu.Unlock()
-		_ = connection.Close()
-		return connection
-	}
-	d.conns = append(d.conns, connection)
-	d.connsMu.Unlock()
-
 	return connection
-}
-
-// Stop closes all client connections dialed by this factory, terminating their
-// gRPC background goroutines. It is wired into the fx lifecycle by the providers
-// that construct the factory.
-func (d *RPCFactory) Stop() {
-	d.connsMu.Lock()
-	conns := d.conns
-	d.conns = nil
-	d.stopped = true
-	d.connsMu.Unlock()
-
-	for _, conn := range conns {
-		_ = conn.Close()
-	}
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {

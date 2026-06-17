@@ -462,12 +462,6 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
-	// Close all dialed client connections on shutdown so their gRPC background
-	// goroutines are released. Stop is not part of the RPCFactory interface so
-	// that third-party implementations are not forced to implement it.
-	if s, ok := any(factory).(interface{ Stop() }); ok {
-		lc.Append(fx.StopHook(s.Stop))
-	}
 	return factory, nil
 }
 

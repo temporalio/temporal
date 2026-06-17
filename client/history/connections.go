@@ -93,6 +93,12 @@ func watchMembershipForClose[C any](
 	for {
 		select {
 		case <-ctx.Done():
+			// Close all cached connections so their gRPC background goroutines exit.
+			conns.Range(func(k, v any) bool {
+				_ = v.(clientConnection[C]).grpcConn.Close() //nolint:revive // unchecked-type-assertion
+				conns.Delete(k)
+				return true
+			})
 			return
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
