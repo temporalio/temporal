@@ -29,9 +29,6 @@
 //	LEAK_MAX_HEAP_KB_PER_CLUSTER      HeapInuse-slope failure threshold, KB (default 2048)
 //	LEAK_OUTPUT_DIR                   on failure, write heap.prof / goroutines.txt /
 //	                                  leaked-goroutines.txt here (CI uploads them)
-//	LEAK_ABORT_ON_FAILURE=1           on failure, SIGABRT to dump a core (with
-//	                                  GOTRACEBACK=crash + ulimit -c unlimited) so CI
-//	                                  can run viewcore/goref for the retainer chain
 package leakcheck
 
 import (
@@ -40,10 +37,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
-	"syscall"
 	"testing"
 	"time"
 
@@ -113,7 +108,6 @@ func TestClusterShutdownLeak(t *testing.T) {
 		for _, f := range failures {
 			t.Error(f)
 		}
-		maybeAbortForCoreDump()
 	}
 }
 
@@ -219,14 +213,3 @@ func writeDiagnostics(t *testing.T, baseline goleak.Option) {
 	t.Logf("leak diagnostics written to %s", dir)
 }
 
-// maybeAbortForCoreDump dumps a core (via SIGABRT under GOTRACEBACK=crash) when
-// LEAK_ABORT_ON_FAILURE=1, so a Linux CI job can point viewcore/goref at the core
-// and recover the exact GC-root reference chain to the retained objects. No-op
-// otherwise (e.g. local runs, where macOS cores aren't viewcore-readable).
-func maybeAbortForCoreDump() {
-	if os.Getenv("LEAK_ABORT_ON_FAILURE") != "1" {
-		return
-	}
-	debug.SetTraceback("crash")
-	_ = syscall.Kill(syscall.Getpid(), syscall.SIGABRT)
-}

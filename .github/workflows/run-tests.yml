@@ -324,29 +324,12 @@ jobs:
 
       # Runs in isolation (own job): it inspects global goroutine state and
       # measures per-cluster heap growth. Uses the in-process sqlite driver, so
-      # it needs no DB containers. GOTRACEBACK=crash + ulimit -c unlimited +
-      # LEAK_ABORT_ON_FAILURE let the test dump a core on failure so the next
-      # step can recover the retaining reference chain with viewcore.
+      # it needs no DB containers.
       - name: Run resource leak test
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
-          # Write cores to /tmp (not LEAK_OUTPUT_DIR) so the multi-GB core isn't
-          # uploaded as an artifact; viewcore reads it in the next step.
-          sudo sysctl -w kernel.core_pattern="/tmp/leakcore.%p" || true
-          ulimit -c unlimited
           mkdir -p "$LEAK_OUTPUT_DIR"
-          export GOTRACEBACK=crash LEAK_ABORT_ON_FAILURE=1
           make leak-test LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
-
-      # On failure, trace what retains the leaked objects via viewcore on the
-      # core dumped above (Linux-only, hence in CI rather than locally). Uses the
-      # pinned viewcore from the Makefile tool mechanism. Best-effort: the target
-      # swallows viewcore errors, so it never fails the job beyond the gate.
-      - name: Retaining-reference analysis (on failure)
-        if: failure()
-        run: |
-          core="$(ls -t /tmp/leakcore.* 2>/dev/null | head -1)"
-          [ -n "$core" ] && make leak-test-refchain CORE="$core" || true
 
       - name: Upload leak diagnostics
         if: failure()

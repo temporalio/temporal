@@ -183,22 +183,6 @@ GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
-# viewcore reads a core dump to recover heap reference chains; used by
-# leak-test-refchain to attribute a leak-test failure. Pinned (x/debug is
-# pseudo-versioned and viewcore is sensitive to the Go version it parses).
-VIEWCORE_VERSION := v0.0.0-20260608150959-31c034ca73bf
-VIEWCORE := $(LOCALBIN)/viewcore-$(VIEWCORE_VERSION)
-$(VIEWCORE): $(LOCALBIN)
-	$(call go-install-tool,$(VIEWCORE),golang.org/x/debug/cmd/viewcore,$(VIEWCORE_VERSION))
-
-# goref (grf) is a delve-based heap reference-graph analyzer; leak-test-refchain
-# runs it alongside viewcore (the two use different internals, so one may follow
-# a root the other can't). It also only reads Linux/Windows cores. Pinned.
-GOREF_VERSION := v0.0.11
-GOREF := $(LOCALBIN)/grf-$(GOREF_VERSION)
-$(GOREF): $(LOCALBIN)
-	$(call go-install-tool,$(GOREF),github.com/cloudwego/goref/cmd/grf,$(GOREF_VERSION))
-
 GOTESTSUM_VER := v1.12.3
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
@@ -519,8 +503,7 @@ functional-test: clean-test-output
 # inspects global goroutine state), so it has its own compiled binary + CI job
 # rather than being part of the functional suite. Thresholds are tunable via the
 # LEAK_* variables below. On failure the test writes heap/goroutine diagnostics
-# to LEAK_OUTPUT_DIR; with LEAK_ABORT_ON_FAILURE=1 (set in CI) it also dumps a
-# core so viewcore can recover the retaining reference chain.
+# to LEAK_OUTPUT_DIR.
 LEAK_TEST_BIN          := $(TEST_OUTPUT_ROOT)/leakcheck.test
 LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
 LEAK_ITERS             ?= 15
@@ -544,21 +527,6 @@ leak-test:
 		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
 		$(LEAK_TEST_BIN) -test.run TestClusterShutdownLeak -test.count=1 -test.v -test.timeout $(LEAK_TIMEOUT) \
 		-persistenceType=sql -persistenceDriver=sqlite
-
-# leak-test-refchain attributes a leak-test failure: it runs viewcore on the
-# core dump left by `make leak-test` (with LEAK_ABORT_ON_FAILURE=1) and writes
-# the retaining object graph + heap histogram to LEAK_OUTPUT_DIR. viewcore only
-# reads Linux cores, so this is a CI-only follow-up step. Pass CORE=<core file>.
-leak-test-refchain: $(VIEWCORE) $(GOREF)
-	@printf $(COLOR) "Analyzing leak-test core for retaining references..."
-	@mkdir -p $(LEAK_OUTPUT_DIR)
-	@test -n "$(CORE)" || { echo "leak-test-refchain: set CORE=<core file>"; exit 1; }
-	$(VIEWCORE) $(CORE) --exe $(LEAK_TEST_BIN) objgraph $(LEAK_OUTPUT_DIR)/objgraph.dot 2>$(LEAK_OUTPUT_DIR)/viewcore.log || true
-	$(VIEWCORE) $(CORE) --exe $(LEAK_TEST_BIN) histogram >$(LEAK_OUTPUT_DIR)/histogram.txt 2>>$(LEAK_OUTPUT_DIR)/viewcore.log || true
-	$(GOREF) core $(LEAK_TEST_BIN) $(CORE) -o $(LEAK_OUTPUT_DIR)/goref.out 2>$(LEAK_OUTPUT_DIR)/goref.log || true
-	go tool pprof -peek='MovingWindowAvgImpl' $(LEAK_OUTPUT_DIR)/goref.out >$(LEAK_OUTPUT_DIR)/goref-mwa-referrers.txt 2>/dev/null || true
-	go tool pprof -top -nodecount=60 $(LEAK_OUTPUT_DIR)/goref.out >$(LEAK_OUTPUT_DIR)/goref-top.txt 2>/dev/null || true
-	go tool pprof -inuse_space -top -nodecount=40 $(LEAK_OUTPUT_DIR)/heap.prof >$(LEAK_OUTPUT_DIR)/heap-top.txt 2>/dev/null || true
 
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
