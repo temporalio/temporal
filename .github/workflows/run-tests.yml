@@ -306,6 +306,43 @@ jobs:
           job_name: Unit test
           artifact_name_suffix: unit-test
 
+  leak-test:
+    name: Memory leak test
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      GITHUB_TIMEOUT: 20
+      # Tunables for tests/memleak (see leak_test.go). Overridable here.
+      RUN_MEMLEAK_TEST: "1"
+      LEAK_ITERS: "15"
+      LEAK_MAX_GOROUTINES_PER_CLUSTER: "12"
+      LEAK_OUTPUT_DIR: ${{ github.workspace }}/.testoutput/memleak
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
+
+      # Runs in isolation (own job) because it measures the global goroutine
+      # count; uses the in-process sqlite driver so it needs no DB containers.
+      - name: Run memory leak test
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          mkdir -p "$LEAK_OUTPUT_DIR"
+          go test -run TestClusterGoroutineSlope -count=1 -v -timeout "$(("$GITHUB_TIMEOUT" - 1))m" \
+            ./tests/memleak/ -args -persistenceType=sql -persistenceDriver=sqlite
+
+      - name: Upload leak diagnostics
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: memleak-diagnostics
+          path: ${{ env.LEAK_OUTPUT_DIR }}
+          if-no-files-found: ignore
+
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
