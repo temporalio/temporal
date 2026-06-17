@@ -48,6 +48,7 @@ import (
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -195,6 +196,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			config.VisibilityAllowList,
 		),
 		config.SuppressErrorSetSystemSearchAttribute,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 	return NewWorkflowHandler(
 		cbValidator,
@@ -242,6 +245,33 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			saValidator,
 		),
 	)
+}
+
+func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
+	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
+	wh := &WorkflowHandler{
+		workerDeploymentReadRateLimiter: rateLimiter,
+	}
+	ctx := headers.SetCallerInfo(
+		context.Background(),
+		headers.NewCallerInfo("test-caller", headers.CallerTypeAPI, "test-origin"),
+	)
+	expectedRequest := quotas.NewRequest(
+		"DescribeWorkerDeployment",
+		1,
+		s.testNamespace.String(),
+		headers.CallerTypeAPI,
+		-1,
+		"test-origin",
+	)
+	rateLimiter.EXPECT().Allow(gomock.Any(), expectedRequest).Return(false)
+
+	err := wh.checkWorkerDeploymentReadRateLimit(ctx, s.testNamespace.String(), "DescribeWorkerDeployment")
+
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	s.Require().ErrorAs(err, &resourceExhaustedErr)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhaustedErr.Cause)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhaustedErr.Scope)
 }
 
 func (s *WorkflowHandlerSuite) TestDisableListVisibilityByFilter() {
@@ -3416,23 +3446,30 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	var unimplementedErr *serviceerror.Unimplemented
+	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
 	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
@@ -3457,7 +3494,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 						WorkflowId:         "WORKFLOW_ID",
 						WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
-						TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+						TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 					},
 				},
 			},
@@ -3520,7 +3557,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled(
 						WorkflowId:         "WORKFLOW_ID",
 						WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
-						TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+						TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 					},
 				},
 			},
@@ -3554,7 +3591,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 		WorkflowId:         "WORKFLOW_ID",
 		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
@@ -3581,7 +3618,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled
 		WorkflowId:         "WORKFLOW_ID",
 		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 	}
 
 	resp, err := wh.StartWorkflowExecution(context.Background(), req)
@@ -3603,7 +3640,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
 		SignalName:         "signal-name",
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 	}
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
@@ -3631,7 +3668,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
 		SignalName:         "signal-name",
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 	}
 
 	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
@@ -3658,7 +3695,7 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
 					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
 						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-							TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+							TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 						},
 						UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 					},
@@ -3696,7 +3733,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 						Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
 							UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
 								WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-									TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+									TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 								},
 								UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 							},
@@ -3729,7 +3766,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOper
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-					TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+					TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 				},
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 			},
@@ -4796,7 +4833,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 			RunId:      "run-id",
 		},
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 	})

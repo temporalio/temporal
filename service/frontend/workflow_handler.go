@@ -700,19 +700,28 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
-	namespaceName namespace.Name,
+	tsc *commonpb.TimeSkippingConfig,
+	ns namespace.Name,
 ) error {
-	if timeSkippingConfig == nil {
+	if tsc == nil {
 		return nil
 	}
-
 	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+	if !wh.config.TimeSkippingEnabled(ns.String()) {
 		return serviceerror.NewUnimplementedf(
 			"The Time-Skipping feature is not enabled for namespace %s",
-			namespaceName,
+			ns.String(),
 		)
+	}
+
+	if !tsc.GetEnabled() {
+		if tsc.GetFastForward() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+		}
+		return nil
+	}
+	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
+		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
 	}
 
 	return nil
@@ -6304,10 +6313,11 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	)
 
 	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-			fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
-		)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
+		}
 	}
 	return nil
 }

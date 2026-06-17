@@ -11,13 +11,13 @@ import (
 var _ Task = (*TimeSkippingTimerTask)(nil)
 
 type (
-	// TimeSkippingTimerTask wakes a workflow when the elapsed-duration bound configured
-	// on its TimeSkippingConfig is reached, so the executor can emit a disable transition.
+	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
+	// on its TimeSkippingConfig should take effect.
 	//
 	// EventID identifies the event (WorkflowExecutionStartedEvent or
-	// WorkflowExecutionOptionsUpdatedEvent) that installed the bound this task targets.
-	// It is matched against TimeSkippingInfo.CurrentElapsedDurationBound.SourceEventId at
-	// firing time to detect superseded tasks: re-configuring the bound emits a new task
+	// WorkflowExecutionOptionsUpdatedEvent) that installed the fast-forward this task targets.
+	// It is matched against TimeSkippingInfo.FastForward.SourceEventId at
+	// firing time to detect superseded tasks: re-configuring the fast-forward emits a new task
 	// with a new EventID, and the old task is silently dropped on mismatch.
 	// todo@time-skipping: replication related feature (ndc)
 	TimeSkippingTimerTask struct {
