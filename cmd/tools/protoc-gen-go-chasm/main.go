@@ -215,7 +215,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	// cached gRPC connections) to the fx lifecycle so they are released on shutdown.
 	w.println("ctx, cancel := context.WithCancel(context.Background())")
 	w.println("lc.Append(fx.StopHook(cancel))")
-	w.println("connections := history.NewConnectionPool(ctx, resolver, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
+	w.println("connections := history.NewConnectionPool(ctx, resolver, rpcFactory, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
 	w.println("var redirector history.Redirector[%sClient]", svc.GoName)
 	w.println("if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {")
 	w.indent() // start if
