@@ -74,7 +74,7 @@ func TestClusterGoroutineSlope(t *testing.T) {
 
 	var series []int
 	var leakBaseline goleak.Option
-	for i := 0; i < iters; i++ {
+	for i := range iters {
 		runOneCluster(t, i)
 		g := numGoroutines()
 		series = append(series, g)
