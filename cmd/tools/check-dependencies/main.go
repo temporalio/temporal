@@ -34,12 +34,12 @@ var knownModules = []moduleSpec{
 	{
 		modulePath:    "go.temporal.io/api",
 		repoURL:       "https://github.com/temporalio/api-go.git",
-		defaultBranch: "master",
+		defaultBranch: "main",
 	},
 	{
 		modulePath:    "go.temporal.io/sdk",
 		repoURL:       "https://github.com/temporalio/sdk-go.git",
-		defaultBranch: "master",
+		defaultBranch: "main",
 	},
 }
 

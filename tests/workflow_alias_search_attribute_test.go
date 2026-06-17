@@ -16,9 +16,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -33,6 +33,11 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
 		testcore.WithWorkerService("worker-deployment version workflows must run for versioned-poller membership checks"),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters.
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("alias-sa").WithBuildID("v1")
+		}),
 	}, opts...)
 
 	env := testcore.NewEnv(s.T(), opts...)
@@ -46,8 +51,8 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 
 func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 ) {
-	tv := env.Tv()
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tv.TaskQueue().Name,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -90,11 +95,11 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
-	tv := env.Tv()
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	s.startVersionedPollerAndValidate(env)
+	s.startVersionedPollerAndValidate(env, tv)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
@@ -124,7 +129,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
 	env := s.newTestEnv()
 
-	_, err := s.createWorkflow(env, nil)
+	_, err := s.createWorkflow(env, env.Tv(), nil)
 	s.NoError(err)
 
 	s.EventuallyWithT(
@@ -175,11 +180,11 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"WorkflowVersioningBehavior": payload.EncodeString("user-defined"),
+			"WorkflowVersioningBehavior": sadefs.MustEncodeValue("user-defined", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 
-	_, err = s.createWorkflow(env, sa)
+	_, err = s.createWorkflow(env, env.Tv(), sa)
 	s.NoError(err)
 
 	s.EventuallyWithT(

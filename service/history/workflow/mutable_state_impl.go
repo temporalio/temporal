@@ -274,6 +274,11 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
+
+		// replayEventBatchID is the first event ID of the history batch currently being applied
+		// during replay, set via SetReplayEventBatchID by the rebuilder. It is common.EmptyEventID
+		// on the live path, where the batch ID is derived from the batch being built instead.
+		replayEventBatchID int64
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -1361,33 +1366,36 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
+// SetReplayEventBatchID records the first event ID of the history batch that subsequent
+// GenerateEventLoadToken calls should reference. Only needed during replay. The rebuilder sets it
+// for each batch before applying its events.
+func (ms *MutableStateImpl) SetReplayEventBatchID(batchID int64) {
+	ms.replayEventBatchID = batchID
+}
+
 // GenerateEventLoadToken generates a token for loading a history event at a later time. The token encodes the event ID
 // and the batch ID (if applicable) which can be used to load the event from the events cache.
 func (ms *MutableStateImpl) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
+	if event.EventId == common.BufferedEventID {
+		return nil, serviceerror.NewInternalf("cannot reference buffered event: %v", event.EventType)
 	}
-
-	f := attrs.Field(0).Interface()
-
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
-		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
-		// WFEStarted is always stored in the first batch of events.
-		eventBatchID = 1
-	} else {
-		// By default, events aren't referenceable as they may end up buffered.
-		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
+	batchID := ms.hBuilder.LatestEventBatchID()
+	if batchID == common.EmptyEventID {
+		batchID = ms.replayEventBatchID
+	}
+	if batchID == common.EmptyEventID {
 		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
+	}
+	if batchID > event.EventId {
+		// The batch ID is the first event ID of the event's own batch, so it can never exceed the
+		// event's ID.
+		return nil, serviceerror.NewInternalf(
+			"event load token batch ID %d exceeds event ID %d",
+			batchID, event.EventId)
 	}
 	ref := &tokenspb.HistoryEventRef{
 		EventId:      event.EventId,
-		EventBatchId: eventBatchID,
+		EventBatchId: batchID,
 	}
 	return proto.Marshal(ref)
 }
@@ -1905,12 +1913,8 @@ func (ms *MutableStateImpl) Now() time.Time {
 	return ms.timeSource.Now()
 }
 
-// accumulatedSkippedDuration returns the workflow's accumulated time-skipping offset, or 0 if
-// time skipping is not configured. Timestamps in mutable state are stored in the virtual frame
-// (i.e. they may include skipped time); this offset is the amount to subtract to get real
-// wall-clock, used by AddTasks when persisting timer-category tasks.
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	return ms.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	return accumulatedSkippedDuration(ms.executionInfo)
 }
 
 // GetWorkflowCloseTime returns workflow closed time, returns a zero time for open workflow
@@ -2711,8 +2715,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
-	newRunTSConfig, newRunInitialSkipped := snapshotTimeSkippingInfo(previousExecutionInfo)
-
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2733,7 +2736,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CompletionCallbacks:   completionCallbacks,
 		Links:                 links,
 		Priority:              previousExecutionInfo.Priority,
-		TimeSkippingConfig:    newRunTSConfig,
+		TimeSkippingConfig:    tsc,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2768,7 +2771,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedPinnedVersion:       inheritedPinnedVersion,
 		VersioningOverride:           pinnedOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
-		InitialSkippedDuration:       newRunInitialSkipped,
+		TimeSkippingStatePropagation: stateProp,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -3175,8 +3178,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 	ms.executionInfo.Priority = event.Priority
 
-	if tsc := event.GetTimeSkippingConfig(); tsc != nil {
-		ms.initTimeSkippingInfo(tsc, event.GetInitialSkippedDuration(), startEvent.GetEventId())
+	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
+		ms.initTimeSkippingInfo(tsc, stateProp, startEvent.GetEventId())
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -4145,13 +4148,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 // AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
 // This should only be called only when `ShouldExecuteTimeSkipping` returns true.
 func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
-	ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error) {
+	ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-		targetTime, disabledAfterBound)
+		targetTime, disabledAfterFastForward)
 	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
 }
 
@@ -4166,7 +4169,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
 		)
 	}
-	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
+	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
 		return serviceerror.NewInternal(
 			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
 		)
@@ -4180,10 +4183,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
 	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
-	tsi.Config.Enabled = !attr.GetDisabledAfterBound()
+	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
 
-	if attr.GetDisabledAfterBound() && tsi.GetCurrentElapsedDurationBound() != nil {
-		tsi.CurrentElapsedDurationBound.HasReached = true
+	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
+		tsi.FastForwardInfo.HasReached = true
 	}
 
 	ms.timeSkippingInfoUpdated = true
@@ -4672,7 +4675,7 @@ func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCo
 // GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
 // in-flight activities that have a worker control queue.
 func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
-	if !ms.config.EnableCancelActivityWorkerCommand() {
+	if !ms.config.EnableCancelActivityWorkerCommand(ms.namespaceEntry.Name().String()) {
 		return nil
 	}
 
@@ -4926,7 +4929,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
-	firstEventID int64,
 	retryState enumspb.RetryState,
 	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
@@ -4935,8 +4937,8 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
-	if err := ms.ApplyWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
+	if err := ms.ApplyWorkflowExecutionTimedoutEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -4951,7 +4953,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -4960,7 +4962,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -5541,7 +5543,6 @@ func (ms *MutableStateImpl) AddRecordMarkerEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
@@ -5553,8 +5554,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
-	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
+	if err := ms.ApplyWorkflowExecutionTerminatedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation
@@ -5839,7 +5840,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
@@ -5854,6 +5856,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		timeSkippingConfigUpdated,
 		workflowUpdateOptions,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
@@ -5942,8 +5945,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
-	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
+	// this flag of timeSkippingConfigUpdated is the source of the truth for if the TSC is updated or not
+	// the contents of the config cannot be used to judge if the config is updated or not, examples:
+	// (1) TSC=nil in handleUseExistingWorkflowOnConflictOptions means nothing is changed
+	// but TSC=nil in MergeAndApplyWorkflowExecutionOptions with update masks means users want to remove the TSC
+	// (2) same TSC with fast-forward in MergeAndApplyWorkflowExecutionOptions logic may
+	// either indicate the TSC is untouched or updated to the same value and should refresh related timer tasks
+	if attributes.GetTimeSkippingConfigUpdated() {
+		tsc := attributes.GetTimeSkippingConfig()
+		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+		if tsi == nil {
 			ms.initTimeSkippingInfo(tsc, nil, event.GetEventId())
 		} else {
 			ms.updateTimeSkippingInfo(tsc, event.GetEventId())
@@ -6077,7 +6088,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
-	firstEventID int64,
+	batchID int64,
 	event *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6086,7 +6097,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -6183,7 +6194,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 
 func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	ctx context.Context,
-	firstEventID int64,
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
@@ -6224,7 +6234,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		}
 	}
 
-	continueAsNewEvent := ms.hBuilder.AddContinuedAsNewEvent(
+	continueAsNewEvent, batchID := ms.hBuilder.AddContinuedAsNewEvent(
 		workflowTaskCompletedEventID,
 		newRunID,
 		command,
@@ -6277,7 +6287,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if err = ms.ApplyWorkflowExecutionContinuedAsNewEvent(
-		firstEventID,
+		batchID,
 		continueAsNewEvent,
 	); err != nil {
 		return nil, nil, err
@@ -6320,7 +6330,7 @@ func rolloverAutoResetPointsWithExpiringTime(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
-	firstEventID int64,
+	batchID int64,
 	continueAsNewEvent *historypb.HistoryEvent,
 ) error {
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -6329,7 +6339,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	); err != nil {
 		return err
 	}
-	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	ms.executionInfo.CompletionEventBatchId = batchID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	ms.ClearStickyTaskQueue()
@@ -6348,14 +6358,13 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-
-	childTSConfig, childInitialSkipped := snapshotTimeSkippingInfo(ms.executionInfo)
+	childTSC, childTSStateProp := propagateTimeSkippingToChild(ms.executionInfo)
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
-		childTSConfig,
-		childInitialSkipped,
+		childTSC,
+		childTSStateProp,
 	)
 	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(batchID, event)
 	if err != nil {
@@ -8348,6 +8357,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
 	ms.reapplyEventsCandidate = nil
 	ms.subStateMachineDeleted = false
+	ms.replayEventBatchID = common.EmptyEventID
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
@@ -8899,7 +8909,7 @@ func (ms *MutableStateImpl) closeTransactionHandleTimeSkipping(
 		}
 		if shouldExecute, transition := ms.shouldExecuteTimeSkipping(); shouldExecute {
 			_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-				ctx, transition.targetTime, transition.disabledAfterBound)
+				ctx, transition.targetTime, transition.disabledAfterFastForward)
 			if err != nil {
 				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
 				ms.logger.Error(
@@ -9985,72 +9995,76 @@ func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationp
 }
 
 func (ms *MutableStateImpl) initTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
-	initialSkippedDuration *durationpb.Duration,
+	config *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 	currentEventID int64,
 ) {
+	// we only need to init time skipping info if
+	// either config is not nil or it has initial skip
+	initialSkip := timeSkippingStatePropagation.GetInitialSkippedDuration()
+	if config == nil && initialSkip == nil {
+		return
+	}
 	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config:                     config,
-		AccumulatedSkippedDuration: initialSkippedDuration,
+		AccumulatedSkippedDuration: initialSkip,
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
-	ms.shiftWorkflowTimes(initialSkippedDuration)
-	ms.applyTimeSkippingBound(currentEventID)
+	ms.shiftWorkflowTimes(initialSkip)
+	ms.applyFastForward(currentEventID, timeSkippingStatePropagation.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
 }
 
+// updateTimeSkippingInfo updates the time skipping info with
+// with new config and the event ID that updates the config
+// we allow updating the config to nil when users want to remove the TSC
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
-	config *workflowpb.TimeSkippingConfig,
+	config *commonpb.TimeSkippingConfig,
 	currentEventID int64,
 ) {
 	ms.executionInfo.TimeSkippingInfo.Config = config
-	ms.applyTimeSkippingBound(currentEventID)
+	// Options update: the new ff duration is a fresh budget measured from now.
+	ms.applyFastForward(currentEventID, nil)
 	ms.timeSkippingInfoUpdated = true
 }
 
-// applyTimeSkippingBound should be called whenever time skipping config is updated.
-func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
-	config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
-	if config == nil {
-		return
-	}
-	if !config.GetEnabled() {
-		return
-	}
+// applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
+// This method should be called whenever the TimeSkippingConfig is initialized or updated.
+// An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
+// the FastForwardInfo should never be nil.
+func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTargetTime *timestamppb.Timestamp) {
+
+	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	tsi := ms.executionInfo.TimeSkippingInfo
-	bound := config.GetBound()
-	if bound == nil {
-		tsi.CurrentElapsedDurationBound = nil
+
+	// clear fast forward if disabled or zero max_elapsed_duration
+	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
+		if tsi.FastForwardInfo != nil {
+			tsi.FastForwardInfo = nil
+		}
 		return
 	}
-	switch b := bound.(type) {
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if b.MaxElapsedDuration == nil {
-			return
-		}
-		target := ms.Now().Add(b.MaxElapsedDuration.AsDuration())
-		// Skip task emission when the existing bound already targets the same
-		// virtual time — avoids leaving a stale wake-up task with a superseded
-		// SourceEventId that the executor would then drop.
-		if existing := tsi.GetCurrentElapsedDurationBound(); existing != nil &&
-			existing.GetTargetTime().AsTime().Equal(target) {
-			return
-		}
-		tsi.CurrentElapsedDurationBound = &persistencespb.TimeSkippingBoundInfo{
-			TargetTime:    timestamppb.New(target),
-			SourceEventId: currentEventID,
-			HasReached:    false,
-		}
-		ms.AddTasks(&tasks.TimeSkippingTimerTask{
-			WorkflowKey:         ms.GetWorkflowKey(),
-			VisibilityTimestamp: target,
-			EventID:             currentEventID,
-		})
-	default:
-		// Non-elapsed bound types don't emit a wake-up task and must not leave a
-		// stale CurrentElapsedDurationBound from a previous elapsed-bound config.
-		tsi.CurrentElapsedDurationBound = nil
+
+	var targetTime time.Time
+	if propagatedTargetTime != nil {
+		targetTime = propagatedTargetTime.AsTime()
+	} else {
+		// if there is no propagated target time,
+		// fast-forward refers to a new duration from now.
+		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
 	}
+
+	// always install a fresh fast-forward bound
+	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
+		TargetTime:    timestamppb.New(targetTime),
+		SourceEventId: currentEventID,
+		HasReached:    false,
+	}
+	ms.AddTasks(&tasks.TimeSkippingTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: targetTime,
+		EventID:             currentEventID,
+	})
 }
 
 // wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
@@ -10064,29 +10078,6 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(
 		ms.timeSource, ms.accumulatedSkippedDuration)
 	ms.hBuilder.SetTimeSource(ms.timeSource)
-}
-
-// snapshotTimeSkippingInfo returns a clone of the source execution's TimeSkippingConfig
-// and a copy of its AccumulatedSkippedDuration, for propagation to a new run (child workflow
-// or continue-as-new). The source is passed explicitly so callers can snapshot from the
-// originating run's executionInfo — on CaN, the new MS is empty at snapshot time, so we
-// must read from the previous run.
-func snapshotTimeSkippingInfo(source *persistencespb.WorkflowExecutionInfo) (*workflowpb.TimeSkippingConfig, *durationpb.Duration) {
-	tsInfo := source.GetTimeSkippingInfo()
-	if tsInfo == nil {
-		return nil, nil
-	}
-	var tsc *workflowpb.TimeSkippingConfig
-	var initialSkipped *durationpb.Duration
-	if srcTSC := tsInfo.GetConfig(); srcTSC != nil {
-		if cloned, ok := proto.Clone(srcTSC).(*workflowpb.TimeSkippingConfig); ok {
-			tsc = cloned
-		}
-	}
-	if skipped := tsInfo.GetAccumulatedSkippedDuration(); skipped != nil {
-		initialSkipped = durationpb.New(skipped.AsDuration())
-	}
-	return tsc, initialSkipped
 }
 
 func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
@@ -10158,6 +10149,7 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 	}
 
 	// Compute the transition early so we can short-circuit before allocating an event.
+	// todo(@time-skipping): replace error with nil
 	transition, err := ms.calculateTimeSkippingTransition()
 	if err != nil {
 		noSkippingReason = fmt.Sprintf("error calculating time skipping decision: %v", err)
@@ -10170,35 +10162,34 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 		return false, nil
 	}
 	if !transition.isValid() {
-		noSkippingReason = "time skipping has no candidate target time nor disabled after bound flag"
+		noSkippingReason = "time skipping has no candidate target time nor disabled after fast-forward flag"
 		return false, nil
 	}
 	return true, &transition
 }
 
 type timeSkippingTransition struct {
-	targetTime         time.Time
-	disabledAfterBound bool
+	targetTime               time.Time
+	disabledAfterFastForward bool
 }
 
 func (d timeSkippingTransition) isValid() bool {
-	return !d.targetTime.IsZero() || d.disabledAfterBound
+	return !d.targetTime.IsZero() || d.disabledAfterFastForward
 }
 
-// calculateTimeSkippingTransition calculates the transition state which includes two fields:
-// 1. targetTime: the time to skip to
-// 2. disabledAfterBound: a flag indicating whether the time skipping should be flipped off
-// right now the time points considered for target time are:
-// - the first expiry time of the pending user timers
-// - the workflow execution retry backoff
-// - the current elapsed duration bound of the time skipping config
-// - the activity retry backoff
+// calculateTimeSkippingTransition determines the next skip target.
+// Candidates (in collection order): pending user timers, activity retry backoffs,
+// workflow start-with-delay/CaN/retry backoff, and the fast-forward.
+// The run/execution timeout is NOT a standalone candidate — it only applies as
+// a cap: if any candidate wins, the skip target is clamped to min(target,
+// runExpiry, execExpiry). This ensures we never advance virtual time past the
+// workflow timeout, even when a user timer or fast-forward would otherwise overshoot.
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var transition timeSkippingTransition
-	advance := func(candidate time.Time, dueToBound bool) {
+	advance := func(candidate time.Time, dueToFastForward bool) {
 		if transition.targetTime.IsZero() || candidate.Before(transition.targetTime) {
 			transition.targetTime = candidate
-			transition.disabledAfterBound = dueToBound
+			transition.disabledAfterFastForward = dueToFastForward
 		}
 	}
 
@@ -10231,20 +10222,22 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		}
 	}
 
-	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	bound := info.GetConfig().GetBound()
-	if bound == nil {
-		return transition, nil
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if !tsi.GetFastForwardInfo().GetHasReached() && tsi.GetFastForwardInfo().GetTargetTime() != nil {
+		advance(tsi.GetFastForwardInfo().GetTargetTime().AsTime(), true)
 	}
 
-	switch bound.(type) {
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if info.GetCurrentElapsedDurationBound() == nil {
-			return timeSkippingTransition{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+	// Cap any skip target at the run/execution timeout: never advance virtual time past
+	// them. Timeouts alone do not create a skip target — only existing candidates
+	// (timers, backoffs, fast-forward) do. This also handles the case where a user
+	// timer fires past the workflow timeout: we cap the skip so the timeout fires on schedule.
+	if !transition.targetTime.IsZero() {
+		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
 		}
-		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
-	default:
-		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
+		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			advance(t.AsTime(), false)
+		}
 	}
 	return transition, nil
 }

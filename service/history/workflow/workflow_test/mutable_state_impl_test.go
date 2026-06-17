@@ -23,6 +23,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -411,7 +412,7 @@ func TestGetNexusCompletion(t *testing.T) {
 		{
 			name: "termination",
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
+				return mutableState.AddWorkflowExecutionTerminatedEvent("dont care", nil, "identity", false, nil)
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.NotNil(t, completion.Error)
@@ -478,8 +479,9 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 	branchToken, err := ms.GetCurrentBranchToken()
 	require.NoError(t, err)
 	firstEventID := event.EventId
+	require.Equal(t, common.FirstEventID, firstEventID)
 
-	token, err := hsm.GenerateEventLoadToken(event)
+	token, err := ms.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 
 	wfKey := ms.GetWorkflowKey()
