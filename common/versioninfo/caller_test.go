@@ -1,6 +1,7 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -69,7 +70,7 @@ func TestPostInfo(t *testing.T) {
 		Name:    "sdk-java",
 		Version: "3.11",
 	}}
-	_, err = caller.Call(&versioninfo.VersionCheckRequest{
+	_, err = caller.Call(context.Background(), &versioninfo.VersionCheckRequest{
 		Product:   "server",
 		Version:   "0.1",
 		ClusterID: "foo",

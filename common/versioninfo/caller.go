@@ -2,6 +2,7 @@ package versioninfo
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -20,7 +21,7 @@ func NewCaller() Caller {
 	return Caller{"https", "version-info.temporal.io"}
 }
 
-func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
+func (c Caller) Call(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
 		return nil, err
@@ -30,6 +31,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 		DisableKeepAlives:   true,
 		MaxIdleConnsPerHost: -1,
 	}
+	defer tr.CloseIdleConnections()
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
@@ -38,7 +40,9 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqBody))
+	// Use the caller's context so the request (and its connection goroutines) is
+	// cancelled on shutdown instead of blocking on network I/O indefinitely.
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}

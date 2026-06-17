@@ -48,11 +48,16 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			// TODO: specify a timeout for the context
-			ctx := headers.SetCallerInfo(
-				context.TODO(),
+			ctx, cancel := context.WithCancel(headers.SetCallerInfo(
+				context.Background(),
 				headers.SystemBackgroundHighCallerInfo,
-			)
+			))
+			// Cancel in-flight work (notably the outbound version-check HTTP
+			// request) when the checker is stopped.
+			go func() {
+				<-vc.shutdownChan
+				cancel()
+			}()
 
 			go vc.versionCheckLoop(ctx)
 		})
@@ -105,7 +110,7 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	resp, err := vc.getVersionInfo(req)
+	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
 		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
@@ -146,8 +151,8 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
-	return versioninfo.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return versioninfo.NewCaller().Call(ctx, req)
 }
 
 func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
