@@ -117,6 +117,15 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	return f.systemSdkClient
 }
 
+// Close closes the cached system SDK client (and its gRPC connection) if one was
+// created. It is wired into the fx lifecycle by the providers that construct the
+// factory, so the connection's background goroutines are released on shutdown.
+func (f *clientFactory) Close() {
+	if f.systemSdkClient != nil {
+		f.systemSdkClient.Close()
+	}
+}
+
 func (f *clientFactory) NewWorker(
 	client sdkclient.Client,
 	taskQueue string,

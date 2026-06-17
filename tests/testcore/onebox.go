@@ -916,6 +916,7 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 }
 
 func sdkClientFactoryProvider(
+	lc fx.Lifecycle,
 	grpcResolver *membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -929,13 +930,15 @@ func sdkClientFactoryProvider(
 			panic(err)
 		}
 	}
-	return sdk.NewClientFactory(
+	factory := sdk.NewClientFactory(
 		grpcResolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+	lc.Append(fx.StopHook(factory.Close))
+	return factory
 }
 
 func (c *TemporalImpl) setNexusCallbackURL() {
