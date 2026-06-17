@@ -211,11 +211,8 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("return nil, err")
 	w.unindent()
 	w.println("}")
-	// Bound the connection pool's background goroutines (membership watcher and
-	// cached gRPC connections) to the fx lifecycle so they are released on shutdown.
-	w.println("ctx, cancel := context.WithCancel(context.Background())")
-	w.println("lc.Append(fx.StopHook(cancel))")
-	w.println("connections := history.NewConnectionPool(ctx, resolver, rpcFactory, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
+	// NewConnectionPool manages its own lifecycle via lc.
+	w.println("connections := history.NewConnectionPool(lc, resolver, rpcFactory, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
 	w.println("var redirector history.Redirector[%sClient]", svc.GoName)
 	w.println("if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {")
 	w.indent() // start if

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.uber.org/fx/fxtest"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
@@ -56,7 +57,7 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 		serveErrs <- grpcServer.Serve(listener)
 	}()
 
-	client := createClient(ctrl, listener)
+	client := createClient(t, ctrl, listener)
 
 	t.Run("ReadDLQTasks", func(t *testing.T) {
 		t.Parallel()
@@ -150,7 +151,7 @@ func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *
 	return grpcServer
 }
 
-func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) historyservice.HistoryServiceClient {
+func createClient(t testing.TB, ctrl *gomock.Controller, listener *nettest.PipeListener) historyservice.HistoryServiceClient {
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
 	address := membership.NewHostInfoFromAddress("127.0.0.1:7104")
 	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{
@@ -161,7 +162,7 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
-		context.Background(),
+		fxtest.NewLifecycle(t),
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
 		log.NewTestLogger(),

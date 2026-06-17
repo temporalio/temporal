@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -44,7 +46,7 @@ type clientImpl struct {
 
 // NewClient creates a new history service gRPC client
 func NewClient(
-	ctx context.Context,
+	lc fx.Lifecycle,
 	dc *dynamicconfig.Collection,
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
@@ -52,7 +54,7 @@ func NewClient(
 	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := NewConnectionPool(ctx, historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
+	connections := NewConnectionPool(lc, historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 
 	var redirector Redirector[historyservice.HistoryServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {

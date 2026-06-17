@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -45,13 +46,11 @@ type clientImpl struct {
 	partitionCache  *partitionCache
 }
 
-// NewClient creates a new matching service gRPC client.
-//
-// The supplied ctx bounds the lifetime of the client's background goroutines
-// (partition cache rotation and membership-based connection eviction): when ctx
-// is cancelled, those goroutines exit.
+// NewClient creates a new matching service gRPC client. Background goroutines
+// (partition cache rotation and membership-based connection eviction) are bound
+// to the fx lifecycle: they start immediately and stop when the lifecycle ends.
 func NewClient(
-	ctx context.Context,
+	lc fx.Lifecycle,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
@@ -73,21 +72,15 @@ func NewClient(
 		partitionCache:  newPartitionCache(metricsHandler),
 	}
 
-	// Start goroutine to prune partition count cache.
+	ctx, cancel := context.WithCancel(context.Background())
 	c.partitionCache.Start(ctx)
-
-	// Evict cached clients whose host leaves the membership ring.
 	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
+	lc.Append(fx.StopHook(func() {
+		cancel()
+		c.partitionCache.Stop()
+	}))
 
 	return c
-}
-
-// Stop waits for the partition-cache rotation goroutine to exit. The goroutine
-// is signalled to stop when the context passed to NewClient is cancelled; Stop
-// blocks until it has actually finished so the factory can confirm clean
-// shutdown. Callers that only cancel the context can ignore Stop entirely.
-func (c *clientImpl) Stop() {
-	c.partitionCache.Stop()
 }
 
 func watchMembershipForEviction(
