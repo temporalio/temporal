@@ -497,6 +497,25 @@ functional-test: clean-test-output
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
+# Goroutine-leak regression test. Builds clusters in a loop and asserts that a
+# clean shutdown leaves no goroutine stacks behind. Uses the in-process sqlite
+# driver (no DB containers) and must run in isolation (it inspects global
+# goroutine state), so it has its own CI job rather than being part of the
+# functional suite.
+LEAK_OUTPUT_DIR ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS      ?= 15
+LEAK_TIMEOUT    ?= 19m
+
+leak-test:
+	@printf $(COLOR) "Run goroutine-leak regression test (sqlite, no Docker)..."
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	RUN_LEAK_TEST=1 \
+		LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
+		go test -run TestClusterShutdownLeak -count=1 -v \
+			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \
+			./tests/leakcheck/ -args -persistenceType=sql -persistenceDriver=sqlite
+
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
