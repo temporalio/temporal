@@ -23,6 +23,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
 
@@ -36,7 +37,7 @@ jobs:
       runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -216,70 +217,57 @@ jobs:
     needs: test-setup
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        id: restore-deps
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
+      - name: Prepare Go
+        id: prepare-go
+        uses: ./.github/actions/prepare-go
 
       - run: make pre-build-functional-test-coverage
 
-      - name: Save dependencies
-        uses: actions/cache/save@v5
-        if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
+      - name: Save Go dependencies
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.dependency_cache_hit != 'true' }}
         with:
-          path: ~/go/pkg/mod
-          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+          path: ${{ steps.prepare-go.outputs.dependency_cache_path }}
+          key: ${{ steps.prepare-go.outputs.dependency_cache_primary_key }}
 
-      - name: Save build outputs
-        uses: actions/cache/save@v5
+      - name: Save Go tools
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.tools_cache_hit != 'true' }}
         with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+          path: ${{ steps.prepare-go.outputs.tools_cache_path }}
+          key: ${{ steps.prepare-go.outputs.tools_cache_primary_key }}
+
+      - name: Save Go build outputs
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.build_cache_hit != 'true' }}
+        with:
+          path: ${{ steps.prepare-go.outputs.build_cache_path }}
+          key: ${{ steps.prepare-go.outputs.build_cache_primary_key }}
 
   misc-checks:
     name: Misc checks
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
-
-      - uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: .github
+          install_args: protoc
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
 
@@ -291,32 +279,23 @@ jobs:
     name: Unit test
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    env:
+      TEST_TIMEOUT: 15m
+      GITHUB_TIMEOUT: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Run unit tests
-        timeout-minutes: 20
-        run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make unit-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -333,8 +312,10 @@ jobs:
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
       CONTAINERS: cassandra mysql postgresql
+      TEST_TIMEOUT: 10m
+      GITHUB_TIMEOUT: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -345,22 +326,8 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Wait for containerized dependencies to be healthy
         uses: ./.github/actions/docker-compose-healthy
@@ -369,8 +336,10 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
-        timeout-minutes: 15
-        run: ./develop/github/monitor_test.sh make integration-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make integration-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -403,9 +372,10 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      GITHUB_TIMEOUT: ${{ matrix.github_timeout }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -417,22 +387,8 @@ jobs:
           services: ${{ env.CONTAINERS }}
           cache: true
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
@@ -444,8 +400,10 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
-        timeout-minutes: ${{ matrix.github_timeout }}
-        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
@@ -480,7 +438,7 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -491,22 +449,8 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Install PostgreSQL schema
         run: make install-schema-postgresql12
@@ -574,10 +518,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: true

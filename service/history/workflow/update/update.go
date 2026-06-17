@@ -485,7 +485,7 @@ func (u *Update) persistCallback(
 		return true, nil
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-		nil, false, "", nil, nil, "", nil, nil,
+		nil, false, "", nil, nil, "", nil, nil, false,
 		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
 			UpdateId:                    u.id,
 			AttachedRequestId:           requestID,

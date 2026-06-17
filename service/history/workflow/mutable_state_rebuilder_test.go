@@ -13,7 +13,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -125,6 +124,8 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+	s.mockMutableState.EXPECT().SetReplayEventBatchID(gomock.Any()).AnyTimes()
+	s.mockMutableState.EXPECT().GenerateEventLoadToken(gomock.Any()).Return([]byte("token"), nil).AnyTimes()
 
 	populateTaskGeneratorProvider(&testTaskGeneratorProvider{
 		mockMutableState:  s.mockMutableState,
@@ -1083,7 +1084,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	}
 	s.mockMutableState.EXPECT().ApplyWorkflowTaskStartedEvent(
 		(*historyi.WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
-		false, gomock.Any(), nil, int64(0), nil, false,
+		false, gomock.Any(), nil, int64(0), nil,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
@@ -2139,7 +2140,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionOptionsUpd
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 					Enabled: true,
 				},
 			},

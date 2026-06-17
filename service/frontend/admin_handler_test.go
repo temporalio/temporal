@@ -32,6 +32,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
@@ -60,6 +61,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -2261,6 +2264,15 @@ func (f *fakeSchedulerClient) MigrateToWorkflow(ctx context.Context, req *schedu
 
 func (s *adminHandlerSuite) TestMigrateScheduleToWorkflow() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(nil, serviceerror.NewNotFound("workflow not found"))
 
 	var capturedReq *schedulerpb.MigrateToWorkflowRequest
 	fake := &fakeSchedulerClient{
@@ -2286,8 +2298,93 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflow() {
 	s.Equal("test-request-id", capturedReq.RequestId)
 }
 
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowExistingWorkflow() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type: &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+		},
+	}, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(s.namespaceID.String(), capturedReq.NamespaceId)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
+	s.Equal("test-identity", capturedReq.Identity)
+	s.Equal("test-request-id", capturedReq.RequestId)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentinel() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type: &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+		},
+	}, nil)
+
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(context.Context, *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			s.Fail("scheduler migration should not be called")
+			return nil, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	_, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.ErrorIs(err, chasmscheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+}
+
 func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "nonexistent",
+			},
+		},
+	}).Return(nil, serviceerror.NewNotFound("workflow not found"))
 
 	fake := &fakeSchedulerClient{
 		migrateToWorkflowFn: func(_ context.Context, _ *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {

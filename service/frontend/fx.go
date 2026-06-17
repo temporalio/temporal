@@ -410,21 +410,28 @@ func BusinessIDInterceptorProvider(
 	)
 }
 
+type NamespaceHandoverInterceptorParams struct {
+	fx.In
+	DynamicConfig                          *dynamicconfig.Collection
+	NamespaceRegistry                      namespace.Registry
+	Logger                                 log.Logger
+	MetricsHandler                         metrics.Handler
+	TimeSource                             clock.TimeSource
+	RequestErrorHandler                    *interceptor.RequestErrorHandler
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceHandoverInterceptorProvider(
-	dc *dynamicconfig.Collection,
-	namespaceCache namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-	requestErrorHandler *interceptor.RequestErrorHandler,
+	params NamespaceHandoverInterceptorParams,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
-		dc,
-		namespaceCache,
-		metricsHandler,
-		logger,
-		timeSource,
-		requestErrorHandler,
+		params.DynamicConfig,
+		params.NamespaceRegistry,
+		params.MetricsHandler,
+		params.Logger,
+		params.TimeSource,
+		params.RequestErrorHandler,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 
@@ -905,6 +912,7 @@ func HandlerProvider(
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
 		serviceConfig.GlobalWorkerDeploymentReadRPS,
+		serviceConfig.GlobalWorkerDeploymentReadBurstRatio,
 		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
 	)
 

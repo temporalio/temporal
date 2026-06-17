@@ -166,6 +166,7 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
 		chasmRegistry:                args.ChasmRegistry,
+		testHooks:                    args.TestHooks,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,

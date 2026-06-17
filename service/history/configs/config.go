@@ -196,6 +196,7 @@ type Config struct {
 	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
@@ -322,7 +323,6 @@ type Config struct {
 	ReplicationStreamReceiverLivenessMultiplier         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableDeleteWorkflowExecutionReplication            dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -372,7 +372,7 @@ type Config struct {
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
-	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFn
+	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
@@ -632,11 +632,11 @@ func NewConfig(
 		ReplicationStreamReceiverLivenessMultiplier:         dynamicconfig.ReplicationStreamReceiverLivenessMultiplier.Get(dc),
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
-		EnableDeleteWorkflowExecutionReplication:            dynamicconfig.EnableDeleteWorkflowExecutionReplication.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
 		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),

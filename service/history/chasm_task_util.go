@@ -17,21 +17,24 @@ import (
 
 // validateChasmSideEffectTask completes validation of a CHASM side effect task
 // after mutable state load/physical task validation.
+//
+// See [chasm.Node.ValidateSideEffectTask] for the semantics of the two returned
+// booleans.
 func validateChasmSideEffectTask(
 	ctx context.Context,
 	ms historyi.MutableState,
 	task *tasks.ChasmTask,
-) (bool, error) {
+) (isTaskInTree bool, isValidByComponent bool, err error) {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
 	// running.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return false, consts.ErrWorkflowZombie
+		return false, false, consts.ErrWorkflowZombie
 	}
 
 	tree := ms.ChasmTree()
 	if tree == nil {
-		return false, errNoChasmTree
+		return false, false, errNoChasmTree
 	}
 
 	return tree.ValidateSideEffectTask(ctx, task)

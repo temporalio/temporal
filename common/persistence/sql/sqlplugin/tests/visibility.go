@@ -265,6 +265,61 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
 }
 
+func (s *visibilitySuite) TestInsertGet() {
+	namespaceID := primitives.NewUUID()
+	runID := primitives.NewUUID()
+	workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
+	workflowID := shuffle.String(testVisibilityWorkflowID)
+	startTime := s.now()
+	executionTime := startTime.Add(time.Second)
+	status := int32(0)
+	closeTime := (*time.Time)(nil)
+	historyLength := (*int64)(nil)
+
+	visibility1 := s.newRandomVisibilityRow(
+		namespaceID,
+		runID,
+		workflowTypeName,
+		workflowID,
+		startTime,
+		executionTime,
+		status,
+		closeTime,
+		historyLength,
+	)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility1)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	visibility2 := s.newRandomVisibilityRow(
+		namespaceID,
+		runID,
+		workflowTypeName,
+		workflowID,
+		startTime,
+		executionTime,
+		status,
+		closeTime,
+		historyLength,
+	)
+	_, err = s.store.InsertIntoVisibility(newVisibilityContext(), &visibility2)
+	s.NoError(err)
+	// NOTE: cannot do assertion on affected rows
+	//  PostgreSQL will return 0
+	//  MySQL will return 1: ref https://dev.mysql.com/doc/c-api/5.7/en/mysql-affected-rows.html
+
+	getFilter := sqlplugin.VisibilityGetFilter{
+		NamespaceID: namespaceID.String(),
+		RunID:       runID.String(),
+	}
+	row, err := s.store.GetFromVisibility(newVisibilityContext(), getFilter)
+	s.NoError(err)
+	row.NamespaceID = namespaceID.String()
+	s.Equal(&visibility1, row)
+}
+
 func (s *visibilitySuite) TestDeleteGet() {
 	namespaceID := primitives.NewUUID()
 	runID := primitives.NewUUID()
@@ -1341,19 +1396,24 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 	historyLength *int64,
 ) sqlplugin.VisibilityRow {
 	s.version++
+	var executionDuration *time.Duration
+	if closeTime != nil {
+		executionDuration = new(closeTime.Sub(executionTime))
+	}
 	return sqlplugin.VisibilityRow{
-		NamespaceID:      namespaceID.String(),
-		RunID:            runID.String(),
-		WorkflowTypeName: workflowTypeName,
-		WorkflowID:       workflowID,
-		StartTime:        startTime,
-		ExecutionTime:    executionTime,
-		Status:           status,
-		CloseTime:        closeTime,
-		HistoryLength:    historyLength,
-		Memo:             shuffle.Bytes(testVisibilityData),
-		Encoding:         testVisibilityEncoding,
-		Version:          s.version,
+		NamespaceID:       namespaceID.String(),
+		RunID:             runID.String(),
+		WorkflowTypeName:  workflowTypeName,
+		WorkflowID:        workflowID,
+		StartTime:         startTime,
+		ExecutionTime:     executionTime,
+		Status:            status,
+		CloseTime:         closeTime,
+		HistoryLength:     historyLength,
+		ExecutionDuration: executionDuration,
+		Memo:              shuffle.Bytes(testVisibilityData),
+		Encoding:          testVisibilityEncoding,
+		Version:           s.version,
 	}
 }
 

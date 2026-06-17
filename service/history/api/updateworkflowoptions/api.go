@@ -2,6 +2,7 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
@@ -84,11 +86,6 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			err = validateTimeSkippingConfig(requestedOptions.GetTimeSkippingConfig(), mutableState)
-			if err != nil {
-				return nil, err
-			}
-
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
@@ -103,6 +100,8 @@ func Invoke(
 					CreateWorkflowTask: false,
 				}, nil
 			}
+
+			ret.UpdateTime = timestamppb.New(mutableState.Now())
 
 			// Store versioning override to send reactivation signal after successful persistence
 			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
@@ -128,26 +127,14 @@ func Invoke(
 	return ret, nil
 }
 
-// validateTimeSkippingConfig rejects an update whose MaxSkippedDuration is
-// below what the workflow has already skipped — the new bound would be
-// retroactively violated. Validated against current MS state, before merge.
-func validateTimeSkippingConfig(cfg *workflowpb.TimeSkippingConfig, ms historyi.MutableState) error {
-	if !cfg.GetEnabled() {
-		return nil
-	}
-	bound, ok := cfg.GetBound().(*workflowpb.TimeSkippingConfig_MaxSkippedDuration)
-	if !ok {
-		return nil
-	}
-	maxSkipped := bound.MaxSkippedDuration.AsDuration()
-	accumulated := ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
-	if maxSkipped <= accumulated {
-		return serviceerror.NewInvalidArgumentf(
-			"max skipped duration must be greater than skipped duration: %v <= %v",
-			maxSkipped, accumulated,
-		)
-	}
-	return nil
+// OptionsToReapply is used to track options that need to be reapplied on every update,
+// whose changes cannot be detected simply by options equality check.
+type OptionsToReapply struct {
+	timeSkippingConfigHasChanged bool
+}
+
+func (u OptionsToReapply) hasChanges() bool {
+	return u.timeSkippingConfigHasChanged
 }
 
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
@@ -159,7 +146,7 @@ func MergeAndApply(
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
-	mergedOpts, err := mergeWorkflowExecutionOptions(
+	mergedOpts, optionsToReapply, err := mergeWorkflowExecutionOptions(
 		getOptionsFromMutableState(ms),
 		opts,
 		updateMask,
@@ -168,17 +155,16 @@ func MergeAndApply(
 		return nil, false, serviceerror.NewInvalidArgumentf("error applying update_options: %v", err)
 	}
 
-	// If there is no mutable state change at all, return with no new history event and Noop=true
-	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
+	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms)) || optionsToReapply.hasChanges()
 	if !hasChanges {
 		return mergedOpts, false, nil
 	}
 
-	unsetOverride := false
-	if mergedOpts.GetVersioningOverride() == nil {
-		unsetOverride = true
-	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig(), nil)
+	unsetOverride := mergedOpts.GetVersioningOverride() == nil
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
+		mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(),
+		mergedOpts.GetTimeSkippingConfig(),
+		optionsToReapply.timeSkippingConfigHasChanged, nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -200,37 +186,39 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		}
 	}
 	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
-		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*workflowpb.TimeSkippingConfig); ok {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*commonpb.TimeSkippingConfig); ok {
 			opts.TimeSkippingConfig = cloned
 		}
 	}
 	return opts
 }
 
-// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct and returns
+// the merged opts and the options to reapply
 func mergeWorkflowExecutionOptions(
 	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
-) (*workflowpb.WorkflowExecutionOptions, error) {
+) (*workflowpb.WorkflowExecutionOptions, OptionsToReapply, error) {
 	_, err := fieldmaskpb.New(mergeInto, updateMask.GetPaths()...)
 	if err != nil { // errors if any paths are not valid for the struct we are merging into
-		return nil, err
+		return nil, OptionsToReapply{}, err
 	}
 	updateFields := util.ParseFieldMask(updateMask)
+
 	if _, ok := updateFields["versioningOverride"]; ok {
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
 		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.behavior"]; ok {
 		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
@@ -263,37 +251,31 @@ func mergeWorkflowExecutionOptions(
 	}
 
 	// ==== Time Skipping Config
-	// nil means "no change" — only update if the caller provided an explicit value.
+	// - fast forward need reapplication so equality check is not enough;
+	// - We only support validating and updating the TSC as a whole;
+	var originalTSC *commonpb.TimeSkippingConfig
+	if tsc := mergeInto.GetTimeSkippingConfig(); tsc != nil {
+		if cloned, ok := proto.Clone(tsc).(*commonpb.TimeSkippingConfig); ok {
+			originalTSC = cloned
+		}
+	}
+
+	var fastForwardSet bool
 	if _, ok := updateFields["timeSkippingConfig"]; ok {
-		if mergeFrom.GetTimeSkippingConfig() != nil {
-			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		if mergeFrom.GetTimeSkippingConfig().GetFastForward() != nil {
+			fastForwardSet = true
 		}
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
-	}
-
-	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxSkippedDuration(),
+	for key := range updateFields {
+		if strings.HasPrefix(key, "timeSkippingConfig.") {
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument(
+				"time_skipping_config doesn't support partial update")
 		}
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
-		}
-	}
-
-	return mergeInto, nil
+	var optionsToReapply OptionsToReapply
+	optionsToReapply.timeSkippingConfigHasChanged = fastForwardSet || (!proto.Equal(mergeInto.GetTimeSkippingConfig(), originalTSC))
+	return mergeInto, optionsToReapply, nil
 }

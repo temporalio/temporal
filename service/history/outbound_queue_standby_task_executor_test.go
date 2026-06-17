@@ -151,10 +151,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 		expectedError       string
 	}{
 		{
-			name: "success",
+			name: "in tree and valid - retries until discard delay",
 			setupMocks: func(task *tasks.ChasmTask) {
-				// Setup successful workflow context loading and CHASM execution
-
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
 					Return(s.mockWorkflowContext, func(error) {}, nil)
@@ -168,12 +166,55 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(
-						gomock.Any(),
-						gomock.Any(),
-					)
+					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					Return(true, true, nil)
 			},
 			expectHandlerCalled: true,
+			expectedError:       consts.ErrTaskRetry.Error(),
+		},
+		{
+			name: "in tree but component invalid (e.g. code-deployment) - retries",
+			setupMocks: func(task *tasks.ChasmTask) {
+				s.mockWorkflowCache.EXPECT().
+					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
+					Return(s.mockWorkflowContext, func(error) {}, nil)
+
+				s.mockWorkflowContext.EXPECT().
+					LoadMutableState(gomock.Any(), gomock.Any()).
+					Return(s.mockMutableState, nil)
+
+				s.mockMutableState.EXPECT().
+					ChasmTree().
+					Return(s.mockChasmTree)
+
+				s.mockChasmTree.EXPECT().
+					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					Return(true, false, nil)
+			},
+			expectHandlerCalled: true,
+			expectedError:       consts.ErrTaskRetry.Error(),
+		},
+		{
+			name: "not in tree - replication removed it, drop physical task",
+			setupMocks: func(task *tasks.ChasmTask) {
+				s.mockWorkflowCache.EXPECT().
+					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
+					Return(s.mockWorkflowContext, func(error) {}, nil)
+
+				s.mockWorkflowContext.EXPECT().
+					LoadMutableState(gomock.Any(), gomock.Any()).
+					Return(s.mockMutableState, nil)
+
+				s.mockMutableState.EXPECT().
+					ChasmTree().
+					Return(s.mockChasmTree)
+
+				s.mockChasmTree.EXPECT().
+					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
+					Return(false, false, nil)
+			},
+			expectHandlerCalled: false,
+			expectedError:       "",
 		},
 		{
 			name: "mutable state failure",
@@ -292,7 +333,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)
