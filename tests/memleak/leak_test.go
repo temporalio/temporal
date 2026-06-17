@@ -117,6 +117,17 @@ func TestClusterGoroutineSlope(t *testing.T) {
 		t.Logf("iter %2d  goroutines=%d", i, g)
 	}
 
+	// Diagnostic: wait a fixed period without the early-exit settle to distinguish
+	// a real leak (count stays) from slow goroutine drain such as SDK poller
+	// backoff (count drops).
+	if w := envInt("LEAK_FINAL_WAIT_SECONDS", 0); w > 0 {
+		before := runtime.NumGoroutine()
+		time.Sleep(time.Duration(w) * time.Second)
+		runtime.GC()
+		runtime.GC()
+		t.Logf("after %ds fixed wait: goroutines %d -> %d", w, before, runtime.NumGoroutine())
+	}
+
 	span := iters - 1 - warmupIters
 	slope := float64(series[iters-1]-series[warmupIters]) / float64(span)
 	t.Logf("post-warmup goroutine growth: %+.2f per cluster over %d clusters (gate: <= %d)",
