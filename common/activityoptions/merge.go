@@ -7,7 +7,7 @@ import (
 )
 
 // MergeActivityOptions applies the fields specified in updateFields from mergeFrom into mergeInto in-place.
-// updateFields is a map of camelCase JSON field paths, as returned by util.ParseFieldMask.
+// updateFields is a map of camelCase JSON field paths, as returned by util.ParseFieldMask
 // Returns an error if a required parent field (TaskQueue, Priority, RetryPolicy) is nil in mergeFrom
 // when a sub-field of that parent is listed in updateFields.
 //
@@ -116,6 +116,10 @@ func MergeActivityOptions(mergeInto, mergeFrom *activitypb.ActivityOptions, upda
 			mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
 		}
 		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.GetRetryPolicy().GetMaximumAttempts()
+	}
+
+	if _, ok := updateFields["startDelay"]; ok {
+		mergeInto.StartDelay = mergeFrom.GetStartDelay()
 	}
 
 	return nil
