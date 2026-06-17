@@ -45,6 +45,10 @@ func Invoke(
 						activityIDs = append(activityIDs, ai.ActivityId)
 					}
 				}
+			case *workflowservice.ResetActivityRequest_MatchAll:
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					activityIDs = append(activityIDs, ai.ActivityId)
+				}
 			}
 
 			if len(activityIDs) == 0 {

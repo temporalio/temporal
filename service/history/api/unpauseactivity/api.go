@@ -97,6 +97,10 @@ func processUnpauseActivityRequest(
 				activityIDs = append(activityIDs, ai.ActivityId)
 			}
 		}
+	case *workflowservice.UnpauseActivityRequest_UnpauseAll:
+		for _, ai := range mutableState.GetPendingActivityInfos() {
+			activityIDs = append(activityIDs, ai.ActivityId)
+		}
 	}
 
 	if len(activityIDs) == 0 {

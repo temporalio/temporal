@@ -11,9 +11,12 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -303,6 +306,100 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 
 	err = workflowRun2.Get(env.Context(), &out)
 	s.NoError(err)
+}
+
+func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWorkflowsResetAttempts() {
+	env := newBatchResetEnv(s.T())
+	ctx := env.Context()
+
+	const workflowCount = 10
+	workflowTypeName := testcore.RandomizeStr("activity-batch-reset-running-workflow")
+
+	internalWorkflow := newInternalWorkflow()
+	internalWorkflow.initialRetryInterval = 100 * time.Millisecond
+	internalWorkflow.activityRetryPolicy.InitialInterval = internalWorkflow.initialRetryInterval
+
+	env.SdkWorker().RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
+	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
+
+	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
+	for i := 0; i < workflowCount; i++ {
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			TaskQueue: env.WorkerTaskQueue(),
+		}, workflowTypeName)
+		s.NoError(err)
+		s.NotNil(workflowRun)
+		workflowRuns = append(workflowRuns, workflowRun)
+	}
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.PendingActivities, 1)
+			require.Greater(t, description.PendingActivities[0].Attempt, int32(3))
+		}
+	}, 15*time.Second, 100*time.Millisecond)
+
+	env.SdkWorker().Stop()
+
+	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  workflowCount,
+			Query:     query,
+		})
+		require.NoError(t, err)
+		require.Len(t, listResp.GetExecutions(), workflowCount)
+	}, 5*time.Second, 500*time.Millisecond)
+
+	jobID := uuid.NewString()
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetActivitiesOperation{
+			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
+				ResetAttempts:  true,
+				ResetHeartbeat: true,
+				Activity:       &batchpb.BatchOperationResetActivities_MatchAll{MatchAll: true},
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+	}, 15*time.Second, 100*time.Millisecond)
+
+	for _, workflowRun := range workflowRuns {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		s.NoError(err)
+		s.Len(description.PendingActivities, 1)
+		s.Equal(int32(1), description.PendingActivities[0].Attempt)
+	}
+
+	internalWorkflow.letActivitySucceed.Store(true)
+
+	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})
+	replacementWorker.RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
+	replacementWorker.RegisterActivity(internalWorkflow.ActivityFunc)
+	s.NoError(replacementWorker.Start())
+	defer replacementWorker.Stop()
+
+	for _, workflowRun := range workflowRuns {
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	}
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_DontResetAttempts() {
