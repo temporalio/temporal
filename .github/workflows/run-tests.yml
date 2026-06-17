@@ -306,16 +306,13 @@ jobs:
           job_name: Unit test
           artifact_name_suffix: unit-test
 
-  goleak-test:
-    name: Goroutine leak test
+  leak-test:
+    name: Resource leak test
     needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     env:
       GITHUB_TIMEOUT: 20
-      RUN_GOLEAK_TEST: "1"
-      GOLEAK_ITERS: "15"
-      GOLEAK_MAX_GOROUTINES_PER_CLUSTER: "12"
-      GOLEAK_OUTPUT_DIR: ${{ github.workspace }}/.testoutput/goleak
+      LEAK_OUTPUT_DIR: ${{ github.workspace }}/.testoutput/leakcheck
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -325,21 +322,43 @@ jobs:
       - name: Prepare Go
         uses: ./.github/actions/prepare-go
 
-      # Runs in isolation (own job) because it measures the global goroutine
-      # count; uses the in-process sqlite driver so it needs no DB containers.
-      - name: Run goroutine leak test
+      # Runs in isolation (own job): it inspects global goroutine state and
+      # measures per-cluster heap growth. Uses the in-process sqlite driver, so
+      # it needs no DB containers. GOTRACEBACK=crash + ulimit -c unlimited +
+      # LEAK_ABORT_ON_FAILURE let the test dump a core on failure so the next
+      # step can recover the retaining reference chain with viewcore.
+      - name: Run resource leak test
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
-          mkdir -p "$GOLEAK_OUTPUT_DIR"
-          go test -run TestClusterGoroutineSlope -count=1 -v -timeout "$(("$GITHUB_TIMEOUT" - 1))m" \
-            ./tests/goleak/ -args -persistenceType=sql -persistenceDriver=sqlite
+          # Write cores to /tmp (not LEAK_OUTPUT_DIR) so the multi-GB core isn't
+          # uploaded as an artifact; viewcore reads it in the next step.
+          sudo sysctl -w kernel.core_pattern="/tmp/leakcore.%p" || true
+          ulimit -c unlimited
+          mkdir -p "$LEAK_OUTPUT_DIR"
+          export GOTRACEBACK=crash LEAK_ABORT_ON_FAILURE=1
+          make leak-test LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
 
-      - name: Upload goleak diagnostics
+      # On failure, trace what retains the leaked objects. viewcore reads the
+      # core dumped above (this only works on Linux, hence in CI rather than
+      # locally). Best-effort: never fails the job beyond the gate itself.
+      - name: Retaining-reference analysis (on failure)
+        if: failure()
+        run: |
+          go install golang.org/x/debug/cmd/viewcore@latest || true
+          viewcore="$(go env GOPATH)/bin/viewcore"
+          core="$(ls -t /tmp/leakcore.* 2>/dev/null | head -1)"
+          if [ -x "$viewcore" ] && [ -n "$core" ]; then
+            "$viewcore" "$core" --exe .testoutput/leakcheck.test objgraph "$LEAK_OUTPUT_DIR/objgraph.dot" 2>"$LEAK_OUTPUT_DIR/viewcore.log" || true
+            "$viewcore" "$core" --exe .testoutput/leakcheck.test histogram >"$LEAK_OUTPUT_DIR/histogram.txt" 2>>"$LEAK_OUTPUT_DIR/viewcore.log" || true
+          fi
+          go tool pprof -inuse_space -top -nodecount=40 "$LEAK_OUTPUT_DIR/heap.prof" >"$LEAK_OUTPUT_DIR/heap-top.txt" 2>/dev/null || true
+
+      - name: Upload leak diagnostics
         if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: goleak-diagnostics
-          path: ${{ env.GOLEAK_OUTPUT_DIR }}
+          name: leak-diagnostics
+          path: ${{ env.LEAK_OUTPUT_DIR }}
           if-no-files-found: ignore
 
   integration-test:

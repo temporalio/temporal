@@ -497,6 +497,33 @@ functional-test: clean-test-output
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
+# Resource-leak regression test (tests/leakcheck). Builds clusters in a loop and
+# asserts no per-cluster growth in goroutines or in-use heap. Runs on the
+# in-process sqlite driver (no DB containers) and must run in isolation (it
+# inspects global goroutine state), so it has its own compiled binary + CI job
+# rather than being part of the functional suite. Thresholds are tunable via the
+# LEAK_* variables below. On failure the test writes heap/goroutine diagnostics
+# to LEAK_OUTPUT_DIR; with LEAK_ABORT_ON_FAILURE=1 (set in CI) it also dumps a
+# core so viewcore can recover the retaining reference chain.
+LEAK_TEST_BIN          := $(TEST_OUTPUT_ROOT)/leakcheck.test
+LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS             ?= 15
+LEAK_MAX_GOROUTINES_PER_CLUSTER ?= 2
+LEAK_MAX_HEAP_KB_PER_CLUSTER    ?= 512
+LEAK_TIMEOUT           ?= 19m
+
+leak-test:
+	@printf $(COLOR) "Run resource-leak regression test (sqlite, no Docker)..."
+	go test -c $(TEST_TAG_FLAG) -o $(LEAK_TEST_BIN) ./tests/leakcheck/
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	RUN_LEAK_TEST=1 \
+		LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_MAX_GOROUTINES_PER_CLUSTER=$(LEAK_MAX_GOROUTINES_PER_CLUSTER) \
+		LEAK_MAX_HEAP_KB_PER_CLUSTER=$(LEAK_MAX_HEAP_KB_PER_CLUSTER) \
+		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
+		$(LEAK_TEST_BIN) -test.run TestClusterShutdownLeak -test.count=1 -test.v -test.timeout $(LEAK_TIMEOUT) \
+		-persistenceType=sql -persistenceDriver=sqlite
+
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -enableFaultInjection=true -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log

@@ -42,11 +42,25 @@ type plugin struct {
 	connPool       *connPool
 }
 
+// registeredPlugin is the process-global sqlite plugin instance. It owns the
+// connection pool, so test harnesses can force-close a per-test database via
+// ForceCloseDB.
+var registeredPlugin = &plugin{
+	queryConverter: &queryConverter{},
+	connPool:       newConnPool(),
+}
+
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{
-		queryConverter: &queryConverter{},
-		connPool:       newConnPool(),
-	})
+	sql.RegisterPlugin(PluginName, registeredPlugin)
+}
+
+// ForceCloseDB closes the pooled connection for cfg's DSN and removes it from
+// the pool, regardless of refcount. It is intended for test teardown: each test
+// cluster uses a unique DSN, so closing it once the cluster is gone reclaims the
+// connection (and stops its background connectionOpener goroutine) without
+// affecting other clusters' databases. No-op if cfg is not a pooled DSN.
+func ForceCloseDB(cfg *config.SQL) error {
+	return registeredPlugin.connPool.forceClose(cfg)
 }
 
 func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {

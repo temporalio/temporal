@@ -46,6 +46,7 @@ func (cp *connPool) Allocate(
 
 	if entry, ok := cp.pool[dsn]; ok {
 		entry.refCount++
+		cp.pool[dsn] = entry
 		return entry.db, nil
 	}
 
@@ -76,6 +77,7 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	}
 
 	e.refCount--
+	cp.pool[dsn] = e
 	// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
 	// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
 	// and "db is closed" error
@@ -83,4 +85,31 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	// 	e.db.Close()
 	// 	delete(cp.pool, dsn)
 	// }
+}
+
+// forceClose closes the pooled *sql.DB for cfg's DSN and removes the entry,
+// regardless of refcount. The refcount-driven close in Close is intentionally
+// disabled because schema setup transiently drops the refcount to zero, which
+// would destroy a still-needed shared in-memory database; this is the explicit
+// teardown path, called once a database is permanently done with. Closing the
+// *sql.DB also stops its background connectionOpener goroutine, which otherwise
+// roots the whole connection (and everything reachable from it) for the process
+// lifetime.
+func (cp *connPool) forceClose(cfg *config.SQL) error {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	dsn, err := buildDSN(cfg)
+	if err != nil {
+		return err
+	}
+
+	e, ok := cp.pool[dsn]
+	if !ok {
+		// no such database
+		return nil
+	}
+
+	delete(cp.pool, dsn)
+	return e.db.Close()
 }

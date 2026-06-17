@@ -38,6 +38,7 @@ import (
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -560,6 +561,23 @@ func (tc *TestCluster) TearDownCluster() error {
 	if err := os.RemoveAll(tc.archiverBase.visibilityStoreDirectory); err != nil {
 		errs = multierr.Combine(errs, err)
 	}
+
+	// The sqlite plugin pools one *sql.DB per DSN for the whole process and does
+	// not close it on the normal (refcounted) path, because schema setup
+	// transiently drops the refcount to zero and an early close would destroy a
+	// still-needed shared in-memory DB. Each test cluster uses a unique DSN, so
+	// once the cluster is fully stopped its DB is permanently done with: force
+	// close it here to reclaim the connection and stop its background
+	// connectionOpener goroutine (which would otherwise root the whole connection
+	// for the process lifetime and accumulate across clusters until OOM).
+	for _, ds := range tc.host.persistenceConfig.DataStores {
+		if ds.SQL != nil && ds.SQL.PluginName == sqlite.PluginName {
+			if err := sqlite.ForceCloseDB(ds.SQL); err != nil {
+				errs = multierr.Combine(errs, err)
+			}
+		}
+	}
+
 	return errs
 }
 
