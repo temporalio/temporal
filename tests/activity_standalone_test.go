@@ -6681,6 +6681,235 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"close-deadline should not shift when start_delay is left untouched")
 	})
 
+	s.Run("ResetRestoreOriginal_RestoresStartDelay", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalDelay := 1 * time.Second
+		updatedDelay := 30 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(originalDelay),
+		})
+		require.NoError(t, err)
+
+		// Mutate start_delay via update to a much longer value so the activity would not naturally dispatch before reset.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(updatedDelay)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, updatedDelay, descResp.GetInfo().GetStartDelay().AsDuration())
+
+		// Reset with RestoreOriginalOptions=true so start_delay is restored alongside the other options.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, originalDelay, descResp.GetInfo().GetStartDelay().AsDuration())
+
+		// Activity should be pollable after reset. The original delay was 1s so the poll succeeds well within
+		// the 10s timeout (and well before updatedDelay would have allowed dispatch).
+		pollCtx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+		require.EqualValues(t, 1, pollResp.GetAttempt())
+	})
+
+	s.Run("ResetRestoreOriginal_PreservesOriginalWallClockTarget", func(s *standaloneActivityTestSuite) {
+		s.T().Skip("TODO: implement once ActivityExecutionInfo exposes RequestedStartTime and ActualStartTime. " +
+			"Assertion will be actualStartTime >= requestedStartTime (within timerSafetyMargin) after a " +
+			"Reset+RestoreOriginalOptions on an activity whose start_delay was zeroed out mid-delay.")
+	})
+
+	s.Run("ResetRestoreOriginal_AfterDelayElapsed_DispatchesImmediately", func(s *standaloneActivityTestSuite) {
+		s.T().Skip("TODO: implement once ActivityExecutionInfo exposes RequestedStartTime and ActualStartTime. " +
+			"Assertion will be actualStartTime - resetTime within timerSafetyMargin after a " +
+			"Reset+RestoreOriginalOptions on an activity whose original delay has already elapsed.")
+	})
+
+	// Reset+RestoreOriginalOptions on a STARTED activity must NOT touch start_delay. The first dispatch
+	// has already happened so altering the value has no actual effect on dispatch timing.
+	s.Run("ResetRestoreOriginal_OnStartedActivity_LeavesStartDelayUnchanged", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalDelay := 5 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Second),
+			StartDelay:          durationpb.New(originalDelay),
+		})
+		require.NoError(t, err)
+
+		// While still in delay window, set start_delay=0 so the activity dispatches immediately.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(0)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+
+		// Poll: activity dispatches and worker picks up, so the status moves to STARTED.
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, descResp.GetInfo().GetRunState())
+		require.EqualValues(t, 0, descResp.GetInfo().GetStartDelay().AsDuration(), "start_delay should be 0 after the update")
+
+		// Reset+RestoreOriginalOptions while STARTED.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// start_delay should remain at the post-update value (0).
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 0, descResp.GetInfo().GetStartDelay().AsDuration(),
+			"start_delay should not be restored when the activity has already dispatched")
+	})
+
+	// Same invariant as the STARTED case, but exercises the retry-backoff path: after the first
+	// attempt dispatched and failed, the activity is back in SCHEDULED. Reset+RestoreOriginalOptions
+	// must not rewrite start_delay since the first dispatch already happened.
+	s.Run("ResetRestoreOriginal_OnRetryBackoff_LeavesStartDelayUnchanged", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalDelay := 5 * time.Second
+		scheduleToCloseTimeout := 5 * time.Minute
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartDelay:             durationpb.New(originalDelay),
+			RetryPolicy: &commonpb.RetryPolicy{
+				// Retry interval long enough to keep the activity in backoff through the Reset call,
+				// short enough to fit comfortably inside ScheduleToCloseTimeout so the activity is
+				// not pre-emptively timed out instead of scheduled for retry.
+				InitialInterval: durationpb.New(1 * time.Minute),
+				MaximumAttempts: 3,
+			},
+		})
+		require.NoError(t, err)
+
+		// Drop start_delay so the activity dispatches immediately.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(0)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		// Fail the attempt with a retryable failure to drive the activity back to SCHEDULED.
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, descResp.GetInfo().GetRunState(),
+			"activity should be in retry backoff (SCHEDULED) after a retryable failure")
+
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 0, descResp.GetInfo().GetStartDelay().AsDuration(),
+			"start_delay should not be restored when the activity has already dispatched")
+	})
+
 	// The guard accepts the field mask path in either snake_case or camelCase form.
 	s.Run("UpdateCamelCaseFieldMask_Rejected", func(s *standaloneActivityTestSuite) {
 		t := s.T()
