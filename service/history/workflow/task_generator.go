@@ -1038,11 +1038,7 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // TODO@time-skipping: currently not safe to call in replication context
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
-	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
-		return nil
-	}
-	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	if accumulatedSkippedDuration <= 0 {
+	if accumulatedSkippedDuration(r.mutableState.GetExecutionInfo()) <= 0 {
 		return nil
 	}
 
