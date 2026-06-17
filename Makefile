@@ -508,11 +508,6 @@ LEAK_TEST_BIN          := $(TEST_OUTPUT_ROOT)/leakcheck.test
 LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
 LEAK_ITERS             ?= 15
 LEAK_MAX_GOROUTINES_PER_CLUSTER ?= 2
-# Heap gate: the residual slope includes lazy-init caches (proto registry,
-# sqlx reflection cache, ...) that saturate after ~30 clusters; the slope
-# measurement over 15 post-warmup iters sees ~1.1MB/cluster during that
-# fill-in phase. 1500 KB clears that noise while catching real linear leaks
-# (the goroutine-stack / gRPC-conn leaks that caused the OOMs were +4MB/cluster).
 LEAK_MAX_HEAP_KB_PER_CLUSTER    ?= 2048
 LEAK_TIMEOUT           ?= 19m
 

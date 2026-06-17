@@ -119,7 +119,7 @@ func FactoryProvider(
 	var systemRequestRateLimiter, namespaceRequestRateLimiter, shardRequestRateLimiter quotas.RequestRateLimiter
 	var dynamicRateLimiters []*HealthRequestRateLimiterImpl
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		systemRequestRateLimiter, dynamicRateLimiters = NewPriorityRateLimiter(
+		systemRequestRateLimiter, dynamicRateLimiters = newPriorityRateLimiterWithStoppables(
 			params.PersistenceMaxQPS,
 			RequestPriorityFn,
 			params.OperatorRPSRatio,

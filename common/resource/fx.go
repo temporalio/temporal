@@ -271,8 +271,12 @@ func ClientFactoryProvider(
 		throttledLogger,
 	)
 	// Stop the factory on shutdown so the background goroutines and pooled gRPC
-	// connections owned by the clients it created are released.
-	lc.Append(fx.StopHook(factory.Stop))
+	// connections owned by the clients it created are released. Stop is not part
+	// of the Factory interface so that third-party implementations are not forced
+	// to implement it; implementations that do have Stop benefit from cleanup.
+	if s, ok := factory.(interface{ Stop() }); ok {
+		lc.Append(fx.StopHook(s.Stop))
+	}
 	return factory
 }
 
@@ -465,8 +469,11 @@ func RPCFactoryProvider(
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
 	// Close all dialed client connections on shutdown so their gRPC background
-	// goroutines are released.
-	lc.Append(fx.StopHook(factory.Stop))
+	// goroutines are released. Stop is not part of the RPCFactory interface so
+	// that third-party implementations are not forced to implement it.
+	if s, ok := any(factory).(interface{ Stop() }); ok {
+		lc.Append(fx.StopHook(s.Stop))
+	}
 	return factory, nil
 }
 

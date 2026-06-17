@@ -141,18 +141,6 @@ func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
 }
 
-// Stop mocks base method.
-func (m *MockFactory) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockFactoryMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockFactory)(nil).Stop))
-}
-
 // MockFactoryProvider is a mock of FactoryProvider interface.
 type MockFactoryProvider struct {
 	ctrl     *gomock.Controller

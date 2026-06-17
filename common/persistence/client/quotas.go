@@ -60,10 +60,27 @@ var (
 	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5, 6}
 )
 
-// NewPriorityRateLimiter builds the composite priority rate limiter used by
-// the persistence factory. It returns both the limiter and the underlying
-// HealthRequestRateLimiterImpls; callers must Stop the latter on shutdown.
 func NewPriorityRateLimiter(
+	hostMaxQPS PersistenceMaxQps,
+	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
+	burstRatio PersistenceBurstRatio,
+	healthSignals p.HealthSignalAggregator,
+	dynamicParams DynamicRateLimitingParams,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) quotas.RequestRateLimiter {
+	rl, _ := newPriorityRateLimiterWithStoppables(
+		hostMaxQPS, requestPriorityFn, operatorRPSRatio, burstRatio,
+		healthSignals, dynamicParams, metricsHandler, logger,
+	)
+	return rl
+}
+
+// newPriorityRateLimiterWithStoppables is the internal variant used by
+// FactoryProvider to also obtain the HealthRequestRateLimiterImpls for
+// fx lifecycle shutdown wiring, without changing the public signature.
+func newPriorityRateLimiterWithStoppables(
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
 	operatorRPSRatio OperatorRPSRatio,
@@ -74,27 +91,13 @@ func NewPriorityRateLimiter(
 	logger log.Logger,
 ) (quotas.RequestRateLimiter, []*HealthRequestRateLimiterImpl) {
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
-
 	dynamic, stoppable := newPriorityDynamicRateLimiter(
-		hostRateFn,
-		requestPriorityFn,
-		operatorRPSRatio,
-		burstRatio,
-		healthSignals,
-		dynamicParams,
-		metricsHandler,
-		logger,
+		hostRateFn, requestPriorityFn, operatorRPSRatio, burstRatio,
+		healthSignals, dynamicParams, metricsHandler, logger,
 	)
 	return quotas.NewMultiRequestRateLimiter(
-		// host-level dynamic rate limiter
 		dynamic,
-		// basic host-level rate limiter
-		newPriorityRateLimiter(
-			hostRateFn,
-			requestPriorityFn,
-			operatorRPSRatio,
-			burstRatio,
-		),
+		newPriorityRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, burstRatio),
 	), stoppable
 }
 

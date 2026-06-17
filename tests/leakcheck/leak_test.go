@@ -13,12 +13,11 @@
 //  2. HeapInuse slope — catches retained heap references that have no live
 //     goroutine (invisible to all goroutine-based tools).
 //
-//  3. Weak-pointer object probes — the most precise detector: a weak.Pointer
-//     to each cluster's key objects (TestCluster, TestBase, TemporalImpl) is
-//     captured before teardown. After GC, Value() == nil means the object was
-//     collected (no leak); != nil means something still retains it. Unlike
-//     heap slopes this names the specific retained type immediately, without
-//     needing external tools (goref, viewcore) that are unreliable on Go 1.26.
+//  3. Weak-pointer object probes ([testcore.ClusterLeakRefs]) — the most
+//     precise detector: weak.Pointer to each cluster's key objects (TestCluster,
+//     TestBase, TemporalImpl) captured before teardown. After GC, Value() == nil
+//     means collected (no leak); != nil names the exact retained type without
+//     needing external tools.
 //
 //  4. goleak.Find — catches goroutine stacks that survive a clean shutdown.
 //
@@ -52,9 +51,7 @@ import (
 	"strconv"
 	"testing"
 	"time"
-	"weak"
 
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -63,14 +60,6 @@ import (
 )
 
 const warmupClusters = 3
-
-// clusterRefs holds weak pointers to the key objects created for one cluster.
-// All are captured before teardown; Value() != nil after GC means a leak.
-type clusterRefs struct {
-	cluster  weak.Pointer[testcore.TestCluster]
-	testBase weak.Pointer[persistencetests.TestBase]
-	host     weak.Pointer[testcore.TemporalImpl]
-}
 
 func TestClusterShutdownLeak(t *testing.T) {
 	if os.Getenv("RUN_LEAK_TEST") != "1" {
@@ -83,9 +72,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Warm up so process-lifetime singletons and first-use initialization (proto
 	// registries, type caches, ...) exist before we snapshot the baselines —
 	// those are one-time costs, not per-cluster leaks.
-	warmupRefs := make([]clusterRefs, warmupClusters)
+	warmupRefs := make([]testcore.ClusterLeakRefs, warmupClusters)
 	for i := range warmupClusters {
-		buildRunTeardownCluster(t, &warmupRefs[i])
+		buildRunTeardownCluster(t, fmt.Sprintf("warmup-%02d", i), &warmupRefs[i])
 	}
 	goroutineBaseline := goleak.IgnoreCurrent()
 	baseGoroutines := stableGoroutines()
@@ -95,9 +84,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// shutdown leaves neither extra goroutines nor extra reachable heap.
 	goroutines := make([]int, iters)
 	heap := make([]uint64, iters)
-	refs := make([]clusterRefs, iters)
+	refs := make([]testcore.ClusterLeakRefs, iters)
 	for i := range iters {
-		buildRunTeardownCluster(t, &refs[i])
+		buildRunTeardownCluster(t, fmt.Sprintf("c%02d", i), &refs[i])
 		goroutines[i] = stableGoroutines()
 		heap[i] = heapInUse()
 		t.Logf("cluster %2d: goroutines=%d heapInUse=%d MB", i, goroutines[i], heap[i]>>20)
@@ -120,22 +109,11 @@ func TestClusterShutdownLeak(t *testing.T) {
 		failures = append(failures, fmt.Sprintf("heap growth %d KB/cluster exceeds %d KB", heapKBPerCluster, maxHeapKBPerCluster))
 	}
 	// goleak.Find catches *new* goroutine stacks that survived a clean shutdown.
-	// No IgnoreTopFunction here: a surviving database/sql connectionOpener (or any
-	// other stack) is a real leak we want to catch.
 	if err := goleak.Find(goroutineBaseline); err != nil {
 		failures = append(failures, fmt.Sprintf("leaked goroutines: %v", err))
 	}
-	// Weak-pointer probes: after extra GC cycles, any cluster object still
-	// reachable is definitively retained by a lingering reference. TestCluster
-	// and TestBase must always reach 0; TemporalImpl allows 2 for GC timing
-	// (the most recently torn-down cluster may not have been collected yet).
-	// These probes name the specific retained type on failure, which the slope
-	// metrics and pprof profiles cannot.
-	if retainedMsgs := checkWeakRefs(append(warmupRefs, refs...)); len(retainedMsgs) > 0 {
-		for _, msg := range retainedMsgs {
-			failures = append(failures, msg)
-		}
-	}
+	// Weak-pointer probes: names the exact retained type on failure.
+	failures = append(failures, testcore.CheckLeakRefs(append(warmupRefs, refs...))...)
 
 	if len(failures) > 0 {
 		writeDiagnostics(t, goroutineBaseline)
@@ -146,19 +124,13 @@ func TestClusterShutdownLeak(t *testing.T) {
 }
 
 // buildRunTeardownCluster creates a freshly-built, dedicated worker-service
-// cluster via the public testEnv API, captures weak pointers to its key
-// objects into refs (before teardown runs), runs a trivial workflow (exercising
-// frontend -> history -> matching -> SDK worker), then tears the cluster down.
-// Running it in a subtest means the env's cleanups run before this returns, so
-// the caller observes a post-teardown state. The workflow doubles as a liveness
-// check: if the cluster weren't functional it would fail here.
-func buildRunTeardownCluster(t *testing.T, refs *clusterRefs) {
+// cluster, captures its leak refs into refs, runs a trivial workflow, then
+// tears the cluster down. Running in a subtest means teardown completes before
+// this returns.
+func buildRunTeardownCluster(t *testing.T, label string, refs *testcore.ClusterLeakRefs) {
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t, testcore.WithWorkerService("leak regression test"))
-		tc := env.GetTestCluster()
-		refs.cluster = weak.Make(tc)
-		refs.testBase = weak.Make(tc.TestBase())
-		refs.host = weak.Make(tc.Host())
+		*refs = env.LeakRefs(label)
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(
 			env.Context(),
@@ -172,42 +144,7 @@ func buildRunTeardownCluster(t *testing.T, refs *clusterRefs) {
 
 func smokeWorkflow(workflow.Context) error { return nil }
 
-// checkWeakRefs runs GC and checks which cluster objects survived. Returns
-// failure messages for any that exceed their allowed retention count.
-// Allowed: TestCluster=0 (always freed), TestBase=0, TemporalImpl≤2 (GC
-// timing: the most recently torn-down cluster may not be collected yet).
-func checkWeakRefs(all []clusterRefs) []string {
-	for range 5 {
-		runtime.GC()
-		time.Sleep(20 * time.Millisecond)
-	}
-	var clusters, bases, hosts []int
-	for i, r := range all {
-		if r.cluster.Value() != nil {
-			clusters = append(clusters, i)
-		}
-		if r.testBase.Value() != nil {
-			bases = append(bases, i)
-		}
-		if r.host.Value() != nil {
-			hosts = append(hosts, i)
-		}
-	}
-	var msgs []string
-	if len(clusters) > 0 {
-		msgs = append(msgs, fmt.Sprintf("TestCluster retained after teardown: clusters %v", clusters))
-	}
-	if len(bases) > 0 {
-		msgs = append(msgs, fmt.Sprintf("TestBase retained after teardown: clusters %v", bases))
-	}
-	if len(hosts) > 2 {
-		msgs = append(msgs, fmt.Sprintf("TemporalImpl retained after teardown: %d clusters %v (allowed ≤2 for GC timing)", len(hosts), hosts))
-	}
-	return msgs
-}
-
-// stableGoroutines forces GC and waits for the goroutine count to stop dropping,
-// so post-teardown draining isn't mistaken for a leak.
+// stableGoroutines forces GC and waits for the goroutine count to stop dropping.
 func stableGoroutines() int {
 	prev := -1
 	for range 20 {
@@ -230,9 +167,6 @@ func heapInUse() uint64 {
 	return m.HeapInuse
 }
 
-// intSlopePerCluster returns the average growth per cluster from the baseline to
-// the last sample, ignoring the first sample to discount one-time post-baseline
-// allocation.
 func intSlopePerCluster(base int, series []int) int {
 	if len(series) < 2 {
 		return 0
@@ -256,8 +190,6 @@ func envInt(name string, def int) int {
 	return def
 }
 
-// writeDiagnostics dumps a heap profile, a full goroutine dump, and the leaked
-// goroutine stacks to LEAK_OUTPUT_DIR so CI can upload them for offline analysis.
 func writeDiagnostics(t *testing.T, baseline goleak.Option) {
 	dir := os.Getenv("LEAK_OUTPUT_DIR")
 	if dir == "" {
