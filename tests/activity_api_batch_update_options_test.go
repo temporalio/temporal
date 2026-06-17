@@ -12,9 +12,11 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -190,6 +192,98 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 
 	err = workflowRun2.Get(ctx, &out)
 	env.NoError(err)
+}
+
+func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatchAll() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("batch operations"),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+	)
+
+	ctx := env.Context()
+	const workflowCount = 10
+	workflowTypeName := testcore.RandomizeStr("activity-batch-update-options-match-all-workflow")
+	updatedScheduleToClose := 10 * time.Second
+
+	internalWorkflow := newInternalWorkflow()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
+	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
+
+	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
+	for i := 0; i < workflowCount; i++ {
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			TaskQueue: env.WorkerTaskQueue(),
+		}, workflowTypeName)
+		env.NoError(err)
+		env.NotNil(workflowRun)
+		workflowRuns = append(workflowRuns, workflowRun)
+	}
+
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.Positive(t, internalWorkflow.startedActivityCount.Load())
+		}
+	}, 5*time.Second, 100*time.Millisecond)
+
+	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  workflowCount,
+			Query:     query,
+		})
+		require.NoError(t, err)
+		require.Len(t, listResp.GetExecutions(), workflowCount)
+	}, 5*time.Second, 500*time.Millisecond)
+
+	jobID := uuid.NewString()
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+				Activity: &batchpb.BatchOperationUpdateActivityOptions_MatchAll{MatchAll: true},
+				ActivityOptions: &activitypb.ActivityOptions{
+					ScheduleToCloseTimeout: durationpb.New(updatedScheduleToClose),
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"schedule_to_close_timeout"},
+				},
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	env.NoError(err)
+
+	env.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+	}, 15*time.Second, 100*time.Millisecond)
+
+	for _, workflowRun := range workflowRuns {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		env.NoError(err)
+		env.Len(description.PendingActivities, 1)
+		env.Equal(updatedScheduleToClose, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+	}
+
+	internalWorkflow.letActivitySucceed.Store(true)
+
+	for _, workflowRun := range workflowRuns {
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		env.NoError(err)
+	}
 }
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFailed() {

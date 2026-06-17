@@ -5742,8 +5742,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
 			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
-			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			input.Request.VisibilityQuery = visibilityQuery
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
