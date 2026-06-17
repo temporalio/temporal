@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -78,6 +80,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -1163,7 +1166,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		}
 	}
 
-	return &workflowservice.PollWorkflowTaskQueueResponse{
+	response := &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,
 		WorkflowType:               matchingResp.WorkflowType,
@@ -1180,7 +1183,15 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
-	}, nil
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+		attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(response.GetStartedEventId())),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+		attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+		attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+	)
+	return response, nil
 }
 
 func contextNearDeadline(ctx context.Context, tailroom time.Duration) bool {
@@ -1396,7 +1407,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	return &workflowservice.PollActivityTaskQueueResponse{
+	response := &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   matchingResponse.TaskToken,
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
 		ActivityId:                  matchingResponse.ActivityId,
@@ -1417,7 +1428,16 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
 		Priority:                    matchingResponse.Priority,
 		RetryPolicy:                 matchingResponse.RetryPolicy,
-	}, nil
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
+		attribute.String(telemetry.WorkerTaskIDKey, response.GetActivityId()),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+		attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+		attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+		attribute.String(telemetry.WorkerTaskActivityIDKey, response.GetActivityId()),
+	)
+	return response, nil
 }
 
 // RecordActivityTaskHeartbeat is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -6180,6 +6200,12 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+		attribute.String(telemetry.WorkerTaskIDKey, tt.GetTaskId()),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, tt.GetNamespaceId()),
+		attribute.String(telemetry.WorkerTaskTaskQueueKey, tt.GetTaskQueue()),
+	)
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
@@ -6228,6 +6254,12 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+		attribute.String(telemetry.WorkerTaskIDKey, tt.GetTaskId()),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, tt.GetNamespaceId()),
+		attribute.String(telemetry.WorkerTaskTaskQueueKey, tt.GetTaskQueue()),
+	)
 
 	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
 		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")

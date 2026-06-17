@@ -385,11 +385,11 @@ func TestAnnotateInboundSpan_SetsTemporalAttributes(t *testing.T) {
 	for _, kv := range s.Attributes() {
 		attrs[string(kv.Key)] = kv.Value.AsString()
 	}
-	require.Equal(t, "test-namespace", attrs[attrTemporalNamespace])
-	require.Equal(t, "test-endpoint", attrs[attrTemporalNexusEndpoint])
-	require.Equal(t, "svc", attrs[attrTemporalNexusService])
-	require.Equal(t, "op", attrs[attrTemporalNexusOperation])
-	require.Equal(t, "request-id", attrs[attrTemporalNexusRequestID])
+	require.Equal(t, "test-namespace", attrs[namespaceAttrKey])
+	require.Equal(t, "test-endpoint", attrs[nexusEndpointAttrKey])
+	require.Equal(t, "svc", attrs[nexusServiceAttrKey])
+	require.Equal(t, "op", attrs[nexusOperationAttrKey])
+	require.Equal(t, "request-id", attrs[nexusRequestIDAttrKey])
 }
 
 // TestRecordInboundSpanStatus_RecordsError verifies that recordInboundSpanStatus records a

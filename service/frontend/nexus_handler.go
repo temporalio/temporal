@@ -43,11 +43,11 @@ import (
 // OpenTelemetry attribute keys for Nexus inbound spans. Standard http.* attributes are set by
 // the otelhttp wrapper; the temporal.* attributes carry Temporal-domain semantics.
 const (
-	attrTemporalNamespace      = telemetry.AttrTemporalNamespace
-	attrTemporalNexusEndpoint  = telemetry.AttrTemporalNexusEndpoint
-	attrTemporalNexusService   = telemetry.AttrTemporalNexusService
-	attrTemporalNexusOperation = telemetry.AttrTemporalNexusOperation
-	attrTemporalNexusRequestID = telemetry.AttrTemporalNexusRequestID
+	namespaceAttrKey      = telemetry.TemporalNamespaceKey
+	nexusEndpointAttrKey  = telemetry.NexusEndpointKey
+	nexusServiceAttrKey   = telemetry.NexusServiceKey
+	nexusOperationAttrKey = telemetry.NexusOperationKey
+	nexusRequestIDAttrKey = telemetry.NexusRequestIDKey
 )
 
 const (

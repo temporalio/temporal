@@ -10,14 +10,14 @@ import (
 const (
 	NexusRequestIDHeader = "nexus-request-id"
 
-	AttrTemporalNamespace      = "temporal.namespace"
-	AttrTemporalNexusEndpoint  = "temporal.nexus.endpoint"
-	AttrTemporalNexusNamespace = "temporal.nexus.namespace"
-	AttrTemporalNexusOperation = "temporal.nexus.operation"
-	AttrTemporalNexusRequest   = "temporal.nexus.request"
-	AttrTemporalNexusRequestID = "temporal.nexus.request_id"
-	AttrTemporalNexusService   = "temporal.nexus.service"
-	AttrTemporalNexusTaskQueue = "temporal.nexus.task_queue"
+	TemporalNamespaceKey = "temporal.namespace"
+	NexusEndpointKey     = "temporal.nexus.endpoint"
+	NexusNamespaceKey    = "temporal.nexus.namespace"
+	NexusOperationKey    = "temporal.nexus.operation"
+	NexusRequestKey      = "temporal.nexus.request"
+	NexusRequestIDKey    = "temporal.nexus.request_id"
+	NexusServiceKey      = "temporal.nexus.service"
+	NexusTaskQueueKey    = "temporal.nexus.task_queue"
 )
 
 type NexusSpanAttributes struct {
@@ -38,28 +38,28 @@ func AnnotateNexusSpan(ctx context.Context, attrs NexusSpanAttributes) {
 func SetNexusSpanAttributes(span trace.Span, attrs NexusSpanAttributes) {
 	kvs := make([]attribute.KeyValue, 0, 8)
 	if attrs.Request {
-		kvs = append(kvs, attribute.Bool(AttrTemporalNexusRequest, true))
+		kvs = append(kvs, attribute.Bool(NexusRequestKey, true))
 	}
 	if attrs.NamespaceName != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNamespace, attrs.NamespaceName))
+		kvs = append(kvs, attribute.String(TemporalNamespaceKey, attrs.NamespaceName))
 	}
 	if attrs.TargetNamespaceName != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusNamespace, attrs.TargetNamespaceName))
+		kvs = append(kvs, attribute.String(NexusNamespaceKey, attrs.TargetNamespaceName))
 	}
 	if attrs.Endpoint != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusEndpoint, attrs.Endpoint))
+		kvs = append(kvs, attribute.String(NexusEndpointKey, attrs.Endpoint))
 	}
 	if attrs.Service != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusService, attrs.Service))
+		kvs = append(kvs, attribute.String(NexusServiceKey, attrs.Service))
 	}
 	if attrs.Operation != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusOperation, attrs.Operation))
+		kvs = append(kvs, attribute.String(NexusOperationKey, attrs.Operation))
 	}
 	if attrs.RequestID != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusRequestID, attrs.RequestID))
+		kvs = append(kvs, attribute.String(NexusRequestIDKey, attrs.RequestID))
 	}
 	if attrs.TaskQueue != "" {
-		kvs = append(kvs, attribute.String(AttrTemporalNexusTaskQueue, attrs.TaskQueue))
+		kvs = append(kvs, attribute.String(NexusTaskQueueKey, attrs.TaskQueue))
 	}
 	if len(kvs) > 0 {
 		span.SetAttributes(kvs...)
