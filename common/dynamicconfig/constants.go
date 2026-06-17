@@ -1395,6 +1395,11 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	WorkerControllerNoPollerHookWindow = NewGlobalDurationSetting(
+		"matching.workerControllerNoPollerHookWindow",
+		5*time.Second,
+		`WorkerControllerNoPollerHookWindow controls how recently a worker must have polled before skipping the WCI scale-up signal on an incoming query or Nexus task dispatch`,
+	)
 	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
 		"matching.emitTaskDispatchLatencyAtPoll",
 		true,
