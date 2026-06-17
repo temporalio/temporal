@@ -1257,6 +1257,8 @@ func (s *PauseWorkflowExecutionSuite) TestSignalBufferingOrderWhilePaused() {
 			if unpaused {
 				workflowTasksAfterUnpause++
 			}
+		default:
+			continue
 		}
 	}
 	s.Equal(signalCount, totalSignals, "all signals should be recorded in history (none lost)")
