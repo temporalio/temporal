@@ -4,10 +4,10 @@
 #
 # 1. Snapshot status:
 #       Samples memory every SNAPSHOT_INTERVAL_SECONDS and writes every sample
-#       to SNAPSHOT_HISTORY_FILE. Logs status every
-#       SNAPSHOT_PRINT_INTERVAL_SECONDS, records those lines in
-#       SNAPSHOT_STATUS_HISTORY_FILE, and writes the highest-memory snapshot
-#       report to SNAPSHOT_FILE.
+#       to SNAPSHOT_HISTORY_FILE with lightweight tests.test process fields and
+#       goroutine count. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS,
+#       records those lines in SNAPSHOT_STATUS_HISTORY_FILE, and writes the
+#       highest-memory snapshot report to SNAPSHOT_FILE.
 #
 # 2. Profile capture:
 #       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
@@ -116,6 +116,14 @@ count_goroutines() {
   echo "${count:-?}"
 }
 
+current_goroutine_count() {
+  local count
+
+  count="$(curl -fsS --max-time 2 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" 2>/dev/null |
+    awk 'NR == 1 && $1 == "goroutine" && $2 == "profile:" && $3 == "total" { print $4 }' || true)"
+  echo "${count:-?}"
+}
+
 # Print heap profile analysis.
 print_heap() {
   local profile_file="$1"
@@ -137,6 +145,31 @@ print_heap() {
 
 test_binary_pid() {
   ps -eo pid=,rss=,comm= --sort=-rss | awk '$3 == "tests.test" {print $1; exit}'
+}
+
+process_snapshot_fields() {
+  local pid="$1"
+  local fields
+
+  if [[ -z "$pid" ]] || [[ ! -r "/proc/$pid/status" ]]; then
+    echo "pid=? rss=? anon=? data=? threads=?"
+    return
+  fi
+
+  fields="$(awk -v pid="$pid" '
+    $1 == "VmRSS:" { rss = int($2 / 1024) "MB" }
+    $1 == "RssAnon:" { anon = int($2 / 1024) "MB" }
+    $1 == "VmData:" { data = int($2 / 1024) "MB" }
+    $1 == "Threads:" { threads = $2 }
+    END {
+      if (rss == "") { rss = "?" }
+      if (anon == "") { anon = "?" }
+      if (data == "") { data = "?" }
+      if (threads == "") { threads = "?" }
+      printf "pid=%s rss=%s anon=%s data=%s threads=%s", pid, rss, anon, data, threads
+    }
+  ' "/proc/$pid/status" 2>/dev/null || true)"
+  echo "${fields:-pid=$pid rss=? anon=? data=? threads=?}"
 }
 
 format_process_profile() {
@@ -406,7 +439,7 @@ EOF
 }
 
 snapshot() {
-  local memtotal_kb memavail_kb memused_kb memused_mb pct profile_report report should_terminate
+  local goroutine_count memtotal_kb memavail_kb memused_kb memused_mb pct process_fields profile_report report should_terminate test_pid
   ensure_snapshot_dirs
 
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
@@ -418,12 +451,15 @@ snapshot() {
   # Get processes with >=1% memory, format as "name (MB)"
   local top_procs
   top_procs="$(ps -eo %mem,rss,comm --sort=-%mem | awk 'NR>1 && $1>=1.0 {printf "%s (%dMB), ", $3, $2/1024}' | sed 's/, $//')"
+  test_pid="$(test_binary_pid)"
+  process_fields="$(process_snapshot_fields "$test_pid")"
+  goroutine_count="$(current_goroutine_count)"
 
   local timestamp
   timestamp="$(date '+%H:%M:%S')"
 
   local status_line
-  status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$top_procs")"
+  status_line="$(printf "%s used=%s%% mem=%sMB goroutines=%s test=[%s] procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$goroutine_count" "$process_fields" "$top_procs")"
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
 
   local now
