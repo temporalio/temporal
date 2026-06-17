@@ -34,6 +34,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -108,8 +109,10 @@ func TestClusterGoroutineSlope(t *testing.T) {
 		switch i {
 		case warmupIters:
 			baseDump = goroutineDump()
+			writeHeapProfile(t, "base")
 		case iters - 1:
 			lastDump = goroutineDump()
+			writeHeapProfile(t, "final")
 		}
 		t.Logf("iter %2d  goroutines=%d", i, g)
 	}
@@ -123,6 +126,25 @@ func TestClusterGoroutineSlope(t *testing.T) {
 		t.Errorf("goroutine leak: %.2f goroutines/cluster (threshold %d). Leaking stacks:\n%s",
 			slope, maxPerCluster, diffBySignature(baseDump, lastDump))
 	}
+}
+
+// writeHeapProfile writes an inuse heap profile to $LEAK_HEAP_PROFILE/<name>.prof
+// if that dir is set. Diff with: go tool pprof -base base.prof final.prof
+func writeHeapProfile(t *testing.T, name string) {
+	dir := os.Getenv("LEAK_HEAP_PROFILE")
+	if dir == "" {
+		return
+	}
+	runtime.GC()
+	f, err := os.Create(dir + "/" + name + ".prof")
+	if err != nil {
+		t.Fatalf("create heap profile: %v", err)
+	}
+	defer f.Close()
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		t.Fatalf("write heap profile: %v", err)
+	}
+	t.Logf("wrote heap profile %s/%s.prof", dir, name)
 }
 
 // goroutineDump returns every goroutine's stack.
