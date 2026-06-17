@@ -47,7 +47,6 @@ func newShardedReq(execs BatchPayload) *shardedBatchReq {
 		TargetClusterName:   remoteCluster,
 		PerBatchGenerateRPS: defaultPerBatchGenerateRPS,
 		ShardNoProgress:     time.Hour,
-		DrainGrace:          time.Second,
 		IdleShardCost:       time.Hour,
 	}
 }
@@ -124,7 +123,6 @@ func (s *activitiesSuite) TestReplicateBatch_Success() {
 	s.NoError(f.Get(&out))
 	s.Equal(int64(1), out.VerifiedCount)
 	s.Equal([]int32{0}, out.CompletedShards)
-	s.Empty(out.InFlight)
 }
 
 // TestReplicateBatch_SkipZombie exercises the retention/zombie skip path:
@@ -137,9 +135,10 @@ func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
-	// Resume=true so we skip inject and only exercise the verify-skip path.
+	// Seed InjectDone=true in heartbeat to skip inject and only exercise the verify-skip path.
+	env.SetHeartbeatDetails(replicateBatchHeartbeat{InjectDone: true})
+
 	req := newShardedReq(payloadFor(0, execution1))
-	req.Resume = true
 
 	s.expectRemoteNotFound(execution1)
 	s.expectSourceDMS(execution1, zombieState, nil)
@@ -149,7 +148,6 @@ func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
 	s.Equal(int64(1), out.VerifiedCount)
-	s.Empty(out.InFlight)
 }
 
 // TestReplicateBatch_SkipRetention exercises the close-time/retention skip
@@ -180,6 +178,9 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(ns, nil).Times(1)
 
+	// Seed InjectDone=true in heartbeat to skip inject.
+	env.SetHeartbeatDetails(replicateBatchHeartbeat{InjectDone: true})
+
 	s.expectRemoteNotFound(execution1)
 	s.expectSourceDMS(execution1, &historyservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencespb.WorkflowMutableState{
@@ -193,7 +194,6 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 	}, nil)
 
 	req := newShardedReq(payloadFor(0, execution1))
-	req.Resume = true
 	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
@@ -203,11 +203,10 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 
 // TestReplicateBatch_ShardNoProgress: the per-shard cumulative no-progress
 // backstop fires non-retryably when a shard has gone longer than
-// req.ShardNoProgress without a verified outcome. Resume=true with a
-// pre-seeded NoProgressByShard pushes the shard right at the threshold
-// before the first verify pass, so the first failed attempt trips the
-// check immediately and we don't have to spin on wall-clock. Mirrors
-// the existing TestVerifyReplicationTasks_FailedNotFound.
+// req.ShardNoProgress without a verified outcome. Heartbeat InjectDone=true
+// skips inject so we go straight to verify; the remote returns BUSY so
+// nothing verifies. With ShardNoProgress=time.Nanosecond the check fires
+// on the first pass. Mirrors TestVerifyReplicationTasks_FailedNotFound.
 func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 	env, _ := s.initEnv()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
@@ -221,12 +220,11 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 			Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
 		}).AnyTimes()
 
+	// Seed InjectDone=true to skip inject, go straight to verify.
+	env.SetHeartbeatDetails(replicateBatchHeartbeat{InjectDone: true})
+
 	req := newShardedReq(payloadFor(0, execution1))
-	req.Resume = true                                // skip inject
-	req.ShardNoProgress = 10 * time.Millisecond      // trip almost immediately
-	req.NoProgressByShard = map[int32]time.Duration{ // seed past threshold
-		0: time.Second,
-	}
+	req.ShardNoProgress = time.Nanosecond // trip almost immediately
 
 	_, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
 	s.Error(err)
@@ -234,31 +232,6 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 	s.ErrorAs(err, &appErr)
 	s.Equal("ShardNoProgress", appErr.Type())
 	s.True(appErr.NonRetryable(), "ShardNoProgress should be non-retryable")
-}
-
-// TestReplicateBatch_Resume_SkipsInject: Resume=true should bypass the
-// inject phase entirely — no GenerateLastHistoryReplicationTasks call.
-// Mirrors the inject-side guarantee that the legacy
-// TestVerifyReplicationTasks_AlreadyVerified asserts for verify
-// (resume-via-heartbeat skips already-done work).
-func (s *activitiesSuite) TestReplicateBatch_Resume_SkipsInject() {
-	env, _ := s.initEnv()
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
-		Return(&testNamespace, nil).Times(1)
-
-	// No GenerateLastHistoryReplicationTasks expectation — gomock with
-	// strict expectations would fail if inject called it. Verify path:
-	// remote DMS OK so the exec verifies on first pass.
-	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).
-		Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
-
-	req := newShardedReq(payloadFor(0, execution1))
-	req.Resume = true
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
-	s.NoError(err)
-	var out replicateBatchResult
-	s.NoError(f.Get(&out))
-	s.Equal(int64(1), out.VerifiedCount)
 }
 
 // TestReplicateBatch_DisableVerification: with verification disabled the
@@ -338,4 +311,18 @@ func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
 	s.Equal(int64(2), out.VerifiedCount)
+}
+
+// TestReplicateBatch_EmptyBatch: an empty BatchPayload returns early with
+// zero result and no errors or mock calls.
+func (s *activitiesSuite) TestReplicateBatch_EmptyBatch() {
+	env, _ := s.initEnv()
+
+	req := newShardedReq(BatchPayload{})
+	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	s.NoError(err)
+	var out replicateBatchResult
+	s.NoError(f.Get(&out))
+	s.Equal(int64(0), out.VerifiedCount)
+	s.Empty(out.CompletedShards)
 }

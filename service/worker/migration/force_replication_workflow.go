@@ -92,16 +92,11 @@ type (
 		ReplicatedWorkflowCountPerSecond   float64
 		PageTokenForRestart                []byte
 
-		// Sharded-workflow-only recovery bundle: feed these three
-		// fields back into a fresh ShardedForceReplicationWorkflow's
-		// NextPageToken / ResumeShards / RecoveredBuckets params to
-		// resume from a failed run without missing executions. Left
-		// zero by the legacy ForceReplicationWorkflow variants —
-		// their PageTokenForRestart is the start-of-run token and
-		// already covers all in-flight execs at restart cost.
+		// RecoveryNextPageToken is the page token the sharded workflow
+		// was processing when it last continued-as-new or was interrupted.
+		// Feed this back into ShardedForceReplicationWorkflow.NextPageToken
+		// to resume from that position. Left zero by the legacy variants.
 		RecoveryNextPageToken []byte
-		RecoveryResumeShards  []ResumeShard
-		RecoveryBuckets       BatchPayload
 	}
 )
 

@@ -139,6 +139,9 @@ func (sc *shardedWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) 
 	registry.RegisterWorkflowWithOptions(ShardedForceReplicationWorkflow, workflow.RegisterOptions{
 		Name: shardedForceReplicationWorkflowName,
 	})
+	registry.RegisterWorkflowWithOptions(shardedForceReplicationWorker, workflow.RegisterOptions{
+		Name: shardedForceReplicationWorkerName,
+	})
 	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{
 		Name: forceTaskQueueUserDataReplicationWorkflow,
 	})

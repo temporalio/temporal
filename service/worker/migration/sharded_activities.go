@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -52,13 +51,10 @@ func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTarget
 }
 
 // ReplicateBatch is the per-batch activity body for the sharded force
-// replication workflow. Runs inject (skipped on Resume) then verify,
-// signal-releasing completed shards mid-flight as their cumulative
-// idle cost crosses IdleShardCost. On workflow-initiated cancellation
-// it enters drain mode and returns a replicateBatchResult carrying
-// any still-unverified execs. Drain-mode signal traffic is suppressed:
-// once we know we're about to return, there's no point racing a
-// signal against the return value.
+// replication workflow. Runs inject (heartbeat-resumable via
+// NextInjectIdx/InjectDone) then verify, signal-releasing completed
+// shards mid-flight as their cumulative idle cost crosses IdleShardCost.
+// Returns {CompletedShards, VerifiedCount} on success.
 func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 	// Flatten once so per-exec bookkeeping (verified[], attempts[],
 	// nextRetryAt[]) can stay index-based.
@@ -74,7 +70,7 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 	}
 
 	// ---- Inject phase ----
-	if !req.Resume && !hb.InjectDone {
+	if !hb.InjectDone {
 		startIdx := hb.NextInjectIdx
 		if err := a.runInjectPhase(ctx, req, execs, startIdx); err != nil {
 			return replicateBatchResult{}, err
@@ -108,10 +104,9 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 }
 
 // runVerifyPhase is the verify-phase loop body of ReplicateBatch. It
-// owns per-exec bookkeeping, the drain-transition handoff, and the
-// per-iteration completion / stuck-shard / signal-release decisions
-// — extracted from ReplicateBatch to keep its cognitive complexity
-// under the linter cap.
+// owns per-exec bookkeeping, the per-iteration completion / stuck-shard /
+// signal-release decisions — extracted from ReplicateBatch to keep its
+// cognitive complexity under the linter cap.
 func (a *activities) runVerifyPhase(
 	ctx context.Context,
 	req *shardedBatchReq,
@@ -125,28 +120,12 @@ func (a *activities) runVerifyPhase(
 	nextRetryAt := make([]time.Time, execCount)
 	doneCount := 0
 
-	shards := newShardVerifyTracker(execs, req.Resume, req.NoProgressByShard)
-
-	var draining bool
-	var drainStartAt time.Time
-
-	// callCtx is what attemptVerifyExec uses for DescribeMutableState.
-	// In drain mode we swap to a detached context: the parent ctx is
-	// already dead (that's what triggered the transition), so reusing
-	// it would make every drain-mode RPC fail instantly.
-	callCtx := ctx
-	// Pre-create the drain context up front and defer cancel right away
-	// so go vet's lostcancel pass sees the canonical pattern.
-	drainCtx, drainCancel := context.WithCancel(context.Background())
-	defer drainCancel()
+	shards := newShardVerifyTracker(execs)
 
 	for {
 		// Worker shutdown short-circuits with a retryable error so the
-		// SDK reschedules on another worker. Folding partial state into
-		// the workflow's drain bucket would conflate worker shutdown
-		// (deploys, host loss — orthogonal to migration progress) with
-		// drain-for-CAN. Returning here also avoids the ~HeartbeatTimeout
-		// wait that the alternative (silent worker death) would incur
+		// SDK reschedules on another worker. Returning here avoids the
+		// ~HeartbeatTimeout wait that silent worker death would incur
 		// before the server retries the attempt. Inject is already
 		// heartbeat-preserved (InjectDone), so retry skips it; verify
 		// re-runs from scratch but DMS reads are idempotent.
@@ -159,58 +138,30 @@ func (a *activities) runVerifyPhase(
 		default:
 		}
 
-		// Workflow-initiated activity cancellation (drainForCAN)
-		// transitions us into drain mode with the full DrainGrace window.
-		// WaitForCancellation=true on the activity options guarantees the
-		// workflow blocks for us, so the grace window is genuinely
-		// available — swap callCtx onto a detached deadline so
-		// DescribeMutableState keeps working after the parent ctx died.
-		if !draining && ctx.Err() != nil {
-			draining = true
-			drainStartAt = time.Now()
-			// Start the drain budget timer here rather than at activity
-			// entry so the grace window measures from drain transition,
-			// not from activity start.
-			time.AfterFunc(req.DrainGrace, drainCancel)
-			callCtx = drainCtx
-		}
-
-		passDelta, minNextRetry, ctxAborted, vErr := a.runVerifyPass(
-			ctx, callCtx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
-		// Fold partial progress in before the error check — the SDK
-		// discards the activity result on failure, so the only way
-		// the workflow learns about partially-verified execs on the
-		// error path is via wrapBatchVerifyError encoding the count
-		// as ApplicationError details below.
+		passDelta, minNextRetry, vErr := a.runVerifyPass(
+			ctx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
 		doneCount += passDelta
 		if vErr != nil {
-			return replicateBatchResult{}, wrapBatchVerifyError(vErr, int64(doneCount))
+			return replicateBatchResult{}, vErr
 		}
 
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 
 		if done, result, err := a.evaluateVerifyIteration(
-			ctx, req, execs, verified, shards, doneCount, execCount, draining, drainStartAt); err != nil {
-			return replicateBatchResult{}, wrapBatchVerifyError(err, int64(doneCount))
+			ctx, req, execs, verified, shards, doneCount, execCount); err != nil {
+			return replicateBatchResult{}, err
 		} else if done {
 			return result, nil
 		}
 
-		// If the inner loop aborted because callCtx died, skip the sleep
-		// entirely so the outer-loop top sees the new state promptly
-		// (normal → drain transition, or drain → exit).
-		if ctxAborted {
-			continue
-		}
-
-		waitNextTick(ctx, callCtx, minNextRetry, draining, drainStartAt, req.DrainGrace)
+		waitNextTick(ctx, minNextRetry)
 	}
 }
 
 // evaluateVerifyIteration runs the post-pass checks (clean completion,
-// stuck-shard backstop, drain-exit decision, mid-flight signal release)
-// for a single verify-loop iteration. Returns done=true with the result
-// when the loop should exit; otherwise (false, _, nil) means continue.
+// stuck-shard backstop, mid-flight signal release) for a single
+// verify-loop iteration. Returns done=true with the result when the loop
+// should exit; otherwise (false, _, nil) means continue.
 func (a *activities) evaluateVerifyIteration(
 	ctx context.Context,
 	req *shardedBatchReq,
@@ -218,8 +169,6 @@ func (a *activities) evaluateVerifyIteration(
 	verified []bool,
 	shards shardVerifyTracker,
 	doneCount, execCount int,
-	draining bool,
-	drainStartAt time.Time,
 ) (bool, replicateBatchResult, error) {
 	// Clean completion — every exec verified.
 	if doneCount >= execCount {
@@ -227,24 +176,6 @@ func (a *activities) evaluateVerifyIteration(
 			CompletedShards: shards.allCompleted(),
 			VerifiedCount:   int64(doneCount),
 		}, nil
-	}
-
-	if draining {
-		// Drain-mode exit checks. No signals here — the return value
-		// carries everything the workflow needs (completed shards +
-		// unverified execs grouped by shard with their cumulative
-		// no-progress duration). The per-shard no-progress backstop is
-		// deliberately skipped: drain is bounded by DrainGrace and the
-		// outstanding execs need to flow back via InFlight for CAN
-		// carry-over, not surface as a ShardNoProgress failure.
-		if shouldExitDrain(req, shards, drainStartAt) {
-			return true, replicateBatchResult{
-				CompletedShards: shards.allCompleted(),
-				InFlight:        buildInFlight(execs, verified, shards, time.Now()),
-				VerifiedCount:   int64(doneCount),
-			}, nil
-		}
-		return false, replicateBatchResult{}, nil
 	}
 
 	// Per-shard cumulative no-progress backstop.
@@ -260,11 +191,9 @@ func (a *activities) evaluateVerifyIteration(
 
 // runInjectPhase walks execs in flattened order, generating one
 // replication task per exec under a per-batch RPS limiter. Cancellation
-// mid-loop returns a CanceledError so spawnBatch's IsCanceledError
-// check fires and the batch's batchExecs entry is preserved for
-// RecoveredBuckets re-injection next cycle. Already-injected execs
-// are re-injected harmlessly — replication dedupes per (namespace,
-// wf, run).
+// mid-loop returns a CanceledError so the caller can propagate it.
+// Already-injected execs are re-injected harmlessly — replication dedupes
+// per (namespace, wf, run).
 func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo, startIdx int) error {
 	rateLimiter := quotas.NewRateLimiter(req.PerBatchGenerateRPS, int(math.Ceil(req.PerBatchGenerateRPS)))
 	for i := startIdx; i < len(execs); i++ {
@@ -290,19 +219,14 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 // runVerifyPass runs one pass over every unverified exec, attempting a
 // verify on those whose backoff timer has expired. Returns the count of
 // execs newly verified this pass, the earliest pending retry deadline
-// (for sleep scheduling), and whether callCtx died mid-pass — in which
-// case the outer loop's top reassesses (drain transition or exit).
-// Returns a non-nil error only for hard errors from the verify path;
-// ctx-derived errors set ctxAborted instead so the outer loop owns
-// the decision about what to do next.
+// (for sleep scheduling), and a non-nil error only for hard errors from
+// the verify path.
 //
-// ctx is the activity ctx, used only for heartbeating — a single pass
-// over a large batch can outlast HeartbeatTimeout if we only heartbeat
-// once at the end, so we tick per attempted exec. callCtx is what the
-// DMS call rides on (the detached drain ctx in drain mode).
+// ctx is the activity ctx, used for both the DMS call and heartbeating —
+// a single pass over a large batch can outlast HeartbeatTimeout if we
+// only heartbeat once at the end, so we tick per attempted exec.
 func (a *activities) runVerifyPass(
 	ctx context.Context,
-	callCtx context.Context,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	req *shardedBatchReq,
@@ -311,7 +235,7 @@ func (a *activities) runVerifyPass(
 	attempts []int,
 	nextRetryAt []time.Time,
 	shards shardVerifyTracker,
-) (int, time.Time, bool, error) {
+) (int, time.Time, error) {
 	now := time.Now()
 	var minNextRetry time.Time
 	verifiedDelta := 0
@@ -324,16 +248,9 @@ func (a *activities) runVerifyPass(
 			continue
 		}
 
-		ok, err := a.attemptVerifyExec(callCtx, remoteAdminClient, ns, req, ex)
+		ok, err := a.attemptVerifyExec(ctx, remoteAdminClient, ns, req, ex)
 		if err != nil {
-			if callCtx.Err() != nil {
-				// callCtx is dead. Two cases: (1) normal-mode parent ctx
-				// was just cancelled mid-call — the outer-loop top will
-				// promote to drain on the next iteration; (2) drain-mode
-				// detached ctx expired — the drain exit check fires.
-				return verifiedDelta, minNextRetry, true, nil
-			}
-			return verifiedDelta, minNextRetry, false, err
+			return verifiedDelta, minNextRetry, err
 		}
 
 		if ok {
@@ -348,7 +265,7 @@ func (a *activities) runVerifyPass(
 
 		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
 	}
-	return verifiedDelta, minNextRetry, false, nil
+	return verifiedDelta, minNextRetry, nil
 }
 
 // earliest returns the earlier of cur (which may be zero) and candidate.
@@ -363,7 +280,8 @@ func earliest(cur, candidate time.Time) time.Time {
 // checkStuckShard fails non-retryably if any shard has gone longer than
 // req.ShardNoProgress without a verified outcome (double that for a shard
 // still awaiting its first verification — see pickStuck). Duration is
-// cumulative across CAN cycles via tracker seeding.
+// cumulative from activity start (seeded at time.Now() on first activity
+// attempt).
 func (a *activities) checkStuckShard(
 	req *shardedBatchReq,
 	shards shardVerifyTracker,
@@ -384,28 +302,16 @@ func (a *activities) checkStuckShard(
 	return temporal.NewNonRetryableApplicationError(msg, "ShardNoProgress", nil)
 }
 
-// shouldExitDrain reports whether the drain-mode exit conditions are
-// met: either the grace window has expired, or the cumulative idle cost
-// across completed-but-unsignaled shards crossed the threshold.
-func shouldExitDrain(req *shardedBatchReq, shards shardVerifyTracker, drainStartAt time.Time) bool {
-	if time.Since(drainStartAt) >= req.DrainGrace {
-		return true
-	}
-	return shards.totalIdleCost(time.Now()) >= req.IdleShardCost
-}
-
 // maybeSignalRelease signals the workflow to release any
 // completed-but-unsignaled shards if their cumulative idle cost crossed
-// the threshold. Only fires in normal mode — drain mode rides the
-// activity result instead.
+// the threshold.
 //
 // Ctx-canceled errors from signalReleaseShards are suppressed: a
 // workflow-initiated cancel arriving mid-signal would otherwise
 // surface as a wrapped ctx-canceled error (not temporal.CanceledError)
-// that the workflow side wouldn't recognise via IsCanceledError —
-// turning a clean CAN into an error exit. Suppressing here lets the
-// outer loop see ctx.Err() at its top and promote to drain mode
-// normally.
+// that the workflow side wouldn't recognise via IsCanceledError.
+// Suppressing here lets the outer loop exit cleanly when the activity's
+// context is cancelled.
 func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchReq, shards shardVerifyTracker) error {
 	if shards.totalIdleCost(time.Now()) < req.IdleShardCost {
 		return nil
@@ -424,35 +330,17 @@ func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchRe
 	return nil
 }
 
-// waitNextTick sleeps until the next exec is due for retry, capped by
-// DrainGrace remaining when in drain mode. In drain mode the parent ctx
-// is already dead, so we wake on the detached drain ctx instead — using
-// the parent ctx would tight-loop on its Done channel.
-func waitNextTick(
-	ctx, callCtx context.Context,
-	minNextRetry time.Time,
-	draining bool,
-	drainStartAt time.Time,
-	drainGrace time.Duration,
-) {
+// waitNextTick sleeps until the next exec is due for retry or ctx is done.
+func waitNextTick(ctx context.Context, minNextRetry time.Time) {
 	sleepDur := 50 * time.Millisecond
 	if !minNextRetry.IsZero() {
 		if delta := time.Until(minNextRetry); delta > sleepDur {
 			sleepDur = delta
 		}
 	}
-	if draining {
-		if remaining := drainGrace - time.Since(drainStartAt); remaining > 0 && remaining < sleepDur {
-			sleepDur = remaining
-		}
-	}
-	wakeCtx := ctx
-	if draining {
-		wakeCtx = callCtx
-	}
 	select {
 	case <-time.After(sleepDur):
-	case <-wakeCtx.Done():
+	case <-ctx.Done():
 	}
 }
 
@@ -515,9 +403,7 @@ func (a *activities) attemptVerifyExec(
 // while this activity stays running on its still-pending shards.
 //
 // No retry wrapping: a transient failure propagates up so the activity
-// fails, the workflow records it via lastErr, and the in-flight batch is
-// recovered into the next CAN's RecoveredBuckets — preferable to silently
-// swallowing the error here and stranding completed shards.
+// fails; the child workflow records the error via lastErr.
 func (a *activities) signalReleaseShards(ctx context.Context, req *shardedBatchReq, shards []int32) error {
 	info := activity.GetInfo(ctx)
 	return a.sdkClientFactory.GetSystemClient().SignalWorkflow(ctx, info.WorkflowExecution.ID, info.WorkflowExecution.RunID, releaseShardsSignalName, releaseShardsPayload{
@@ -537,11 +423,11 @@ type shardVerify struct {
 
 type shardVerifyTracker map[int32]shardVerify
 
-func newShardVerifyTracker(
-	execs []*shardedExecutionInfo,
-	resume bool,
-	noProgressByShard map[int32]time.Duration,
-) shardVerifyTracker {
+// newShardVerifyTracker builds the per-shard state from the flattened
+// exec slice. Each shard's lastProgress starts at time.Now() so the
+// stuck-shard backstop measures elapsed time from activity start rather
+// than the activity's scheduling epoch.
+func newShardVerifyTracker(execs []*shardedExecutionInfo) shardVerifyTracker {
 	t := shardVerifyTracker{}
 	for _, ex := range execs {
 		sv := t[ex.Shard]
@@ -550,16 +436,7 @@ func newShardVerifyTracker(
 	}
 	nowSeed := time.Now()
 	for sh, sv := range t {
-		if resume {
-			sv.lastProgress = nowSeed.Add(-noProgressByShard[sh])
-			// Resumed shards had their tasks submitted (and their initial
-			// first-verification grace) in a prior CAN cycle — inject is
-			// skipped on resume — so they continue cumulative no-progress
-			// tracking against the normal window, not the doubled one.
-			sv.verifiedAny = true
-		} else {
-			sv.lastProgress = nowSeed
-		}
+		sv.lastProgress = nowSeed
 		t[sh] = sv
 	}
 	return t
@@ -660,40 +537,6 @@ func (t shardVerifyTracker) pickStuck(now time.Time, threshold time.Duration) (i
 	return minShard, minAge, found
 }
 
-// buildInFlight groups unverified execs by shard then businessID and
-// attaches the cumulative no-progress duration per shard, for the
-// drain-mode activity return. Shards with zero unverified execs are
-// reported via CompletedShards instead.
-func buildInFlight(
-	execs []*shardedExecutionInfo,
-	verified []bool,
-	shards shardVerifyTracker,
-	now time.Time,
-) []ResumeShard {
-	payload := BatchPayload{}
-	for i, ex := range execs {
-		if verified[i] {
-			continue
-		}
-		if payload[ex.Shard] == nil {
-			payload[ex.Shard] = map[string][]RunEntry{}
-		}
-		payload[ex.Shard][ex.BusinessID] = append(payload[ex.Shard][ex.BusinessID], RunEntry{
-			RunID:       ex.RunID,
-			ArchetypeID: ex.ArchetypeID,
-		})
-	}
-	if len(payload) == 0 {
-		return nil
-	}
-	noProgress := make(map[int32]time.Duration, len(payload))
-	//workflowcheck:ignore (one entry per shard; order-independent)
-	for sh := range payload {
-		noProgress[sh] = now.Sub(shards[sh].lastProgress)
-	}
-	return resumeShardsFromPayload(payload, noProgress)
-}
-
 // firstUnverifiedOnShard returns the index of the first execution in the
 // flattened execs slice that targets the given shard and hasn't verified
 // yet, and a found flag. Callers should only invoke this for shards
@@ -709,38 +552,6 @@ func firstUnverifiedOnShard(execs []*shardedExecutionInfo, verified []bool, shar
 		}
 	}
 	return 0, false
-}
-
-// batchVerifyPartialErrorType is the ApplicationError Type stamped on
-// wrappers produced by wrapBatchVerifyError. The workflow keys off
-// this Type via extractVerifiedCountFromError to disambiguate "the
-// wrapper we made" from any other ApplicationError carrying an
-// int64. The original error is reachable via Unwrap on the wrapper.
-const batchVerifyPartialErrorType = "BatchVerifyPartial"
-
-// wrapBatchVerifyError wraps the verify-phase error so the partial
-// VerifiedCount survives the activity boundary — the SDK discards
-// the activity result on failure, so the count would otherwise be
-// lost. The original error is attached as Cause; the workflow side
-// reaches it via errors.As / Unwrap as usual. Returns the cause
-// unchanged when there's no progress to report.
-func wrapBatchVerifyError(cause error, verifiedCount int64) error {
-	if cause == nil || verifiedCount <= 0 {
-		return cause
-	}
-	nonRetryable := false
-	if appErr, ok := errors.AsType[*temporal.ApplicationError](cause); ok {
-		nonRetryable = appErr.NonRetryable()
-	}
-	return temporal.NewApplicationErrorWithOptions(
-		cause.Error(),
-		batchVerifyPartialErrorType,
-		temporal.ApplicationErrorOptions{
-			Cause:        cause,
-			Details:      []any{verifiedCount},
-			NonRetryable: nonRetryable,
-		},
-	)
 }
 
 // backoffDelay returns the per-exec retry delay after `attempt`

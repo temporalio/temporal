@@ -91,53 +91,6 @@ func TestBatchPayload_Flatten(t *testing.T) {
 	require.Equal(t, "b-z", got[3].BusinessID)
 }
 
-// TestBatchPayload_mergeInto merges payload runs into dst and keeps
-// bucketCounts in sync — the same invariant addToBucket maintains per
-// run, but for a bulk restore on CAN entry.
-func TestBatchPayload_mergeInto(t *testing.T) {
-	dst := BatchPayload{1: {"a": {{RunID: "r0"}}}}
-	counts := map[int32]int{1: 1}
-
-	src := BatchPayload{
-		1: {"b": {{RunID: "r1"}, {RunID: "r2"}}},
-		2: {"c": {{RunID: "r3"}}},
-	}
-	src.mergeInto(dst, counts)
-
-	require.Len(t, dst, 2)
-	require.Len(t, dst[1]["a"], 1)
-	require.Len(t, dst[1]["b"], 2)
-	require.Len(t, dst[2]["c"], 1)
-	require.Equal(t, map[int32]int{1: 3, 2: 1}, counts)
-	require.Equal(t, 4, dst.totalRuns())
-}
-
-func TestResumeShardPayloadRoundTrip(t *testing.T) {
-	shards := []ResumeShard{
-		{Shard: 2, Execs: map[string][]RunEntry{"b": {{RunID: "r2"}}}, NoProgressDuration: 3 * time.Second},
-		{Shard: 1, Execs: map[string][]RunEntry{"a": {{RunID: "r1"}, {RunID: "r1b"}}}, NoProgressDuration: 5 * time.Second},
-	}
-	payload, noProgress := resumeShardsToPayload(shards)
-	got := resumeShardsFromPayload(payload, noProgress)
-
-	require.Len(t, got, 2)
-	require.Equal(t, int32(1), got[0].Shard)
-	require.Equal(t, 5*time.Second, got[0].NoProgressDuration)
-	require.Len(t, got[0].Execs["a"], 2)
-	require.Equal(t, int32(2), got[1].Shard)
-	require.Equal(t, 3*time.Second, got[1].NoProgressDuration)
-}
-
-func TestResumeShardsToPayload_mergesDuplicateShards(t *testing.T) {
-	shards := []ResumeShard{
-		{Shard: 1, Execs: map[string][]RunEntry{"a": {{RunID: "r1"}}}, NoProgressDuration: time.Second},
-		{Shard: 1, Execs: map[string][]RunEntry{"b": {{RunID: "r2"}}}, NoProgressDuration: 2 * time.Second},
-	}
-	payload, noProgress := resumeShardsToPayload(shards)
-	require.Len(t, payload[1], 2)
-	require.Equal(t, 2*time.Second, noProgress[1])
-}
-
 // TestShardVerifyTracker_FirstVerificationDoubledWindow pins the
 // no-progress backstop's grace for a shard's first verified outcome: a
 // shard that hasn't verified anything yet gets 2×threshold before
@@ -170,17 +123,59 @@ func TestShardVerifyTracker_FirstVerificationDoubledWindow(t *testing.T) {
 	require.True(t, stuck, "must trip at 1×threshold after first verification")
 }
 
-// TestNewShardVerifyTracker_ResumeSkipsDoubledWindow: a resumed shard's
-// tasks were submitted (and given their first-verification grace) in a
-// prior CAN cycle, so it is seeded as already past its first
-// verification and tracks cumulative no-progress against the plain
-// threshold. A fresh shard awaits its first verification.
-func TestNewShardVerifyTracker_ResumeSkipsDoubledWindow(t *testing.T) {
-	execs := []*shardedExecutionInfo{{Shard: 0}}
+// TestNewShardVerifyTracker_SeedsAllShards: newShardVerifyTracker with
+// execs from two shards produces a tracker with entries for each shard,
+// correct pending counts, verifiedAny=false, and a seeded lastProgress.
+func TestNewShardVerifyTracker_SeedsAllShards(t *testing.T) {
+	execs := []*shardedExecutionInfo{
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-0", RunID: "r0"}, Shard: 0},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-1", RunID: "r1"}, Shard: 0},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-2", RunID: "r2"}, Shard: 1},
+	}
 
-	fresh := newShardVerifyTracker(execs, false, nil)
-	require.False(t, fresh[0].verifiedAny, "fresh shard awaits its first verification")
+	before := time.Now()
+	tr := newShardVerifyTracker(execs)
+	after := time.Now()
 
-	resumed := newShardVerifyTracker(execs, true, map[int32]time.Duration{0: time.Minute})
-	require.True(t, resumed[0].verifiedAny, "resumed shard skips the doubled first-verification window")
+	require.Len(t, tr, 2, "should have entries for both shards")
+
+	sv0 := tr[0]
+	require.Equal(t, 2, sv0.pending, "shard 0 should have 2 pending execs")
+	require.False(t, sv0.verifiedAny, "fresh shard must not have verifiedAny set")
+	require.False(t, sv0.lastProgress.IsZero(), "lastProgress must be seeded")
+	require.True(t, !sv0.lastProgress.Before(before) && !sv0.lastProgress.After(after),
+		"lastProgress should be within the call window")
+
+	sv1 := tr[1]
+	require.Equal(t, 1, sv1.pending, "shard 1 should have 1 pending exec")
+	require.False(t, sv1.verifiedAny, "fresh shard must not have verifiedAny set")
+	require.False(t, sv1.lastProgress.IsZero(), "lastProgress must be seeded")
+}
+
+// TestEffectiveMaxExecsPerShard: effectiveMaxExecsPerShard returns the
+// full MaxExecsPerShard when promoted and not cut, and max(cap/2, 1)
+// in all other cases.
+func TestEffectiveMaxExecsPerShard(t *testing.T) {
+	cases := []struct {
+		name             string
+		promoted, cut    bool
+		maxExecsPerShard int
+		want             int
+	}{
+		{"promoted and not cut returns full", true, false, 10, 10},
+		{"not promoted returns half", false, false, 10, 5},
+		{"promoted and cut returns half", true, true, 10, 5},
+		{"minimum of 1 enforced", false, false, 1, 1},
+		{"odd cap rounds down but floors at 1", false, false, 3, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &shardedWorkflowState{
+				params:   &shardedChildParams{MaxExecsPerShard: tc.maxExecsPerShard},
+				promoted: tc.promoted,
+				cut:      tc.cut,
+			}
+			require.Equal(t, tc.want, s.effectiveMaxExecsPerShard())
+		})
+	}
 }

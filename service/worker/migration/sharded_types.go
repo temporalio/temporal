@@ -8,18 +8,39 @@ import (
 )
 
 const (
-	// shardedForceReplicationWorkflowName is the registered workflow name.
-	// Distinct from the legacy ForceReplicationWorkflow so both variants
-	// coexist in the same worker — pick which to use at workflow start
-	// time by setting the start request's workflow type.
+	// shardedForceReplicationWorkflowName is the registered workflow name for
+	// the parent. Distinct from the legacy ForceReplicationWorkflow so both
+	// variants coexist in the same worker — pick at workflow start time by
+	// setting the workflow type.
 	shardedForceReplicationWorkflowName = "force-replication-sharded"
+
+	// shardedForceReplicationWorkerName is the registered workflow name for
+	// the child worker workflows spawned by the parent. Registered on the
+	// same sharded worker component and task queue as the parent.
+	shardedForceReplicationWorkerName = "force-replication-sharded-worker"
 
 	// releaseShardsSignalName carries mid-flight ReleaseShards signals
 	// from active replicate-batch activities back to their parent
-	// workflow. Drain-mode shard completions ride the activity return
-	// value instead, so this signal only fires while the activity is
-	// still running normally.
+	// workflow (the child). Drain-mode shard completions are gone in
+	// the new design, so this signal only fires while the activity is
+	// still running normally and the child needs to free the shard early
+	// so a successor can pack against it.
 	releaseShardsSignalName = "ReleaseShards"
+
+	// shardedCheckpointSignalName is sent by a child to the parent at
+	// its cut point — when GetContinueAsNewSuggested fires at a page
+	// boundary. Payload: shardedCheckpointPayload.
+	shardedCheckpointSignalName = "force-replication-sharded-checkpoint"
+
+	// shardedProgressSignalName carries a periodic (60 s) cumulative
+	// verified-count rollup from each live child to the parent.
+	// Payload: shardedProgressPayload.
+	shardedProgressSignalName = "force-replication-sharded-progress"
+
+	// shardedResumeFullSignalName is sent by the parent to a child to
+	// promote it to full-rate operation once its predecessor has
+	// completed. Payload: empty struct — presence is the signal.
+	shardedResumeFullSignalName = "force-replication-sharded-resume-full"
 
 	// defaultShardedListPageSize is the ListWorkflows page size when
 	// the sharded workflow's params.ListWorkflowsPageSize is unset.
@@ -40,34 +61,18 @@ const (
 	// defaultShardNoProgress is the per-shard cumulative no-progress
 	// backstop. While a shard's pending exec count is non-zero and
 	// no exec on that shard has produced a verified outcome for this
-	// long (carried across CAN via the resume payload), the activity
-	// fails non-retryably naming the stuck shard. A shard awaiting its
-	// very first verification gets double this window so the server has
-	// time to clear any backlog predating our task submission; it
-	// reverts to this value once the shard's first exec verifies.
+	// long, the activity fails non-retryably naming the stuck shard.
+	// A shard awaiting its very first verification gets double this
+	// window so the server has time to clear any backlog predating our
+	// task submission; it reverts to this value once the shard's first
+	// exec verifies.
 	defaultShardNoProgress = 5 * time.Minute
-
-	// defaultDrainGrace is the wall-budget the activity gets after
-	// the workflow cancels it (on lastErr or cycle drain timeout).
-	// Continues verifying until either the grace expires, the
-	// idle-cost trigger fires, or every exec verifies.
-	defaultDrainGrace = 15 * time.Second
 
 	// defaultIdleShardCost is the cumulative idle-time threshold
 	// (the "shard-seconds" unit: 30 s with 1 idle shard equals
 	// 3.3 s with 9 idle) at which the activity signal-releases its
 	// completed-but-not-yet-released shards mid-flight.
 	defaultIdleShardCost = 30 * time.Second
-
-	// defaultCycleDrainTimeout bounds the wall-clock the workflow
-	// will spend draining buckets + awaiting in-flight activities
-	// after the page loop stops. GetContinueAsNewSuggested trips at
-	// ~8% of the hard history cap so we have ~92% of the budget
-	// remaining when the page loop breaks; 10 minutes is generously
-	// inside that. Catches the "many shards making slow-but-real
-	// progress" case; a single stuck shard is already bounded by
-	// ShardNoProgress on the activity side.
-	defaultCycleDrainTimeout = 10 * time.Minute
 
 	// defaultPerBatchGenerateRPS is the per-batch inject-phase target.
 	// Sharded dispatches many concurrent batches and each builds its
@@ -132,8 +137,7 @@ func (r *RunEntry) UnmarshalJSON(data []byte) error {
 
 // BatchPayload groups runs by (shard, businessID) so a single businessID
 // with many runs costs one BID-string-worth of bytes instead of one per
-// run. The wire shape behind shardedBatchReq.Executions, ResumeShard.Execs
-// (the per-shard inner map), and ShardedForceReplicationParams.RecoveredBuckets.
+// run. The wire shape behind shardedBatchReq.Executions.
 //
 // On-wire form:
 //
@@ -211,44 +215,7 @@ func (p BatchPayload) flatten() []*shardedExecutionInfo {
 	return out
 }
 
-// merge folds src into p. Callers guarantee disjoint (shard, BID) keys
-// between src and any prior merges into p — in-flight batches hold
-// disjoint shard claims and listed-but-unpacked buckets share no shard
-// with batchExecs — so per-key appends never interleave across iterations.
-func (p BatchPayload) merge(src BatchPayload) {
-	//workflowcheck:ignore (writes are to disjoint keys; order-independent)
-	for sh, byBID := range src {
-		if p[sh] == nil {
-			p[sh] = map[string][]RunEntry{}
-		}
-		//workflowcheck:ignore (writes are to disjoint keys; order-independent)
-		for bid, runs := range byBID {
-			p[sh][bid] = append(p[sh][bid], runs...)
-		}
-	}
-}
-
-// addRunCountsTo increments counts[shard] by the number of runs in p.
-func (p BatchPayload) addRunCountsTo(counts map[int32]int) {
-	//workflowcheck:ignore (per-shard sum is order-independent)
-	for sh, byBID := range p {
-		//workflowcheck:ignore (per-shard sum is order-independent)
-		for _, runs := range byBID {
-			counts[sh] += len(runs)
-		}
-	}
-}
-
-// mergeInto folds p into dst and bumps counts by the runs merged from p.
-func (p BatchPayload) mergeInto(dst BatchPayload, counts map[int32]int) {
-	if len(p) == 0 {
-		return
-	}
-	dst.merge(p)
-	p.addRunCountsTo(counts)
-}
-
-// ShardedForceReplicationParams is the workflow input. Configuration
+// ShardedForceReplicationParams is the parent workflow input. Configuration
 // fields are read-only across CAN cycles; the carry-over block at the
 // bottom is mutated each cycle.
 type ShardedForceReplicationParams struct {
@@ -262,16 +229,7 @@ type ShardedForceReplicationParams struct {
 	DisableVerification   bool
 
 	ShardNoProgress time.Duration
-	DrainGrace      time.Duration
 	IdleShardCost   time.Duration
-
-	// CycleDrainTimeout caps how long the workflow will spend after
-	// the page loop stops, draining buckets and waiting for in-flight
-	// activities to complete naturally. On expiry the workflow falls
-	// into drainForCAN — cancels in-flight batches, collects their
-	// drain payload, and CANs with the recovered state. Defaults to
-	// defaultCycleDrainTimeout.
-	CycleDrainTimeout time.Duration
 
 	TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
 
@@ -306,109 +264,77 @@ type ShardedForceReplicationParams struct {
 	// per-second rate doesn't drop to zero on every cycle boundary.
 	QPSQueue QPSQueue
 
-	// ResumeShards carries unverified execs from drained activities in
-	// the prior CAN cycle. The new run dispatches resume activities for
-	// these before the page loop runs, so their shards are claimed in
-	// shardInFlight from the start and the packer treats them as busy.
-	ResumeShards []ResumeShard
-
-	// RecoveredBuckets carries execs whose dispatching activity returned
-	// a cancellation without returning a result — i.e., the activity
-	// body never ran, because cancellation (from lastErr or cycle drain
-	// timeout) reached it before the worker picked it up. They were
-	// dispatched but never injected, so the new cycle restores them
-	// into the streaming buckets to be dispatched as fresh inject+verify
-	// batches.
-	RecoveredBuckets BatchPayload
-
 	TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 }
 
-// ResumeShard carries one shard's worth of unverified execs from a drained
-// activity across a CAN boundary to the resume activity that picks them
-// up. NoProgressDuration is the cumulative time the shard went without a
-// verified outcome at drain time; the resume activity initialises its own
-// per-shard last-progress clock to (now - NoProgressDuration) so the
-// backstop check sees the full elapsed no-progress window, not just the
-// current activity's slice.
-//
-// Execs is keyed by businessID: each entry is a list of RunEntry tuples
-// for that BID. Grouping by BID at the wire level lets a hot BID (with
-// many runs) collapse to one BID-string + N tuples rather than N copies
-// of the BID; see BatchPayload's docstring.
-//
-// The slice-of-ResumeShard form is the CAN/activity wire shape: JSON-
-// friendly, easy to append from drained batches, and sortable for replay
-// determinism. The packer and activity input use BatchPayload plus a
-// per-shard no-progress map; resumeShardsToPayload and
-// resumeShardsFromPayload convert between the two.
-type ResumeShard struct {
-	Shard              int32
-	Execs              map[string][]RunEntry
-	NoProgressDuration time.Duration
+// shardedChildParams is the input to each child worker workflow
+// (shardedForceReplicationWorker). It carries the configuration subset
+// needed by the child and the handover state for the child's listing range.
+type shardedChildParams struct {
+	// Configuration subset passed down from the parent.
+	Namespace, Query, NamespaceID, TargetClusterName                         string
+	TargetShardCount                                                         int32
+	BatchSize, MaxExecsPerShard, ListWorkflowsPageSize, ConcurrentBatchCount int
+	DisableVerification                                                      bool
+	ShardNoProgress                                                          time.Duration
+	IdleShardCost                                                            time.Duration
+	PerBatchGenerateRPS                                                      float64
+
+	// StartPageToken is the ListWorkflows continuation token from which
+	// this child begins listing. Nil for the very first child.
+	StartPageToken []byte
+
+	// StartThrottled, when true, means the child begins at half
+	// MaxExecsPerShard until the parent signals resumeFullRate. Used
+	// during handover overlap so a new child and its not-yet-drained
+	// predecessor together stay ≤ MaxExecsPerShard per shard.
+	StartThrottled bool
 }
 
-// resumeShardsFromPayload expands a BatchPayload and its per-shard
-// no-progress durations into a shard-sorted ResumeShard slice.
-func resumeShardsFromPayload(payload BatchPayload, noProgress map[int32]time.Duration) []ResumeShard {
-	if len(payload) == 0 {
-		return nil
-	}
-	out := make([]ResumeShard, 0, len(payload))
-	for _, sh := range payload.sortedShards() {
-		execs := payload[sh]
-		if len(execs) == 0 {
-			continue
-		}
-		out = append(out, ResumeShard{
-			Shard:              sh,
-			Execs:              execs,
-			NoProgressDuration: noProgress[sh],
-		})
-	}
-	return out
+// shardedChildResult is the return value of each child worker workflow.
+type shardedChildResult struct {
+	// VerifiedCount is the total number of executions verified by this
+	// child during its lifetime. Folded into the parent's retiredTotal
+	// on child completion.
+	VerifiedCount int64
+
+	// ReachedEnd is true when this child exhausted the namespace
+	// (ListWorkflows returned an empty next-page token) — meaning there
+	// is no more work for a successor. The parent uses this to skip
+	// starting a successor and to proceed toward terminal completion.
+	ReachedEnd bool
 }
 
-// resumeShardsToPayload folds a ResumeShard slice into the BatchPayload
-// and per-shard no-progress map the packer and activity input use.
-// Duplicate shard entries merge execs; the last NoProgressDuration wins.
-func resumeShardsToPayload(shards []ResumeShard) (BatchPayload, map[int32]time.Duration) {
-	if len(shards) == 0 {
-		return nil, nil
-	}
-	payload := BatchPayload{}
-	noProgress := map[int32]time.Duration{}
-	for _, rs := range shards {
-		if len(rs.Execs) == 0 {
-			continue
-		}
-		if payload[rs.Shard] == nil {
-			payload[rs.Shard] = map[string][]RunEntry{}
-		}
-		//workflowcheck:ignore (writes are to disjoint BID keys per shard entry; order-independent)
-		for bid, runs := range rs.Execs {
-			payload[rs.Shard][bid] = append(payload[rs.Shard][bid], runs...)
-		}
-		noProgress[rs.Shard] = rs.NoProgressDuration
-	}
-	if len(payload) == 0 {
-		return nil, nil
-	}
-	return payload, noProgress
+// shardedCheckpointPayload is the body of the shardedCheckpointSignalName
+// signal that a child sends to the parent when it reaches a
+// GetContinueAsNewSuggested hint at a page boundary. The parent starts a
+// successor from NextPageToken and, when this child completes, promotes the
+// successor to full rate.
+type shardedCheckpointPayload struct {
+	// ChildRunID identifies the sending child so the parent can track
+	// which child's successor has already been started.
+	ChildRunID string
+	// NextPageToken is the continuation token for the next page range.
+	// The successor starts listing from here.
+	NextPageToken []byte
+}
+
+// shardedProgressPayload is the body of the shardedProgressSignalName
+// signal that each live child sends to the parent every 60 seconds.
+// The parent aggregates these to answer the force-replication-status query.
+type shardedProgressPayload struct {
+	// ChildRunID identifies the sending child within the parent's liveCounts map.
+	ChildRunID string
+	// VerifiedCount is the child's cumulative verified-execution count
+	// at the time of this rollup signal.
+	VerifiedCount int64
 }
 
 // shardedBatchReq is the per-batch activity input. Executions is the
 // per-shard, per-BID nested payload — the workflow has marked every
 // shard appearing as a top-level key in shardInFlight before dispatch,
 // and the activity is responsible for either signal-releasing each shard
-// mid-flight or listing it in the return value's CompletedShards / InFlight
-// set.
-//
-// Resume=true skips the inject phase: the execs were already injected by
-// some earlier activity that was cancelled at drain time and returned its
-// unverified execs in its result. NoProgressByShard carries the cumulative
-// pre-resume no-progress duration so the per-shard backstop stays
-// meaningful across resume cycles.
+// mid-flight or listing it in the return value's CompletedShards set.
 type shardedBatchReq struct {
 	BatchID     int64
 	Namespace   string
@@ -417,35 +343,26 @@ type shardedBatchReq struct {
 
 	TargetClusterName string
 
-	Resume              bool
 	DisableVerification bool
-	NoProgressByShard   map[int32]time.Duration
 
 	PerBatchGenerateRPS float64
 
 	ShardNoProgress time.Duration
-	DrainGrace      time.Duration
 	IdleShardCost   time.Duration
 }
 
-// replicateBatchResult is the activity's return payload. The activity is
-// the source of truth for which execs verified vs. are still outstanding
-// when it returns — only it has the per-exec verify state — so the drain
-// payload rides the return value rather than a signal. The workflow's
-// dispatch coroutine reads InFlight into drainPayload on nil-error return.
+// replicateBatchResult is the activity's return payload.
 //
 // CompletedShards is informational (the dispatch coroutine's defer clears
 // heldByBatch + shardInFlight regardless), but keeping it in the result
 // gives metrics a clean handle on "which shards this batch finished".
 type replicateBatchResult struct {
 	CompletedShards []int32
-	InFlight        []ResumeShard
 
 	// VerifiedCount is the number of executions this activity invocation
 	// finished verifying (including retention/zombie skips that resolve
-	// as verified). The workflow accumulates this into its running
-	// ReplicatedWorkflowCount and emits the per-batch delta as the
-	// replicated_workflow_count counter.
+	// as verified). The child workflow accumulates this into its running
+	// verifiedCount.
 	VerifiedCount int64
 }
 
@@ -462,8 +379,7 @@ type replicateBatchHeartbeat struct {
 // The workflow handler clears these shards from shardInFlight +
 // heldByBatch[BatchID] so the packer can immediately dispatch new work
 // against them while the activity stays running on its still-pending
-// shards. Only fires in normal mode — once the activity enters drain mode
-// it returns its remaining state via the activity result instead.
+// shards.
 type releaseShardsPayload struct {
 	BatchID int64
 	Shards  []int32
