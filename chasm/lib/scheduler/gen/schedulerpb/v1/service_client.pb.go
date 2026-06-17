@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +29,7 @@ type SchedulerServiceLayeredClient struct {
 
 // NewSchedulerServiceLayeredClient initializes a new SchedulerServiceLayeredClient.
 func NewSchedulerServiceLayeredClient(
+	lc fx.Lifecycle,
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
@@ -39,7 +41,9 @@ func NewSchedulerServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewSchedulerServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
+	ctx, cancel := context.WithCancel(context.Background())
+	lc.Append(fx.StopHook(cancel))
+	connections := history.NewConnectionPool(ctx, resolver, rpcFactory, NewSchedulerServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[SchedulerServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(

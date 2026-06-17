@@ -161,6 +161,7 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
+		context.Background(),
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
 		log.NewTestLogger(),

@@ -31,7 +31,7 @@ type hpcRes struct{ value string }
 
 func newTestCache(t *testing.T) *partitionCache {
 	cache := newPartitionCache(metrics.NoopMetricsHandler)
-	cache.Start()
+	cache.Start(context.Background())
 	t.Cleanup(cache.Stop)
 	return cache
 }

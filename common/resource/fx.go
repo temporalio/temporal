@@ -249,6 +249,7 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 }
 
 func ClientFactoryProvider(
+	lc fx.Lifecycle,
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
@@ -259,7 +260,7 @@ func ClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 ) client.Factory {
-	return factoryProvider.NewFactory(
+	factory := factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
 		metricsHandler,
@@ -269,6 +270,10 @@ func ClientFactoryProvider(
 		logger,
 		throttledLogger,
 	)
+	// Stop the factory on shutdown so the background goroutines and pooled gRPC
+	// connections owned by the clients it created are released.
+	lc.Append(fx.StopHook(factory.Stop))
+	return factory
 }
 
 func ClientBeanProvider(
@@ -413,6 +418,7 @@ func PerServiceDialOptionsProvider(
 }
 
 func RPCFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	svcName primitives.ServiceName,
 	logger log.Logger,
@@ -454,6 +460,9 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	// Close all dialed client connections on shutdown so their gRPC background
+	// goroutines are released.
+	lc.Append(fx.StopHook(factory.Stop))
 	return factory, nil
 }
 

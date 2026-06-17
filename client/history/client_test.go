@@ -37,6 +37,7 @@ func TestErrLookup(t *testing.T) {
 	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	serviceResolver.EXPECT().Members().Return(nil).AnyTimes()
 	client := history.NewClient(
+		context.Background(),
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
 		log.NewTestLogger(),
@@ -130,6 +131,7 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 
 			// Send 3 requests to verify that we re-use a connection for the last request.
 			client := history.NewClient(
+				context.Background(),
 				dynamicconfig.NewNoopCollection(),
 				serviceResolver,
 				log.NewTestLogger(),

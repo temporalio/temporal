@@ -6,7 +6,6 @@ package matching
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,8 +45,13 @@ type clientImpl struct {
 	partitionCache  *partitionCache
 }
 
-// NewClient creates a new matching service gRPC client
+// NewClient creates a new matching service gRPC client.
+//
+// The supplied ctx bounds the lifetime of the client's background goroutines
+// (partition cache rotation and membership-based connection eviction): when ctx
+// is cancelled, those goroutines exit.
 func NewClient(
+	ctx context.Context,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
@@ -70,14 +74,10 @@ func NewClient(
 	}
 
 	// Start goroutine to prune partition count cache.
-	// Clean up on gc, since we can't easily hook into fx here.
-	c.partitionCache.Start()
-	runtime.AddCleanup(c, func(cache *partitionCache) { cache.Stop() }, c.partitionCache)
+	c.partitionCache.Start(ctx)
 
 	// Evict cached clients whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
 	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 
 	return c
 }
