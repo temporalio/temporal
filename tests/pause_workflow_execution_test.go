@@ -1232,21 +1232,35 @@ func (s *PauseWorkflowExecutionSuite) TestSignalBufferingOrderWhilePaused() {
 	s.NoError(workflowRun.Get(s.Context(), &result))
 	s.Equal(strings.Join(expected, ","), result)
 
-	// Exactly one workflow task processes all buffered signals after unpause.
+	// All signals are recorded in history while paused (none lost), and exactly
+	// one workflow task drains them after unpause. No signals are sent before the
+	// pause, so a single "unpaused" boundary is enough: signals before it are the
+	// buffered ones, and the workflow's initial (pre-pause) workflow task is
+	// naturally excluded from the post-unpause count.
 	hist := env.SdkClient().GetWorkflowHistory(s.Context(), workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	unpaused := false
+	totalSignals := 0
+	signalsBeforeUnpause := 0
 	workflowTasksAfterUnpause := 0
 	for hist.HasNext() {
 		event, herr := hist.Next()
 		s.NoError(herr)
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED {
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED:
 			unpaused = true
-			continue
-		}
-		if unpaused && event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-			workflowTasksAfterUnpause++
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+			totalSignals++
+			if !unpaused {
+				signalsBeforeUnpause++
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			if unpaused {
+				workflowTasksAfterUnpause++
+			}
 		}
 	}
+	s.Equal(signalCount, totalSignals, "all signals should be recorded in history (none lost)")
+	s.Equal(signalCount, signalsBeforeUnpause, "all signals should be buffered while the workflow is paused")
 	s.Equal(1, workflowTasksAfterUnpause, "buffered signals should be drained in a single workflow task")
 
 	// The workflow has run to completion (its result was retrieved above).
