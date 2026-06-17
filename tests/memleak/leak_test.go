@@ -73,9 +73,10 @@ func numGoroutines() int {
 	return runtime.NumGoroutine()
 }
 
-// buildAndTearDownCluster runs one full cluster create+teardown cycle.
+// buildAndTearDownCluster runs one full cluster create+teardown cycle. Set
+// LEAK_WORKER_SERVICE=1 to also exercise the worker-service shutdown path.
 func buildAndTearDownCluster(t *testing.T) {
-	tearDown := testcore.NewUnpooledCluster(t)
+	tearDown := testcore.NewUnpooledCluster(t, os.Getenv("LEAK_WORKER_SERVICE") == "1")
 	tearDown()
 }
 

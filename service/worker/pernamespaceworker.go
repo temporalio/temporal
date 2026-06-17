@@ -58,6 +58,7 @@ type (
 		startLimiter      quotas.RateLimiter
 
 		membershipChangedCh chan *membership.ChangedEvent
+		stopCh              chan struct{} // closed by Stop to terminate periodicRefresh
 
 		lock    sync.Mutex
 		workers map[namespace.ID]*perNamespaceWorker
@@ -122,6 +123,7 @@ func NewPerNamespaceWorkerManager(
 		thisClusterName:     clusterMetadata.GetCurrentClusterName(),
 		startLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.PerNamespaceWorkerStartRate)),
 		membershipChangedCh: make(chan *membership.ChangedEvent),
+		stopCh:              make(chan struct{}),
 		workers:             make(map[namespace.ID]*perNamespaceWorker),
 	}
 }
@@ -176,6 +178,7 @@ func (wm *PerNamespaceWorkerManager) Stop() {
 	if err != nil {
 		wm.logger.Error("Unable to unregister membership listener", tag.Error(err))
 	}
+	close(wm.stopCh)
 	close(wm.membershipChangedCh)
 
 	wm.lock.Lock()
@@ -210,11 +213,15 @@ func (wm *PerNamespaceWorkerManager) membershipChangedListener() {
 }
 
 func (wm *PerNamespaceWorkerManager) periodicRefresh() {
-	for range time.NewTicker(refreshInterval).C {
-		if atomic.LoadInt32(&wm.status) != common.DaemonStatusStarted {
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-wm.stopCh:
 			return
+		case <-ticker.C:
+			wm.refreshAll()
 		}
-		wm.refreshAll()
 	}
 }
 
@@ -415,6 +422,13 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
+
+	// Re-check under the lock: the manager may have been stopped after the
+	// Running() check above but before we acquired the lock. Without this, a
+	// worker started here would be missed by Stop's snapshot and leak.
+	if !w.wm.Running() {
+		return errNoWorkerNeeded
+	}
 
 	if args.ns != w.ns {
 		// stale refresh goroutine, do nothing
