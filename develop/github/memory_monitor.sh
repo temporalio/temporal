@@ -266,7 +266,7 @@ save_system_profile_files() {
   mount > "${prefix}.system-mount.txt" 2>/dev/null || true
   lsblk > "${prefix}.system-lsblk.txt" 2>/dev/null || true
   lscpu > "${prefix}.system-lscpu.txt" 2>/dev/null || true
-  dmesg -T | tail -200 > "${prefix}.system-dmesg-tail.txt" 2>/dev/null || true
+  dmesg -T 2>/dev/null | tail -200 > "${prefix}.system-dmesg-tail.txt" 2>/dev/null || true
   docker ps -a > "${prefix}.docker-ps.txt" 2>/dev/null || true
   docker stats --no-stream > "${prefix}.docker-stats.txt" 2>/dev/null || true
   cat /proc/self/cgroup > "${prefix}.system-cgroup.txt" 2>/dev/null || true
