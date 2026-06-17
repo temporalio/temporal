@@ -42,6 +42,16 @@ type (
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+
+		// derivedMu guards derivedClients. Every client returned by NewClient shares the system
+		// client's gRPC connection through a reference count, so the connection is only released
+		// once all of them are closed. We track them here and close them in Close so that callers
+		// which create a client but never close it (the connection "uses an existing connection,
+		// no need to close" pattern) cannot pin the connection's background goroutines for the
+		// lifetime of the process.
+		derivedMu      sync.Mutex
+		derivedClients []sdkclient.Client
+		closed         bool
 	}
 )
 
@@ -85,6 +95,17 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
+
+	f.derivedMu.Lock()
+	if f.closed {
+		// Factory already stopped; don't retain (and leak) this client's share of the connection.
+		f.derivedMu.Unlock()
+		client.Close()
+		return client
+	}
+	f.derivedClients = append(f.derivedClients, client)
+	f.derivedMu.Unlock()
+
 	return client
 }
 
@@ -117,10 +138,22 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	return f.systemSdkClient
 }
 
-// Close closes the cached system SDK client (and its gRPC connection) if one was
-// created. It is wired into the fx lifecycle by the providers that construct the
-// factory, so the connection's background goroutines are released on shutdown.
+// Close closes the cached system SDK client and every client derived from it via NewClient
+// (and thus the shared gRPC connection) if any were created. It is wired into the fx lifecycle
+// by the providers that construct the factory, so the connection's background goroutines are
+// released on shutdown. Closing each client is idempotent, so callers that already closed their
+// own derived client are unaffected.
 func (f *clientFactory) Close() {
+	f.derivedMu.Lock()
+	derived := f.derivedClients
+	f.derivedClients = nil
+	f.closed = true
+	f.derivedMu.Unlock()
+
+	for _, client := range derived {
+		client.Close()
+	}
+
 	if f.systemSdkClient != nil {
 		f.systemSdkClient.Close()
 	}
