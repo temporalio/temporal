@@ -64,7 +64,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.62.14-0.20260610022354-c1bf584b0bf0 // DO NOT SUBMIT, SHA of a private branch (chrsmith/worker-oncomplete-handlers)
+	go.temporal.io/api v1.62.14-0.20260612230131-b9d38e7a2f0d // DO NOT SUBMIT, SHA of a private branch (chrsmith/worker-oncomplete-handlers)
 	go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2
 	go.temporal.io/sdk v1.44.2-0.20260610024128-1957711cf7de // DO NOT SUBMIT, SHA of a private branch (chrsmith/worker-oncomplete-handlers)
 	go.uber.org/fx v1.24.0

@@ -17,4 +17,10 @@ const (
 	WorkerCallbackTargetNamespaceHeader = "target-namespace"
 	WorkerCallbackTargetActivityHeader  = "target-activity"
 	WorkerCallbackTargetTaskQueueHeader = "target-task-queue"
+	WorkerCallbackTargetServiceHeader   = "target-service"
+	WorkerCallbackTargetOperationHeader = "target-operation"
+	// WorkerCallbackTargetEndpointHeader names the Nexus endpoint the completion is dispatched to.
+	// The endpoint's worker target supplies both the destination namespace and task queue, replacing
+	// the separate target-namespace/target-task-queue headers.
+	WorkerCallbackTargetEndpointHeader = "target-endpoint"
 )

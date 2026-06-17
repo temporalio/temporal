@@ -4,26 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // PROTOTYPE
 //
-// invokeWorkerCallback simply spawns a standalone activity. The SAA will then ensure durable execution of
-// a callback (registered as an Activity) within a worker.
+// invokeWorkerCallback delivers a completed Nexus operation's result to a worker for processing. It
+// builds a Nexus CompletionRequest and dispatches it to the target worker's task queue via the
+// matching service. The matching dispatch is synchronous: it blocks until the worker handles the
+// task and responds with a CompletionResponse (or the request times out). Once that response is
+// received, the callback is done.
 type invokeWorkerCallback struct {
 	callback   *callbackspb.Callback_Nexus
 	completion nexusrpc.CompleteOperationOptions
@@ -37,137 +40,168 @@ func (c invokeWorkerCallback) WrapError(_ invocationResult, err error) error {
 func (c invokeWorkerCallback) Invoke(
 	ctx context.Context,
 	// IMPORTANT: The namespace of the callback's execution. Which we expect to ALSO match the
-	// namespace the SAA will be called from. Otherwise, worker callbacks could dispatch activities
+	// namespace the worker callback dispatches into. Otherwise, worker callbacks could dispatch tasks
 	// into _other_ namespaces, and that would be a big security problem.
 	ns *namespace.Namespace,
 	h *invocationTaskHandler,
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	log.Printf("invokeWorkerCallback::Invoke 🤞")
-	// TODO: Somehow redupe/idempotency/activity invocation ID reuse/conflict policies need to be accounted for.
-
 	// Gather routing information from the callback's headers.
 	header := c.callback.GetHeader()
-	targetNamespaceName := header[commonnexus.WorkerCallbackTargetNamespaceHeader]
-	targetActivityType := header[commonnexus.WorkerCallbackTargetActivityHeader]
-	targetTaskQueue := header[commonnexus.WorkerCallbackTargetTaskQueueHeader]
-	if targetNamespaceName == "" || targetActivityType == "" || targetTaskQueue == "" {
+	targetEndpointName := header[commonnexus.WorkerCallbackTargetEndpointHeader]
+	targetService := header[commonnexus.WorkerCallbackTargetServiceHeader]
+	targetOperation := header[commonnexus.WorkerCallbackTargetOperationHeader]
+	if targetEndpointName == "" || targetService == "" || targetOperation == "" {
 		// Misconfigured callback: nothing a retry can fix. Fail permanently.
 		err := logInternalError(h.logger, "worker callback missing required header", nil)
 		return invocationResultFail{err}
 	}
 
-	// Confirm the SAA to run the worker callback is targeting the same namespace of the callback
-	// component being invoked.
-	targetNamespace, err := h.namespaceRegistry.GetNamespace(namespace.Name(targetNamespaceName))
-	if err != nil {
-		// Transient registry errors are retryable; an unknown namespace will keep failing but is
-		// cheap to retry and surfaces clearly in logs.
-		return invocationResultRetry{err: fmt.Errorf("resolve target namespace %q: %w", targetNamespaceName, err)}
-	}
-	if ns.ID() != targetNamespace.ID() {
-		err := fmt.Errorf("target namespace (%s) does not match invocation namespace (%s)", ns.ID().String(), targetNamespace.ID().String())
-		err2 := logInternalError(h.logger, "namespace mismatch", err)
-		return invocationResultFail{err2}
+	if h.endpointRegistry == nil {
+		// Should not happen in the history service, where the registry is provided. Retry rather than
+		// fail permanently — a misconfiguration is operator-fixable.
+		return invocationResultRetry{err: logInternalError(h.logger,
+			"worker callback dispatch requires an EndpointRegistry, but none is configured", nil)}
 	}
 
-	// Build the activity's input.
-	// TODO: Expand this to include more information, such as the contextual data about where the args came from.
-	if c.completion.Error != nil {
-		err := logInternalError(h.logger, "NYI: Failures not supported yet", err)
-		return invocationResultFail{err}
+	// Resolve the target Nexus endpoint to its worker target, which supplies the destination
+	// namespace and task queue.
+	entry, err := h.endpointRegistry.GetByName(ctx, ns.ID(), targetEndpointName)
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			// Unknown endpoint: a retry won't fix it. Fail permanently.
+			return invocationResultFail{logInternalError(h.logger,
+				fmt.Sprintf("worker callback target endpoint %q not found", targetEndpointName), err)}
+		}
+		// Transient registry/persistence errors are retryable.
+		return invocationResultRetry{err: fmt.Errorf("resolve target endpoint %q: %w", targetEndpointName, err)}
 	}
-	var input *commonpb.Payloads
-	if c.completion.Result != nil {
-		p, ok := c.completion.Result.(*commonpb.Payload)
+
+	workerTarget, ok := entry.GetEndpoint().GetSpec().GetTarget().GetVariant().(*persistencespb.NexusEndpointTarget_Worker_)
+	if !ok {
+		// Worker callbacks can only be delivered to a worker target (not an external URL).
+		return invocationResultFail{logInternalError(h.logger,
+			fmt.Sprintf("worker callback target endpoint %q is not a worker target", targetEndpointName), nil)}
+	}
+	targetNamespaceID := workerTarget.Worker.GetNamespaceId()
+	targetTaskQueue := workerTarget.Worker.GetTaskQueue()
+
+	// SECURITY: confirm the endpoint dispatches into the same namespace as the callback component
+	// being invoked. Otherwise a worker callback could dispatch completions into _other_ namespaces,
+	// and that would be a big security problem.
+	if ns.ID().String() != targetNamespaceID {
+		err := fmt.Errorf("target namespace (%s) does not match invocation namespace (%s)", targetNamespaceID, ns.ID().String())
+		return invocationResultFail{logInternalError(h.logger, "namespace mismatch", err)}
+	}
+
+	// Build the completion describing the operation that finished. Service/Operation/OperationId of
+	// the originating operation are not yet populated by the CompletionSource (see
+	// nexusoperation.Operation.GetNexusCompletion); they can be filled in once that data is wired up.
+	// Links are likewise stubbed by the source for now, so they are left unset here.
+	operationCompletion := &nexuspb.CompletionRequest_NexusOperationCompletion{
+		OperationToken: c.completion.OperationToken,
+	}
+	if c.completion.Error != nil {
+		failure, err := c.completionFailure()
+		if err != nil {
+			return invocationResultFail{logInternalError(h.logger, "failed to convert completion failure", err)}
+		}
+		operationCompletion.Failure = failure
+	} else if c.completion.Result != nil {
+		result, ok := c.completion.Result.(*commonpb.Payload)
 		if !ok {
 			err := logInternalError(h.logger, fmt.Sprintf("expected *commonpb.Payload result, got %T", c.completion.Result), nil)
 			return invocationResultFail{err}
 		}
-		input = &commonpb.Payloads{Payloads: []*commonpb.Payload{p}}
+		operationCompletion.Result = result
 	}
 
-	// Idempotency. Side-effect tasks retry, so the activity ID and request ID must be
-	// deterministic across attempts; derive them from the callback's stable request ID so a
-	// re-delivered task dedupes onto the same execution instead of spawning a duplicate.
-	idempotencyKey := fmt.Sprintf("worker-callback-%s", c.requestID)
+	nexusRequest := &nexuspb.Request{
+		Header: map[string]string{},
+		Variant: &nexuspb.Request_Completion{
+			Completion: &nexuspb.CompletionRequest{
+				Service:   targetService,
+				Operation: targetOperation,
+				// Idempotency key derived from the callback's stable request ID, so a re-delivered
+				// side-effect task dedupes onto the same completion instead of being processed twice.
+				RequestId: fmt.Sprintf("worker-callback-%s", c.requestID),
+				Variant: &nexuspb.CompletionRequest_NexusOperation{
+					NexusOperation: operationCompletion,
+				},
+			},
+		},
+	}
 
-	// PROTOTYPE: reuse the callback request timeout as the activity's execution timeout. These are
-	// distinct concepts (callback delivery vs. activity run time); a dedicated/ configurable value
-	// would be better.
-	activityTimeout := h.config.RequestTimeout(targetNamespaceName, taskAttr.Destination)
+	if h.matchingClient == nil {
+		// Should not happen in the history service, where the client is provided. If it does, retry
+		// rather than fail permanently — a misconfiguration is operator-fixable.
+		return invocationResultRetry{err: logInternalError(h.logger,
+			"worker callback dispatch requires a MatchingClient, but none is configured", nil)}
+	}
 
-	// SECURITY: We are bypassing all sorts of validations for SAA found in activity/frontend.go.
-	startReq := &workflowservice.StartActivityExecutionRequest{
-		Namespace:    targetNamespaceName,
-		ActivityId:   idempotencyKey,
-		RequestId:    idempotencyKey,
-		ActivityType: &commonpb.ActivityType{Name: targetActivityType},
+	// Dispatch the completion to the worker's Nexus task queue. ctx is already deadline-bounded by
+	// the task handler (config.RequestTimeout); matching blocks until the worker responds via
+	// RespondNexusTaskCompleted or the deadline fires.
+	resp, err := h.matchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: targetNamespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: targetTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Input:                  input,
-		ScheduleToCloseTimeout: durationpb.New(activityTimeout),
-		// StartToCloseTimeout MUST be non-zero. TransitionStarted schedules the start-to-close
-		// timeout at (startedTime + StartToCloseTimeout); a zero value fires it immediately, which
-		// times out and reschedules the attempt the instant it starts — discarding the worker's
-		// successful completion (its token's stamp is now stale) and looping until ScheduleToClose
-		// closes the activity. Normally activity/frontend.go would default this; we bypass it.
-		StartToCloseTimeout: durationpb.New(activityTimeout),
-		// Bound retries explicitly. An empty RetryPolicy means MaximumAttempts == 0 (unlimited), so
-		// a permanently-failing callback activity would retry until ScheduleToClose. One attempt is
-		// the right default for a delivery callback; raise this if callbacks should be retried.
-		RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1},
-		// These must be set: the activity handler rejects the UNSPECIFIED (zero) values. Combined
-		// with the deterministic RequestId above, retried side-effect tasks dedupe onto the same
-		// execution rather than spawning duplicates.
-		IdReusePolicy:    enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		IdConflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL,
-	}
-
-	// Dispatch the activity.
-	//
-	// We cannot call chasm.StartExecution[*activity.Activity] / activity.NewStandaloneActivity
-	// directly here — the activity library already imports this callback package, so importing it
-	// back would create a cycle. We also can't use the in-process CHASM engine: side-effect tasks
-	// run on the shard owning the *callback's* execution, while the target SAA lives on a shard
-	// keyed by the (target namespace, activity ID) pair, which may be owned by another host.
-	//
-	// Instead we go through activitypb.ActivityServiceClient — the shard-routing ("layered") client
-	// for the standalone-activity service. It redirects the StartActivityExecution RPC to whichever
-	// history host owns the target shard, mirroring how invocableInternal RPCs to History for
-	// completion delivery. The client is a generated package (no import cycle) and is injected via
-	// fx; see invocationTaskHandlerOptions.ActivityClient.
-	if h.activityClient == nil {
-		// Should not happen in the history service, where the client is provided. If it does, retry
-		// rather than fail permanently — a misconfiguration is operator-fixable.
-		return invocationResultRetry{err: logInternalError(h.logger,
-			"worker callback dispatch requires an ActivityServiceClient, but none is configured", nil)}
-	}
-
-	log.Printf("Calling StartActivityExecution...")
-	_, err = h.activityClient.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
-		NamespaceId:     targetNamespace.ID().String(),
-		FrontendRequest: startReq,
+		Request: nexusRequest,
 	})
 	if err != nil {
-		// A retried side-effect task re-issues the same RequestId, so the engine normally dedupes
-		// silently. But if a prior attempt already created the execution and the dedup surfaces as
-		// AlreadyStarted, treat the callback as delivered.
-		if _, ok := errors.AsType[*serviceerror.ActivityExecutionAlreadyStarted](err); ok {
-			log.Printf("Got serviceerror.ActivityExecutionAlreadyStarted error")
-			return invocationResultOK{}
-		}
 		if isRetryableRPCResponse(err) {
-			log.Printf("Got retryable RPC response: %v\n", err)
 			return invocationResultRetry{err: err}
 		}
-		log.Printf("Got failure result: %v\n", err)
 		return invocationResultFail{err}
 	}
 
-	log.Printf("The SANO was created successfully. Godspeed.")
-	return invocationResultOK{}
+	return dispatchResponseToInvocationResult(resp)
+}
+
+// completionFailure converts the callback's completion error into a Temporal API failure, mirroring
+// invocableInternal.getHistoryRequest. The operation error is unwrapped so the handler receives the
+// underlying cause.
+func (c invokeWorkerCallback) completionFailure() (*failurepb.Failure, error) {
+	failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+	}
+	// Unwrap the operation error; the handler on the other side expects the underlying cause.
+	if failure.Cause != nil {
+		failure = *failure.Cause
+	}
+	apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert failure type: %w", err)
+	}
+	return apiFailure, nil
+}
+
+// dispatchResponseToInvocationResult maps a synchronous matching DispatchNexusTask outcome onto a
+// callback invocation result, following the same semantics as the worker-commands dispatcher:
+//   - successful completion (no failure) -> OK
+//   - worker-returned failure -> permanent fail (the worker received and processed the task)
+//   - request timeout (no poller / worker not up yet) -> retry
+//   - anything else -> permanent fail
+func dispatchResponseToInvocationResult(resp *matchingservice.DispatchNexusTaskResponse) invocationResult {
+	switch outcome := resp.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		completion := outcome.Response.GetCompletion()
+		if completion == nil {
+			return invocationResultFail{fmt.Errorf("unexpected non-completion response variant: %T", outcome.Response.GetVariant())}
+		}
+		if failure := completion.GetFailure(); failure != nil {
+			return invocationResultFail{fmt.Errorf("worker callback handler failed: %s", failure.GetMessage())}
+		}
+		return invocationResultOK{}
+	case *matchingservice.DispatchNexusTaskResponse_Failure:
+		return invocationResultFail{fmt.Errorf("worker failed the callback task: %s", outcome.Failure.GetMessage())}
+	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+		return invocationResultRetry{err: fmt.Errorf("no worker polling task queue for worker callback")}
+	default:
+		return invocationResultFail{fmt.Errorf("empty or unknown dispatch outcome: %T", outcome)}
+	}
 }

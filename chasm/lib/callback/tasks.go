@@ -87,6 +87,18 @@ type invocationTaskHandlerOptions struct {
 	// (where side-effect tasks run); it is nil in the worker, and in the frontend it resolves to
 	// the layered client from activity.FrontendModule.
 	ActivityClient activitypb.ActivityServiceClient `optional:"true"`
+
+	// PROTOTYPE
+	// MatchingClient dispatches worker callbacks to a worker as a Nexus completion task. Optional
+	// for the same reason as ActivityClient: side-effect tasks run in the history service, where it
+	// is provided; callback.Module is also loaded in the frontend and worker graphs.
+	MatchingClient resource.MatchingClient `optional:"true"`
+
+	// PROTOTYPE
+	// EndpointRegistry resolves the target Nexus endpoint of a worker callback to its worker target
+	// (namespace + task queue). Optional: it is provided in the history and frontend graphs (via
+	// chasm/lib/nexusoperation.Module) but not in the worker graph.
+	EndpointRegistry commonnexus.EndpointRegistry `optional:"true"`
 }
 
 type invocationTaskHandler struct {
@@ -99,6 +111,8 @@ type invocationTaskHandler struct {
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
 	activityClient     activitypb.ActivityServiceClient
+	matchingClient     resource.MatchingClient
+	endpointRegistry   commonnexus.EndpointRegistry
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -111,6 +125,8 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
 		activityClient:     opts.ActivityClient,
+		matchingClient:     opts.MatchingClient,
+		endpointRegistry:   opts.EndpointRegistry,
 	}
 }
 
