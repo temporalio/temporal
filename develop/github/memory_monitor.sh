@@ -16,10 +16,11 @@
 #       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
 # 3. OOM prevention:
-#       When usage crosses OOM_TERMINATION_THRESHOLD, captures a final profile
-#       if needed, writes the latest snapshot and a synthetic JUnit report,
-#       then terminates the monitored test process group so post-test artifact
-#       upload can still run.
+#       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
+#       captured profile, writes the latest snapshot and a synthetic JUnit
+#       report, then terminates the monitored test process group so post-test
+#       artifact upload can still run. If no profile has been captured yet, it
+#       captures one before terminating.
 #
 # Usage:
 #   ./memory_monitor.sh [snapshot-file]
@@ -46,7 +47,7 @@ PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
 # OOM prevention config.
-OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-97}"
+OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-95}"
 OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
@@ -54,6 +55,7 @@ SNAPSHOT_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
 LAST_PROFILE_CAPTURE_TIME=0
 WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
+HAS_CAPTURED_PROFILE=false
 OOM_TERMINATED=false
 
 ensure_snapshot_dirs() {
@@ -434,12 +436,16 @@ snapshot() {
     should_terminate=true
   fi
 
-  if should_capture_profile "$pct" "$now"; then
+  if [[ "$should_terminate" == "true" && "$HAS_CAPTURED_PROFILE" == "true" ]]; then
+    :
+  elif should_capture_profile "$pct" "$now"; then
     LAST_PROFILE_CAPTURE_TIME="$now"
     profile_report="$(capture_profile "$pct")"
+    HAS_CAPTURED_PROFILE=true
   elif [[ "$should_terminate" == "true" ]]; then
     LAST_PROFILE_CAPTURE_TIME="$now"
     profile_report="$(capture_profile "$pct")"
+    HAS_CAPTURED_PROFILE=true
   fi
 
   report="$(build_snapshot_report "$pct")"
