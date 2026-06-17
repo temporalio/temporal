@@ -1038,11 +1038,8 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // TODO@time-skipping: currently not safe to call in replication context
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
-	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
-		return nil
-	}
-	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	if accumulatedSkippedDuration <= 0 {
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil || tsi.GetAccumulatedSkippedDuration().AsDuration() <= 0 {
 		return nil
 	}
 
@@ -1093,7 +1090,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	// (3) fast-forward timer — regenerate when configured so its real-time
 	// VisibilityTimestamp tracks the new accumulated skip.
-	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi.GetConfig().GetEnabled() {
 		fastForward := tsi.GetFastForwardInfo()
 		if fastForward != nil && !fastForward.GetHasReached() {
