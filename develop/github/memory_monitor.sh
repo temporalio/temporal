@@ -11,9 +11,9 @@
 #
 # 2. Profile capture:
 #       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
-#       pprof, debug, process, and system profiles in PROFILE_OUTPUT_DIR
-#       before running analysis, then repeats every PROFILE_INTERVAL_SECONDS
-#       while usage remains above the threshold.
+#       pprof, debug, process, runtime, cgroup, and system profiles in
+#       PROFILE_OUTPUT_DIR before running analysis, then repeats every
+#       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, captures a final profile
@@ -164,31 +164,103 @@ save_process_profile_files() {
     return
   fi
 
+  mkdir -p "$(dirname "$prefix")"
+  tr '\0' ' ' < "/proc/$pid/cmdline" > "${prefix}.cmdline.txt" 2>/dev/null || true
   cat "/proc/$pid/status" > "${prefix}.status.txt" 2>/dev/null || true
+  cat "/proc/$pid/stat" > "${prefix}.stat.txt" 2>/dev/null || true
+  cat "/proc/$pid/statm" > "${prefix}.statm.txt" 2>/dev/null || true
+  cat "/proc/$pid/limits" > "${prefix}.limits.txt" 2>/dev/null || true
+  cat "/proc/$pid/sched" > "${prefix}.sched.txt" 2>/dev/null || true
+  cat "/proc/$pid/schedstat" > "${prefix}.schedstat.txt" 2>/dev/null || true
+  cat "/proc/$pid/io" > "${prefix}.io.txt" 2>/dev/null || true
+  cat "/proc/$pid/cgroup" > "${prefix}.process-cgroup.txt" 2>/dev/null || true
+  cat "/proc/$pid/oom_score" > "${prefix}.oom_score.txt" 2>/dev/null || true
+  cat "/proc/$pid/oom_score_adj" > "${prefix}.oom_score_adj.txt" 2>/dev/null || true
   cat "/proc/$pid/maps" > "${prefix}.maps.txt" 2>/dev/null || true
+  cat "/proc/$pid/numa_maps" > "${prefix}.numa_maps.txt" 2>/dev/null || true
   cat "/proc/$pid/smaps" > "${prefix}.smaps.txt" 2>/dev/null || true
   cat "/proc/$pid/smaps_rollup" > "${prefix}.smaps_rollup.txt" 2>/dev/null || true
+  find "/proc/$pid/fd" -maxdepth 1 -mindepth 1 -type l -ls > "${prefix}.fd.txt" 2>/dev/null || true
+  find "/proc/$pid/task" -maxdepth 2 -name status -print -exec cat {} \; > "${prefix}.threads-status.txt" 2>/dev/null || true
   pmap -x "$pid" > "${prefix}.pmap.txt" 2>/dev/null || true
+  pmap -XX "$pid" > "${prefix}.pmap-XX.txt" 2>/dev/null || true
+}
+
+save_runtime_profile_files() {
+  local prefix="$1"
+
+  mkdir -p "$(dirname "$prefix")"
+  {
+    echo "=== uname -a ==="
+    uname -a
+    echo ""
+    echo "=== ulimit -a ==="
+    ulimit -a
+  } > "${prefix}.runtime.txt" 2>/dev/null || true
+
+  printenv | sort | awk -F= '
+    BEGIN { IGNORECASE = 1 }
+    $1 ~ /(TOKEN|SECRET|PASSWORD|PASS|KEY|CREDENTIAL|AUTH|COOKIE)/ {
+      print $1 "=<redacted>"
+      next
+    }
+    { print }
+  ' > "${prefix}.runtime-env.txt" 2>/dev/null || true
+  go env > "${prefix}.go-env.txt" 2>/dev/null || true
 }
 
 save_system_profile_files() {
   local prefix="$1"
-  local cgroup_file="${prefix}.system-cgroup-memory.txt"
+  local cgroup_file="${prefix}.system-cgroup-files.txt"
 
   mkdir -p "$(dirname "$prefix")"
   ps -eo pid,ppid,pgid,%mem,rss,vsz,comm,args --sort=-rss > "${prefix}.system-processes.txt" 2>/dev/null || true
   free -m > "${prefix}.system-free.txt" 2>/dev/null || true
+  uptime > "${prefix}.system-uptime.txt" 2>/dev/null || true
+  cat /proc/loadavg > "${prefix}.system-loadavg.txt" 2>/dev/null || true
   cat /proc/meminfo > "${prefix}.system-meminfo.txt" 2>/dev/null || true
   cat /proc/vmstat > "${prefix}.system-vmstat.txt" 2>/dev/null || true
+  cat /proc/slabinfo > "${prefix}.system-slabinfo.txt" 2>/dev/null || true
+  cat /proc/buddyinfo > "${prefix}.system-buddyinfo.txt" 2>/dev/null || true
+  cat /proc/pagetypeinfo > "${prefix}.system-pagetypeinfo.txt" 2>/dev/null || true
+  cat /proc/zoneinfo > "${prefix}.system-zoneinfo.txt" 2>/dev/null || true
+  cat /proc/pressure/memory > "${prefix}.system-pressure-memory.txt" 2>/dev/null || true
+  cat /proc/pressure/cpu > "${prefix}.system-pressure-cpu.txt" 2>/dev/null || true
+  cat /proc/pressure/io > "${prefix}.system-pressure-io.txt" 2>/dev/null || true
+  df -h > "${prefix}.system-df.txt" 2>/dev/null || true
+  mount > "${prefix}.system-mount.txt" 2>/dev/null || true
+  lsblk > "${prefix}.system-lsblk.txt" 2>/dev/null || true
+  lscpu > "${prefix}.system-lscpu.txt" 2>/dev/null || true
+  dmesg -T | tail -200 > "${prefix}.system-dmesg-tail.txt" 2>/dev/null || true
+  docker ps -a > "${prefix}.docker-ps.txt" 2>/dev/null || true
+  docker stats --no-stream > "${prefix}.docker-stats.txt" 2>/dev/null || true
   cat /proc/self/cgroup > "${prefix}.system-cgroup.txt" 2>/dev/null || true
 
   : > "$cgroup_file"
   for file in \
-    /sys/fs/cgroup/memory.current \
-    /sys/fs/cgroup/memory.max \
+    /sys/fs/cgroup/cgroup.controllers \
+    /sys/fs/cgroup/cgroup.events \
+    /sys/fs/cgroup/cgroup.procs \
+    /sys/fs/cgroup/cgroup.threads \
+    /sys/fs/cgroup/cgroup.type \
+    /sys/fs/cgroup/cpu.max \
+    /sys/fs/cgroup/cpu.stat \
+    /sys/fs/cgroup/io.stat \
     /sys/fs/cgroup/memory.events \
+    /sys/fs/cgroup/memory.events.local \
+    /sys/fs/cgroup/memory.current \
+    /sys/fs/cgroup/memory.peak \
+    /sys/fs/cgroup/memory.high \
+    /sys/fs/cgroup/memory.low \
+    /sys/fs/cgroup/memory.max \
+    /sys/fs/cgroup/memory.min \
+    /sys/fs/cgroup/memory.numa_stat \
+    /sys/fs/cgroup/memory.oom.group \
+    /sys/fs/cgroup/memory.pressure \
     /sys/fs/cgroup/memory.stat \
     /sys/fs/cgroup/memory.swap.current \
+    /sys/fs/cgroup/memory.swap.events \
+    /sys/fs/cgroup/memory.swap.high \
     /sys/fs/cgroup/memory.swap.max; do
     if [[ -r "$file" ]]; then
       {
@@ -211,10 +283,17 @@ save_pprof_files() {
   local prefix="$1"
 
   mkdir -p "$(dirname "$prefix")"
+  fetch_pprof "cmdline" "${prefix}.pprof-cmdline.txt" || true
   fetch_pprof "heap" "${prefix}.heap.pb.gz" || true
+  fetch_pprof "heap?debug=1" "${prefix}.heap-debug-1.txt" || true
   fetch_pprof "allocs" "${prefix}.allocs.pb.gz" || true
+  fetch_pprof "allocs?debug=1" "${prefix}.allocs-debug-1.txt" || true
+  fetch_pprof "block" "${prefix}.block.pb.gz" || true
+  fetch_pprof "mutex" "${prefix}.mutex.pb.gz" || true
   fetch_pprof "goroutine" "${prefix}.goroutine.pb.gz" || true
+  fetch_pprof "goroutine?debug=1" "${prefix}.goroutine-debug-1.txt" || true
   fetch_pprof "threadcreate" "${prefix}.threadcreate.pb.gz" || true
+  fetch_pprof "threadcreate?debug=1" "${prefix}.threadcreate-debug-1.txt" || true
   fetch_pprof "goroutine?debug=2" "${prefix}.goroutine-debug-2.txt" || true
 }
 
@@ -305,6 +384,7 @@ capture_profile() {
   save_pprof_files "$profile_prefix"
   save_debug_files "$profile_prefix"
   save_process_profile_files "$test_pid" "$profile_prefix"
+  save_runtime_profile_files "$profile_prefix"
   save_system_profile_files "$profile_prefix"
   goroutine_output="$(print_goroutines "${profile_prefix}.goroutine.pb.gz")"
   goroutine_count="$(count_goroutines "${profile_prefix}.goroutine-debug-2.txt")"
