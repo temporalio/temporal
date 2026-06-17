@@ -183,6 +183,14 @@ GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
+# viewcore reads a core dump to recover heap reference chains; used by
+# leak-test-refchain to attribute a leak-test failure. Pinned (x/debug is
+# pseudo-versioned and viewcore is sensitive to the Go version it parses).
+VIEWCORE_VERSION := v0.0.0-20260608150959-31c034ca73bf
+VIEWCORE := $(LOCALBIN)/viewcore-$(VIEWCORE_VERSION)
+$(VIEWCORE): $(LOCALBIN)
+	$(call go-install-tool,$(VIEWCORE),golang.org/x/debug/cmd/viewcore,$(VIEWCORE_VERSION))
+
 GOTESTSUM_VER := v1.12.3
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
@@ -523,6 +531,18 @@ leak-test:
 		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
 		$(LEAK_TEST_BIN) -test.run TestClusterShutdownLeak -test.count=1 -test.v -test.timeout $(LEAK_TIMEOUT) \
 		-persistenceType=sql -persistenceDriver=sqlite
+
+# leak-test-refchain attributes a leak-test failure: it runs viewcore on the
+# core dump left by `make leak-test` (with LEAK_ABORT_ON_FAILURE=1) and writes
+# the retaining object graph + heap histogram to LEAK_OUTPUT_DIR. viewcore only
+# reads Linux cores, so this is a CI-only follow-up step. Pass CORE=<core file>.
+leak-test-refchain: $(VIEWCORE)
+	@printf $(COLOR) "Analyzing leak-test core for retaining references..."
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	@test -n "$(CORE)" || { echo "leak-test-refchain: set CORE=<core file>"; exit 1; }
+	$(VIEWCORE) $(CORE) --exe $(LEAK_TEST_BIN) objgraph $(LEAK_OUTPUT_DIR)/objgraph.dot 2>$(LEAK_OUTPUT_DIR)/viewcore.log || true
+	$(VIEWCORE) $(CORE) --exe $(LEAK_TEST_BIN) histogram >$(LEAK_OUTPUT_DIR)/histogram.txt 2>>$(LEAK_OUTPUT_DIR)/viewcore.log || true
+	go tool pprof -inuse_space -top -nodecount=40 $(LEAK_OUTPUT_DIR)/heap.prof >$(LEAK_OUTPUT_DIR)/heap-top.txt 2>/dev/null || true
 
 functional-with-fault-injection-test: clean-test-output
 	@printf $(COLOR) "Run integration tests with fault injection..."

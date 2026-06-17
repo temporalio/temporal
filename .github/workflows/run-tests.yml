@@ -338,20 +338,15 @@ jobs:
           export GOTRACEBACK=crash LEAK_ABORT_ON_FAILURE=1
           make leak-test LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
 
-      # On failure, trace what retains the leaked objects. viewcore reads the
-      # core dumped above (this only works on Linux, hence in CI rather than
-      # locally). Best-effort: never fails the job beyond the gate itself.
+      # On failure, trace what retains the leaked objects via viewcore on the
+      # core dumped above (Linux-only, hence in CI rather than locally). Uses the
+      # pinned viewcore from the Makefile tool mechanism. Best-effort: the target
+      # swallows viewcore errors, so it never fails the job beyond the gate.
       - name: Retaining-reference analysis (on failure)
         if: failure()
         run: |
-          go install golang.org/x/debug/cmd/viewcore@latest || true
-          viewcore="$(go env GOPATH)/bin/viewcore"
           core="$(ls -t /tmp/leakcore.* 2>/dev/null | head -1)"
-          if [ -x "$viewcore" ] && [ -n "$core" ]; then
-            "$viewcore" "$core" --exe .testoutput/leakcheck.test objgraph "$LEAK_OUTPUT_DIR/objgraph.dot" 2>"$LEAK_OUTPUT_DIR/viewcore.log" || true
-            "$viewcore" "$core" --exe .testoutput/leakcheck.test histogram >"$LEAK_OUTPUT_DIR/histogram.txt" 2>>"$LEAK_OUTPUT_DIR/viewcore.log" || true
-          fi
-          go tool pprof -inuse_space -top -nodecount=40 "$LEAK_OUTPUT_DIR/heap.prof" >"$LEAK_OUTPUT_DIR/heap-top.txt" 2>/dev/null || true
+          [ -n "$core" ] && make leak-test-refchain CORE="$core" || true
 
       - name: Upload leak diagnostics
         if: failure()
