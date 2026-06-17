@@ -1422,6 +1422,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
+		ActualStartTime:         a.GetFirstAttemptStartedTime(),
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
@@ -1443,6 +1444,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		NextAttemptScheduleTime: attemptScheduleTimeForRetry(attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
+		RequestedStartTime:      timestamppb.New(a.firstDispatchTime()),
 		RunId:                   key.RunID,
 		RunState:                runState,
 		ScheduleTime:            a.GetScheduleTime(),
