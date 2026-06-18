@@ -89,19 +89,15 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	goleak.VerifyNone(t, append(opts, baseline)...)
+	if err := goleak.Find(append(opts, baseline)...); err != nil {
+		t.Error(err)
 
-	// On failure, write a goroutine dump to the output directory.
-	if t.Failed() {
-		f, err := os.Create(filepath.Join(outputDir, "goroutines.txt"))
-		if err != nil {
-			t.Logf("failed to create goroutine dump: %v", err)
+		// Write the goroutine report to the output directory.
+		outputPath := filepath.Join(outputDir, "goleak_report.txt")
+		if err := os.WriteFile(outputPath, []byte(err.Error()+"\n"), 0o644); err != nil {
+			t.Logf("failed to write goroutine dump: %v", err)
 		} else {
-			_ = goleak.Find(opts...)
-			if err := f.Close(); err != nil {
-				t.Logf("failed to close goroutine dump: %v", err)
-			}
-			t.Logf("goroutine dump written to %s/goroutines.txt", outputDir)
+			t.Logf("goroutine dump written to %s", outputPath)
 		}
 	}
 }
