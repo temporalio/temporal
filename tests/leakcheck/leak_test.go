@@ -50,6 +50,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -61,6 +62,8 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/goleak"
 )
+
+const heapSlopeNoiseFloorBytes = 16 * 1024
 
 func TestClusterShutdownLeak(t *testing.T) {
 	if os.Getenv("RUN_LEAK_TEST") != "1" {
@@ -199,24 +202,23 @@ func uint64SlopePerCluster(base uint64, series []uint64) uint64 {
 	}
 
 	n := len(series) + 1
-	meanX := float64(n-1) / 2
-	var meanY float64
+	slopes := make([]int64, 0, n*(n-1)/2)
 	for i := 0; i < n; i++ {
-		meanY += float64(heapSample(base, series, i))
+		from := int64(heapSample(base, series, i))
+		for j := i + 1; j < n; j++ {
+			to := int64(heapSample(base, series, j))
+			slopes = append(slopes, (to-from)/int64(j-i))
+		}
 	}
-	meanY /= float64(n)
-
-	var numerator, denominator float64
-	for i := 0; i < n; i++ {
-		x := float64(i)
-		y := float64(heapSample(base, series, i))
-		numerator += (x - meanX) * (y - meanY)
-		denominator += (x - meanX) * (x - meanX)
+	sort.Slice(slopes, func(i, j int) bool { return slopes[i] < slopes[j] })
+	median := slopes[len(slopes)/2]
+	if len(slopes)%2 == 0 {
+		median = (slopes[len(slopes)/2-1] + median) / 2
 	}
-	if numerator <= 0 || denominator == 0 {
+	if median <= heapSlopeNoiseFloorBytes {
 		return 0
 	}
-	return uint64(numerator / denominator)
+	return uint64(median)
 }
 
 func heapSample(base uint64, series []uint64, i int) uint64 {
@@ -224,6 +226,34 @@ func heapSample(base uint64, series []uint64, i int) uint64 {
 		return base
 	}
 	return series[i-1]
+}
+
+func TestUint64SlopePerClusterIgnoresHeapJitter(t *testing.T) {
+	const mb = 1024 * 1024
+	slope := uint64SlopePerCluster(18*mb, []uint64{
+		18 * mb,
+		18*mb + 7*1024,
+		17 * mb,
+		19*mb + 12*1024,
+		18*mb + 4*1024,
+		19 * mb,
+		17*mb + 8*1024,
+		18 * mb,
+	})
+	require.Zero(t, slope)
+}
+
+func TestUint64SlopePerClusterDetectsHeapGrowth(t *testing.T) {
+	const (
+		mb      = 1024 * 1024
+		growth  = 256 * 1024
+		samples = 8
+	)
+	series := make([]uint64, samples)
+	for i := range series {
+		series[i] = 18*mb + uint64(i+1)*growth
+	}
+	require.Equal(t, uint64(growth), uint64SlopePerCluster(18*mb, series))
 }
 
 func envInt(name string, def int) int {

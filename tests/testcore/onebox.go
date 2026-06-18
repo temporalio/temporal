@@ -800,6 +800,13 @@ func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
 	return c.captureMetricsHandler
 }
 
+func (c *TemporalImpl) GetMetricsHandler() metrics.Handler {
+	if c.captureMetricsHandler != nil {
+		return c.captureMetricsHandler
+	}
+	return metrics.NoopMetricsHandler
+}
+
 type taskQueueRecorderSink struct {
 	recorder *TaskQueueRecorder
 }
