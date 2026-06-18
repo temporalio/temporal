@@ -8,8 +8,9 @@ import (
 )
 
 type objectWalker struct {
-	objects []trackedObject
-	seen    map[uintptr]struct{}
+	objects    []trackedObject
+	seen       map[uintptr]struct{}
+	pruneTypes patterns
 }
 
 type trackedObject struct {
@@ -20,9 +21,10 @@ type trackedObject struct {
 	cleanup   runtime.Cleanup
 }
 
-func newObjectWalker() objectWalker {
+func newObjectWalker(pruneTypes patterns) objectWalker {
 	return objectWalker{
-		seen: make(map[uintptr]struct{}),
+		seen:       make(map[uintptr]struct{}),
+		pruneTypes: pruneTypes,
 	}
 }
 
@@ -53,8 +55,14 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 		if obj, ok := trackPointerObject(addr, path, v.Type().String()); ok {
 			w.objects = append(w.objects, obj)
 		}
+		if w.shouldPrune(v.Type()) {
+			return
+		}
 		w.walk(v.Elem(), path)
 	case reflect.Struct:
+		if w.shouldPrune(v.Type()) {
+			return
+		}
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
 			w.walk(v.Field(i), path.field(field.Name))
@@ -72,6 +80,10 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 	default:
 		return
 	}
+}
+
+func (w *objectWalker) shouldPrune(t reflect.Type) bool {
+	return w.pruneTypes.matchType(t)
 }
 
 func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject, bool) {

@@ -19,6 +19,7 @@ type report struct {
 	unexpectedRetainedObservations int
 	unexpectedRetainedObjects      int
 	unmatchedExcludes              []string
+	unmatchedPrunes                []string
 }
 
 type objectGroup struct {
@@ -28,12 +29,12 @@ type objectGroup struct {
 	addresses    map[uintptr]struct{}
 }
 
-func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) report {
+func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pruneTypes patterns) report {
 	report := report{
 		trackedRoots: trackedRoots,
 	}
 
-	// Matching mutates exclusion.matched for stale-exclusion detection.
+	// Matching mutates pattern.matched for stale-exclusion detection.
 	activeExclusions := slices.Clone(excludes)
 
 	type groupKey struct {
@@ -53,7 +54,7 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 			continue
 		}
 
-		excludedBy := activeExclusions.match(obj)
+		excludedBy := activeExclusions.matchObject(obj)
 		report.totalRetainedObservations++
 		retainedAddresses[obj.addr] = struct{}{}
 		expected := len(excludedBy) > 0
@@ -88,11 +89,8 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 
 	// Exclusions that never matched any tracked object are stale and should be
 	// removed with the fix that made them unnecessary.
-	for _, exclusion := range activeExclusions {
-		if !exclusion.matched {
-			report.unmatchedExcludes = append(report.unmatchedExcludes, exclusion.pattern)
-		}
-	}
+	report.unmatchedExcludes = activeExclusions.unmatched()
+	report.unmatchedPrunes = pruneTypes.unmatched()
 
 	// Keep report output stable across map iteration order and repeated runs.
 	for key, group := range groupByKey {
@@ -119,6 +117,7 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 	sortGroups(report.unexpectedObjects)
 	sortGroups(report.expectedObjects)
 	slices.Sort(report.unmatchedExcludes)
+	slices.Sort(report.unmatchedPrunes)
 	return report
 }
 
@@ -130,6 +129,9 @@ func (r report) failures() error {
 	for _, pattern := range r.unmatchedExcludes {
 		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
 	}
+	for _, pattern := range r.unmatchedPrunes {
+		failures = append(failures, fmt.Errorf("object prune %q did not match any type", pattern))
+	}
 	return errors.Join(failures...)
 }
 
@@ -137,7 +139,7 @@ func (r report) totals() [3]int {
 	return [3]int{
 		r.totalRetainedObjects,
 		r.unexpectedRetainedObjects,
-		len(r.unmatchedExcludes),
+		len(r.unmatchedExcludes) + len(r.unmatchedPrunes),
 	}
 }
 
@@ -166,6 +168,13 @@ func (r report) string() string {
 	for _, pattern := range r.unmatchedExcludes {
 		fmt.Fprintf(&out, "  %s\n", pattern)
 	}
+
+	if len(r.unmatchedPrunes) > 0 {
+		out.WriteString("\nstale prunes:\n")
+	}
+	for _, pattern := range r.unmatchedPrunes {
+		fmt.Fprintf(&out, "  %s\n", pattern)
+	}
 	return strings.TrimSuffix(out.String(), "\n")
 }
 
@@ -186,7 +195,8 @@ func (r report) writeSummary(out *strings.Builder) {
 		r.expectedRetainedObjects,
 		r.unexpectedRetainedObjects,
 	)
-	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
+	fmt.Fprintf(out, "stale exclusions: %d\n", len(r.unmatchedExcludes))
+	fmt.Fprintf(out, "stale prunes: %d", len(r.unmatchedPrunes))
 }
 
 func (g objectGroup) name() string {

@@ -20,7 +20,8 @@ const (
 type ObjectLeakCheck struct {
 	objects         []trackedObject
 	roots           int
-	excludes        exclusions
+	excludes        patterns
+	pruneTypes      patterns
 	gcSettleTimeout time.Duration
 }
 
@@ -30,11 +31,17 @@ type Option func(*ObjectLeakCheck) error
 // matches pattern. A trailing '*' matches any suffix.
 func WithExclude(pattern string) Option {
 	return func(t *ObjectLeakCheck) error {
-		exclusion, err := newExclusion(pattern)
-		if err != nil {
-			return err
-		}
-		t.excludes = append(t.excludes, exclusion)
+		t.excludes = append(t.excludes, newPattern(pattern))
+		return nil
+	}
+}
+
+// WithPruneType prevents Track from descending into values whose reflected type
+// matches pattern. Named types match their package-qualified name. A trailing
+// '*' matches any suffix.
+func WithPruneType(pattern string) Option {
+	return func(t *ObjectLeakCheck) error {
+		t.pruneTypes = append(t.pruneTypes, newPattern(pattern))
 		return nil
 	}
 }
@@ -66,15 +73,15 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 
 // Track walks all values reachable from root and tracks pointer objects it finds.
 func (t *ObjectLeakCheck) Track(root any) {
-	walker := newObjectWalker()
+	walker := newObjectWalker(t.pruneTypes)
 	walker.track(root)
 	t.roots++
 	t.objects = append(t.objects, walker.objects...)
 }
 
 // Check settles GC, then returns a full retained-object report and an error for
-// retained objects not covered by exclusions or exclusions that no longer match
-// any tracked object.
+// retained objects not covered by exclusions, exclusions that no longer match
+// any tracked object, or prune rules that did not match during tracking.
 func (t *ObjectLeakCheck) Check() (string, error) {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
@@ -97,7 +104,7 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		runtimedebug.FreeOSMemory()
 		runtime.Gosched()
 
-		report = newReport(t.objects, t.roots, t.excludes)
+		report = newReport(t.objects, t.roots, t.excludes, t.pruneTypes)
 		err = report.failures()
 		now := time.Now()
 
