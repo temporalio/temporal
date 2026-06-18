@@ -1072,33 +1072,33 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 			},
-			LastModifierIdentity: currentVersionVars.ClientIdentity(),
+			LastModifierIdentity: env.Tv().ClientIdentity(),
 		},
 	})
 
-	expectedError := fmt.Errorf("ramping version %s is already current", currentVersionVars.DeploymentVersionString())
-	s.setAndVerifyRampingVersion(env, currentVersionVars, false, 50, true, expectedError.Error()) // setting current version to ramping should fail
+	expectedError := fmt.Errorf("ramping version %s is already current", env.Tv().DeploymentVersionString())
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 50, true, expectedError.Error()) // setting current version to ramping should fail
 
 	resp, err = env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: currentVersionVars.DeploymentSeries(),
+		DeploymentName: env.Tv().DeploymentSeries(),
 	})
 	s.NoError(err)
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
-			Name:       currentVersionVars.DeploymentSeries(),
+			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				RampingVersion:                      "",  // no ramping info should be set
 				RampingVersionPercentage:            0,   // no ramping info should be set
 				RampingVersionChangedTime:           nil, // no ramping info should be set
 				RampingVersionPercentageChangedTime: nil, // no ramping info should be set
-				CurrentVersion:                      currentVersionVars.DeploymentVersionString(),
+				CurrentVersion:                      env.Tv().DeploymentVersionString(),
 				CurrentVersionChangedTime:           versionCreateTime,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              currentVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setCurrentUpdateTime,
@@ -1110,7 +1110,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 			},
-			LastModifierIdentity: currentVersionVars.ClientIdentity(),
+			LastModifierIdentity: env.Tv().ClientIdentity(),
 		},
 	})
 }
@@ -1149,7 +1149,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
+				RampingVersion:                      env.Tv().DeploymentVersionString(),
 				RampingVersionPercentage:            50,
 				RampingVersionChangedTime:           setRampingUpdateTime,
 				RampingVersionPercentageChangedTime: setRampingUpdateTime,
@@ -1158,7 +1158,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RampingSinceTime:     setRampingUpdateTime,
@@ -1175,7 +1175,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 
 	// modify ramping version percentage
 	modifyRampingPercentageTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, false, 75, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 75, true, "")
 
 	// RampingVersionPercentage and RampingVersionPercentageChangedTime should be updated
 	resp, err = env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
