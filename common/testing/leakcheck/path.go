@@ -67,6 +67,8 @@ func (p path) format(normalized bool) string {
 				out.WriteString(segment.value)
 				out.WriteByte(']')
 			}
+		default:
+			continue
 		}
 	}
 	return out.String()

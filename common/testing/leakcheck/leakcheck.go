@@ -1,7 +1,7 @@
 package leakcheck
 
 import (
-	"fmt"
+	"errors"
 	"runtime"
 	runtimedebug "runtime/debug"
 	"time"
@@ -44,7 +44,7 @@ func WithExclude(pattern string) Option {
 func WithGCSettleTimeout(timeout time.Duration) Option {
 	return func(t *ObjectLeakCheck) error {
 		if timeout <= 0 {
-			return fmt.Errorf("GC settle timeout must be positive")
+			return errors.New("GC settle timeout must be positive")
 		}
 		t.gcSettleTimeout = timeout
 		return nil
@@ -90,6 +90,7 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		// unreachable. Run a small burst and yield so callbacks can mark tracked
 		// objects before the next report snapshot.
 		for range checkGCBurst {
+			//nolint:revive // This checker intentionally forces GC to drive AddCleanup callbacks.
 			runtime.GC()
 			runtime.Gosched()
 		}
