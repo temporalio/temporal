@@ -1,10 +1,12 @@
 package leakcheck
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"testing"
 
@@ -34,7 +36,6 @@ var opts = []goleak.Option{
 	// TODO: worker-service and persistence goroutine leaks.
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/persistence.(*healthSignalAggregatorImpl).emitMetricsLoop"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/quotas.(*MapRequestRateLimiterImpl[...]).cleanupLoop"),
-	goleak.IgnoreTopFunction("go.temporal.io/server/service/worker.(*PerNamespaceWorkerManager).periodicRefresh"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
 
@@ -93,11 +94,22 @@ func TestClusterShutdownLeak(t *testing.T) {
 		t.Error(err)
 
 		// Write the goroutine report to the output directory.
-		outputPath := filepath.Join(outputDir, "goleak_report.txt")
-		if err := os.WriteFile(outputPath, []byte(err.Error()+"\n"), 0o644); err != nil {
+		reportPath := filepath.Join(outputDir, "goleak_report.txt")
+		if err := os.WriteFile(reportPath, []byte(err.Error()+"\n"), 0o644); err != nil {
 			t.Logf("failed to write goroutine dump: %v", err)
 		} else {
-			t.Logf("goroutine dump written to %s", outputPath)
+			t.Logf("goroutine dump written to %s", reportPath)
+		}
+
+		// Write the full goroutine profile to the output directory.
+		pprofPath := filepath.Join(outputDir, "goroutines_all.txt")
+		var pprofDump bytes.Buffer
+		if err := pprof.Lookup("goroutine").WriteTo(&pprofDump, 2); err != nil {
+			t.Logf("failed to capture goroutine pprof dump: %v", err)
+		} else if err := os.WriteFile(pprofPath, pprofDump.Bytes(), 0o644); err != nil {
+			t.Logf("failed to write goroutine pprof dump: %v", err)
+		} else {
+			t.Logf("goroutine pprof dump written to %s", pprofPath)
 		}
 	}
 }
