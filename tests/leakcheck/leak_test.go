@@ -53,29 +53,24 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
-	// Those are one-time costs, not per-cluster leaks.
 	for range warmup {
 		buildRunTeardownCluster(t)
 	}
 
-	// Use goleak's built-in retry (20 attempts, exponential backoff capped at
-	// 100 ms) to wait for warmup goroutines to drain before snapshotting the
-	// baseline. goleak.IgnoreCurrent filters by stack trace, so a still-draining
-	// warmup goroutine would mask an identical per-cluster leak. We discard the
-	// Find result: any persistent goroutines that survive the retry window are
-	// legitimate process-lifetime singletons that IgnoreCurrent will baseline.
+	// Wait for warmup goroutines to drain before snapshotting the baseline.
 	_ = goleak.Find(ignoreSQLiteConnOpener)
 	baseline := goleak.IgnoreCurrent()
 
+	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
 		buildRunTeardownCluster(t)
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
-	goleak.VerifyNone(t, baseline,
-		ignoreSQLiteConnOpener,
-	)
+	// Verify that no goroutines leaked beyond the baseline.
+	goleak.VerifyNone(t, baseline, ignoreSQLiteConnOpener)
 
+	// On failure, write a goroutine dump to the output directory.
 	if t.Failed() {
 		f, err := os.Create(outputDir + "/goroutines.txt")
 		if err != nil {
