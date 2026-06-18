@@ -36,6 +36,7 @@ var opts = []goleak.Option{
 	// TODO: worker-service and persistence goroutine leaks.
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/persistence.(*healthSignalAggregatorImpl).emitMetricsLoop"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/quotas.(*MapRequestRateLimiterImpl[...]).cleanupLoop"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/service/worker.(*PerNamespaceWorkerManager).periodicRefresh"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
 
