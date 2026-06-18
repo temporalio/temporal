@@ -53,7 +53,7 @@ var opts = []goleak.Option{
 //
 //	LEAK_ITERS         clusters built after warmup
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
-//	LEAK_OUTPUT_DIR    directory for diagnostics on failure (CI uploads it)
+//	LEAK_OUTPUT_DIR    directory for diagnostics on failure
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
