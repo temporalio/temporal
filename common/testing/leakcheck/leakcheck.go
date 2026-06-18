@@ -10,6 +10,7 @@ import (
 const (
 	defaultGCSettleTimeout = 10 * time.Second
 	checkGCMinWait         = 2 * time.Second
+	checkGCBurst           = 3
 	checkGCPause           = 20 * time.Millisecond
 	checkGCQuiet           = 500 * time.Millisecond
 )
@@ -89,9 +90,14 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 	var err error
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
-		// unreachable. FreeOSMemory makes the cycle more aggressive for tests.
-		runtime.GC()
+		// unreachable. Run a small burst and yield so callbacks can mark tracked
+		// objects before the next report snapshot.
+		for range checkGCBurst {
+			runtime.GC()
+			runtime.Gosched()
+		}
 		runtimedebug.FreeOSMemory()
+		runtime.Gosched()
 
 		report = newReport(t.objects, t.roots, t.excludes)
 		err = report.failures()
