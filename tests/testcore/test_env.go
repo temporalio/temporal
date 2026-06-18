@@ -281,9 +281,25 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
-		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
 			t.Fatal(err)
 		}
+	})
+
+	// Go's testing framework retains every subtest's *T for the parent test's
+	// lifetime (t.parent.sub), and a *T keeps its already-run cleanup closures
+	// reachable (runCleanup reslices c.cleanups but never nils the backing
+	// array). Those closures capture this *TestEnv, so in a long-lived
+	// functional-test process the retained husk would pin every cluster's entire
+	// fx graph (persistence managers, health-signal aggregators, SDK workers,
+	// ...) and OOM the process. Dropping env's reference to the cluster makes the
+	// whole *TemporalImpl collectible at once; the cluster is still torn down via
+	// the FunctionalTestBase cleanup, which uses its own reference.
+	t.Cleanup(func() {
+		env.cluster = nil
+		env.taskPoller = nil
+		env.ctx = nil
+		env.tv = nil
 	})
 
 	if options.disableTestloggerFailure {
@@ -451,7 +467,12 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 		if err != nil {
 			e.t.Fatalf("Failed to create SDK client: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkClient.Close() })
+		// Drop the reference after Close so the closed client (and its gRPC
+		// connection) is not pinned via the retained *TestEnv husk.
+		e.t.Cleanup(func() {
+			e.sdkClient.Close()
+			e.sdkClient = nil
+		})
 	})
 	return e.sdkClient
 }
@@ -464,7 +485,13 @@ func (e *TestEnv) SdkWorker() sdkworker.Worker {
 		if err := e.sdkWorker.Start(); err != nil {
 			e.t.Fatalf("Failed to start SDK worker: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkWorker.Stop() })
+		// Drop the reference after Stop so the stopped worker (with its local
+		// activity tunnel and task channels) is not pinned via the retained
+		// *TestEnv husk.
+		e.t.Cleanup(func() {
+			e.sdkWorker.Stop()
+			e.sdkWorker = nil
+		})
 	})
 	return e.sdkWorker
 }
