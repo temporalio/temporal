@@ -142,7 +142,7 @@ func (r report) string() string {
 
 func (r report) writeSummary(out *strings.Builder) {
 	out.WriteString("object leak report\n")
-	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d unexcluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
+	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d not excluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
 	if len(r.exclusionCounts) > 0 {
 		out.WriteString("\nretained objects by exclusion:")
