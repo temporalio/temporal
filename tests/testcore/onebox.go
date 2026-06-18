@@ -102,14 +102,13 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims               func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize               func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock              sync.RWMutex // Must be used for above callbacks
+		authorizer                *testAuthorizer
 		serviceFxOptions          map[primitives.ServiceName][]fx.Option
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmRegistry             *chasm.Registry
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
+		leakRefProbes             []leakRefProbe
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		tokenProvider             auth.TokenProvider
 	}
@@ -207,6 +206,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		testHooks:                        testhooks.NewTestHooks(),
+		authorizer:                       &testAuthorizer{},
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 		hostsByProtocolByService:         params.HostsByProtocolByService,
@@ -238,7 +238,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	}
 	return impl
 }
-
 
 func (c *TemporalImpl) Start() error {
 	// create temporal-system namespace, this must be created before starting
@@ -291,11 +290,13 @@ func (c *TemporalImpl) Stop() error {
 	c.visibilityStoreFactory = nil
 	c.captureMetricsHandler = nil
 	c.spanExporters = nil
+	c.authorizer = nil
 	c.chasmRegistry = nil
 	c.hostsByProtocolByService = nil
 	c.taskCategoryRegistry = nil
 	c.replicationStreamRecorder = nil
 	c.taskQueueRecorder = nil
+	c.leakRefProbes = nil
 
 	return multierr.Combine(errs...)
 }
@@ -366,6 +367,25 @@ func (c *TemporalImpl) startFrontend() {
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
+		frontendHTTPPort := mustPortFromAddress(c.FrontendHTTPAddress())
+		hostMap := c.makeHostMap(serviceName, host)
+		clusterMetadataConfig := c.clusterMetadataConfig
+		archiverMetadata := c.archiverMetadata
+		archiverProvider := c.archiverProvider
+		abstractDataStoreFactory := c.abstractDataStoreFactory
+		visibilityStoreFactory := c.visibilityStoreFactory
+		dcClient := c.dcClient
+		esClient := c.esClient
+		testHooks := c.testHooks
+		authProvider := c.authorizer
+		dcRedirectionPolicy := c.dcRedirectionPolicy
+		captureMetricsHandler := c.captureMetricsHandler
+		spanExporters := c.spanExporters
+		replicationStreamRecorder := c.replicationStreamRecorder
+		clusterName := c.clusterMetadataConfig.CurrentClusterName
+		tokenProvider := c.tokenProvider
+		tlsConfigProvider := c.tlsConfigProvider
+		taskCategoryRegistry := c.taskCategoryRegistry
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
@@ -373,53 +393,53 @@ func (c *TemporalImpl) startFrontend() {
 				serviceName,
 				c.mockAdminClient,
 			),
-			fx.Provide(c.frontendConfigProvider),
+			fx.Provide(frontendConfigProvider(frontendHTTPPort, dcRedirectionPolicy, spanExporters)),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() config.DCRedirectionPolicy { return dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
-			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(c.makeHostMap(serviceName, host)),
-			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
-			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
-			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+			fx.Provide(newRPCFactoryProvider(replicationStreamRecorder, clusterName, tokenProvider)),
+			static.MembershipModule(hostMap),
+			fx.Provide(func() *cluster.Config { return clusterMetadataConfig }),
+			fx.Provide(func() carchiver.ArchivalMetadata { return archiverMetadata }),
+			fx.Provide(func() provider.ArchiverProvider { return archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(c.GetMetricsHandler),
+			fx.Provide(metricsHandlerProvider(captureMetricsHandler)),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
-				if c.replicationStreamRecorder != nil {
+				if replicationStreamRecorder != nil {
 					return []grpc.UnaryServerInterceptor{
-						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+						replicationStreamRecorder.UnaryServerInterceptor(clusterName),
 					}
 				}
 				return nil
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
-				if c.replicationStreamRecorder != nil {
+				if replicationStreamRecorder != nil {
 					return []grpc.StreamServerInterceptor{
-						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+						replicationStreamRecorder.StreamServerInterceptor(clusterName),
 					}
 				}
 				return nil
 			}),
-			fx.Provide(func() authorization.Authorizer { return c }),
-			fx.Provide(func() authorization.ClaimMapper { return c }),
+			fx.Provide(func() authorization.Authorizer { return authProvider }),
+			fx.Provide(func() authorization.ClaimMapper { return authProvider }),
 			fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
-			fx.Provide(c.newClientFactoryProvider),
+			fx.Provide(newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
-			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
-			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
-			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return abstractDataStoreFactory }),
+			fx.Provide(func() visibility.VisibilityStoreFactory { return visibilityStoreFactory }),
+			fx.Provide(func() dynamicconfig.Client { return dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(func() esclient.Client { return esClient }),
+			fx.Provide(tlsConfigProviderProvider(tlsConfigProvider)),
+			fx.Provide(taskCategoryRegistryProvider(taskCategoryRegistry)),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
@@ -454,59 +474,83 @@ func (c *TemporalImpl) startHistory() {
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
+		frontendHTTPPort := mustPortFromAddress(c.FrontendHTTPAddress())
+		hostMap := c.makeHostMap(serviceName, host)
+		clusterMetadataConfig := c.clusterMetadataConfig
+		archiverMetadata := c.archiverMetadata
+		archiverProvider := c.archiverProvider
+		abstractDataStoreFactory := c.abstractDataStoreFactory
+		visibilityStoreFactory := c.visibilityStoreFactory
+		dcClient := c.dcClient
+		esClient := c.esClient
+		testHooks := c.testHooks
+		captureMetricsHandler := c.captureMetricsHandler
+		spanExporters := c.spanExporters
+		replicationStreamRecorder := c.replicationStreamRecorder
+		clusterName := c.clusterMetadataConfig.CurrentClusterName
+		tokenProvider := c.tokenProvider
+		tlsConfigProvider := c.tlsConfigProvider
+		taskCategoryRegistry := c.taskCategoryRegistry
+		taskQueueRecorderSink := &taskQueueRecorderSink{}
+		var chasmEngine chasm.Engine
+		var chasmVisibilityMgr chasm.VisibilityManager
+		var chasmRegistry *chasm.Registry
+		var dynamicCollection *dynamicconfig.Collection
+		var historyService *history.Service
+		var historyHandler *history.Handler
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
 			),
-			fx.Provide(c.configProvider),
-			fx.Provide(c.GetMetricsHandler),
+			fx.Provide(configProvider(spanExporters)),
+			fx.Provide(metricsHandlerProvider(captureMetricsHandler)),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
-			fx.Provide(c.newRPCFactory),
+			fx.Provide(newRPCFactoryProvider(replicationStreamRecorder, clusterName, tokenProvider)),
 			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
 				// Wrap ExecutionManager with recorder to capture task writes
 				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
-				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
-				return c.taskQueueRecorder
+				taskQueueRecorderSink.recorder = NewTaskQueueRecorder(base, logger)
+				return taskQueueRecorderSink.recorder
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
-				if c.replicationStreamRecorder != nil {
-					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+				if replicationStreamRecorder != nil {
+					return append(base, replicationStreamRecorder.UnaryServerInterceptor(clusterName))
 				}
 				return base
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
-				if c.replicationStreamRecorder != nil {
+				if replicationStreamRecorder != nil {
 					return []grpc.StreamServerInterceptor{
-						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+						replicationStreamRecorder.StreamServerInterceptor(clusterName),
 					}
 				}
 				return nil
 			}),
-			static.MembershipModule(c.makeHostMap(serviceName, host)),
-			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
-			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
-			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+			static.MembershipModule(hostMap),
+			fx.Provide(func() *cluster.Config { return clusterMetadataConfig }),
+			fx.Provide(func() carchiver.ArchivalMetadata { return archiverMetadata }),
+			fx.Provide(func() provider.ArchiverProvider { return archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(c.newClientFactoryProvider),
+			fx.Provide(newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
-			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
-			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
-			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return abstractDataStoreFactory }),
+			fx.Provide(func() visibility.VisibilityStoreFactory { return visibilityStoreFactory }),
+			fx.Provide(func() dynamicconfig.Client { return dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(func() esclient.Client { return esClient }),
+			fx.Provide(tlsConfigProviderProvider(tlsConfigProvider)),
+			fx.Provide(taskCategoryRegistryProvider(taskCategoryRegistry)),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -517,9 +561,12 @@ func (c *TemporalImpl) startHistory() {
 			chasm.Module,
 			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
-			fx.Populate(&c.chasmEngine),
-			fx.Populate(&c.chasmVisibilityMgr),
-			fx.Populate(&c.chasmRegistry),
+			fx.Populate(&chasmEngine),
+			fx.Populate(&chasmVisibilityMgr),
+			fx.Populate(&chasmRegistry),
+			fx.Populate(&dynamicCollection),
+			fx.Populate(&historyService),
+			fx.Populate(&historyHandler),
 		)
 		err := app.Err()
 		if err != nil {
@@ -527,6 +574,16 @@ func (c *TemporalImpl) startHistory() {
 		}
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.taskQueueRecorder = taskQueueRecorderSink.recorder
+		c.chasmEngine = chasmEngine
+		c.chasmVisibilityMgr = chasmVisibilityMgr
+		c.chasmRegistry = chasmRegistry
+		c.leakRefProbes = append(c.leakRefProbes,
+			newLeakRefProbe("history dynamic config collection", dynamicCollection),
+			newLeakRefProbe("history service", historyService),
+			newLeakRefProbe("history handler", historyHandler),
+			newLeakRefProbe("history chasm registry", chasmRegistry),
+		)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
@@ -540,35 +597,52 @@ func (c *TemporalImpl) startMatching() {
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
+		frontendHTTPPort := mustPortFromAddress(c.FrontendHTTPAddress())
+		hostMap := c.makeHostMap(serviceName, host)
+		clusterMetadataConfig := c.clusterMetadataConfig
+		archiverMetadata := c.archiverMetadata
+		archiverProvider := c.archiverProvider
+		abstractDataStoreFactory := c.abstractDataStoreFactory
+		visibilityStoreFactory := c.visibilityStoreFactory
+		dcClient := c.dcClient
+		esClient := c.esClient
+		testHooks := c.testHooks
+		captureMetricsHandler := c.captureMetricsHandler
+		spanExporters := c.spanExporters
+		replicationStreamRecorder := c.replicationStreamRecorder
+		clusterName := c.clusterMetadataConfig.CurrentClusterName
+		tokenProvider := c.tokenProvider
+		tlsConfigProvider := c.tlsConfigProvider
+		taskCategoryRegistry := c.taskCategoryRegistry
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
 			),
-			fx.Provide(c.configProvider),
-			fx.Provide(c.GetMetricsHandler),
+			fx.Provide(configProvider(spanExporters)),
+			fx.Provide(metricsHandlerProvider(captureMetricsHandler)),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
-			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(c.makeHostMap(serviceName, host)),
-			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
-			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
-			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-			fx.Provide(c.newClientFactoryProvider),
+			fx.Provide(newRPCFactoryProvider(replicationStreamRecorder, clusterName, tokenProvider)),
+			static.MembershipModule(hostMap),
+			fx.Provide(func() *cluster.Config { return clusterMetadataConfig }),
+			fx.Provide(func() carchiver.ArchivalMetadata { return archiverMetadata }),
+			fx.Provide(func() provider.ArchiverProvider { return archiverProvider }),
+			fx.Provide(newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
-			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
-			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
-			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
-			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(c.GetTLSConfigProvider),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return abstractDataStoreFactory }),
+			fx.Provide(func() visibility.VisibilityStoreFactory { return visibilityStoreFactory }),
+			fx.Provide(func() dynamicconfig.Client { return dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return testHooks }),
+			fx.Provide(func() esclient.Client { return esClient }),
+			fx.Provide(tlsConfigProviderProvider(tlsConfigProvider)),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(taskCategoryRegistryProvider(taskCategoryRegistry)),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
@@ -604,6 +678,25 @@ func (c *TemporalImpl) startWorker() {
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
+		frontendHTTPPort := mustPortFromAddress(c.FrontendHTTPAddress())
+		hostMap := c.makeHostMap(serviceName, host)
+		archiverMetadata := c.archiverMetadata
+		archiverProvider := c.archiverProvider
+		abstractDataStoreFactory := c.abstractDataStoreFactory
+		visibilityStoreFactory := c.visibilityStoreFactory
+		dcClient := c.dcClient
+		esClient := c.esClient
+		testHooks := c.testHooks
+		captureMetricsHandler := c.captureMetricsHandler
+		spanExporters := c.spanExporters
+		replicationStreamRecorder := c.replicationStreamRecorder
+		clusterName := c.clusterMetadataConfig.CurrentClusterName
+		tokenProvider := c.tokenProvider
+		tlsConfigProvider := c.tlsConfigProvider
+		taskCategoryRegistry := c.taskCategoryRegistry
+		var dynamicCollection *dynamicconfig.Collection
+		var workerService *worker.Service
+		var grpcResolver *membership.GRPCResolver
 		app := fx.New(
 
 			fx.Supply(
@@ -611,31 +704,31 @@ func (c *TemporalImpl) startWorker() {
 				serviceName,
 				c.mockAdminClient,
 			),
-			fx.Provide(c.configProvider),
-			fx.Provide(c.GetMetricsHandler),
+			fx.Provide(configProvider(spanExporters)),
+			fx.Provide(metricsHandlerProvider(captureMetricsHandler)),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
-			fx.Provide(c.newRPCFactory),
-			static.MembershipModule(c.makeHostMap(serviceName, host)),
+			fx.Provide(newRPCFactoryProvider(replicationStreamRecorder, clusterName, tokenProvider)),
+			static.MembershipModule(hostMap),
 			fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
-			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
-			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+			fx.Provide(func() carchiver.ArchivalMetadata { return archiverMetadata }),
+			fx.Provide(func() provider.ArchiverProvider { return archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(c.newClientFactoryProvider),
+			fx.Provide(newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
-			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
-			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
-			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return abstractDataStoreFactory }),
+			fx.Provide(func() visibility.VisibilityStoreFactory { return visibilityStoreFactory }),
+			fx.Provide(func() dynamicconfig.Client { return dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(c.GetTLSConfigProvider),
-			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(func() esclient.Client { return esClient }),
+			fx.Provide(tlsConfigProviderProvider(tlsConfigProvider)),
+			fx.Provide(taskCategoryRegistryProvider(taskCategoryRegistry)),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
@@ -644,6 +737,9 @@ func (c *TemporalImpl) startWorker() {
 			chasm.Module,
 			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
+			fx.Populate(&dynamicCollection),
+			fx.Populate(&workerService),
+			fx.Populate(&grpcResolver),
 		)
 		err := app.Err()
 		if err != nil {
@@ -652,6 +748,11 @@ func (c *TemporalImpl) startWorker() {
 
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.leakRefProbes = append(c.leakRefProbes,
+			newLeakRefProbe("worker dynamic config collection", dynamicCollection),
+			newLeakRefProbe("worker service", workerService),
+			newLeakRefProbe("worker grpc resolver", grpcResolver),
+		)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
@@ -685,19 +786,6 @@ func (c *TemporalImpl) SetTaskQueueRecorder(recorder *TaskQueueRecorder) {
 	c.taskQueueRecorder = recorder
 }
 
-func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
-	// If we just return this directly, the interface will be non-nil but the
-	// pointer will be nil
-	if c.tlsConfigProvider != nil {
-		return c.tlsConfigProvider
-	}
-	return nil
-}
-
-func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
-	return c.taskCategoryRegistry
-}
-
 func (c *TemporalImpl) GetCHASMRegistry() *chasm.Registry {
 	return c.chasmRegistry
 }
@@ -712,113 +800,161 @@ func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
 	return c.captureMetricsHandler
 }
 
-func (c *TemporalImpl) GetMetricsHandler() metrics.Handler {
-	if c.captureMetricsHandler != nil {
-		return c.captureMetricsHandler
-	}
-	return metrics.NoopMetricsHandler
+type taskQueueRecorderSink struct {
+	recorder *TaskQueueRecorder
 }
 
-func (c *TemporalImpl) frontendConfigProvider() *config.Config {
-	// Set HTTP port and a test HTTP forwarded header
-	return &config.Config{
-		Services: map[string]config.Service{
-			string(primitives.FrontendService): {
-				RPC: config.RPC{
-					HTTPPort: int(mustPortFromAddress(c.FrontendHTTPAddress())),
-					HTTPAdditionalForwardedHeaders: []string{
-						"this-header-forwarded",
-						"this-header-prefix-forwarded-*",
+func metricsHandlerProvider(captureMetricsHandler *metricstest.CaptureHandler) func() metrics.Handler {
+	return func() metrics.Handler {
+		if captureMetricsHandler != nil {
+			return captureMetricsHandler
+		}
+		return metrics.NoopMetricsHandler
+	}
+}
+
+func tlsConfigProviderProvider(tlsConfigProvider *encryption.FixedTLSConfigProvider) func() encryption.TLSConfigProvider {
+	return func() encryption.TLSConfigProvider {
+		// If we just return this directly, the interface will be non-nil but the
+		// pointer will be nil
+		if tlsConfigProvider != nil {
+			return tlsConfigProvider
+		}
+		return nil
+	}
+}
+
+func taskCategoryRegistryProvider(taskCategoryRegistry tasks.TaskCategoryRegistry) func() tasks.TaskCategoryRegistry {
+	return func() tasks.TaskCategoryRegistry {
+		return taskCategoryRegistry
+	}
+}
+
+func frontendConfigProvider(
+	frontendHTTPPort httpPort,
+	dcRedirectionPolicy config.DCRedirectionPolicy,
+	spanExporters map[telemetry.SpanExporterType]sdktrace.SpanExporter,
+) func() *config.Config {
+	return func() *config.Config {
+		// Set HTTP port and a test HTTP forwarded header
+		return &config.Config{
+			Services: map[string]config.Service{
+				string(primitives.FrontendService): {
+					RPC: config.RPC{
+						HTTPPort: int(frontendHTTPPort),
+						HTTPAdditionalForwardedHeaders: []string{
+							"this-header-forwarded",
+							"this-header-prefix-forwarded-*",
+						},
 					},
 				},
 			},
-		},
-		DCRedirectionPolicy: c.dcRedirectionPolicy,
-		ExporterConfig: telemetry.ExportConfig{
-			CustomExporters: c.spanExporters,
-		},
-	}
-}
-
-func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *config.Config {
-	return &config.Config{
-		Services: map[string]config.Service{
-			string(serviceName): {
-				RPC: config.RPC{},
+			DCRedirectionPolicy: dcRedirectionPolicy,
+			ExporterConfig: telemetry.ExportConfig{
+				CustomExporters: spanExporters,
 			},
-		},
-		DCRedirectionPolicy: config.DCRedirectionPolicy{},
-		ExporterConfig: telemetry.ExportConfig{
-			CustomExporters: c.spanExporters,
-		},
-	}
-}
-
-func (c *TemporalImpl) newRPCFactory(
-	lc fx.Lifecycle,
-	sn primitives.ServiceName,
-	grpcHostPort listenHostPort,
-	logger log.Logger,
-	grpcResolver *membership.GRPCResolver,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	monitor membership.Monitor,
-	tracingStatsHandler telemetry.ClientStatsHandler,
-	httpPort httpPort,
-	metricsHandler metrics.Handler,
-) (common.RPCFactory, error) {
-	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
-	if err != nil {
-		return nil, fmt.Errorf("failed parsing host:port: %w", err)
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port: %w", err)
-	}
-	var frontendTLSConfig *tls.Config
-	if tlsConfigProvider != nil {
-		if frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig(); err != nil {
-			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
 		}
 	}
-	var options []grpc.DialOption
-	if tracingStatsHandler != nil {
-		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
-	}
-	// Add replication stream recorder injector
-	if c.replicationStreamRecorder != nil {
-		options = append(options,
-			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
-			grpc.WithChainStreamInterceptor(c.replicationStreamRecorder.StreamInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
-		)
-	}
-	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
-	cfg := &config.Config{
-		Services: map[string]config.Service{
-			string(sn): {
-				RPC: rpcConfig,
-			},
-		},
-	}
-	factory := rpc.NewFactory(
-		cfg,
-		sn,
-		logger,
-		metricsHandler,
-		tlsConfigProvider,
-		grpcResolver.MakeURL(primitives.FrontendService),
-		grpcResolver.MakeURL(primitives.FrontendService),
-		int(httpPort),
-		frontendTLSConfig,
-		options,
-		resource.PerServiceDialOptionsProvider(logger),
-		monitor,
-		c.tokenProvider,
-	)
-	lc.Append(fx.StopHook(factory.Stop))
-	return factory, nil
 }
 
-func (c *TemporalImpl) newClientFactoryProvider(
+func configProvider(spanExporters map[telemetry.SpanExporterType]sdktrace.SpanExporter) func(primitives.ServiceName) *config.Config {
+	return func(serviceName primitives.ServiceName) *config.Config {
+		return &config.Config{
+			Services: map[string]config.Service{
+				string(serviceName): {
+					RPC: config.RPC{},
+				},
+			},
+			DCRedirectionPolicy: config.DCRedirectionPolicy{},
+			ExporterConfig: telemetry.ExportConfig{
+				CustomExporters: spanExporters,
+			},
+		}
+	}
+}
+
+func newRPCFactoryProvider(
+	replicationStreamRecorder *ReplicationStreamRecorder,
+	clusterName string,
+	tokenProvider auth.TokenProvider,
+) func(
+	fx.Lifecycle,
+	primitives.ServiceName,
+	listenHostPort,
+	log.Logger,
+	*membership.GRPCResolver,
+	encryption.TLSConfigProvider,
+	membership.Monitor,
+	telemetry.ClientStatsHandler,
+	httpPort,
+	metrics.Handler,
+) (common.RPCFactory, error) {
+	return func(
+		lc fx.Lifecycle,
+		sn primitives.ServiceName,
+		grpcHostPort listenHostPort,
+		logger log.Logger,
+		grpcResolver *membership.GRPCResolver,
+		tlsConfigProvider encryption.TLSConfigProvider,
+		monitor membership.Monitor,
+		tracingStatsHandler telemetry.ClientStatsHandler,
+		httpPort httpPort,
+		metricsHandler metrics.Handler,
+	) (common.RPCFactory, error) {
+		host, portStr, err := net.SplitHostPort(string(grpcHostPort))
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing host:port: %w", err)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port: %w", err)
+		}
+		var frontendTLSConfig *tls.Config
+		if tlsConfigProvider != nil {
+			if frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig(); err != nil {
+				return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+			}
+		}
+		var options []grpc.DialOption
+		if tracingStatsHandler != nil {
+			options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
+		}
+		// Add replication stream recorder injector
+		if replicationStreamRecorder != nil {
+			options = append(options,
+				grpc.WithChainUnaryInterceptor(replicationStreamRecorder.UnaryInterceptor(clusterName)),
+				grpc.WithChainStreamInterceptor(replicationStreamRecorder.StreamInterceptor(clusterName)),
+			)
+		}
+		rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
+		cfg := &config.Config{
+			Services: map[string]config.Service{
+				string(sn): {
+					RPC: rpcConfig,
+				},
+			},
+		}
+		factory := rpc.NewFactory(
+			cfg,
+			sn,
+			logger,
+			metricsHandler,
+			tlsConfigProvider,
+			grpcResolver.MakeURL(primitives.FrontendService),
+			grpcResolver.MakeURL(primitives.FrontendService),
+			int(httpPort),
+			frontendTLSConfig,
+			options,
+			resource.PerServiceDialOptionsProvider(logger),
+			monitor,
+			tokenProvider,
+		)
+		lc.Append(fx.StopHook(factory.Stop))
+		return factory, nil
+	}
+}
+
+func newClientFactoryProvider(
 	config *cluster.Config,
 	mockAdminClient map[string]adminservice.AdminServiceClient,
 ) client.FactoryProvider {
@@ -882,16 +1018,26 @@ func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeo
 	return f.Factory.NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout)
 }
 
-func (c *TemporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
-	c.callbackLock.Lock()
-	c.onGetClaims = fn
-	c.callbackLock.Unlock()
+type testAuthorizer struct {
+	onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
+	onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+	callbackLock sync.RWMutex // Must be used for above callbacks
 }
 
-func (c *TemporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-	c.callbackLock.RLock()
-	onGetClaims := c.onGetClaims
-	c.callbackLock.RUnlock()
+func (c *TemporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	c.authorizer.SetOnGetClaims(fn)
+}
+
+func (a *testAuthorizer) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	a.callbackLock.Lock()
+	a.onGetClaims = fn
+	a.callbackLock.Unlock()
+}
+
+func (a *testAuthorizer) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	a.callbackLock.RLock()
+	onGetClaims := a.onGetClaims
+	a.callbackLock.RUnlock()
 	if onGetClaims != nil {
 		return onGetClaims(authInfo)
 	}
@@ -901,19 +1047,25 @@ func (c *TemporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorizati
 func (c *TemporalImpl) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
-	c.callbackLock.Lock()
-	c.onAuthorize = fn
-	c.callbackLock.Unlock()
+	c.authorizer.SetOnAuthorize(fn)
 }
 
-func (c *TemporalImpl) Authorize(
+func (a *testAuthorizer) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	a.callbackLock.Lock()
+	a.onAuthorize = fn
+	a.callbackLock.Unlock()
+}
+
+func (a *testAuthorizer) Authorize(
 	ctx context.Context,
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
 ) (authorization.Result, error) {
-	c.callbackLock.RLock()
-	onAuthorize := c.onAuthorize
-	c.callbackLock.RUnlock()
+	a.callbackLock.RLock()
+	onAuthorize := a.onAuthorize
+	a.callbackLock.RUnlock()
 	if onAuthorize != nil {
 		return onAuthorize(ctx, caller, target)
 	}

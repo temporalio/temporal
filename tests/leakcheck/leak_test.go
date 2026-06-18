@@ -10,7 +10,7 @@
 //  1. Goroutine-count slope — catches accumulation of already-seen stacks that
 //     goleak.Find misses (those are captured in its IgnoreCurrent baseline).
 //
-//  2. HeapInuse slope — catches retained heap references that have no live
+//  2. Live-heap slope — catches retained heap references that have no live
 //     goroutine (invisible to all goroutine-based tools).
 //
 //  3. Weak-pointer object probes ([testcore.ClusterLeakRefs]) — the most
@@ -37,7 +37,7 @@
 //	LEAK_ITERS                        clusters built after warmup (default 15)
 //	LEAK_WARMUP_CLUSTERS              warmup clusters before baselining (default 20)
 //	LEAK_MAX_GOROUTINES_PER_CLUSTER   goroutine-slope failure threshold (default 2)
-//	LEAK_MAX_HEAP_KB_PER_CLUSTER      HeapInuse-slope failure threshold, KB (default 2048)
+//	LEAK_MAX_HEAP_KB_PER_CLUSTER      live-heap-slope failure threshold, KB (default 0)
 //	LEAK_OUTPUT_DIR                   on failure, write heap.prof / goroutines.txt /
 //	                                  leaked-goroutines.txt here (CI uploads them)
 package leakcheck
@@ -48,6 +48,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
 	"testing"
@@ -56,11 +57,10 @@ import (
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/goleak"
 )
-
-
 
 func TestClusterShutdownLeak(t *testing.T) {
 	if os.Getenv("RUN_LEAK_TEST") != "1" {
@@ -68,7 +68,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 	iters := envInt("LEAK_ITERS", 15)
 	maxGoroutinesPerCluster := envInt("LEAK_MAX_GOROUTINES_PER_CLUSTER", 2)
-	maxHeapKBPerCluster := envInt("LEAK_MAX_HEAP_KB_PER_CLUSTER", 2048)
+	maxHeapKBPerCluster := envInt("LEAK_MAX_HEAP_KB_PER_CLUSTER", 0)
 	warmupClusters := envInt("LEAK_WARMUP_CLUSTERS", 20)
 
 	// Warm up so process-lifetime singletons and first-use initialization (proto
@@ -79,20 +79,23 @@ func TestClusterShutdownLeak(t *testing.T) {
 		buildRunTeardownCluster(t, fmt.Sprintf("warmup-%02d", i), &warmupRefs[i])
 	}
 	goroutineBaseline := goleak.IgnoreCurrent()
+	testcore.SettleLeakCheck()
 	baseGoroutines := stableGoroutines()
-	baseHeap := heapInUse()
+	baseHeap := stableHeapAlloc()
 
-	// Build and tear down more clusters, measuring after each settles. A clean
-	// shutdown leaves neither extra goroutines nor extra reachable heap.
+	// Build and tear down more clusters. A clean shutdown leaves neither extra
+	// goroutines nor extra reachable heap after teardown transients settle.
 	goroutines := make([]int, iters)
 	heap := make([]uint64, iters)
 	refs := make([]testcore.ClusterLeakRefs, iters)
 	for i := range iters {
 		buildRunTeardownCluster(t, fmt.Sprintf("c%02d", i), &refs[i])
 		goroutines[i] = stableGoroutines()
-		heap[i] = heapInUse()
-		t.Logf("cluster %2d: goroutines=%d heapInUse=%d MB", i, goroutines[i], heap[i]>>20)
+		testcore.SettleLeakCheck()
+		heap[i] = stableHeapAlloc()
+		t.Logf("cluster %2d: goroutines=%d heapAlloc=%d MB", i, goroutines[i], heap[i]>>20)
 	}
+	t.Run("settle-stack", func(t *testing.T) {})
 
 	goroutinePerCluster := intSlopePerCluster(baseGoroutines, goroutines)
 	heapKBPerCluster := int(uint64SlopePerCluster(baseHeap, heap) >> 10)
@@ -105,8 +108,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 	if goroutinePerCluster > maxGoroutinesPerCluster {
 		failures = append(failures, fmt.Sprintf("goroutine growth %d/cluster exceeds %d", goroutinePerCluster, maxGoroutinesPerCluster))
 	}
-	// Heap-inuse slope catches retained references (objects still reachable after
-	// shutdown) — leaks that have no live goroutine and so are invisible to goleak.
+	// Settled live-heap growth catches retained references (objects still
+	// reachable after shutdown) — leaks that have no live goroutine and so are
+	// invisible to goleak.
 	if heapKBPerCluster > maxHeapKBPerCluster {
 		failures = append(failures, fmt.Sprintf("heap growth %d KB/cluster exceeds %d KB", heapKBPerCluster, maxHeapKBPerCluster))
 	}
@@ -131,7 +135,11 @@ func TestClusterShutdownLeak(t *testing.T) {
 // this returns.
 func buildRunTeardownCluster(t *testing.T, label string, refs *testcore.ClusterLeakRefs) {
 	t.Run("cluster", func(t *testing.T) {
-		env := testcore.NewEnv(t, testcore.WithWorkerService("leak regression test"))
+		env := testcore.NewEnv(
+			t,
+			testcore.WithWorkerService("leak regression test"),
+			testcore.WithLogger(log.NewNoopLogger()),
+		)
 		*refs = env.LeakRefs(label)
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(
@@ -141,6 +149,8 @@ func buildRunTeardownCluster(t *testing.T, label string, refs *testcore.ClusterL
 		)
 		require.NoError(t, err)
 		require.NoError(t, run.Get(env.Context(), nil))
+		run = nil
+		env = nil
 	})
 }
 
@@ -161,12 +171,19 @@ func stableGoroutines() int {
 	return prev
 }
 
-func heapInUse() uint64 {
-	runtime.GC()
-	runtime.GC()
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	return m.HeapInuse
+func stableHeapAlloc() uint64 {
+	minHeap := ^uint64(0)
+	for range 10 {
+		runtime.GC()
+		debug.FreeOSMemory()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		if m.HeapAlloc < minHeap {
+			minHeap = m.HeapAlloc
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return minHeap
 }
 
 func intSlopePerCluster(base int, series []int) int {
@@ -177,10 +194,36 @@ func intSlopePerCluster(base int, series []int) int {
 }
 
 func uint64SlopePerCluster(base uint64, series []uint64) uint64 {
-	if len(series) < 2 || series[len(series)-1] < base {
+	if len(series) < 2 {
 		return 0
 	}
-	return (series[len(series)-1] - base) / uint64(len(series))
+
+	n := len(series) + 1
+	meanX := float64(n-1) / 2
+	var meanY float64
+	for i := 0; i < n; i++ {
+		meanY += float64(heapSample(base, series, i))
+	}
+	meanY /= float64(n)
+
+	var numerator, denominator float64
+	for i := 0; i < n; i++ {
+		x := float64(i)
+		y := float64(heapSample(base, series, i))
+		numerator += (x - meanX) * (y - meanY)
+		denominator += (x - meanX) * (x - meanX)
+	}
+	if numerator <= 0 || denominator == 0 {
+		return 0
+	}
+	return uint64(numerator / denominator)
+}
+
+func heapSample(base uint64, series []uint64, i int) uint64 {
+	if i == 0 {
+		return base
+	}
+	return series[i-1]
 }
 
 func envInt(name string, def int) int {

@@ -468,9 +468,10 @@ func (s *FunctionalTestBase) TearDownCluster() {
 // T's queued cleanups (notably tl.Close). Cleanups run via defer so they
 // execute even when teardown errors.
 func (s *FunctionalTestBase) tearDownTestCluster() error {
+	proxyT := s.t
 	defer func() {
-		if s.t != nil {
-			s.t.doCleanups()
+		if proxyT != nil {
+			proxyT.doCleanups()
 		}
 	}()
 	if s.testCluster == nil {
@@ -488,6 +489,15 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	s.otelExporter = nil
 	s.testClusterConfig = nil
 	s.Logger = nil
+	s.SetT(nil)
+	s.Assertions = nil
+	s.ProtoAssertions = protorequire.ProtoAssertions{}
+	s.HistoryRequire = historyrequire.HistoryRequire{}
+	s.UpdateUtils = updateutils.UpdateUtils{}
+	s.sdkClient = nil
+	s.sdkWorker = nil
+	s.taskPoller = nil
+	s.t = nil
 
 	return err
 }
@@ -506,9 +516,11 @@ func (s *FunctionalTestBase) TearDownSubTest() {
 func (s *FunctionalTestBase) tearDownSdk() {
 	if s.sdkWorker != nil {
 		s.sdkWorker.Stop()
+		s.sdkWorker = nil
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
+		s.sdkClient = nil
 	}
 }
 

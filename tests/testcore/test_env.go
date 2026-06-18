@@ -281,7 +281,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
-		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
 			t.Fatal(err)
 		}
 	})
@@ -296,10 +296,17 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// whole *TemporalImpl collectible at once; the cluster is still torn down via
 	// the FunctionalTestBase cleanup, which uses its own reference.
 	t.Cleanup(func() {
+		env.FunctionalTestBase = nil
+		env.Assertions = nil
+		env.Logger = nil
 		env.cluster = nil
 		env.taskPoller = nil
+		env.t = nil
 		env.ctx = nil
 		env.tv = nil
+		env.dedicatedGuard = nil
+		env.sdkClient = nil
+		env.sdkWorker = nil
 	})
 
 	if options.disableTestloggerFailure {

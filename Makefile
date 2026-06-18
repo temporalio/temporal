@@ -498,7 +498,7 @@ functional-test: clean-test-output
 	@$(MAKE) verify-test-log
 
 # Resource-leak regression test (tests/leakcheck). Builds clusters in a loop and
-# asserts no per-cluster growth in goroutines or in-use heap. Runs on the
+# asserts no per-cluster growth in goroutines or live heap. Runs on the
 # in-process sqlite driver (no DB containers) and must run in isolation (it
 # inspects global goroutine state), so it has its own compiled binary + CI job
 # rather than being part of the functional suite. Thresholds are tunable via the
@@ -509,7 +509,7 @@ LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
 LEAK_ITERS             ?= 15
 LEAK_WARMUP_CLUSTERS   ?= 20
 LEAK_MAX_GOROUTINES_PER_CLUSTER ?= 2
-LEAK_MAX_HEAP_KB_PER_CLUSTER    ?= 2048
+LEAK_MAX_HEAP_KB_PER_CLUSTER    ?= 0
 LEAK_TIMEOUT           ?= 19m
 
 leak-test:

@@ -548,10 +548,15 @@ func newArchiverBase(
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
-	errs := tc.host.Stop()
+	host := tc.host
+	esConfig := host.esConfig
+	logger := host.logger
+	persistenceConfig := host.persistenceConfig
+
+	errs := host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UseSQLVisibility() && tc.host.esConfig != nil {
-		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
+	if !UseSQLVisibility() && esConfig != nil {
+		if err := deleteIndex(esConfig, logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
 	}
@@ -570,7 +575,7 @@ func (tc *TestCluster) TearDownCluster() error {
 	// close it here to reclaim the connection and stop its background
 	// connectionOpener goroutine (which would otherwise root the whole connection
 	// for the process lifetime and accumulate across clusters until OOM).
-	for _, ds := range tc.host.persistenceConfig.DataStores {
+	for _, ds := range persistenceConfig.DataStores {
 		if ds.SQL != nil && ds.SQL.PluginName == sqlite.PluginName {
 			if err := sqlite.ForceCloseDB(ds.SQL); err != nil {
 				errs = multierr.Combine(errs, err)
