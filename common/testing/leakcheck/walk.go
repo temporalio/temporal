@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-type graphWalker struct {
+type objectWalker struct {
 	objects []trackedObject
 	seen    map[uintptr]struct{}
 }
@@ -19,17 +19,17 @@ type trackedObject struct {
 	cleanup   runtime.Cleanup
 }
 
-func newGraphWalker() graphWalker {
-	return graphWalker{
+func newGraphWalker() objectWalker {
+	return objectWalker{
 		seen: make(map[uintptr]struct{}),
 	}
 }
 
-func (w *graphWalker) track(rootPath string, root any) {
+func (w *objectWalker) track(rootPath string, root any) {
 	w.walk(reflect.ValueOf(root), newObjectPath(rootPath))
 }
 
-func (w *graphWalker) walk(v reflect.Value, path objectPath) {
+func (w *objectWalker) walk(v reflect.Value, path objectPath) {
 	if !v.IsValid() {
 		return
 	}
