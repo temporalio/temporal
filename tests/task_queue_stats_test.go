@@ -68,7 +68,6 @@ func newTaskQueueStatsContext(
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
 	opts := []testcore.TestOption{
-		testcore.WithWorkerService("worker-deployment versioning"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),
@@ -97,7 +96,8 @@ type TaskQueueStatsSuite struct {
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	parallelsuite.Run(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
+	testcore.UseSuiteScopedCluster(t)                                  //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}, true) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
@@ -191,7 +191,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMa
 func (s *TaskQueueStatsSuite) TestVersioningSuite(usePriMatcher bool) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
-			parallelsuite.Run(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior)
+			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 		})
 	}
 }
