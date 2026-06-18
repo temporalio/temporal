@@ -17,9 +17,9 @@ import (
 	"go.uber.org/goleak"
 )
 
-// opts are the goleak options applied to every Find/VerifyNone call.
+// goleakOpts are the goleak options applied to every Find/VerifyNone call.
 // TODO entries are known leaks to be fixed; remove each ignore once fixed.
-var opts = []goleak.Option{
+var goleakOpts = []goleak.Option{
 	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 
@@ -81,7 +81,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
-	_ = goleak.Find(opts...)
+	_ = goleak.Find(goleakOpts...)
 	baseline := goleak.IgnoreCurrent()
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
@@ -91,7 +91,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	if err := goleak.Find(append(opts, baseline)...); err != nil {
+	if err := goleak.Find(append(goleakOpts, baseline)...); err != nil {
 		t.Error(err)
 
 		// Write the goroutine report to the output directory.
