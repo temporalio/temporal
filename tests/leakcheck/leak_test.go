@@ -18,6 +18,7 @@ package leakcheck
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -72,7 +73,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// On failure, write a goroutine dump to the output directory.
 	if t.Failed() {
-		f, err := os.Create(outputDir + "/goroutines.txt")
+		f, err := os.Create(filepath.Join(outputDir, "goroutines.txt"))
 		if err != nil {
 			t.Logf("failed to create goroutine dump: %v", err)
 		} else {
