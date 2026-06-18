@@ -77,7 +77,10 @@ func TestClusterShutdownLeak(t *testing.T) {
 	)
 
 	if t.Failed() {
-		if f, err := os.Create(outputDir + "/goroutines.txt"); err == nil {
+		f, err := os.Create(outputDir + "/goroutines.txt")
+		if err != nil {
+			t.Logf("failed to create goroutine dump: %v", err)
+		} else {
 			_ = goleak.Find(ignoreSQLiteConnOpener)
 			f.Close()
 			t.Logf("goroutine dump written to %s/goroutines.txt", outputDir)
