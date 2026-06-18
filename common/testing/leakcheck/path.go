@@ -38,6 +38,7 @@ func (p path) mapKey(index int) path {
 }
 
 func (p path) append(segment pathSegment) path {
+	// Each recursion branch owns its path so sibling fields cannot mutate it.
 	return append(slices.Clone(p), segment)
 }
 
