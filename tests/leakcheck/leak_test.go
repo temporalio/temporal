@@ -13,7 +13,7 @@
 //
 //	LEAK_ITERS         clusters built after warmup
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
-//	LEAK_OUTPUT_DIR    on failure, write goroutines.txt here (CI uploads it)
+//	LEAK_OUTPUT_DIR    directory for diagnostics on failure (CI uploads it)
 package leakcheck
 
 import (
@@ -29,10 +29,10 @@ import (
 	"go.uber.org/goleak"
 )
 
-// sqliteConnOpener is the top-of-stack for the background goroutine the sqlite
-// plugin keeps alive per file DSN for the process lifetime. That is by design,
-// not a per-cluster leak; sqlite is dev/test-only.
-const sqliteConnOpener = "database/sql.(*DB).connectionOpener"
+// ignoreSQLiteConnOpener filters the background goroutine the sqlite plugin
+// keeps alive per file DSN for the process lifetime. That is by design, not a
+// per-cluster leak; sqlite is dev/test-only.
+var ignoreSQLiteConnOpener = goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener")
 
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
@@ -42,6 +42,13 @@ func TestClusterShutdownLeak(t *testing.T) {
 	warmup, err := strconv.Atoi(os.Getenv("LEAK_ITERS_WARMUP"))
 	if err != nil {
 		t.Fatal("LEAK_ITERS_WARMUP must be set to a positive integer")
+	}
+	outputDir := os.Getenv("LEAK_OUTPUT_DIR")
+	if outputDir == "" {
+		t.Fatal("LEAK_OUTPUT_DIR must be set")
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatalf("LEAK_OUTPUT_DIR: %v", err)
 	}
 
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
@@ -57,7 +64,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// warmup goroutine would mask an identical per-cluster leak. We discard the
 	// Find result: any persistent goroutines that survive the retry window are
 	// legitimate process-lifetime singletons that IgnoreCurrent will baseline.
-	_ = goleak.Find(goleak.IgnoreTopFunction(sqliteConnOpener))
+	_ = goleak.Find(ignoreSQLiteConnOpener)
 	baseline := goleak.IgnoreCurrent()
 
 	for i := range iters {
@@ -66,27 +73,23 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	goleak.VerifyNone(t, baseline,
-		goleak.IgnoreTopFunction(sqliteConnOpener),
+		ignoreSQLiteConnOpener,
 	)
 
 	if t.Failed() {
-		if dir := os.Getenv("LEAK_OUTPUT_DIR"); dir != "" {
-			if err := os.MkdirAll(dir, 0o755); err == nil {
-				if f, err := os.Create(dir + "/goroutines.txt"); err == nil {
-					_ = goleak.Find(goleak.IgnoreTopFunction(sqliteConnOpener))
-					f.Close()
-					t.Logf("goroutine dump written to %s/goroutines.txt", dir)
-				}
-			}
+		if f, err := os.Create(outputDir + "/goroutines.txt"); err == nil {
+			_ = goleak.Find(ignoreSQLiteConnOpener)
+			f.Close()
+			t.Logf("goroutine dump written to %s/goroutines.txt", outputDir)
 		}
 	}
 }
 
-// buildRunTeardownCluster creates a freshly-built dedicated cluster,
-// runs a trivial workflow on it to exercise the full server path,
-// then tears it down.
+// buildRunTeardownCluster creates a freshly-built dedicated worker-service
+// cluster, runs a trivial workflow on it to exercise the full server path, then
+// tears it down. The subtest ensures all env cleanups (SDK worker stop + cluster
+// teardown) complete before this returns.
 func buildRunTeardownCluster(t *testing.T) {
-	// using t.Run to ensure subtest cleanups
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t, testcore.WithWorkerService("leak regression test"))
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
