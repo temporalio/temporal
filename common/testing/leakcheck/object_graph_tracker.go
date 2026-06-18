@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	runtimedebug "runtime/debug"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -68,6 +70,30 @@ func (t ObjectGraphLeakCheck) Check() (string, error) {
 		}
 	}
 	return report.String(), report.failures()
+}
+
+func CheckAll(checks ...ObjectGraphLeakCheck) (string, error) {
+	settleLeakCheck()
+	var failures []error
+	var reports []string
+	for _, check := range checks {
+		report, err := check.Check()
+		if report != "" {
+			reports = append(reports, report)
+		}
+		failures = append(failures, err)
+	}
+	return strings.Join(reports, "\n"), errors.Join(failures...)
+}
+
+// settleLeakCheck gives stopped services, runtime timers, and GC enough time to
+// release teardown-only references before leak probes sample object reachability.
+func settleLeakCheck() {
+	for range 200 {
+		runtime.GC()
+		runtimedebug.FreeOSMemory()
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 type objectGraphReport struct {
