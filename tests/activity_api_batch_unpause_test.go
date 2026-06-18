@@ -201,8 +201,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_MatchAll() {
 	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := env.Context()
 
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-unpause-match-all-workflow")
