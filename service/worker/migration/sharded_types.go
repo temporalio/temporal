@@ -28,7 +28,7 @@ const (
 	releaseShardsSignalName = "ReleaseShards"
 
 	// shardedCheckpointSignalName is sent by a child to the parent at
-	// its cut point — when GetContinueAsNewSuggested fires at a page
+	// its checkpoint — when GetContinueAsNewSuggested fires at a page
 	// boundary. Payload: shardedCheckpointPayload.
 	shardedCheckpointSignalName = "force-replication-sharded-checkpoint"
 

@@ -1,7 +1,7 @@
 package migration
 
-// sharded_handover_test.go: focused unit tests for the handover/cut logic of the
-// sharded force-replication child orchestration.
+// sharded_handover_test.go: focused unit tests for the handover/checkpoint logic
+// of the sharded force-replication child orchestration.
 //
 // Design rationale for the two test groups:
 //
@@ -20,11 +20,12 @@ package migration
 // targets the production child's env directly so the CAN-hint code path executes. The
 // trade-off is that workflow.GetInfo(ctx).ParentWorkflowExecution is nil for root
 // workflows, which triggers a nil pointer dereference in the current production code
-// (sharded_workflow.go). See TestChild_ThrottledHitsHint_SkipCase and the note in
-// TestChild_CutAtHint_HalfRateAfterCut for details.
+// (sharded_workflow.go). See TestChild_ThrottledHitsHint_PausesUntilPromoted and the
+// note in TestChild_CheckpointAtHint_StopsListing for details.
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,6 +34,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payloads"
@@ -85,7 +87,7 @@ func TestParent_OneFullHandover(t *testing.T) {
 
 			if n == 1 {
 				// Child 0: send a checkpoint to the parent after 1 minute (simulating
-				// "cut at page boundary"). Then complete after 5 minutes.
+				// "checkpoint at page boundary"). Then complete after 5 minutes.
 				workflow.Go(ctx, func(gCtx workflow.Context) {
 					_ = workflow.NewTimer(gCtx, 1*time.Minute).Get(gCtx, nil)
 					if parentExec != nil {
@@ -94,7 +96,7 @@ func TestParent_OneFullHandover(t *testing.T) {
 							shardedCheckpointSignalName,
 							shardedCheckpointPayload{
 								ChildRunID:    myRunID,
-								NextPageToken: []byte("page-token-after-cut"),
+								NextPageToken: []byte("page-token-after-checkpoint"),
 							},
 						).Get(gCtx, nil)
 					}
@@ -290,7 +292,7 @@ func (e *handoverSyntheticError) Error() string { return e.msg }
 // ID, so handleProgress drops the rollup (the IDs match in real Temporal). End-to-end
 // rollup is covered by integration tests.
 //
-// Sequence: child 0 cuts at 30s (→ child 1 starts) and completes at 1min with
+// Sequence: child 0 checkpoints at 30s (→ child 1 starts) and completes at 1min with
 // VerifiedCount=20; child 1 completes with VerifiedCount=5. After both retire, the
 // final status query reports 25.
 func TestParent_QueryAggregation(t *testing.T) {
@@ -306,7 +308,7 @@ func TestParent_QueryAggregation(t *testing.T) {
 			myRunID := workflow.GetInfo(ctx).WorkflowExecution.RunID
 
 			if n == 1 {
-				// Child 0: cut at 30s (parent starts the successor), complete at 1min.
+				// Child 0: checkpoint at 30s (parent starts the successor), complete at 1min.
 				workflow.Go(ctx, func(gCtx workflow.Context) {
 					_ = workflow.NewTimer(gCtx, 30*time.Second).Get(gCtx, nil)
 					if parentExec != nil {
@@ -357,21 +359,22 @@ func TestParent_QueryAggregation(t *testing.T) {
 
 // ---- Child tests — shardedForceReplicationWorker as root ----
 
-// TestChild_CutAtHint_StopsListing verifies that when GetContinueAsNewSuggested
-// fires at a fully-consumed page boundary with pages remaining, a promoted child
-// cuts: it stops listing, drains only the pages it already consumed, and returns
-// ReachedEnd=false (the remaining pages belong to the successor the parent starts
-// from the checkpoint token). The worker runs as the root workflow so
-// env.SetContinueAsNewSuggested drives the production hint directly (the nil
-// ParentWorkflowExecution is handled by the guard in run()). The per-shard
-// half-rate value applied after the cut is unit-tested by TestEffectiveMaxExecsPerShard.
-func TestChild_CutAtHint_StopsListing(t *testing.T) {
+// TestChild_CheckpointAtHint_StopsListing verifies that when
+// GetContinueAsNewSuggested fires at a fully-consumed page boundary with pages
+// remaining, a promoted child checkpoints: it stops listing, drains only the
+// pages it already consumed, and returns ReachedEnd=false (the remaining pages
+// belong to the successor the parent starts from the checkpoint token). The
+// worker runs as the root workflow so env.SetContinueAsNewSuggested drives the
+// production hint directly (the nil ParentWorkflowExecution is handled by the
+// guard in run()). The per-shard half-rate value applied after the checkpoint is
+// unit-tested by TestEffectiveMaxExecsPerShard.
+func TestChild_CheckpointAtHint_StopsListing(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(shardedForceReplicationWorker)
 
 	// 20 execs paginated 5-at-a-time so page 1 returns a non-empty next-page token:
-	// the hint becomes a "cut" (work remains) rather than a terminal end.
+	// the hint becomes a "checkpoint" (work remains) rather than a terminal end.
 	execs := makeExecs(2, 10)
 	env.RegisterActivityWithOptions(pageThrough(execs, 5), activity.RegisterOptions{Name: "ListWorkflows"})
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
@@ -381,7 +384,7 @@ func TestChild_CutAtHint_StopsListing(t *testing.T) {
 		}, nil
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
-	// Hint is true from the start: the child cuts after the first fully-consumed page.
+	// Hint is true from the start: the child checkpoints after the first fully-consumed page.
 	env.SetContinueAsNewSuggested(true)
 
 	params := makeChildParams(2) // not throttled → promoted; first child has no predecessor
@@ -393,16 +396,16 @@ func TestChild_CutAtHint_StopsListing(t *testing.T) {
 	var result shardedChildResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.False(t, result.ReachedEnd,
-		"child must cut (ReachedEnd=false) when the hint fires with pages remaining")
+		"child must checkpoint (ReachedEnd=false) when the hint fires with pages remaining")
 	require.Equal(t, int64(5), result.VerifiedCount,
-		"child verifies only the first fully-consumed page (5 execs) before cutting")
+		"child verifies only the first fully-consumed page (5 execs) before checkpointing")
 }
 
 // TestChild_ThrottledHitsHint_PausesUntilPromoted verifies the throttled-hits-hint
 // rule: a child started throttled (predecessor still running) that reaches the CAN
-// hint must NOT cut until it is promoted — guaranteeing at most one handover in
-// flight. The worker runs as root so env.SetContinueAsNewSuggested drives the hint
-// and env.SignalWorkflow delivers resumeFullRate.
+// hint must NOT checkpoint until it is promoted — guaranteeing at most one handover
+// in flight. The worker runs as root so env.SetContinueAsNewSuggested drives the
+// hint and env.SignalWorkflow delivers resumeFullRate.
 func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 	newEnv := func() *testsuite.TestWorkflowEnvironment {
 		suite := &testsuite.WorkflowTestSuite{}
@@ -423,19 +426,19 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 	t.Run("blocks without promotion", func(t *testing.T) {
 		env := newEnv()
 		params := makeChildParams(2)
-		params.Handover = true // not promoted: must await resumeFullRate before cutting
+		params.Handover = true // not promoted: must await resumeFullRate before checkpointing
 		env.ExecuteWorkflow(shardedForceReplicationWorker, params)
 		// A correctly-pausing child never completes on its own — it stays blocked
 		// awaiting promotion, so the env surfaces a timeout rather than a result. A
-		// child that wrongly cut without promotion would instead complete cleanly
-		// with ReachedEnd=false, leaving GetWorkflowError nil.
+		// child that wrongly checkpointed without promotion would instead complete
+		// cleanly with ReachedEnd=false, leaving GetWorkflowError nil.
 		require.Error(t, env.GetWorkflowError(),
 			"throttled child must pause at the hint until promoted (never completing on its own)")
 	})
 
 	t.Run("completes after promotion", func(t *testing.T) {
 		env := newEnv()
-		// Deliver the promotion; the child leaves the pause, cuts, and completes.
+		// Deliver the promotion; the child leaves the pause, checkpoints, and completes.
 		env.RegisterDelayedCallback(func() {
 			env.SignalWorkflow(shardedResumeFullSignalName, struct{}{})
 		}, time.Minute)
@@ -446,16 +449,16 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 		require.NoError(t, env.GetWorkflowError())
 		var result shardedChildResult
 		require.NoError(t, env.GetWorkflowResult(&result))
-		require.False(t, result.ReachedEnd, "throttled child cuts after promotion (pages remain)")
+		require.False(t, result.ReachedEnd, "throttled child checkpoints after promotion (pages remain)")
 	})
 }
 
-// TestChild_PromotedAndCuts_VerifiedCountAccumulated verifies the basic child
-// lifecycle: a promoted child (not throttled) lists a namespace, dispatches
+// TestChild_PromotedAndCheckpoints_VerifiedCountAccumulated verifies the basic
+// child lifecycle: a promoted child (not throttled) lists a namespace, dispatches
 // batches, and returns ReachedEnd=true with the correct VerifiedCount.
 // This uses childDirectRunner (real child with parent) so ParentWorkflowExecution
 // is non-nil, sidestepping the production nil-guard bug.
-func TestChild_PromotedAndCuts_VerifiedCountAccumulated(t *testing.T) {
+func TestChild_PromotedAndCheckpoints_VerifiedCountAccumulated(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(childDirectRunner)
@@ -504,4 +507,115 @@ func TestChild_PromotedAndCuts_VerifiedCountAccumulated(t *testing.T) {
 			"per-shard count in batch must not exceed MaxExecsPerShard at full rate")
 	}
 	mu.Unlock()
+}
+
+// checkpointProbe is a test-only workflow that drives checkpointAtBoundary
+// directly with a non-nil parent execution. The production trigger for this path
+// (a CAN hint at a page boundary) is not reproducible for a non-root child in
+// the SDK test env — env.SetContinueAsNewSuggested only affects the root env,
+// not an inner child (see the note on TestChild_ThrottledPromotion_ReceivesSignal)
+// — so the probe exercises the checkpoint-signal handling without a full listing
+// loop. It returns lastErr so the test can assert on it.
+func checkpointProbe(ctx workflow.Context) error {
+	s := &shardedWorkflowState{}
+	s.checkpointAtBoundary(ctx, &workflow.Execution{ID: "parent-id", RunID: "parent-run"}, []byte("next-page"))
+	return s.lastErr
+}
+
+// TestCheckpointAtBoundary_SignalFailureFailsChild verifies that checkpointAtBoundary
+// latches lastErr when the checkpoint signal to the parent fails. A dropped
+// checkpoint means the parent never starts a successor, so every execution past
+// the page boundary would be silently lost; SignalExternalWorkflow has no
+// transient failure modes, so the child must surface the error. The success
+// case guards against the probe passing vacuously.
+func TestCheckpointAtBoundary_SignalFailureFailsChild(t *testing.T) {
+	t.Run("signal fails → error latched", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(checkpointProbe)
+
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedCheckpointSignalName, mock.Anything,
+		).Return(errors.New("signal target gone"))
+
+		env.ExecuteWorkflow(checkpointProbe)
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err, "checkpointAtBoundary must latch lastErr when the signal fails")
+		require.Contains(t, err.Error(), "checkpoint signal to parent")
+	})
+
+	t.Run("signal succeeds → no error", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(checkpointProbe)
+
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedCheckpointSignalName, mock.Anything,
+		).Return(nil)
+
+		env.ExecuteWorkflow(checkpointProbe)
+
+		require.True(t, env.IsWorkflowCompleted())
+		require.NoError(t, env.GetWorkflowError(),
+			"checkpointAtBoundary must not error when the signal succeeds")
+	})
+}
+
+// promoteSuccessorProbe is a test-only workflow that drives promoteSuccessor
+// directly. The production promotion path is not reachable through the full
+// parent flow in the SDK test env: the mocked child's GetInfo run ID differs
+// from the run ID the parent tracks, so successorStarted never matches and the
+// promotion block is skipped (see the note in TestParent_OneFullHandover). The
+// probe returns childErr so the test can assert on it.
+func promoteSuccessorProbe(ctx workflow.Context) error {
+	ps := &shardedParentState{}
+	ps.promoteSuccessor(ctx, workflow.Execution{ID: "successor-id", RunID: "successor-run"})
+	return ps.childErr
+}
+
+// TestPromoteSuccessor_SignalFailure verifies that an anomalous resumeFullRate
+// failure fails the parent (a live, unpromoted successor would otherwise
+// deadlock at its next checkpoint), while a "successor already completed"
+// failure is tolerated (the successor finished without ever needing promotion).
+func TestPromoteSuccessor_SignalFailure(t *testing.T) {
+	t.Run("anomalous failure → parent fails", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(promoteSuccessorProbe)
+
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedResumeFullSignalName, mock.Anything,
+		).Return(errors.New("unexpected signal failure"))
+
+		env.ExecuteWorkflow(promoteSuccessorProbe)
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err, "anomalous promotion-signal failure must fail the parent")
+		require.Contains(t, err.Error(), "resumeFullRate signal to successor")
+	})
+
+	t.Run("successor already completed → tolerated", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(promoteSuccessorProbe)
+
+		// UnknownExternalWorkflowExecutionError == target not found: the
+		// successor already completed, so it never needed promotion.
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedResumeFullSignalName, mock.Anything,
+		).Return(&temporal.UnknownExternalWorkflowExecutionError{})
+
+		env.ExecuteWorkflow(promoteSuccessorProbe)
+
+		require.True(t, env.IsWorkflowCompleted())
+		require.NoError(t, env.GetWorkflowError(),
+			"a successor that already completed is benign — no promotion was needed")
+	})
 }

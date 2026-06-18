@@ -33,8 +33,8 @@ import (
 //
 // Handover-hits-hint: a child started with Handover=true (not yet promoted)
 // pauses at a CAN hint and awaits the parent's resumeFullRate signal before
-// cutting. This ensures at most one handover is in flight at any time and at
-// most two children run concurrently.
+// checkpointing. This ensures at most one handover is in flight at any time and
+// at most two children run concurrently.
 func shardedForceReplicationWorker(ctx workflow.Context, params shardedChildParams) (shardedChildResult, error) {
 	s := &shardedWorkflowState{
 		params:           &params,
@@ -92,7 +92,7 @@ type shardedWorkflowState struct {
 	//     (predecessor still running) and clears it when the parent sends the
 	//     resumeFullRate signal (predecessor done). The first child
 	//     (Handover=false) has no predecessor and starts clear.
-	//   - Shutdown: a child re-enters handover when it cuts — sends its
+	//   - Shutdown: a child re-enters handover when it checkpoints — sends its
 	//     checkpoint signal and stops listing — so the successor the parent
 	//     starts from that checkpoint can run at half alongside it.
 	handover bool
@@ -114,8 +114,8 @@ type shardedWorkflowState struct {
 // (see the handover field):
 //   - Startup handover: this child was started alongside a still-running
 //     predecessor; together they must stay ≤ MaxExecsPerShard per shard.
-//   - Shutdown handover (after cut): a successor has been started at half
-//     rate alongside us; same combined-load constraint.
+//   - Shutdown handover (after checkpointing): a successor has been started at
+//     half rate alongside us; same combined-load constraint.
 //
 // Minimum of 1 ensures at least one exec can always be packed regardless
 // of BatchSize or MaxExecsPerShard settings.
@@ -135,7 +135,7 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) (shardedChildResult, er
 	parentExec := workflow.GetInfo(ctx).ParentWorkflowExecution
 	s.startBackgroundCoroutines(ctx, parentExec)
 
-	reachedEnd := s.listUntilCutOrEnd(ctx, parentExec)
+	reachedEnd := s.listUntilCheckpointOrEnd(ctx, parentExec)
 	if s.lastErr != nil {
 		return shardedChildResult{}, s.lastErr
 	}
@@ -168,7 +168,7 @@ func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, p
 	// handover (clears handover), advancing the child to full rate once the
 	// predecessor has completed. Runs until the signal arrives (or ctx is
 	// cancelled at workflow end). Only throttled children ever receive it, and
-	// always before they cut, so it never races the shutdown handover.
+	// always before they checkpoint, so it never races the shutdown handover.
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		ch := workflow.GetSignalChannel(gCtx, shardedResumeFullSignalName)
 		var dummy struct{}
@@ -188,23 +188,33 @@ func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, p
 			if err := workflow.NewTimer(gCtx, 60*time.Second).Get(gCtx, nil); err != nil {
 				return // ctx cancelled — workflow is completing
 			}
-			// Best-effort: signal failure is not fatal for the child.
-			_ = workflow.SignalExternalWorkflow(gCtx,
+			// The parent is alive for the whole child lifetime — it awaits all
+			// children before completing or continuing-as-new, and a child is
+			// terminated with its parent (ParentClosePolicy TERMINATE). So a
+			// progress signal can only fail for a permanent, anomalous reason
+			// (SignalExternalWorkflow has no transient failure modes). Latch it
+			// and stop: continuing would mean operating against a parent we can
+			// no longer reach, with unpredictable results.
+			if err := workflow.SignalExternalWorkflow(gCtx,
 				parentExec.ID, parentExec.RunID,
 				shardedProgressSignalName,
 				shardedProgressPayload{
 					ChildRunID:    workflow.GetInfo(gCtx).WorkflowExecution.RunID,
 					VerifiedCount: s.verifiedCount,
-				}).Get(gCtx, nil)
+				}).Get(gCtx, nil); err != nil {
+				s.setLastErr(fmt.Errorf("progress signal to parent: %w", err))
+				return
+			}
 		}
 	})
 }
 
-// listUntilCutOrEnd drives the listing loop: page through ListWorkflows,
+// listUntilCheckpointOrEnd drives the listing loop: page through ListWorkflows,
 // bucketing and opportunistically packing each page, until either the
 // namespace is exhausted (returns true) or a CAN hint at a fully-consumed page
-// boundary triggers a cut (returns false). Latches s.lastErr on listing failure.
-func (s *shardedWorkflowState) listUntilCutOrEnd(ctx workflow.Context, parentExec *workflow.Execution) bool {
+// boundary triggers a checkpoint (returns false). Latches s.lastErr on listing
+// failure.
+func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context, parentExec *workflow.Execution) bool {
 	currentPageToken := s.params.StartPageToken
 	for s.lastErr == nil {
 		executions, nextPageToken, err := s.listWorkflowPageWithToken(ctx, currentPageToken)
@@ -233,7 +243,7 @@ func (s *shardedWorkflowState) listUntilCutOrEnd(ctx workflow.Context, parentExe
 		// Check the CAN hint at this fully-consumed page boundary, so
 		// currentPageToken is exact and safe to hand to a successor.
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-			s.cutAtBoundary(ctx, parentExec, currentPageToken)
+			s.checkpointAtBoundary(ctx, parentExec, currentPageToken)
 			return false
 		}
 
@@ -247,17 +257,25 @@ func (s *shardedWorkflowState) listUntilCutOrEnd(ctx workflow.Context, parentExe
 	return false
 }
 
-// cutAtBoundary performs the handover cut. If still in the startup handover it
-// first awaits promotion (so at most one handover is ever in flight), then
-// re-enters handover for the shutdown phase (dropping to half rate) and signals
-// the parent the next page token; the parent starts a successor from there and
-// promotes it once this child completes.
-func (s *shardedWorkflowState) cutAtBoundary(ctx workflow.Context, parentExec *workflow.Execution, pageToken []byte) {
+// checkpointAtBoundary performs the handover checkpoint. If still in the startup
+// handover it first awaits promotion (so at most one handover is ever in
+// flight), then re-enters handover for the shutdown phase (dropping to half
+// rate) and signals the parent the next page token; the parent starts a
+// successor from there and promotes it once this child completes.
+//
+// The checkpoint signal is load-bearing: it is the only way the parent learns
+// where to resume, so if it fails the parent never starts a successor and every
+// execution past this page boundary is silently dropped. SignalExternalWorkflow
+// has no transient failure modes (it fails only for permanent reasons, e.g. the
+// parent no longer exists), so a failure is latched into lastErr to fail the
+// child rather than continue.
+func (s *shardedWorkflowState) checkpointAtBoundary(ctx workflow.Context, parentExec *workflow.Execution, pageToken []byte) {
 	if s.handover {
 		// Handover-hits-hint: still in the startup handover, predecessor
 		// running. Pausing here bounds our history at ~hint size and guarantees
 		// at most one handover is in flight at a time. Await promotion
-		// (predecessor completion, which clears handover), then cut immediately.
+		// (predecessor completion, which clears handover), then checkpoint
+		// immediately.
 		_ = workflow.Await(ctx, func() bool { return !s.handover || s.lastErr != nil })
 		if s.lastErr != nil {
 			return
@@ -267,13 +285,15 @@ func (s *shardedWorkflowState) cutAtBoundary(ctx workflow.Context, parentExec *w
 	if parentExec == nil {
 		return
 	}
-	_ = workflow.SignalExternalWorkflow(ctx,
+	if err := workflow.SignalExternalWorkflow(ctx,
 		parentExec.ID, parentExec.RunID,
 		shardedCheckpointSignalName,
 		shardedCheckpointPayload{
 			ChildRunID:    workflow.GetInfo(ctx).WorkflowExecution.RunID,
 			NextPageToken: pageToken,
-		}).Get(ctx, nil)
+		}).Get(ctx, nil); err != nil {
+		s.setLastErr(fmt.Errorf("checkpoint signal to parent: %w", err))
+	}
 }
 
 var (

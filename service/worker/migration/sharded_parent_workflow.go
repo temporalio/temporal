@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -284,8 +285,9 @@ type shardedParentState struct {
 	// (which cannot return an error) can surface it to the main loop.
 	startErr error
 
-	// childErr captures the first child failure so the main loop can
-	// return it after the selector fires.
+	// childErr captures the first error surfaced from a child-completion
+	// callback — a child failure, or a failed promotion signal to a successor
+	// — so the main loop can return it after the selector fires.
 	childErr error
 
 	metricsHandler sdkclient.MetricsHandler
@@ -341,7 +343,7 @@ func (ps *shardedParentState) liveTotalCount() int64 {
 //   - On exit (no live children): finish if a child reached the namespace
 //     end; else CAN if draining; else fail (handover bookkeeping bug).
 //
-// At most two children are live at once (the cutting child plus its
+// At most two children are live at once (the checkpointing child plus its
 // successor) and at most one handover is in flight at any time.
 func (ps *shardedParentState) run(ctx workflow.Context) error {
 	// Start the first child. Not in handover — no predecessor exists.
@@ -357,7 +359,7 @@ func (ps *shardedParentState) run(ctx workflow.Context) error {
 	}
 	ps.wiredCount = len(ps.liveRunIDs)
 
-	// Checkpoint signal: received when a child cuts at a page boundary.
+	// Checkpoint signal: received when a child checkpoints at a page boundary.
 	// Re-added to the selector each iteration because AddReceive fires
 	// once per message delivery; the channel itself persists.
 	sel.AddReceive(ps.checkpointCh, func(c workflow.ReceiveChannel, _ bool) {
@@ -585,18 +587,35 @@ func (ps *shardedParentState) onChildCompleted(ctx workflow.Context, runID strin
 			if _, live := ps.liveChildren[candidateRunID]; !live {
 				continue
 			}
-			// Send resumeFullRate to the successor. Best-effort:
-			// if the signal fails (e.g., successor already completed),
-			// the child simply stays at half rate for its remaining work,
-			// which is safe.
-			successorExec := ps.liveExecs[candidateRunID]
-			_ = workflow.SignalExternalWorkflow(ctx,
-				successorExec.ID,
-				successorExec.RunID,
-				shardedResumeFullSignalName,
-				struct{}{},
-			).Get(ctx, nil)
+			ps.promoteSuccessor(ctx, ps.liveExecs[candidateRunID])
 			break
+		}
+	}
+}
+
+// promoteSuccessor sends resumeFullRate to advance a throttled successor to
+// full rate. This is load-bearing, not best-effort: a successor started
+// throttled stays throttled until this signal arrives, and a throttled child
+// blocks at its next checkpoint awaiting promotion (see checkpointAtBoundary),
+// so a lost promotion to a still-running successor would deadlock the handover
+// chain.
+//
+// The one benign failure is the successor having already completed
+// (UnknownExternalWorkflowExecutionError, target not found): a throttled child
+// can only complete by reaching the namespace end without hitting a checkpoint,
+// so it never needed promotion. Any other failure means a live, unpromoted
+// successor — and SignalExternalWorkflow has no transient failure modes — so it
+// is latched into childErr to fail the parent rather than hang.
+func (ps *shardedParentState) promoteSuccessor(ctx workflow.Context, successorExec workflow.Execution) {
+	if err := workflow.SignalExternalWorkflow(ctx,
+		successorExec.ID,
+		successorExec.RunID,
+		shardedResumeFullSignalName,
+		struct{}{},
+	).Get(ctx, nil); err != nil {
+		var gone *temporal.UnknownExternalWorkflowExecutionError
+		if !errors.As(err, &gone) && ps.childErr == nil {
+			ps.childErr = fmt.Errorf("resumeFullRate signal to successor %s: %w", successorExec.RunID, err)
 		}
 	}
 }
