@@ -51,6 +51,7 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 		if expected {
 			report.expectedRetained++
 		}
+
 		key := groupKey{
 			path:     obj.path.normalized(),
 			typeName: obj.typeName,
@@ -59,9 +60,8 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 		group := groupByKey[key]
 		if group == nil {
 			group = &objectGroup{
-				path:       key.path,
-				typeName:   key.typeName,
-				excludedBy: excludedBy,
+				path:     key.path,
+				typeName: key.typeName,
 			}
 			groupByKey[key] = group
 		}
@@ -77,8 +77,8 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 	}
 
 	// Keep report output stable across map iteration order and repeated runs.
-	for _, group := range groupByKey {
-		if groupByKey[groupKey{path: group.path, typeName: group.typeName, expected: true}] == group {
+	for key, group := range groupByKey {
+		if key.expected {
 			report.expectedObjects = append(report.expectedObjects, *group)
 		} else {
 			report.unexpectedObjects = append(report.unexpectedObjects, *group)
@@ -147,70 +147,4 @@ func (r report) writeSummary(out *strings.Builder) {
 	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
 	fmt.Fprintf(out, "retained objects: %d total, %d expected, %d unexpected\n", r.totalRetained, r.expectedRetained, r.totalRetained-r.expectedRetained)
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
-}
-		if c := cmp.Compare(b.count, a.count); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.path, b.path); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.typeName, b.typeName); c != 0 {
-			return c
-		}
-		return cmp.Compare(strings.Join(a.excludedBy, "\x00"), strings.Join(b.excludedBy, "\x00"))
-	})
-	slices.Sort(report.unmatchedExcludes)
-	return report
-}
-
-func (r report) failures() error {
-	var failures []error
-	for _, group := range r.retainedObjects {
-		if len(group.excludedBy) > 0 {
-			continue
-		}
-		failures = append(failures, fmt.Errorf("retained object %s (%s) retained %d times", group.path, group.typeName, group.count))
-	}
-	for _, pattern := range r.unmatchedExcludes {
-		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
-	}
-	return errors.Join(failures...)
-}
-
-func (r report) string() string {
-	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 {
-		return ""
-	}
-
-	var out strings.Builder
-	r.writeSummary(&out)
-	out.WriteString("\n\nretained objects:\n")
-
-	for _, group := range r.retainedObjects {
-		fmt.Fprintf(&out, "  %dx %s (%s)", group.count, group.path, group.typeName)
-		if len(group.excludedBy) > 0 {
-			fmt.Fprintf(&out, " [excluded by %s]", strings.Join(group.excludedBy, ", "))
-		}
-		out.WriteByte('\n')
-	}
-	if len(r.unmatchedExcludes) > 0 {
-		out.WriteString("\nstale exclusions:\n")
-	}
-	for _, pattern := range r.unmatchedExcludes {
-		fmt.Fprintf(&out, "  %s\n", pattern)
-	}
-	return strings.TrimSuffix(out.String(), "\n")
-}
-
-func (r report) writeSummary(out *strings.Builder) {
-	out.WriteString("object leak report\n")
-	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
-	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d not excluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
-	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
-	if len(r.exclusionCounts) > 0 {
-		out.WriteString("\nretained objects by exclusion:")
-		for _, pattern := range slices.Sorted(maps.Keys(r.exclusionCounts)) {
-			fmt.Fprintf(out, "\n  %s: %d", pattern, r.exclusionCounts[pattern])
-		}
-	}
 }
