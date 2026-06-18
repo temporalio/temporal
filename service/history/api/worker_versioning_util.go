@@ -21,7 +21,8 @@ type VersionReactivationSignalerFn func(
 ) error
 
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
-// when workflow execution options target a potentially DRAINED/INACTIVE version.
+// when workflow execution options target a potentially DRAINED/INACTIVE version
+// (for example, by specifying a Pinned or OneTime override via update options).
 // This is a fire-and-forget operation - the signal is sent asynchronously and errors are
 // logged by the signaler implementation. The signaler itself is responsible for per-pod
 // dedup by revision number; cross-pod duplicates fold at the receiver via a deterministic
