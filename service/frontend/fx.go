@@ -912,6 +912,7 @@ func HandlerProvider(
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
 		serviceConfig.GlobalWorkerDeploymentReadRPS,
+		serviceConfig.GlobalWorkerDeploymentReadBurstRatio,
 		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
 	)
 

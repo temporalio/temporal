@@ -199,6 +199,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"TriggerWorkflowRule":                          {},
 		"RecordWorkerHeartbeat":                        {},
 		"ListWorkers":                                  {},
+		"CountWorkers":                                 {},
 		"DescribeWorker":                               {},
 		"UpdateTaskQueueConfig":                        {},
 		"FetchWorkerConfig":                            {},

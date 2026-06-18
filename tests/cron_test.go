@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -143,7 +144,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("keyword-value"),
+			"CustomKeywordField": sadefs.MustEncodeValue("keyword-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 

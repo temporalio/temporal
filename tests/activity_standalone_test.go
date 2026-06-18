@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -70,7 +71,7 @@ var (
 	}
 	defaultSearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("value1"),
+			"CustomKeywordField": sadefs.MustEncodeValue("value1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 	defaultUserMetadata = &sdkpb.UserMetadata{
@@ -110,6 +111,7 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
+	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.StartDelayEnabled, nsValues(true))
 	return env
 }
@@ -696,7 +698,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		t.Run("SearchAttributesInvalid", func(t *testing.T) {
 			invalidSearchAttributes := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					"InvalidSearchAttributeKey": payload.EncodeString("value"),
+					"InvalidSearchAttributeKey": sadefs.MustEncodeValue("value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
 			}
 
@@ -883,7 +885,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.NoError(t, err)
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
-		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
+		protorequire.ProtoElementsMatch(t, expected, descResp.GetInfo().GetLinks())
 	})
 
 	t.Run("AttachLinksOnConflictStoresRawInput", func(t *testing.T) {
@@ -1002,10 +1005,12 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {
 		// Reproduces the SAA Nexus-handler scenario: a benign retry of
-		// StartActivityExecution against an already-running activity, without
-		// OnConflictOptions.attach_links, must not reject the request just because
-		// the Links field would push the activity over the per-execution cap — the
-		// links would be dropped anyway.
+		// StartActivityExecution against an already-running activity with
+		// USE_EXISTING and no OnConflictOptions.attach_links must succeed and
+		// silently drop the request's Links field. The per-component cap must
+		// not be enforced on the dropped links — without this carve-out, a
+		// retry that would have pushed the activity over the cap (if attach
+		// had been requested) would falsely reject.
 		const maxLinks = 1
 		cleanup := env.OverrideDynamicConfig(dynamicconfig.MaxLinksPerComponent, maxLinks)
 		defer cleanup()
@@ -1013,28 +1018,13 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-		})
-		require.NoError(t, err)
-		require.True(t, firstResp.Started)
-
-		overCap := make([]*commonpb.Link, maxLinks+5)
-		for i := range overCap {
-			overCap[i] = &commonpb.Link{
+		makeLink := func(prefix string, i int) *commonpb.Link {
+			return &commonpb.Link{
 				Variant: &commonpb.Link_WorkflowEvent_{
 					WorkflowEvent: &commonpb.Link_WorkflowEvent{
 						Namespace:  env.Namespace().String(),
-						WorkflowId: fmt.Sprintf("drop-wf-%d", i),
-						RunId:      "drop-run",
+						WorkflowId: fmt.Sprintf("%s-wf-%d", prefix, i),
+						RunId:      fmt.Sprintf("%s-run", prefix),
 						Reference: &commonpb.Link_WorkflowEvent_EventRef{
 							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 								EventId:   1,
@@ -1046,6 +1036,25 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			}
 		}
 
+		// First call seeds the activity at the per-component cap so any
+		// subsequent attach would exceed it.
+		firstLinks := []*commonpb.Link{makeLink("first", 0)}
+		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:               firstLinks,
+		})
+		require.NoError(t, err)
+		require.True(t, firstResp.Started)
+
+		links := []*commonpb.Link{makeLink("drop", 0)}
 		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
@@ -1056,7 +1065,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           env.Tv().Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               overCap,
+			Links:               links,
 			// attach_links intentionally omitted — the Links field should be silently dropped.
 		})
 		require.NoError(t, err, "over-cap Links must be ignored when attach_links is unset")
@@ -3636,6 +3645,36 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 		})
 	})
 
+	s.Run("StartDelay", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := env.Tv().ActivityID()
+		taskQueue := env.Tv().TaskQueue()
+		startDelay := durationpb.New(300 * time.Second)
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue.GetName()},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          startDelay,
+			RequestId:           env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, startDelay, describeResp.GetInfo().GetStartDelay())
+	})
+
 	s.Run("WaitAnyStateChange", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
@@ -4711,7 +4750,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			RequestId:           env.Tv().RequestID(),
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					customSAName: payload.EncodeString(customSAValue),
+					customSAName: sadefs.MustEncodeValue(customSAValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
 			},
 		})
@@ -4953,7 +4992,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 				RequestId:           env.Tv().RequestID(),
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						customSAName: payload.EncodeString(customSAValue),
+						customSAName: sadefs.MustEncodeValue(customSAValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			})
@@ -6808,5 +6847,52 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
+	env := s.newTestEnv()
+	t := s.T()
+
+	// Override EnableCallbacks back to false to simulate a namespace where the feature is off.
+	nsValues := []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false},
+	}
+	env.GetTestCluster().OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues)
+
+	cb := []*commonpb.Callback{{
+		Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb"}},
+	}}
+
+	t.Run("StartWithCallbacksFails", func(t *testing.T) {
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: cb,
+		})
+		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
+	})
+
+	t.Run("OnConflictAttachCallbacksFails", func(t *testing.T) {
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          testcore.RandomizeStr(t.Name()),
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: cb,
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions:   &commonpb.OnConflictOptions{AttachCompletionCallbacks: true},
+		})
+		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
 	})
 }

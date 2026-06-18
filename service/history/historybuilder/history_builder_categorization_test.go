@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type StubHandler struct{}
@@ -51,7 +52,7 @@ func (h StubHandler) StartBatch(_ string) metrics.BatchHandler {
 }
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
-	hb := HistoryBuilder{EventStore: EventStore{}}
+	hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 	if hb.IsDirty() {
 		t.Fatal("newly created history is dirty")
 	}
@@ -60,7 +61,7 @@ func TestHistoryBuilder_IsDirty(t *testing.T) {
 func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	ns := "some-namespace"
 	t.Run("When ParentExecutionInfo is nil should not include in attributes", func(t *testing.T) {
-		hb := HistoryBuilder{}
+		hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq}
 		startTime := time.Date(2023, 12, 27, 1, 11, 00, 00, time.UTC)
@@ -88,7 +89,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	})
 
 	t.Run("When ParentExecutionInfo is not nil should copy values to attributes", func(t *testing.T) {
-		hb := HistoryBuilder{}
+		hb := HistoryBuilder{EventStore: EventStore{maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes}}
 		parentInfo := &workflowspb.ParentExecutionInfo{Namespace: ns}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
@@ -125,7 +126,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
 		hb := HistoryBuilder{
-			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[string]int64)},
+			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[string]int64), maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes},
 			EventFactory{},
 		}
 		hb.scheduledIDToStartedID[71] = 42
@@ -208,7 +209,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
 		// add another event to memBufferBatch
-		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "", nil, nil, nil)
+		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "", nil, nil, false, nil)
 		if len(hb.memBufferBatch) != 2 {
 			t.Errorf("expected 2 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
@@ -1212,7 +1213,7 @@ type builderConfig struct {
 func newHistoryBuilderFromConfig(config builderConfig) *HistoryBuilder {
 	ts := clock.NewRealTimeSource()
 	tig := func(n int) ([]int64, error) { return []int64{1, 2, 3, 4, 5}, nil }
-	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{})
+	return New(ts, tig, int64(101), config.nextEventId, config.dbBufferBatch, StubHandler{}, tests.NewDynamicConfig().MaximumEventBatchSizeInBytes)
 }
 
 func newHistoryBuilder() *HistoryBuilder {
@@ -1292,11 +1293,12 @@ func (s *sutTestingAdapter) AddActivityTaskFailedEvent(optionalConfig ...eventCo
 }
 
 func (s *sutTestingAdapter) AddActivityTaskScheduledEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddActivityTaskScheduledEvent(
+	event, _ := s.HistoryBuilder.AddActivityTaskScheduledEvent(
 		64,
 		&commandpb.ScheduleActivityTaskCommandAttributes{},
 		defaultNamespace,
 	)
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskFailedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1339,7 +1341,8 @@ func (s *sutTestingAdapter) AddCompletedWorkflowEvent(_ ...eventConfig) *history
 	attrs := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 		Result: nil,
 	}
-	return s.HistoryBuilder.AddCompletedWorkflowEvent(64, attrs, "new-run-1")
+	event, _ := s.HistoryBuilder.AddCompletedWorkflowEvent(64, attrs, "new-run-1")
+	return event
 }
 
 func (s *sutTestingAdapter) AddFailWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1354,11 +1357,13 @@ func (s *sutTestingAdapter) AddFailWorkflowEvent(_ ...eventConfig) *historypb.Hi
 }
 
 func (s *sutTestingAdapter) AddTimeoutWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddTimeoutWorkflowEvent(enumspb.RETRY_STATE_IN_PROGRESS, "new-rung-1")
+	event, _ := s.HistoryBuilder.AddTimeoutWorkflowEvent(enumspb.RETRY_STATE_IN_PROGRESS, "new-rung-1")
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionTerminatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
+	event, _ := s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
+	return event
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionUpdateAcceptedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1372,7 +1377,8 @@ func (s *sutTestingAdapter) AddWorkflowExecutionUpdateCompletedEvent(_ ...eventC
 
 func (s *sutTestingAdapter) AddContinuedAsNewEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddContinuedAsNewEvent(64, "new-run-5", attrs)
+	event, _ := s.HistoryBuilder.AddContinuedAsNewEvent(64, "new-run-5", attrs)
+	return event
 }
 
 func (s *sutTestingAdapter) AddTimerStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1413,12 +1419,14 @@ func (s *sutTestingAdapter) AddWorkflowExecutionCancelRequestedEvent(_ ...eventC
 
 func (s *sutTestingAdapter) AddWorkflowExecutionCanceledEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.CancelWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddWorkflowExecutionCanceledEvent(64, attrs)
+	event, _ := s.HistoryBuilder.AddWorkflowExecutionCanceledEvent(64, attrs)
+	return event
 }
 
 func (s *sutTestingAdapter) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("some-id"))
+	event, _ := s.HistoryBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("some-id"))
+	return event
 }
 
 func (s *sutTestingAdapter) AddRequestCancelExternalWorkflowExecutionFailedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1447,7 +1455,8 @@ func (s *sutTestingAdapter) AddSignalExternalWorkflowExecutionInitiatedEvent(_ .
 	attrs := &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 		Execution: &commonpb.WorkflowExecution{},
 	}
-	return s.HistoryBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
+	event, _ := s.HistoryBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
+	return event
 }
 
 func (s *sutTestingAdapter) AddUpsertWorkflowSearchAttributesEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1503,7 +1512,8 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 
 func (s *sutTestingAdapter) AddStartChildWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"), nil, nil)
+	event, _ := s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"), nil, nil)
+	return event
 }
 
 func (s *sutTestingAdapter) AddChildWorkflowExecutionStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {

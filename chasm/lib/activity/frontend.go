@@ -409,12 +409,19 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
+		if !h.config.EnableCallbacks(req.GetNamespace()) {
+			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
+		}
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
 	}
 
 	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
+		return nil, err
+	}
+
+	if err := validateOnConflictOptions(req); err != nil {
 		return nil, err
 	}
 
