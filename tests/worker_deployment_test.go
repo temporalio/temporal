@@ -495,10 +495,8 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 
 	expectedError := "conflict token mismatch"
 
-	firstVersion := env.Tv()
-
 	// Start deployment version workflow + worker-deployment workflow.
-	go s.pollFromDeployment(env, firstVersion)
+	go s.pollFromDeployment(env, env.Tv())
 
 	cTWrong, _ := time.Now().MarshalBinary() // wrong token
 	// Wait until deployment exists
@@ -990,17 +988,15 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateRamp() {
 	env := s.newTestEnv()
 
-	rampingVersionVars := env.Tv()
-
 	versionCreateTime := timestamppb.Now()
-	s.startVersionWorkflow(env, rampingVersionVars)
+	s.startVersionWorkflow(env, env.Tv())
 
 	// set version as ramping
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, false, 50, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 50, true, "")
 	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: rampingVersionVars.DeploymentSeries(),
+		DeploymentName: env.Tv().DeploymentSeries(),
 	})
 	s.NoError(err)
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
@@ -1040,15 +1036,14 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 	env := s.newTestEnv()
 
 	versionCreateTime := timestamppb.Now()
-	currentVersionVars := env.Tv()
-	s.startVersionWorkflow(env, currentVersionVars)
+	s.startVersionWorkflow(env, env.Tv())
 
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(env, currentVersionVars, true, "")
+	s.setCurrentVersion(env, env.Tv(), true, "")
 
 	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: currentVersionVars.DeploymentSeries(),
+		DeploymentName: env.Tv().DeploymentSeries(),
 	})
 	s.NoError(err)
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
@@ -1139,12 +1134,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 	env := s.newTestEnv()
 
 	versionCreateTime := timestamppb.Now()
-	rampingVersionVars := env.Tv()
-	s.startVersionWorkflow(env, rampingVersionVars)
+	s.startVersionWorkflow(env, env.Tv())
 
 	// set version as ramping
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, false, 50, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 50, true, "")
 	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: env.Tv().DeploymentSeries(),
