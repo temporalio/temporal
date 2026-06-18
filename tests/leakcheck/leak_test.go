@@ -1,12 +1,3 @@
-// Package leakcheck is a goroutine-leak regression test for the functional
-// test infrastructure. It detects per-cluster goroutines and gRPC connections not
-// being released when a test cluster shuts down.
-//
-// Tunable via env:
-//
-//	LEAK_ITERS         clusters built after warmup
-//	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
-//	LEAK_OUTPUT_DIR    directory for diagnostics on failure (CI uploads it)
 package leakcheck
 
 import (
@@ -54,6 +45,15 @@ var opts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
 }
 
+// TestClusterShutdownLeak is a goroutine-leak regression test for the functional
+// test infrastructure. It detects per-cluster goroutines not being released when
+// a test cluster shuts down.
+//
+// Tunable via env:
+//
+//	LEAK_ITERS         clusters built after warmup
+//	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
+//	LEAK_OUTPUT_DIR    directory for diagnostics on failure (CI uploads it)
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
