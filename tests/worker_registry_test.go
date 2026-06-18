@@ -22,12 +22,12 @@ type WorkerRegistryTestSuite struct {
 }
 
 func TestWorkerRegistryTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkerRegistryTestSuite{})
+	testcore.UseSuiteScopedCluster(t)                                //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &WorkerRegistryTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *WorkerRegistryTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
-		testcore.WithWorkerService("worker registry tests need worker service"),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
