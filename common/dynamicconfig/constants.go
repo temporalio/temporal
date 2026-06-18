@@ -1519,6 +1519,14 @@ second per poller by one physical queue manager`,
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
 	)
+	MatchingFairnessPassDither = NewTaskQueueBoolSetting(
+		"matching.fairnessPassDither",
+		false,
+		`When true, dither the starting pass of new/reset fairness keys over their initial
+stride instead of starting them all at the ack level. This spreads low-weight keys ahead
+in pass-space so they don't clump at the front after a counter reset (e.g. partition
+movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new keys.`,
+	)
 	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
