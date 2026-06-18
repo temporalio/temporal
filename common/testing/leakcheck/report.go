@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type objectGraphReport struct {
+type objectLeakReport struct {
 	retainedObjects   []retainedObjectGroup
 	totalRetained     int
 	excludedRetained  int
@@ -22,8 +22,8 @@ type retainedObjectGroup struct {
 	count      int
 }
 
-func newObjectGraphReport(objects []trackedObject, excludes exclusions) objectGraphReport {
-	report := objectGraphReport{
+func newObjectLeakReport(objects []trackedObject, excludes exclusions) objectLeakReport {
+	report := objectLeakReport{
 		exclusionCounts: make(map[string]int),
 	}
 	activeExclusions := append(exclusions(nil), excludes...)
@@ -50,7 +50,7 @@ func newObjectGraphReport(objects []trackedObject, excludes exclusions) objectGr
 
 		excludedBy = sortedStrings(excludedBy)
 		key := groupKey{
-			path:       obj.path.Normalized(),
+			path:       obj.path.normalized(),
 			typeName:   obj.typeName,
 			excludedBy: strings.Join(excludedBy, "\x00"),
 		}
@@ -78,7 +78,7 @@ func newObjectGraphReport(objects []trackedObject, excludes exclusions) objectGr
 	return report
 }
 
-func (r objectGraphReport) failures() error {
+func (r objectLeakReport) failures() error {
 	var failures []error
 	for _, group := range r.retainedObjects {
 		if len(group.excludedBy) > 0 {
@@ -87,12 +87,12 @@ func (r objectGraphReport) failures() error {
 		failures = append(failures, fmt.Errorf("retained graph object %s (%s) retained %d times", group.path, group.typeName, group.count))
 	}
 	for _, pattern := range r.unmatchedExcludes {
-		failures = append(failures, fmt.Errorf("object graph exclusion %q did not match any object", pattern))
+		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
 	}
 	return errors.Join(failures...)
 }
 
-func (r objectGraphReport) String() string {
+func (r objectLeakReport) String() string {
 	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 {
 		return ""
 	}
@@ -132,9 +132,9 @@ func sortRetainedObjectGroups(groups []retainedObjectGroup) {
 	})
 }
 
-func (r objectGraphReport) summaryLines() []string {
+func (r objectLeakReport) summaryLines() []string {
 	lines := []string{
-		"object graph leak report",
+		"object leak report",
 		fmt.Sprintf("retained objects: %d total, %d excluded, %d unexcluded", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained),
 		fmt.Sprintf("stale exclusions: %d", len(r.unmatchedExcludes)),
 	}

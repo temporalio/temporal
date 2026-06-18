@@ -24,15 +24,15 @@ func newObjectPath(root string) objectPath {
 	return objectPath{{kind: pathSegmentField, value: root}}
 }
 
-func (p objectPath) Field(name string) objectPath {
+func (p objectPath) field(name string) objectPath {
 	return p.append(pathSegment{kind: pathSegmentField, value: name})
 }
 
-func (p objectPath) Index(index int) objectPath {
+func (p objectPath) index(index int) objectPath {
 	return p.append(pathSegment{kind: pathSegmentIndex, value: fmt.Sprint(index)})
 }
 
-func (p objectPath) MapKey(index int) objectPath {
+func (p objectPath) mapKey(index int) objectPath {
 	return p.append(pathSegment{kind: pathSegmentMapKey, value: fmt.Sprint(index)})
 }
 
@@ -47,7 +47,7 @@ func (p objectPath) String() string {
 	return p.format(false)
 }
 
-func (p objectPath) Normalized() string {
+func (p objectPath) normalized() string {
 	return p.format(true)
 }
 

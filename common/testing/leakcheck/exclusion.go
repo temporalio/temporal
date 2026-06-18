@@ -14,14 +14,14 @@ type exclusions []exclusion
 
 func newExclusion(pattern string) (exclusion, error) {
 	if hasSpecificPathIndex(pattern) {
-		return exclusion{}, fmt.Errorf("object graph exclusion %q targets a specific index; use [*] or [key*]", pattern)
+		return exclusion{}, fmt.Errorf("object exclusion %q targets a specific index; use [*] or [key*]", pattern)
 	}
 	return exclusion{pattern: pattern}, nil
 }
 
 func (xs exclusions) Match(obj trackedObject) []string {
 	var matches []string
-	path := obj.path.Normalized()
+	path := obj.path.normalized()
 	for i := range xs {
 		if xs[i].matches(path, obj.typeName) {
 			xs[i].matched = true
