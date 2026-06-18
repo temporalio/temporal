@@ -8,15 +8,12 @@ import (
 )
 
 type objectGraphReport struct {
-	retainedObjects   []retainedObject
+	retainedObjects   []retainedObjectGroup
+	totalRetained     int
+	excludedRetained  int
+	exclusionCounts   map[string]int
 	unmatchedExcludes []string
 	invalidExcludes   []string
-}
-
-type retainedObject struct {
-	path       string
-	typeName   string
-	excludedBy []string
 }
 
 type retainedObjectGroup struct {
@@ -26,116 +23,33 @@ type retainedObjectGroup struct {
 	count      int
 }
 
-func newObjectGraphReport(objects []trackedObject, excludes []string) objectGraphReport {
-	var report objectGraphReport
-	matchedExcludes := make(map[string]bool, len(excludes))
-	for _, pattern := range excludes {
-		if hasSpecificPathIndex(pattern) {
-			report.invalidExcludes = append(report.invalidExcludes, pattern)
-		}
+func newObjectGraphReport(objects []trackedObject, excludes []exclusion) objectGraphReport {
+	report := objectGraphReport{
+		exclusionCounts: make(map[string]int),
 	}
-	for _, obj := range objects {
-		excludedBy := matchingExcludes(obj, excludes)
-		for _, pattern := range excludedBy {
-			matchedExcludes[pattern] = true
-		}
-		if obj.collected.Load() {
-			continue
-		}
-		report.retainedObjects = append(report.retainedObjects, retainedObject{
-			path:       obj.path,
-			typeName:   obj.typeName,
-			excludedBy: excludedBy,
-		})
-	}
-	for _, pattern := range excludes {
-		if !matchedExcludes[pattern] {
-			report.unmatchedExcludes = append(report.unmatchedExcludes, pattern)
-		}
-	}
-	return report
-}
+	exclusions := append([]exclusion(nil), excludes...)
 
-func matchingExcludes(obj trackedObject, excludes []string) []string {
-	var matches []string
-	path := normalizePathIndexes(obj.path)
-	matchesPattern := func(pattern string, value string) bool {
-		if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
-			return strings.HasPrefix(value, prefix)
-		}
-		return value == pattern
-	}
-	for _, pattern := range excludes {
-		if hasSpecificPathIndex(pattern) {
-			continue
-		}
-		if matchesPattern(pattern, path) || matchesPattern(pattern, obj.typeName) {
-			matches = append(matches, pattern)
-		}
-	}
-	return matches
-}
-
-func (r objectGraphReport) failures() error {
-	var failures []error
-	for _, group := range r.groups() {
-		if len(group.excludedBy) > 0 {
-			continue
-		}
-		failures = append(failures, fmt.Errorf("retained graph object %s (%s) retained %d times", group.path, group.typeName, group.count))
-	}
-	for _, pattern := range r.unmatchedExcludes {
-		failures = append(failures, fmt.Errorf("object graph exclusion %q did not match any object", pattern))
-	}
-	for _, pattern := range r.invalidExcludes {
-		failures = append(failures, fmt.Errorf("object graph exclusion %q targets a specific index; use [*] or [key*]", pattern))
-	}
-	return errors.Join(failures...)
-}
-
-func (r objectGraphReport) String() string {
-	if len(r.retainedObjects) == 0 && len(r.unmatchedExcludes) == 0 && len(r.invalidExcludes) == 0 {
-		return ""
-	}
-
-	var lines []string
-	lines = append(lines, r.summaryLines()...)
-	lines = append(lines, "", "retained objects:")
-
-	for _, group := range r.groups() {
-		line := fmt.Sprintf("  %dx %s (%s)", group.count, group.path, group.typeName)
-		if len(group.excludedBy) > 0 {
-			line += fmt.Sprintf(" [excluded by %s]", strings.Join(group.excludedBy, ", "))
-		}
-		lines = append(lines, line)
-	}
-	sort.Strings(r.unmatchedExcludes)
-	if len(r.unmatchedExcludes) > 0 {
-		lines = append(lines, "", "stale exclusions:")
-	}
-	for _, pattern := range r.unmatchedExcludes {
-		lines = append(lines, fmt.Sprintf("  %s", pattern))
-	}
-	sort.Strings(r.invalidExcludes)
-	if len(r.invalidExcludes) > 0 {
-		lines = append(lines, "", "invalid exclusions:")
-	}
-	for _, pattern := range r.invalidExcludes {
-		lines = append(lines, fmt.Sprintf("  %s targets a specific index; use [*] or [key*]", pattern))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (r objectGraphReport) groups() []retainedObjectGroup {
 	type groupKey struct {
 		path       string
 		typeName   string
 		excludedBy string
 	}
-
 	groupByKey := make(map[groupKey]*retainedObjectGroup)
-	for _, obj := range r.retainedObjects {
-		excludedBy := sortedStrings(obj.excludedBy)
+	for _, obj := range objects {
+		excludedBy := matchingExcludes(obj, exclusions)
+		if obj.collected.Load() {
+			continue
+		}
+
+		report.totalRetained++
+		if len(excludedBy) > 0 {
+			report.excludedRetained++
+		}
+		for _, pattern := range excludedBy {
+			report.exclusionCounts[pattern]++
+		}
+
+		excludedBy = sortedStrings(excludedBy)
 		key := groupKey{
 			path:       normalizePathIndexes(obj.path),
 			typeName:   obj.typeName,
@@ -152,11 +66,71 @@ func (r objectGraphReport) groups() []retainedObjectGroup {
 		}
 		group.count++
 	}
-
-	groups := make([]retainedObjectGroup, 0, len(groupByKey))
-	for _, group := range groupByKey {
-		groups = append(groups, *group)
+	for _, exclusion := range exclusions {
+		if exclusion.invalid {
+			report.invalidExcludes = append(report.invalidExcludes, exclusion.pattern)
+		} else if !exclusion.matched {
+			report.unmatchedExcludes = append(report.unmatchedExcludes, exclusion.pattern)
+		}
 	}
+	for _, group := range groupByKey {
+		report.retainedObjects = append(report.retainedObjects, *group)
+	}
+	sortRetainedObjectGroups(report.retainedObjects)
+	sort.Strings(report.unmatchedExcludes)
+	sort.Strings(report.invalidExcludes)
+	return report
+}
+
+func (r objectGraphReport) failures() error {
+	var failures []error
+	for _, group := range r.retainedObjects {
+		if len(group.excludedBy) > 0 {
+			continue
+		}
+		failures = append(failures, fmt.Errorf("retained graph object %s (%s) retained %d times", group.path, group.typeName, group.count))
+	}
+	for _, pattern := range r.unmatchedExcludes {
+		failures = append(failures, fmt.Errorf("object graph exclusion %q did not match any object", pattern))
+	}
+	for _, pattern := range r.invalidExcludes {
+		failures = append(failures, fmt.Errorf("object graph exclusion %q targets a specific index; use [*] or [key*]", pattern))
+	}
+	return errors.Join(failures...)
+}
+
+func (r objectGraphReport) String() string {
+	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 && len(r.invalidExcludes) == 0 {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, r.summaryLines()...)
+	lines = append(lines, "", "retained objects:")
+
+	for _, group := range r.retainedObjects {
+		line := fmt.Sprintf("  %dx %s (%s)", group.count, group.path, group.typeName)
+		if len(group.excludedBy) > 0 {
+			line += fmt.Sprintf(" [excluded by %s]", strings.Join(group.excludedBy, ", "))
+		}
+		lines = append(lines, line)
+	}
+	if len(r.unmatchedExcludes) > 0 {
+		lines = append(lines, "", "stale exclusions:")
+	}
+	for _, pattern := range r.unmatchedExcludes {
+		lines = append(lines, fmt.Sprintf("  %s", pattern))
+	}
+	if len(r.invalidExcludes) > 0 {
+		lines = append(lines, "", "invalid exclusions:")
+	}
+	for _, pattern := range r.invalidExcludes {
+		lines = append(lines, fmt.Sprintf("  %s targets a specific index; use [*] or [key*]", pattern))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func sortRetainedObjectGroups(groups []retainedObjectGroup) {
 	sort.Slice(groups, func(i int, j int) bool {
 		if groups[i].count != groups[j].count {
 			return groups[i].count > groups[j].count
@@ -169,34 +143,19 @@ func (r objectGraphReport) groups() []retainedObjectGroup {
 		}
 		return strings.Join(groups[i].excludedBy, "\x00") < strings.Join(groups[j].excludedBy, "\x00")
 	})
-	return groups
 }
 
 func (r objectGraphReport) summaryLines() []string {
-	excludedCount := 0
-	unexcludedCount := 0
-	exclusionCounts := make(map[string]int)
-	for _, obj := range r.retainedObjects {
-		if len(obj.excludedBy) == 0 {
-			unexcludedCount++
-			continue
-		}
-		excludedCount++
-		for _, pattern := range obj.excludedBy {
-			exclusionCounts[pattern]++
-		}
-	}
-
 	lines := []string{
 		"object graph leak report",
-		fmt.Sprintf("retained objects: %d total, %d excluded, %d unexcluded", len(r.retainedObjects), excludedCount, unexcludedCount),
+		fmt.Sprintf("retained objects: %d total, %d excluded, %d unexcluded", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained),
 		fmt.Sprintf("stale exclusions: %d", len(r.unmatchedExcludes)),
 		fmt.Sprintf("invalid exclusions: %d", len(r.invalidExcludes)),
 	}
-	if len(exclusionCounts) > 0 {
+	if len(r.exclusionCounts) > 0 {
 		lines = append(lines, "retained objects by exclusion:")
-		for _, pattern := range sortedMapKeys(exclusionCounts) {
-			lines = append(lines, fmt.Sprintf("  %s: %d", pattern, exclusionCounts[pattern]))
+		for _, pattern := range sortedMapKeys(r.exclusionCounts) {
+			lines = append(lines, fmt.Sprintf("  %s: %d", pattern, r.exclusionCounts[pattern]))
 		}
 	}
 	return lines
