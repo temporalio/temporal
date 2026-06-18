@@ -2658,7 +2658,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
-		newTQ := command.GetTaskQueue().GetName()
+		newTQ := taskQueue
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
@@ -2670,13 +2670,34 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
+	// If a OneTimeOverride is still pending when this WFT issues Continue-As-New, carry it to the new run so the move can still be
+	// attempted there. If the move already succeeded, it was cleared during WFT completion before this
+	// Continue-As-New path runs.
+	previousVersioningOverride := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride()
+	pendingOneTimeOverrideTarget := worker_versioning.GetOverrideOneTimeTargetVersion(previousVersioningOverride)
+	hasPendingOneTimeOverride := pendingOneTimeOverrideTarget != nil
+
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	var pinnedOverride *workflowpb.VersioningOverride
-	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
-		pinnedOverride = o
-		newTQ := command.GetTaskQueue().GetName()
+	// Pending one-time override is also inherited as one-time state.
+	var inheritedVersioningOverride *workflowpb.VersioningOverride
+	if hasPendingOneTimeOverride {
+		inheritedVersioningOverride = previousVersioningOverride
+		newTQ := taskQueue
+		if newTQ != previousExecutionInfo.GetTaskQueue() {
+			// Querying matching since the TQ used for the pendingOneTimeOverride could not have the version present in it's userData
+			newTQInOneTimeTarget, err := IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, pendingOneTimeOverrideTarget)
+			if err != nil {
+				return nil, fmt.Errorf("error determining continue-as-new task queue presence in one-time override target version: %w", err)
+			}
+			if !newTQInOneTimeTarget {
+				inheritedVersioningOverride = nil
+			}
+		}
+	} else if worker_versioning.OverrideIsPinned(previousVersioningOverride) {
+		inheritedVersioningOverride = previousVersioningOverride
+		newTQ := taskQueue
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
-			pinnedOverride = nil
+			inheritedVersioningOverride = nil
 		}
 	}
 
@@ -2695,7 +2716,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
-		newTQ := command.GetTaskQueue().GetName()
+		newTQ := taskQueue
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			// Cross-TQ CAN: check if new TQ is in parent's deployment
 			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
@@ -2769,7 +2790,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		RootExecutionInfo:            rootExecutionInfo,
 		InheritedBuildId:             inheritedBuildId,
 		InheritedPinnedVersion:       inheritedPinnedVersion,
-		VersioningOverride:           pinnedOverride,
+		VersioningOverride:           inheritedVersioningOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		TimeSkippingStatePropagation: stateProp,
 	}
@@ -9629,8 +9650,8 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 // GetEffectiveDeployment returns the effective deployment in the following order:
 //  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 //     new deployment
-//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+//     pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Deployment: this is returned when there is no transition and no override (the most
 //     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -9717,8 +9738,8 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
 //  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {

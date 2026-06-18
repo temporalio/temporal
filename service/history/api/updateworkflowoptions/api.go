@@ -223,6 +223,30 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
+	if _, ok := updateFields["versioningOverride.pinned"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.pinned.behavior"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.pinned.version"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.autoUpgrade"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.oneTime"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.oneTime.targetDeploymentVersion"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
 	// ==== Priority
 
 	if _, ok := updateFields["priority"]; ok {

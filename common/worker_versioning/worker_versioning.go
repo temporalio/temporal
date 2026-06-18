@@ -657,10 +657,22 @@ func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deployme
 	}
 	return nil
 }
+
+func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	return override.GetOneTime().GetTargetDeploymentVersion()
+}
+
+func GetOverrideTargetVersionForReactivation(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	if OverrideIsPinned(override) {
+		return GetOverridePinnedVersion(override)
+	}
+	return GetOverrideOneTimeTargetVersion(override)
+}
+
 func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
 	if override.GetAutoUpgrade() {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	} else if override.GetPinned() != nil {
+	} else if override.GetPinned() != nil || override.GetOneTime() != nil {
 		return enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
@@ -737,6 +749,11 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 			return false, 0, serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
 		return validateVersionAndGetReactivationEligibility(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	} else if oneTime := override.GetOneTime(); oneTime != nil {
+		if oneTime.GetTargetDeploymentVersion() == nil {
+			return false, 0, serviceerror.NewInvalidArgument("must provide target deployment version if override is one-time.")
+		}
+		return validateVersionAndGetReactivationEligibility(ctx, oneTime.GetTargetDeploymentVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31

@@ -236,9 +236,10 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	var pinnedOverride *workflowpb.VersioningOverride
-	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
-		pinnedOverride = o
+	var versioningOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) ||
+		worker_versioning.GetOverrideOneTimeTargetVersion(o) != nil {
+		versioningOverride = o
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 	}
 
@@ -300,7 +301,7 @@ func SetupNewWorkflowForRetryOrCron(
 		CompletionCallbacks:      completionCallbacks,
 		Links:                    startLinks,
 		Priority:                 startAttr.Priority,
-		VersioningOverride:       pinnedOverride,
+		VersioningOverride:       versioningOverride,
 	}
 
 	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)

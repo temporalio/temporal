@@ -852,6 +852,19 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 		versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 		s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
+		if useV32 {
+			versioningInfo.DeploymentVersion = deploymentVersion1
+			versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: deploymentVersion2,
+					},
+				},
+			}
+			versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+			s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+		}
+
 		// ------- With transition
 
 		if useV32 {
@@ -917,6 +930,45 @@ func (s *mutableStateSuite) verifyEffectiveDeployment(
 		)
 	}
 	s.Equal(expectedBehavior, s.mutableState.GetEffectiveVersioningBehavior())
+}
+
+func oneTimeOverride(deployment *deploymentpb.Deployment) *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_OneTime{
+			OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+				TargetDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
+			},
+		},
+	}
+}
+
+func (s *mutableStateSuite) requireOneTimeOverride(expectedDeployment *deploymentpb.Deployment) {
+	s.requireOneTimeOverrideInVersioningInfo(s.mutableState.GetExecutionInfo().GetVersioningInfo(), expectedDeployment)
+}
+
+func (s *mutableStateSuite) requireOneTimeOverrideInVersioningInfo(
+	versioningInfo *workflowpb.WorkflowExecutionVersioningInfo,
+	expectedDeployment *deploymentpb.Deployment,
+) {
+	s.Require().NotNil(versioningInfo)
+	override := versioningInfo.GetVersioningOverride()
+	s.Require().NotNil(override)
+	oneTime := override.GetOneTime()
+	s.Require().NotNil(oneTime)
+	targetVersion := oneTime.GetTargetDeploymentVersion()
+	s.Require().NotNil(targetVersion)
+	expectedVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(expectedDeployment)
+	s.Equal(expectedVersion.GetDeploymentName(), targetVersion.GetDeploymentName())
+	s.Equal(expectedVersion.GetBuildId(), targetVersion.GetBuildId())
+}
+
+func (s *mutableStateSuite) requireEffectiveDeploymentForState(
+	ms historyi.MutableState,
+	expectedDeployment *deploymentpb.Deployment,
+	expectedBehavior enumspb.VersioningBehavior,
+) {
+	s.True(ms.GetEffectiveDeployment().Equal(expectedDeployment))
+	s.Equal(expectedBehavior, ms.GetEffectiveVersioningBehavior())
 }
 
 // Creates a mutable state with first WFT completed on the given deployment and behavior set
@@ -1331,6 +1383,218 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		},
 	)
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
+}
+
+func (s *mutableStateSuite) TestOneTimeOverrideClearedAfterTargetWorkflowTaskCompletion() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+
+	_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		oneTimeOverride(deployment2), false, "", nil, nil, uuid.NewString(), nil, nil, false, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment:         deployment2, //nolint:staticcheck // SA1019: worker versioning v0.30
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	s.Nil(s.mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+}
+
+func (s *mutableStateSuite) TestOneTimeOverrideNotClearedAfterDifferentWorkflowTaskCompletion() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+
+	// Note: Here, we are replicating the case where the UpdateOptionsEvent is persisted while we have an
+	// Started WFT
+	_, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		oneTimeOverride(deployment2), false, "", nil, nil, uuid.NewString(), nil, nil, false, nil)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			Deployment:         deployment1, //nolint:staticcheck // SA1019: worker versioning v0.30
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	s.requireOneTimeOverride(deployment2)
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+}
+
+func (s *mutableStateSuite) TestOneTimeOverrideContinueAsNewAfterTargetWorkflowTaskCompletionAllowsAutoUpgrade() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+
+	_, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		oneTimeOverride(deployment2), false, "", nil, nil, uuid.NewString(), nil, nil, false, nil)
+	s.NoError(err)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment:         deployment2, //nolint:staticcheck // SA1019: worker versioning v0.30
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	s.Nil(s.mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	s.mutableState.SetVersioningRevisionNumber(123)
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
+		context.Background(),
+		completedEvent.GetEventId(),
+		"",
+		&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+			WorkflowRunTimeout:        s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+			InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		},
+		nil,
+	)
+	s.NoError(err)
+	s.Nil(newRunMutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	s.requireEffectiveDeploymentForState(newRunMutableState, deployment2, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) TestOneTimeOverrideContinueAsNewCarriesPendingOverride() {
+	testCases := []struct {
+		name                      string
+		initialVersioningBehavior enumspb.ContinueAsNewVersioningBehavior
+		expectedBaseBehavior      enumspb.VersioningBehavior
+	}{
+		{
+			name:                      "unspecified inherits pinned base",
+			initialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED,
+			expectedBaseBehavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		},
+		{
+			name:                      "auto upgrade inherits auto upgrade base",
+			initialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			expectedBaseBehavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			tq := &taskqueuepb.TaskQueue{Name: "tq"}
+			s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+
+			wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			s.NoError(err)
+			_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+				wft.ScheduledEventID,
+				"",
+				tq,
+				"",
+				nil,
+				nil,
+				nil,
+				false,
+				nil,
+				0,
+			)
+			s.NoError(err)
+
+			_, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				oneTimeOverride(deployment2), false, "", nil, nil, uuid.NewString(), nil, nil, false, nil)
+			s.NoError(err)
+
+			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+				wft,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{
+					VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+					Deployment:         deployment1, //nolint:staticcheck // SA1019: worker versioning v0.30
+				},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
+			s.requireOneTimeOverride(deployment2)
+			s.mutableState.SetVersioningRevisionNumber(123)
+
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+			_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
+				context.Background(),
+				completedEvent.GetEventId(),
+				"",
+				&commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowRunTimeout:        s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+					InitialVersioningBehavior: tc.initialVersioningBehavior,
+				},
+				nil,
+			)
+			s.NoError(err)
+			newRunVersioningInfo := newRunMutableState.GetExecutionInfo().GetVersioningInfo()
+			s.requireOneTimeOverrideInVersioningInfo(newRunVersioningInfo, deployment2)
+			s.Equal(tc.expectedBaseBehavior, newRunVersioningInfo.GetBehavior())
+			expectedBaseVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
+			s.Equal(expectedBaseVersion.GetDeploymentName(), newRunVersioningInfo.GetDeploymentVersion().GetDeploymentName())
+			s.Equal(expectedBaseVersion.GetBuildId(), newRunVersioningInfo.GetDeploymentVersion().GetBuildId())
+			s.requireEffectiveDeploymentForState(newRunMutableState, deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+		})
+	}
 }
 
 func (s *mutableStateSuite) TestChecksum() {
