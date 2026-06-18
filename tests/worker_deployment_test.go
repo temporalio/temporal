@@ -70,10 +70,10 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
 func (s *WorkerDeploymentSuite) pollFromDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
-	s.pollFromDeploymentWithContext(s.Context(), env, tv)
+	s.pollFromDeploymentUntil(s.Context(), env, tv)
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentWithContext(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentUntil(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
 	_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -84,7 +84,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentWithContext(ctx context.Contex
 
 func (s *WorkerDeploymentSuite) startDeploymentPoller(env *testcore.TestEnv, tv *testvars.TestVars) context.CancelFunc {
 	ctx, cancel := context.WithCancel(s.Context())
-	go s.pollFromDeploymentWithContext(ctx, env, tv)
+	go s.pollFromDeploymentUntil(ctx, env, tv)
 	return cancel
 }
 
@@ -2158,7 +2158,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 
 		sendPollers := func() {
 			for j := range numTaskQueues {
-				go s.pollFromDeploymentWithContext(pollCtx, env, s.tv().WithBuildIDNumber(i).WithTaskQueueNumber(j))
+				go s.pollFromDeploymentUntil(pollCtx, env, s.tv().WithBuildIDNumber(i).WithTaskQueueNumber(j))
 			}
 		}
 
