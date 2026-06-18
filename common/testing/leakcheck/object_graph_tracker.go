@@ -10,9 +10,9 @@ import (
 	"unsafe"
 )
 
-// ObjectGraphTracker tracks objects reachable from a root and reports objects
+// ObjectGraphLeakCheck tracks objects reachable from a root and reports objects
 // that remain reachable after GC.
-type ObjectGraphTracker struct {
+type ObjectGraphLeakCheck struct {
 	objects  []trackedObject
 	excludes []string
 }
@@ -24,18 +24,18 @@ type trackedObject struct {
 	cleanup   runtime.Cleanup
 }
 
-type Option func(*ObjectGraphTracker)
+type Option func(*ObjectGraphLeakCheck)
 
 // WithExclude skips retained-object failures whose reflected path or type name
 // matches pattern. A trailing '*' matches any suffix.
 func WithExclude(pattern string) Option {
-	return func(t *ObjectGraphTracker) {
+	return func(t *ObjectGraphLeakCheck) {
 		t.excludes = append(t.excludes, pattern)
 	}
 }
 
-func NewObjectGraphTracker(rootPath string, root any, opts ...Option) ObjectGraphTracker {
-	t := ObjectGraphTracker{}
+func NewObjectGraphLeakCheck(rootPath string, root any, opts ...Option) ObjectGraphLeakCheck {
+	t := ObjectGraphLeakCheck{}
 	for _, opt := range opts {
 		opt(&t)
 	}
@@ -47,15 +47,15 @@ func NewObjectGraphTracker(rootPath string, root any, opts ...Option) ObjectGrap
 	return t
 }
 
-func (t ObjectGraphTracker) Failures() error {
+func (t ObjectGraphLeakCheck) Failures() error {
 	return t.report().failures()
 }
 
-func (t ObjectGraphTracker) Report() string {
+func (t ObjectGraphLeakCheck) Report() string {
 	return t.report().String()
 }
 
-func (t ObjectGraphTracker) report() objectGraphReport {
+func (t ObjectGraphLeakCheck) report() objectGraphReport {
 	var report objectGraphReport
 	matchedExcludes := make(map[string]bool, len(t.excludes))
 	for _, obj := range t.objects {
@@ -120,21 +120,20 @@ func (r objectGraphReport) String() string {
 	return strings.Join(lines, "\n")
 }
 
-func (t ObjectGraphTracker) matchingExcludes(obj trackedObject) []string {
+func (t ObjectGraphLeakCheck) matchingExcludes(obj trackedObject) []string {
 	var matches []string
+	matchesPattern := func(pattern string, value string) bool {
+		if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
+			return strings.HasPrefix(value, prefix)
+		}
+		return value == pattern
+	}
 	for _, pattern := range t.excludes {
 		if matchesPattern(pattern, obj.path) || matchesPattern(pattern, obj.typeName) {
 			matches = append(matches, pattern)
 		}
 	}
 	return matches
-}
-
-func matchesPattern(pattern string, value string) bool {
-	if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
-		return strings.HasPrefix(value, prefix)
-	}
-	return value == pattern
 }
 
 type graphWalker struct {
@@ -194,7 +193,9 @@ func trackPointerObject(addr uintptr, objPath string, typeName string) (trackedO
 				ok = false
 			}
 		}()
-		cleanup = runtime.AddCleanup((*byte)(unsafe.Pointer(addr)), markCollected, collected)
+		cleanup = runtime.AddCleanup((*byte)(unsafe.Pointer(addr)), func(collected *atomic.Bool) {
+			collected.Store(true)
+		}, collected)
 	}()
 	if !ok || cleanup == (runtime.Cleanup{}) {
 		return trackedObject{}, false
@@ -205,8 +206,4 @@ func trackPointerObject(addr uintptr, objPath string, typeName string) (trackedO
 		collected: collected,
 		cleanup:   cleanup,
 	}, true
-}
-
-func markCollected(collected *atomic.Bool) {
-	collected.Store(true)
 }
