@@ -265,6 +265,12 @@ func (c *TemporalImpl) Stop() error {
 		errs = append(errs, app.Stop(ctx))
 	}
 
+	// A stopped fx.App still retains its entire dig graph. The functional-test
+	// harness keeps each *TestCluster reachable via per-test cleanup closures,
+	// so holding stopped apps here pins every cluster's whole graph. Drop them
+	// now that they're stopped so the graphs become collectible.
+	c.fxApps = nil
+
 	return multierr.Combine(errs...)
 }
 
