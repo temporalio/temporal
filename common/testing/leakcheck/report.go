@@ -51,7 +51,7 @@ func newObjectGraphReport(objects []trackedObject, excludes []exclusion) objectG
 
 		excludedBy = sortedStrings(excludedBy)
 		key := groupKey{
-			path:       normalizePathIndexes(obj.path),
+			path:       obj.path.Normalized(),
 			typeName:   obj.typeName,
 			excludedBy: strings.Join(excludedBy, "\x00"),
 		}
@@ -174,66 +174,4 @@ func sortedStrings(values []string) []string {
 	sorted := append([]string(nil), values...)
 	sort.Strings(sorted)
 	return sorted
-}
-
-func normalizePathIndexes(path string) string {
-	var out strings.Builder
-	for i := 0; i < len(path); {
-		if path[i] != '[' {
-			out.WriteByte(path[i])
-			i++
-			continue
-		}
-
-		end := strings.IndexByte(path[i:], ']')
-		if end < 0 {
-			out.WriteString(path[i:])
-			break
-		}
-		end += i
-		index := path[i+1 : end]
-		switch {
-		case allDigits(index):
-			out.WriteString("[*]")
-		case strings.HasPrefix(index, "key") && allDigits(strings.TrimPrefix(index, "key")):
-			out.WriteString("[key*]")
-		default:
-			out.WriteString(path[i : end+1])
-		}
-		i = end + 1
-	}
-	return out.String()
-}
-
-func hasSpecificPathIndex(path string) bool {
-	for i := 0; i < len(path); {
-		if path[i] != '[' {
-			i++
-			continue
-		}
-
-		end := strings.IndexByte(path[i:], ']')
-		if end < 0 {
-			return false
-		}
-		end += i
-		index := path[i+1 : end]
-		if allDigits(index) || strings.HasPrefix(index, "key") && allDigits(strings.TrimPrefix(index, "key")) {
-			return true
-		}
-		i = end + 1
-	}
-	return false
-}
-
-func allDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
 }
