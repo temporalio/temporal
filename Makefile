@@ -514,7 +514,7 @@ LEAK_ITERS         ?= 15
 LEAK_ITERS_WARMUP  ?= 3
 LEAK_TIMEOUT       ?= 5m
 leak-test:
-	@printf $(COLOR) "Run goroutine-leak regression test (sqlite, no Docker)..."
+	@printf $(COLOR) "Run goroutine-leak regression test..."
 	@mkdir -p $(LEAK_OUTPUT_DIR)
 	LEAK_ITERS=$(LEAK_ITERS) \
 		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
