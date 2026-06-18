@@ -90,13 +90,17 @@ type (
 		TotalWorkflowCount                 int64
 		ReplicatedWorkflowCount            int64
 		ReplicatedWorkflowCountPerSecond   float64
-		PageTokenForRestart                []byte
 
-		// RecoveryNextPageToken is the page token the sharded workflow
-		// was processing when it last continued-as-new or was interrupted.
-		// Feed this back into ShardedForceReplicationWorkflow.NextPageToken
-		// to resume from that position. Left zero by the legacy variants.
-		RecoveryNextPageToken []byte
+		// PageTokenForRestart is the ListWorkflows page token to restart
+		// from if the operation is interrupted; feed it back into the
+		// workflow's NextPageToken to resume near current progress. The
+		// legacy variants return the current continue-as-new run's start
+		// token, which advances as the parent frequently CANs. The sharded
+		// parent rarely CANs, so it instead returns the latest child
+		// checkpoint token (falling back to the run's start token before
+		// any child has checkpointed) so the value tracks progress the
+		// same way.
+		PageTokenForRestart []byte
 	}
 )
 

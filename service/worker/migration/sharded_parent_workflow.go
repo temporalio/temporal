@@ -29,8 +29,9 @@ import (
 // The parent keeps the registered name "force-replication-sharded" so
 // tooling that already targets that name continues to work.
 func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceReplicationParams) error {
-	// startPageToken is the token at workflow entry — returned as
-	// PageTokenForRestart in the status query for tooling compatibility.
+	// startPageToken is the token at workflow entry — the PageTokenForRestart
+	// fallback used until the first child checkpoint advances it (see the
+	// query handler below).
 	startPageToken := params.NextPageToken
 
 	// ps is set after setup; the query handler closes over the pointer so
@@ -47,11 +48,17 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 			ReplicatedWorkflowCountPerSecond:   params.ReplicatedWorkflowCountPerSecond,
 			PageTokenForRestart:                startPageToken,
 			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
-			RecoveryNextPageToken:              params.NextPageToken,
 		}
 		if ps != nil {
 			status.ReplicatedWorkflowCount = ps.retiredTotal + ps.liveTotalCount()
 			status.ReplicatedWorkflowCountPerSecond = params.ReplicatedWorkflowCountPerSecond
+			// The parent rarely CANs, so startPageToken would stay pinned at
+			// the run's initial token. Once children begin checkpointing,
+			// advance the restart token to the latest checkpoint so a restart
+			// resumes near current progress instead of replaying the whole run.
+			if ps.lastCheckpointToken != nil {
+				status.PageTokenForRestart = ps.lastCheckpointToken
+			}
 		}
 		return status, nil
 	}); err != nil {
@@ -257,6 +264,12 @@ type shardedParentState struct {
 	// child completes the parent CANs with the last checkpoint token.
 	drainingForCAN bool
 
+	// reachedEnd is set when a child returns ReachedEnd=true — it exhausted
+	// the namespace (ListWorkflows returned an empty next-page token). This
+	// is the authoritative terminal signal: once set the parent finishes
+	// rather than continuing-as-new, because no work remains for a successor.
+	reachedEnd bool
+
 	// lastCheckpointToken is the NextPageToken from the most recently
 	// received checkpoint signal. Carried into the CAN params so the
 	// new parent run resumes children from the right position.
@@ -321,15 +334,17 @@ func (ps *shardedParentState) liveTotalCount() int64 {
 //
 // Handover orchestration:
 //   - On checkpoint: start a successor (at half rate) unless drainingForCAN.
-//   - On child completion: retire its verifiedCount, send resumeFullRate
-//     to its successor (if one was started), check for terminal exit.
+//   - On child completion: retire its verifiedCount, record ReachedEnd, and
+//     send resumeFullRate to its successor (if one was started).
 //   - On GetContinueAsNewSuggested: set drainingForCAN. When the last live
 //     child completes, CAN with lastCheckpointToken as NextPageToken.
+//   - On exit (no live children): finish if a child reached the namespace
+//     end; else CAN if draining; else fail (handover bookkeeping bug).
 //
 // At most two children are live at once (the cutting child plus its
 // successor) and at most one handover is in flight at any time.
 func (ps *shardedParentState) run(ctx workflow.Context) error {
-	// Start the first child. Not throttled — no predecessor exists.
+	// Start the first child. Not in handover — no predecessor exists.
 	if err := ps.startChild(ctx, ps.params.NextPageToken, false); err != nil {
 		return err
 	}
@@ -388,6 +403,15 @@ func (ps *shardedParentState) run(ctx workflow.Context) error {
 		sel.Select(ctx)
 	}
 
+	if ps.reachedEnd {
+		// A child exhausted the namespace — terminal. Record the final count
+		// for the terminal Await in ShardedForceReplicationWorkflow. Takes
+		// precedence over drainingForCAN: once the end is reached there is
+		// nothing left for a CAN'd successor to process.
+		ps.params.ReplicatedWorkflowCount = ps.retiredTotal
+		return nil
+	}
+
 	if ps.drainingForCAN {
 		// Parent CAN: carry the last checkpoint token forward so the new
 		// parent run resumes children from the right position.
@@ -398,11 +422,13 @@ func (ps *shardedParentState) run(ctx workflow.Context) error {
 		return workflow.NewContinueAsNewError(ctx, ShardedForceReplicationWorkflow, next)
 	}
 
-	// Terminal: the last child set ReachedEnd=true, meaning the namespace
-	// is exhausted. Record final count in params for the terminal Await
-	// in ShardedForceReplicationWorkflow.
-	ps.params.ReplicatedWorkflowCount = ps.retiredTotal
-	return nil
+	// No live children, yet the namespace was never exhausted and we are not
+	// draining for CAN — work remains past the last checkpoint with nothing
+	// scheduled to process it (a handover-bookkeeping bug). Fail loudly rather
+	// than returning nil, which would silently drop those executions.
+	return temporal.NewNonRetryableApplicationError(
+		"parent has no live children but the namespace is not exhausted and is not draining for CAN (handover bookkeeping bug)",
+		"ShardedParentStuck", nil)
 }
 
 // startChild starts a new shardedForceReplicationWorker child and records
@@ -410,9 +436,9 @@ func (ps *shardedParentState) run(ctx workflow.Context) error {
 // execution starts (GetChildWorkflowExecution().Get) so its run ID is
 // available for future signal addressing.
 //
-// throttled=true means the child starts at half rate (StartThrottled=true),
+// handover=true means the child starts at half rate (Handover=true),
 // awaiting a resumeFullRate signal from the parent before going full.
-func (ps *shardedParentState) startChild(ctx workflow.Context, pageToken []byte, throttled bool) error {
+func (ps *shardedParentState) startChild(ctx workflow.Context, pageToken []byte, handover bool) error {
 	childParams := shardedChildParams{
 		Namespace:             ps.params.Namespace,
 		Query:                 ps.params.Query,
@@ -428,7 +454,7 @@ func (ps *shardedParentState) startChild(ctx workflow.Context, pageToken []byte,
 		IdleShardCost:         ps.params.IdleShardCost,
 		PerBatchGenerateRPS:   ps.params.PerBatchGenerateRPS,
 		StartPageToken:        pageToken,
-		StartThrottled:        throttled,
+		Handover:              handover,
 	}
 
 	childOpts := workflow.ChildWorkflowOptions{
@@ -486,7 +512,7 @@ func (ps *shardedParentState) handleCheckpoint(ctx workflow.Context, sel workflo
 	}
 	ps.successorStarted[payload.ChildRunID] = true
 
-	// Start the successor at half rate (StartThrottled=true). The
+	// Start the successor at half rate (Handover=true). The
 	// parent will promote it to full rate via resumeFullRate when the
 	// current child (payload.ChildRunID) completes.
 	if err := ps.startChild(ctx, payload.NextPageToken, true); err != nil {
@@ -532,6 +558,13 @@ func (ps *shardedParentState) onChildCompleted(ctx workflow.Context, runID strin
 
 	ps.retiredTotal += result.VerifiedCount
 	ps.updateQPS(ctx)
+
+	// A child that exhausted the namespace is the chain's terminal child:
+	// it started no checkpoint and needs no successor. Record it so run()
+	// finishes instead of continuing-as-new.
+	if result.ReachedEnd {
+		ps.reachedEnd = true
+	}
 
 	// Promote the successor to full rate if one was started. The
 	// successor's run ID is the last entry in liveRunIDs that is still

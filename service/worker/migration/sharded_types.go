@@ -284,11 +284,11 @@ type shardedChildParams struct {
 	// this child begins listing. Nil for the very first child.
 	StartPageToken []byte
 
-	// StartThrottled, when true, means the child begins at half
-	// MaxExecsPerShard until the parent signals resumeFullRate. Used
-	// during handover overlap so a new child and its not-yet-drained
-	// predecessor together stay ≤ MaxExecsPerShard per shard.
-	StartThrottled bool
+	// Handover, when true, means the child begins in the startup handover
+	// phase: running at half MaxExecsPerShard until the parent signals
+	// resumeFullRate. Used during handover overlap so a new child and its
+	// not-yet-drained predecessor together stay ≤ MaxExecsPerShard per shard.
+	Handover bool
 }
 
 // shardedChildResult is the return value of each child worker workflow.

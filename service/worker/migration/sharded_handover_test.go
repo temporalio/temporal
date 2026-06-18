@@ -53,7 +53,7 @@ func parentTestEnv(t *testing.T, shardCount int32) *testsuite.TestWorkflowEnviro
 
 // TestParent_OneFullHandover verifies the core handover sequence:
 //  1. Child 0 starts (not throttled) and sends a checkpoint to the parent after 1 minute.
-//  2. Parent starts child 1 with StartThrottled=true.
+//  2. Parent starts child 1 with Handover=true.
 //  3. Child 0 completes after 5 minutes.
 //  4. Parent sends resumeFullRate to child 1.
 //  5. Child 1 receives the signal and completes, parent returns nil.
@@ -138,12 +138,12 @@ func TestParent_OneFullHandover(t *testing.T) {
 	// Two children should have been started.
 	require.Len(t, childParamsSeen, 2, "parent should start exactly two children")
 
-	// Child 0 is not throttled (first child, no predecessor).
-	require.False(t, childParamsSeen[0].StartThrottled, "child 0 must not be throttled")
+	// Child 0 does not start in handover (first child, no predecessor).
+	require.False(t, childParamsSeen[0].Handover, "child 0 must not start in handover")
 
-	// Child 1 is throttled (started alongside still-running child 0).
-	require.True(t, childParamsSeen[1].StartThrottled,
-		"child 1 must start throttled (predecessor still running)")
+	// Child 1 starts in handover (started alongside still-running child 0).
+	require.True(t, childParamsSeen[1].Handover,
+		"child 1 must start in handover (predecessor still running)")
 
 	// Promotion (resumeFullRate to the successor) and live-count rollups are not
 	// asserted here: the SDK test env assigns a mocked child a GetInfo run ID that
@@ -243,6 +243,37 @@ func TestParent_ChildFailure(t *testing.T) {
 		"parent error message should contain 'child worker' prefix")
 }
 
+// TestParent_NoReachedEndNoCheckpoint_Fails verifies the parent fails loudly
+// rather than returning nil when its last child completes without reaching the
+// namespace end and without having checkpointed. That state leaves work past
+// the last checkpoint with nothing scheduled to process it; returning nil
+// would silently drop those executions, so the parent must surface a
+// ShardedParentStuck error instead.
+func TestParent_NoReachedEndNoCheckpoint_Fails(t *testing.T) {
+	env := parentTestEnv(t, 2)
+
+	// Child completes ReachedEnd=false and sends no checkpoint, so no successor
+	// is started and the namespace is never marked exhausted. The CAN hint is
+	// left unset (parentTestEnv default), so the parent is not draining either.
+	env.OnWorkflow(shardedForceReplicationWorker, mock.Anything, mock.Anything).Return(
+		shardedChildResult{VerifiedCount: 3, ReachedEnd: false}, nil,
+	).Once()
+
+	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
+		Namespace:         "test-ns",
+		TargetClusterName: "remote_cluster",
+		// Done=true skips the task-queue-user-data child so the parent reaches
+		// the terminal decision directly.
+		TaskQueueUserDataReplicationStatus: TaskQueueUserDataReplicationStatus{Done: true},
+	})
+
+	require.True(t, env.IsWorkflowCompleted(), "parent should complete")
+	err := env.GetWorkflowError()
+	require.Error(t, err, "parent must fail when work remains but nothing is scheduled")
+	require.True(t, hasAppErrType(err, "ShardedParentStuck"),
+		"expected ShardedParentStuck in error chain, got: %v", err)
+}
+
 // handoverTestChildErr is the synthetic child error for TestParent_ChildFailure.
 var handoverTestChildErr = &handoverSyntheticError{msg: "synthetic child failure"}
 
@@ -320,6 +351,8 @@ func TestParent_QueryAggregation(t *testing.T) {
 	require.NoError(t, val.Get(&status))
 	require.Equal(t, int64(25), status.ReplicatedWorkflowCount,
 		"final query must reflect retiredTotal of both children (20+5)")
+	require.Equal(t, []byte("next-page"), status.PageTokenForRestart,
+		"restart token must track the latest child checkpoint, not the run's start token")
 }
 
 // ---- Child tests — shardedForceReplicationWorker as root ----
@@ -390,7 +423,7 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 	t.Run("blocks without promotion", func(t *testing.T) {
 		env := newEnv()
 		params := makeChildParams(2)
-		params.StartThrottled = true // not promoted: must await resumeFullRate before cutting
+		params.Handover = true // not promoted: must await resumeFullRate before cutting
 		env.ExecuteWorkflow(shardedForceReplicationWorker, params)
 		// A correctly-pausing child never completes on its own — it stays blocked
 		// awaiting promotion, so the env surfaces a timeout rather than a result. A
@@ -407,7 +440,7 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 			env.SignalWorkflow(shardedResumeFullSignalName, struct{}{})
 		}, time.Minute)
 		params := makeChildParams(2)
-		params.StartThrottled = true
+		params.Handover = true
 		env.ExecuteWorkflow(shardedForceReplicationWorker, params)
 		require.True(t, env.IsWorkflowCompleted(), "child should complete once promoted")
 		require.NoError(t, env.GetWorkflowError())

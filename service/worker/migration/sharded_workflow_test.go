@@ -550,7 +550,7 @@ func TestChild_DisableVerification_ReachesEnd(t *testing.T) {
 }
 
 // TestChild_ThrottledPromotion_ReceivesSignal: a child started with
-// StartThrottled=true runs at half rate but can receive a promotion signal
+// Handover=true runs at half rate but can receive a promotion signal
 // via the childDirectRunner relay and complete a terminal page. This verifies
 // that (a) childDirectRunner correctly relays the shardedResumeFullSignalName
 // signal to the production child, and (b) a throttled child completes
@@ -592,7 +592,7 @@ func TestChild_ThrottledPromotion_ReceivesSignal(t *testing.T) {
 	}, activity.RegisterOptions{Name: "ReplicateBatch"})
 
 	params := makeChildParams(2)
-	params.StartThrottled = true // child begins at half rate
+	params.Handover = true // child begins at half rate
 	env.ExecuteWorkflow(childDirectRunner, params)
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -603,4 +603,62 @@ func TestChild_ThrottledPromotion_ReceivesSignal(t *testing.T) {
 	// Terminal page → child reaches end, even when starting throttled.
 	require.True(t, result.ReachedEnd, "terminal-page child should reach end regardless of throttle state")
 	require.Equal(t, int64(5), result.VerifiedCount)
+}
+
+// TestChild_ListingBackpressure_BlocksUntilSlotFree: with ConcurrentBatchCount=1
+// the listing loop must not fetch the next page until the in-flight batch from
+// the previous page has completed and freed the single dispatch slot. Without
+// backpressure (waitForDispatchSlot), the loop would list every page up front,
+// inflating the buckets with execs it can't dispatch.
+//
+// Four pages, each one exec on a distinct shard so per-shard exclusivity never
+// binds and ConcurrentBatchCount is the only limiter. The events slice records
+// each ListWorkflows ("L") and ReplicateBatch ("R") call; backpressure forces
+// strict L,R,L,R,... alternation. waitForDispatchSlot Awaits the batch
+// coroutine's releaseAll, which drops batches.count() (and runs only after
+// ReplicateBatch returns) before the next list, so the recorded order is
+// deterministic.
+func TestChild_ListingBackpressure_BlocksUntilSlotFree(t *testing.T) {
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(childDirectRunner)
+	env.RegisterWorkflow(shardedForceReplicationWorker)
+
+	all := makeExecs(4, 1) // 4 execs across 4 distinct shards
+	pager := pageThrough(all, 1)
+
+	var mu sync.Mutex
+	var events []string
+	env.RegisterActivityWithOptions(func(ctx context.Context, req *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		mu.Lock()
+		events = append(events, "L")
+		mu.Unlock()
+		return pager(ctx, req)
+	}, activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+		mu.Lock()
+		events = append(events, "R")
+		mu.Unlock()
+		return replicateBatchResult{
+			VerifiedCount:   1,
+			CompletedShards: req.Executions.sortedShards(),
+		}, nil
+	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+
+	params := makeChildParams(4)
+	params.ConcurrentBatchCount = 1
+	env.ExecuteWorkflow(childDirectRunner, params)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	var result shardedChildResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.True(t, result.ReachedEnd)
+	require.Equal(t, int64(4), result.VerifiedCount)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{"L", "R", "L", "R", "L", "R", "L", "R"}, events,
+		"listing must block on the single dispatch slot, alternating list and replicate")
 }
