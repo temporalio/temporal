@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"sort"
@@ -214,7 +215,8 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	err = node.syncSubComponents()
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
-	s.Len(node.mutation.DeletedNodes, 1)
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 
 	sd1Node = node.children["SubData1"]
 	s.Nil(sd1Node)
@@ -383,7 +385,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
 		})
 
@@ -407,7 +409,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection item deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
 		})
 
@@ -434,7 +436,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			// Now map is empty and must be deleted.
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
-			s.Len(mutation.UpdatedNodes, 1, "although root component is not updated, collection is tracked as part of component, therefore root must be updated")
+			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
 		})
 
@@ -609,7 +611,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.NotEmpty(mutation.UpdatedNodes)
+		s.Empty(mutation.UpdatedNodes)
 		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
@@ -689,8 +691,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 1)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	// SubComponent11 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(node.mutation.DeletedNodes)
 	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
 }
 
@@ -710,10 +712,8 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	s.NoError(err)
 	s.False(node.needsPointerResolution)
 
-	s.Len(node.mutation.DeletedNodes, 3)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
+	// SubComponent1 and its children were never persisted (nil LVT), so no storage deletes are needed.
+	s.Empty(node.mutation.DeletedNodes)
 
 	s.Nil(node.children["SubComponent1"])
 }
@@ -1097,6 +1097,123 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Equal(expectedMutation, root.mutation)
 
 	s.Len(root.taskValueCache, 1)
+}
+
+func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+
+	newRootComponent := func(items map[string]string) *TestComponent {
+		component := &TestComponent{
+			ComponentData: &protoMessageType{
+				RunId:     "root",
+				StartTime: timestamppb.New(s.timeSource.Now()),
+			},
+			SubComponents: make(Map[string, *TestSubComponent1], len(items)),
+		}
+		for key, runID := range items {
+			component.SubComponents[key] = NewComponentField(nil, &TestSubComponent1{
+				SubComponent1Data: &protoMessageType{RunId: runID},
+			})
+		}
+		return component
+	}
+
+	buildSnapshot := func(component *TestComponent) map[string]*persistencespb.ChasmNode {
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+		root, err := s.newTestTree(nil)
+		s.NoError(err)
+		s.NoError(root.SetRootComponent(component))
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+		s.NotEmpty(mutation.UpdatedNodes)
+		return common.CloneProtoMap(mutation.UpdatedNodes)
+	}
+
+	mutationFromSource := func(
+		persistedNodes map[string]*persistencespb.ChasmNode,
+		mutate func(Context, *TestComponent),
+	) NodesMutation {
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+		source, err := s.newTestTree(common.CloneProtoMap(persistedNodes))
+		s.NoError(err)
+		chasmContext := NewMutableContext(context.Background(), source)
+		component, err := source.Component(chasmContext, ComponentRef{})
+		s.NoError(err)
+		mutate(chasmContext, component.(*TestComponent))
+		mutation, err := source.CloseTransaction()
+		s.NoError(err)
+		s.NotContains(mutation.UpdatedNodes, "", "replicated mutation must not include the hydrated parent component")
+		return NodesMutation{
+			UpdatedNodes: common.CloneProtoMap(mutation.UpdatedNodes),
+			DeletedNodes: maps.Clone(mutation.DeletedNodes),
+		}
+	}
+
+	assertTargetMap := func(
+		persistedNodes map[string]*persistencespb.ChasmNode,
+		mutation NodesMutation,
+		expected map[string]string,
+	) {
+		target, err := s.newTestTree(common.CloneProtoMap(persistedNodes))
+		s.NoError(err)
+		component, err := target.Component(NewContext(context.Background(), target), ComponentRef{})
+		s.NoError(err)
+		s.Len(component.(*TestComponent).SubComponents, 2, "target parent must be hydrated before replication")
+
+		s.NoError(target.ApplyMutation(mutation))
+
+		component, err = target.Component(NewContext(context.Background(), target), ComponentRef{})
+		s.NoError(err)
+		rootComponent := component.(*TestComponent)
+		s.Len(rootComponent.SubComponents, len(expected))
+		for key, runID := range expected {
+			field, ok := rootComponent.SubComponents[key]
+			s.True(ok, "expected map key %q", key)
+			subComponent := field.Get(NewContext(context.Background(), target))
+			s.Equal(runID, subComponent.SubComponent1Data.GetRunId())
+		}
+	}
+
+	initialNodes := buildSnapshot(newRootComponent(map[string]string{
+		"one": "run-one",
+		"two": "run-two",
+	}))
+
+	s.Run("CreateMapItem", func() {
+		mutation := mutationFromSource(initialNodes, func(_ Context, component *TestComponent) {
+			component.SubComponents["three"] = NewComponentField(nil, &TestSubComponent1{
+				SubComponent1Data: &protoMessageType{RunId: "run-three"},
+			})
+		})
+
+		assertTargetMap(initialNodes, mutation, map[string]string{
+			"one":   "run-one",
+			"two":   "run-two",
+			"three": "run-three",
+		})
+	})
+
+	s.Run("UpdateMapItem", func() {
+		mutation := mutationFromSource(initialNodes, func(ctx Context, component *TestComponent) {
+			component.SubComponents["one"].Get(ctx).SubComponent1Data = &protoMessageType{RunId: "run-one-updated"}
+		})
+
+		assertTargetMap(initialNodes, mutation, map[string]string{
+			"one": "run-one-updated",
+			"two": "run-two",
+		})
+	})
+
+	s.Run("DeleteMapItem", func() {
+		mutation := mutationFromSource(initialNodes, func(_ Context, component *TestComponent) {
+			delete(component.SubComponents, "one")
+		})
+
+		assertTargetMap(initialNodes, mutation, map[string]string{
+			"two": "run-two",
+		})
+	})
 }
 
 func (s *nodeSuite) TestApplyMutation_DeleteUpdateSamePath() {
@@ -2170,16 +2287,15 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubComponent11", "SubComponent1/SubComponent11 component must be in UpdatedNodes")
 	s.Contains(mutations.UpdatedNodes, "SubComponent1/SubData11", "SubComponent1/SubData11 component must be in UpdatedNodes")
-	s.Len(mutations.DeletedNodes, 1)
-	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
+	// SubData1 was never persisted (nil LVT), so no storage delete is needed.
+	s.Empty(mutations.DeletedNodes)
 
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
-	s.Contains(mutations.UpdatedNodes, "SubComponent1", "SubComponent1 component must be in UpdatedNodes")
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 }
 
@@ -3120,7 +3236,7 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
+	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
@@ -3267,7 +3383,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	mutations, err = root.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.

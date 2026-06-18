@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -417,6 +418,17 @@ func (n *Node) setValueState(state valueState) {
 	}
 }
 
+func (n *Node) clearAncestorNodeValues(parent *Node) {
+	for node := parent; node != nil; node = node.parent {
+		if node.serializedNode == nil || !node.isComponent() || node.value == nil {
+			continue
+		}
+
+		node.setValue(nil)
+		node.setValueState(valueStateNeedDeserialize)
+	}
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs access rule, and task validation checks
@@ -788,6 +800,10 @@ func (n *Node) setSerializedNode(
 		n.children[childName] = childNode
 	}
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
+}
+
+func (n *Node) hasNewTransactionSideEffects() bool {
+	return len(n.newTasks[n.value]) > 0 || n.terminated
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -1878,8 +1894,29 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+
+		prevVersionedTransition := common.CloneProto(
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+		)
+		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+			prevVersionedTransition != nil &&
+			!node.hasNewTransactionSideEffects()
+		var prevData *commonpb.DataBlob
+		if skipIfClean {
+			prevData = node.serializedNode.Data
+		}
+
 		if err := node.serialize(); err != nil {
 			return err
+		}
+
+		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
+			continue
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
@@ -1891,10 +1928,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 				fmt.Errorf("found at path %s", nodePath))
 		}
 
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
 		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,
@@ -2562,9 +2595,11 @@ func (n *Node) applyDeletions(
 			continue
 		}
 
+		parent := node.parent
 		if err := node.delete(isSystemUpdates); err != nil {
 			return err
 		}
+		n.clearAncestorNodeValues(parent)
 	}
 
 	return nil
@@ -2585,6 +2620,7 @@ func (n *Node) applyUpdates(
 			// Node doesn't exist, we need to create it.
 			newNode := n.setSerializedNode(path, encodedPath, updatedNode)
 			newNode.resetTaskStatus()
+			n.clearAncestorNodeValues(newNode.parent)
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
 				delete(n.systemMutation.DeletedNodes, encodedPath)
@@ -2626,9 +2662,7 @@ func (n *Node) applyUpdates(
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
 			node.serializedNode = updatedNode
-
-			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
-			// Parent node is pointing to the Node struct.
+			n.clearAncestorNodeValues(node.parent)
 		}
 	}
 
@@ -2754,6 +2788,8 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// Only record the deletion if the node was previously persisted.
+	//
 	// TODO: consider remove entries from UpdatedNodes map as well
 	// if the same node is updated and then deleted in the same transaction.
 	//
@@ -2764,10 +2800,12 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
 	//   first with a deletion only mutation for tombstone nodes, and then an
 	//   update only mutation.
-	if isSystemDelete {
-		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
-	} else {
-		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		if isSystemDelete {
+			n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+		} else {
+			n.mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
 	}
 
 	n.cleanupCachedTasks()
