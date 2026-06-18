@@ -11,6 +11,7 @@ import (
 
 type report struct {
 	retainedObjects   []objectGroup
+	trackedRoots      int
 	totalRetained     int
 	excludedRetained  int
 	exclusionCounts   map[string]int
@@ -24,9 +25,10 @@ type objectGroup struct {
 	count      int
 }
 
-func newReport(objects []trackedObject, excludes exclusions) report {
+func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) report {
 	report := report{
 		exclusionCounts: make(map[string]int),
+		trackedRoots:    trackedRoots,
 	}
 
 	// Matching mutates exclusion.matched for stale-exclusion detection.
@@ -142,6 +144,7 @@ func (r report) string() string {
 
 func (r report) writeSummary(out *strings.Builder) {
 	out.WriteString("object leak report\n")
+	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
 	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d not excluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
 	if len(r.exclusionCounts) > 0 {

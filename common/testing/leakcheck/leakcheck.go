@@ -10,6 +10,7 @@ import (
 // that remain reachable after GC.
 type ObjectLeakCheck struct {
 	objects  []trackedObject
+	roots    int
 	excludes exclusions
 }
 
@@ -46,6 +47,7 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 func (t *ObjectLeakCheck) Track(rootPath string, root any) {
 	walker := newObjectWalker()
 	walker.track(rootPath, root)
+	t.roots++
 	t.objects = append(t.objects, walker.objects...)
 }
 
@@ -58,6 +60,6 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		runtimedebug.FreeOSMemory()
 		time.Sleep(20 * time.Millisecond)
 	}
-	report := newReport(t.objects, t.excludes)
+	report := newReport(t.objects, t.roots, t.excludes)
 	return report.string(), report.failures()
 }
