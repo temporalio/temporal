@@ -41,11 +41,11 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 	// Classify each retained object and fold equivalent normalized paths into
 	// a single report row.
 	for _, obj := range objects {
-		excludedBy := activeExclusions.match(obj)
 		if obj.collected.Load() {
 			continue
 		}
 
+		excludedBy := activeExclusions.match(obj)
 		report.totalRetained++
 		expected := len(excludedBy) > 0
 		if expected {
@@ -113,15 +113,11 @@ func (r report) failures() error {
 }
 
 func (r report) string() string {
-	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 {
-		return ""
-	}
-
 	var out strings.Builder
 	r.writeSummary(&out)
 
 	writeGroups := func(title string, groups []objectGroup) {
-		fmt.Fprintf(&out, "\n%s:\n", title)
+		fmt.Fprintf(&out, "%s:\n", title)
 		if len(groups) == 0 {
 			out.WriteString("  none\n")
 			return

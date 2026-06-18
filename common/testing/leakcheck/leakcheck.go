@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	checkGCDeadline = 10 * time.Second
+	checkGCPause    = 20 * time.Millisecond
+)
+
 // ObjectLeakCheck tracks objects reachable from roots and reports objects
 // that remain reachable after GC.
 type ObjectLeakCheck struct {
@@ -55,11 +60,17 @@ func (t *ObjectLeakCheck) Track(rootPath string, root any) {
 // retained objects not covered by exclusions or exclusions that no longer match
 // any tracked object.
 func (t *ObjectLeakCheck) Check() (string, error) {
-	for range 200 {
+	deadline := time.Now().Add(checkGCDeadline)
+	var report report
+	var err error
+	for {
 		runtime.GC()
 		runtimedebug.FreeOSMemory()
-		time.Sleep(20 * time.Millisecond)
+		report = newReport(t.objects, t.roots, t.excludes)
+		err = report.failures()
+		if err == nil || time.Now().After(deadline) {
+			return report.string(), err
+		}
+		time.Sleep(checkGCPause)
 	}
-	report := newReport(t.objects, t.roots, t.excludes)
-	return report.string(), report.failures()
 }
