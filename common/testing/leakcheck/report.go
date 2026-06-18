@@ -17,13 +17,6 @@ type report struct {
 	unmatchedExcludes []string
 }
 
-type reportTotals struct {
-	retained        int
-	expected        int
-	unexpected      int
-	staleExclusions int
-}
-
 type objectGroup struct {
 	path     string
 	typeName string
@@ -119,12 +112,11 @@ func (r report) failures() error {
 	return errors.Join(failures...)
 }
 
-func (r report) totals() reportTotals {
-	return reportTotals{
-		retained:        r.totalRetained,
-		expected:        r.expectedRetained,
-		unexpected:      r.totalRetained - r.expectedRetained,
-		staleExclusions: len(r.unmatchedExcludes),
+func (r report) totals() [3]int {
+	return [3]int{
+		r.totalRetained,
+		r.totalRetained - r.expectedRetained,
+		len(r.unmatchedExcludes),
 	}
 }
 

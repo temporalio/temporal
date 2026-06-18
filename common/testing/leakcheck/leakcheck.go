@@ -9,6 +9,7 @@ import (
 
 const (
 	defaultGCSettleTimeout = 10 * time.Second
+	checkGCMinWait         = 2 * time.Second
 	checkGCPause           = 20 * time.Millisecond
 	checkGCQuiet           = 500 * time.Millisecond
 )
@@ -77,10 +78,13 @@ func (t *ObjectLeakCheck) Track(rootPath string, root any) {
 // retained objects not covered by exclusions or exclusions that no longer match
 // any tracked object.
 func (t *ObjectLeakCheck) Check() (string, error) {
-	deadline := time.Now().Add(t.gcSettleTimeout)
-	quietDeadline := time.Now().Add(checkGCQuiet)
-	var lastTotals reportTotals
-	haveLastTotals := false
+	start := time.Now()
+	minWaitDeadline := start.Add(checkGCMinWait)
+	deadline := start.Add(t.gcSettleTimeout)
+	settledDeadline := minWaitDeadline
+
+	var lastTotals [3]int
+	var haveLastTotals bool
 	var report report
 	var err error
 	for {
@@ -99,12 +103,16 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		if totals := report.totals(); !haveLastTotals || totals != lastTotals {
 			lastTotals = totals
 			haveLastTotals = true
-			quietDeadline = now.Add(checkGCQuiet)
+			settledDeadline = now.Add(checkGCQuiet)
+			if minWaitDeadline.After(settledDeadline) {
+				settledDeadline = minWaitDeadline
+			}
 		}
 
-		// The quiet window handles normal cleanup latency; the timeout bounds a
+		// The minimum wait gives cleanup callbacks several GC cycles to run. The
+		// quiet window then handles normal cleanup latency; the timeout bounds a
 		// genuinely stuck object graph so the test can still report diagnostics.
-		if now.After(quietDeadline) || now.After(deadline) {
+		if now.After(settledDeadline) || now.After(deadline) {
 			return report.string(), err
 		}
 		time.Sleep(checkGCPause)
