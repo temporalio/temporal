@@ -333,26 +333,26 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		workflowRuns = append(workflowRuns, workflowRun)
 	}
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
 		for _, workflowRun := range workflowRuns {
-			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-			require.NoError(t, err)
-			require.Len(t, description.PendingActivities, 1)
-			require.Greater(t, description.PendingActivities[0].Attempt, int32(3))
+			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.PendingActivities, 1)
+			s.Greater(description.PendingActivities[0].Attempt, int32(3))
 		}
 	}, 15*time.Second, 100*time.Millisecond)
 
 	env.SdkWorker().Stop()
 
 	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  workflowCount,
 			Query:     query,
 		})
-		require.NoError(t, err)
-		require.Len(t, listResp.GetExecutions(), workflowCount)
+		s.NoError(err)
+		s.Len(listResp.GetExecutions(), workflowCount)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	jobID := uuid.NewString()
@@ -371,13 +371,13 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	})
 	s.NoError(err)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		descResp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
+		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
 			Namespace: env.Namespace().String(),
 			JobId:     jobID,
 		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
 	}, 15*time.Second, 100*time.Millisecond)
 
 	for _, workflowRun := range workflowRuns {
