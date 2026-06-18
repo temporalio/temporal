@@ -28,6 +28,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	report := report{
 		exclusionCounts: make(map[string]int),
 	}
+	// Matching mutates exclusion.matched for stale-exclusion detection.
 	activeExclusions := slices.Clone(excludes)
 
 	type groupKey struct {
@@ -139,9 +140,9 @@ func (r report) writeSummary(out *strings.Builder) {
 	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d unexcluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
 	if len(r.exclusionCounts) > 0 {
-		out.WriteString("\nretained objects by exclusion:\n")
+		out.WriteString("\nretained objects by exclusion:")
 		for _, pattern := range sortedMapKeys(r.exclusionCounts) {
-			fmt.Fprintf(out, "  %s: %d\n", pattern, r.exclusionCounts[pattern])
+			fmt.Fprintf(out, "\n  %s: %d", pattern, r.exclusionCounts[pattern])
 		}
 	}
 }

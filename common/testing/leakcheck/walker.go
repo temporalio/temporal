@@ -76,6 +76,7 @@ func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject
 	var cleanup runtime.Cleanup
 	ok := true
 	func() {
+		// Some reflected pointers are not valid heap objects for AddCleanup.
 		defer func() {
 			if recover() != nil {
 				ok = false
