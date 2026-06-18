@@ -125,6 +125,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 		goleakReport = goleakErr.Error() + "\n"
 	}
 	writeReport(t, outputDir, "goleak_report.txt", goleakReport)
+	writeProfile(t, outputDir, "goroutine", "goroutines_all.txt", 2)
 
 	// Verify that no cluster references leaked.
 	leakCheckStart := time.Now()
@@ -132,7 +133,6 @@ func TestClusterShutdownLeak(t *testing.T) {
 	t.Logf("object leak check settled in %s", time.Since(leakCheckStart).Round(time.Millisecond))
 	reportPath := filepath.Join(outputDir, "objectleak_report.txt")
 	writeReport(t, outputDir, "objectleak_report.txt", leakReport+"\n")
-	writeProfile(t, outputDir, "goroutine", "goroutines_all.txt", 2)
 	writeProfile(t, outputDir, "heap", "heap.pb.gz", 0)
 	writeProfile(t, outputDir, "heap", "heap.txt", 1)
 	writeProfile(t, outputDir, "allocs", "allocs.pb.gz", 0)
