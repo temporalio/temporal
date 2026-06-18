@@ -372,7 +372,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 		a.NotNil(versionSummaries[0].GetVersion())
 		a.NotNil(versionSummaries[1].GetVersion())
 		a.Equal(versionSummaries[0].GetVersion(), secondVersion.DeploymentVersionString())
-		a.Equal(versionSummaries[1].GetVersion(), firstVersion.DeploymentVersionString())
+		a.Equal(versionSummaries[1].GetVersion(), env.Tv().DeploymentVersionString())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
@@ -450,7 +450,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 	_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(s.Context(), &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: env.Tv().DeploymentSeries(),
-		Version:        firstVersion.DeploymentVersionString(),
+		Version:        env.Tv().DeploymentVersionString(),
 		ConflictToken:  cT,
 	})
 	s.NoError(err)
@@ -463,7 +463,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(firstVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 		cT = resp.GetConflictToken()
 	}, time.Second*10, time.Millisecond*1000)
 
@@ -514,7 +514,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 	_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(s.Context(), &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: env.Tv().DeploymentSeries(),
-		Version:        firstVersion.DeploymentVersionString(),
+		Version:        env.Tv().DeploymentVersionString(),
 		ConflictToken:  cTWrong,
 	})
 	s.Equal(expectedError, err.Error())
@@ -523,7 +523,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 	_, err = env.FrontendClient().SetWorkerDeploymentRampingVersion(s.Context(), &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: env.Tv().DeploymentSeries(),
-		Version:        firstVersion.DeploymentVersionString(),
+		Version:        env.Tv().DeploymentVersionString(),
 		Percentage:     5,
 		ConflictToken:  cTWrong,
 	})
@@ -586,7 +586,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	s.setCurrentVersion(env, firstVersion, true, "")
 
 	routingInfo := &deploymentpb.RoutingConfig{
-		CurrentVersion:            firstVersion.DeploymentVersionString(),
+		CurrentVersion:            env.Tv().DeploymentVersionString(),
 		CurrentVersionChangedTime: setCurrentTime,
 	}
 
@@ -602,7 +602,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 	}
 	currentVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		Version:              firstVersion.DeploymentVersionString(),
+		Version:              env.Tv().DeploymentVersionString(),
 		CreateTime:           createVersion1Time,
 		DrainageInfo:         nil,
 		RampingSinceTime:     nil,
@@ -1569,12 +1569,12 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				CurrentVersion:            firstVersion.DeploymentVersionString(),
+				CurrentVersion:            env.Tv().DeploymentVersionString(),
 				CurrentVersionChangedTime: firstVersionCurrentUpdateTime,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              firstVersion.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           version1CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    firstVersionCurrentUpdateTime,
@@ -1614,7 +1614,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              firstVersion.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           version1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
 					RoutingUpdateTime:    firstVersionCurrentUpdateTime,
