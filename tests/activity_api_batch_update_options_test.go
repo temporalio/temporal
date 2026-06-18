@@ -211,13 +211,13 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatch
 	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
 	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
-	for i := 0; i < workflowCount; i++ {
+	for range workflowCount {
 		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 			TaskQueue: env.WorkerTaskQueue(),
 		}, workflowTypeName)
-		require.NoError(s.T(), err)
-		require.NotNil(s.T(), workflowRun)
+		s.NoError(err)
+		s.NotNil(workflowRun)
 		workflowRuns = append(workflowRuns, workflowRun)
 	}
 
@@ -259,7 +259,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatch
 		JobId:           jobID,
 		Reason:          "test",
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
 		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
@@ -272,9 +272,9 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatch
 
 	for _, workflowRun := range workflowRuns {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(s.T(), err)
-		require.Len(s.T(), description.PendingActivities, 1)
-		require.Equal(s.T(), updatedScheduleToClose, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		s.NoError(err)
+		s.Len(description.PendingActivities, 1)
+		s.Equal(updatedScheduleToClose, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
 	}
 
 	internalWorkflow.letActivitySucceed.Store(true)
@@ -282,7 +282,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatch
 	for _, workflowRun := range workflowRuns {
 		var out string
 		err = workflowRun.Get(ctx, &out)
-		require.NoError(s.T(), err)
+		s.NoError(err)
 	}
 }
 

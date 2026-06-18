@@ -212,7 +212,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_MatchA
 	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
 	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
-	for i := 0; i < workflowCount; i++ {
+	for range workflowCount {
 		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 			TaskQueue: env.WorkerTaskQueue(),
