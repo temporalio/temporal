@@ -551,6 +551,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		PartitionScaleAllowedDrift: func() dynamicconfig.PartitionScaleAllowedDrift {
 			return config.PartitionScaleAllowedDrift(ns.String(), taskQueueName, taskType)
 		},
+		PartitionScaleManagerSettings: func() dynamicconfig.PartitionScaleManagerSettings {
+			return config.PartitionScaleManagerSettings(ns.String(), taskQueueName, taskType)
+		},
 		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}
 }
