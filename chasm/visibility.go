@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -61,7 +62,10 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	}
 	alias, ok := v.fieldToAlias[field]
 	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+		return "", serviceerror.NewInvalidArgumentf(
+			"visibility search attributes mapper has no registered field %q",
+			field,
+		)
 	}
 	return alias, nil
 }
@@ -190,14 +194,14 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 // CustomSearchAttributes returns the stored custom search attribute fields.
 // Nil is returned if there are none.
 //
-// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
-// directly, use Merge/ReplaceCustomSearchAttributes methods instead.
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
 func (v *Visibility) CustomSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	sa, _ := v.SA.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return sa.GetIndexedFields()
+	return maps.Clone(sa.GetIndexedFields())
 }
 
 // MergeCustomSearchAttributes merges the provided custom search attribute fields into the existing ones.
@@ -263,14 +267,14 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 // CustomMemo returns the stored custom memo fields.
 // Nil is returned if there are none.
 //
-// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
-// directly, use Merge/ReplaceCustomMemo methods instead.
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
 func (v *Visibility) CustomMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	memo, _ := v.Memo.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return memo.GetFields()
+	return maps.Clone(memo.GetFields())
 }
 
 // MergeCustomMemo merges the provided custom memo fields into the existing ones.

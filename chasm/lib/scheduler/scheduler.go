@@ -649,6 +649,7 @@ func (s *Scheduler) Describe(
 	}
 
 	visibility := s.Visibility.Get(ctx)
+	// CustomMemo/CustomSearchAttributes return the component's live maps by reference.
 	memo := visibility.CustomMemo(ctx)
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 

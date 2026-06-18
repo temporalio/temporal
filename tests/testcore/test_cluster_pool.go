@@ -32,16 +32,9 @@ func init() {
 		dedicatedSize = n
 	}
 
-	// In CI, recreate clusters after 50 tests to prevent resource accumulation.
-	// Locally, clusters are reused indefinitely for faster iteration.
-	var maxLeases int
-	if os.Getenv("CI") != "" {
-		maxLeases = 50
-	}
-
 	testClusterRouter = &clusterRouter{
-		shared:    newClusterPool(sharedSize, false, maxLeases),
-		dedicated: newClusterPool(dedicatedSize, true, maxLeases),
+		shared:    newClusterPool(sharedSize, false, 0),
+		dedicated: newClusterPool(dedicatedSize, true, 0),
 	}
 }
 

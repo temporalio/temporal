@@ -47,7 +47,7 @@ type ChasmTree interface {
 	ValidateSideEffectTask(
 		ctx context.Context,
 		task *tasks.ChasmTask,
-	) (bool, error)
+	) (isTaskInTree bool, isValidByComponent bool, err error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)

@@ -1168,13 +1168,13 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionIn
 type TimeSkippingInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Current time-skipping configuration applied to the workflow.
-	Config *v12.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	Config *v13.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
 	// Total skipped duration for the current workflow execution run, including any
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
-	// The current bound based on elapsed duration for time skipping.
-	CurrentElapsedDurationBound *TimeSkippingBoundInfo `protobuf:"bytes,3,opt,name=current_elapsed_duration_bound,json=currentElapsedDurationBound,proto3" json:"current_elapsed_duration_bound,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// The current fast-forward info for time skipping.
+	FastForwardInfo *FastForwardInfo `protobuf:"bytes,4,opt,name=fast_forward_info,json=fastForwardInfo,proto3" json:"fast_forward_info,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1207,7 +1207,7 @@ func (*TimeSkippingInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *TimeSkippingInfo) GetConfig() *v12.TimeSkippingConfig {
+func (x *TimeSkippingInfo) GetConfig() *v13.TimeSkippingConfig {
 	if x != nil {
 		return x.Config
 	}
@@ -1221,43 +1221,43 @@ func (x *TimeSkippingInfo) GetAccumulatedSkippedDuration() *durationpb.Duration 
 	return nil
 }
 
-func (x *TimeSkippingInfo) GetCurrentElapsedDurationBound() *TimeSkippingBoundInfo {
+func (x *TimeSkippingInfo) GetFastForwardInfo() *FastForwardInfo {
 	if x != nil {
-		return x.CurrentElapsedDurationBound
+		return x.FastForwardInfo
 	}
 	return nil
 }
 
-type TimeSkippingBoundInfo struct {
+type FastForwardInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Target time for a bound, expressed in virtual time.
+	// Target time for the fast-forward, expressed in virtual time.
 	TargetTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=target_time,json=targetTime,proto3" json:"target_time,omitempty"`
-	// Indicates whether this bound has already been reached, used for idempotency checks.
+	// Indicates whether this fast-forward has already been reached, used for idempotency checks.
 	HasReached bool `protobuf:"varint,2,opt,name=has_reached,json=hasReached,proto3" json:"has_reached,omitempty"`
 	// Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
 	// WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
 	// configuration. This is used as the task event ID for the time-skipping timer task,
-	// enabling reset and replication-conflict resolution to identify obsolete bound tasks
+	// enabling reset and replication-conflict resolution to identify obsolete fast-forward tasks
 	// via the standard staleness check.
 	SourceEventId int64 `protobuf:"varint,3,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TimeSkippingBoundInfo) Reset() {
-	*x = TimeSkippingBoundInfo{}
+func (x *FastForwardInfo) Reset() {
+	*x = FastForwardInfo{}
 	mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TimeSkippingBoundInfo) String() string {
+func (x *FastForwardInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TimeSkippingBoundInfo) ProtoMessage() {}
+func (*FastForwardInfo) ProtoMessage() {}
 
-func (x *TimeSkippingBoundInfo) ProtoReflect() protoreflect.Message {
+func (x *FastForwardInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1269,26 +1269,26 @@ func (x *TimeSkippingBoundInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TimeSkippingBoundInfo.ProtoReflect.Descriptor instead.
-func (*TimeSkippingBoundInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use FastForwardInfo.ProtoReflect.Descriptor instead.
+func (*FastForwardInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *TimeSkippingBoundInfo) GetTargetTime() *timestamppb.Timestamp {
+func (x *FastForwardInfo) GetTargetTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.TargetTime
 	}
 	return nil
 }
 
-func (x *TimeSkippingBoundInfo) GetHasReached() bool {
+func (x *FastForwardInfo) GetHasReached() bool {
 	if x != nil {
 		return x.HasReached
 	}
 	return false
 }
 
-func (x *TimeSkippingBoundInfo) GetSourceEventId() int64 {
+func (x *FastForwardInfo) GetSourceEventId() int64 {
 	if x != nil {
 		return x.SourceEventId
 	}
@@ -5040,12 +5040,12 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xb5\x02\n" +
-	"\x10TimeSkippingInfo\x12D\n" +
-	"\x06config\x18\x01 \x01(\v2,.temporal.api.workflow.v1.TimeSkippingConfigR\x06config\x12[\n" +
-	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12~\n" +
-	"\x1ecurrent_elapsed_duration_bound\x18\x03 \x01(\v29.temporal.server.api.persistence.v1.TimeSkippingBoundInfoR\x1bcurrentElapsedDurationBound\"\x9d\x01\n" +
-	"\x15TimeSkippingBoundInfo\x12;\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xba\x02\n" +
+	"\x10TimeSkippingInfo\x12B\n" +
+	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
+	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
+	"\x11fast_forward_info\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.FastForwardInfoR\x0ffastForwardInfoJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x97\x01\n" +
+	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +
 	"\vhas_reached\x18\x02 \x01(\bR\n" +
@@ -5402,7 +5402,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
 	(*ShardInfo)(nil),                      // 0: temporal.server.api.persistence.v1.ShardInfo
 	(*WorkflowExecutionInfo)(nil),          // 1: temporal.server.api.persistence.v1.WorkflowExecutionInfo
 	(*TimeSkippingInfo)(nil),               // 2: temporal.server.api.persistence.v1.TimeSkippingInfo
-	(*TimeSkippingBoundInfo)(nil),          // 3: temporal.server.api.persistence.v1.TimeSkippingBoundInfo
+	(*FastForwardInfo)(nil),                // 3: temporal.server.api.persistence.v1.FastForwardInfo
 	(*LastNotifiedTargetVersion)(nil),      // 4: temporal.server.api.persistence.v1.LastNotifiedTargetVersion
 	(*ExecutionStats)(nil),                 // 5: temporal.server.api.persistence.v1.ExecutionStats
 	(*WorkflowExecutionState)(nil),         // 6: temporal.server.api.persistence.v1.WorkflowExecutionState
@@ -5463,7 +5463,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
 	(v11.WorkflowTaskFailedCause)(0),                   // 61: temporal.api.enums.v1.WorkflowTaskFailedCause
 	(v11.TimeoutType)(0),                               // 62: temporal.api.enums.v1.TimeoutType
 	(*v17.DeclinedTargetVersionUpgrade)(nil),           // 63: temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	(*v12.TimeSkippingConfig)(nil),                     // 64: temporal.api.workflow.v1.TimeSkippingConfig
+	(*v13.TimeSkippingConfig)(nil),                     // 64: temporal.api.common.v1.TimeSkippingConfig
 	(*v18.WorkerDeploymentVersion)(nil),                // 65: temporal.api.deployment.v1.WorkerDeploymentVersion
 	(v1.WorkflowExecutionState)(0),                     // 66: temporal.server.api.enums.v1.WorkflowExecutionState
 	(v11.WorkflowExecutionStatus)(0),                   // 67: temporal.api.enums.v1.WorkflowExecutionStatus
@@ -5541,10 +5541,10 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	4,   // 45: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_notified_target_version:type_name -> temporal.server.api.persistence.v1.LastNotifiedTargetVersion
 	63,  // 46: temporal.server.api.persistence.v1.WorkflowExecutionInfo.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
 	2,   // 47: temporal.server.api.persistence.v1.WorkflowExecutionInfo.time_skipping_info:type_name -> temporal.server.api.persistence.v1.TimeSkippingInfo
-	64,  // 48: temporal.server.api.persistence.v1.TimeSkippingInfo.config:type_name -> temporal.api.workflow.v1.TimeSkippingConfig
+	64,  // 48: temporal.server.api.persistence.v1.TimeSkippingInfo.config:type_name -> temporal.api.common.v1.TimeSkippingConfig
 	48,  // 49: temporal.server.api.persistence.v1.TimeSkippingInfo.accumulated_skipped_duration:type_name -> google.protobuf.Duration
-	3,   // 50: temporal.server.api.persistence.v1.TimeSkippingInfo.current_elapsed_duration_bound:type_name -> temporal.server.api.persistence.v1.TimeSkippingBoundInfo
-	47,  // 51: temporal.server.api.persistence.v1.TimeSkippingBoundInfo.target_time:type_name -> google.protobuf.Timestamp
+	3,   // 50: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info:type_name -> temporal.server.api.persistence.v1.FastForwardInfo
+	47,  // 51: temporal.server.api.persistence.v1.FastForwardInfo.target_time:type_name -> google.protobuf.Timestamp
 	65,  // 52: temporal.server.api.persistence.v1.LastNotifiedTargetVersion.deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	66,  // 53: temporal.server.api.persistence.v1.WorkflowExecutionState.state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
 	67,  // 54: temporal.server.api.persistence.v1.WorkflowExecutionState.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
