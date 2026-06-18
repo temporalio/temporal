@@ -13,45 +13,45 @@ const (
 	pathSegmentMapKey
 )
 
-type objectPath []pathSegment
+type path []pathSegment
 
 type pathSegment struct {
 	kind  pathSegmentKind
 	value string
 }
 
-func newObjectPath(root string) objectPath {
-	return objectPath{{kind: pathSegmentField, value: root}}
+func newPath(root string) path {
+	return path{{kind: pathSegmentField, value: root}}
 }
 
-func (p objectPath) field(name string) objectPath {
+func (p path) field(name string) path {
 	return p.append(pathSegment{kind: pathSegmentField, value: name})
 }
 
-func (p objectPath) index(index int) objectPath {
+func (p path) index(index int) path {
 	return p.append(pathSegment{kind: pathSegmentIndex, value: fmt.Sprint(index)})
 }
 
-func (p objectPath) mapKey(index int) objectPath {
+func (p path) mapKey(index int) path {
 	return p.append(pathSegment{kind: pathSegmentMapKey, value: fmt.Sprint(index)})
 }
 
-func (p objectPath) append(segment pathSegment) objectPath {
-	next := make(objectPath, 0, len(p)+1)
+func (p path) append(segment pathSegment) path {
+	next := make(path, 0, len(p)+1)
 	next = append(next, p...)
 	next = append(next, segment)
 	return next
 }
 
-func (p objectPath) String() string {
+func (p path) String() string {
 	return p.format(false)
 }
 
-func (p objectPath) normalized() string {
+func (p path) normalized() string {
 	return p.format(true)
 }
 
-func (p objectPath) format(normalized bool) string {
+func (p path) format(normalized bool) string {
 	var out strings.Builder
 	for i, segment := range p {
 		switch segment.kind {

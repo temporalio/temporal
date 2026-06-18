@@ -58,6 +58,6 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		runtimedebug.FreeOSMemory()
 		time.Sleep(20 * time.Millisecond)
 	}
-	report := newObjectLeakReport(t.objects, t.excludes)
+	report := newReport(t.objects, t.excludes)
 	return report.String(), report.failures()
 }
