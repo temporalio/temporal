@@ -17,6 +17,13 @@ type report struct {
 	unmatchedExcludes []string
 }
 
+type reportTotals struct {
+	retained        int
+	expected        int
+	unexpected      int
+	staleExclusions int
+}
+
 type objectGroup struct {
 	path     string
 	typeName string
@@ -110,6 +117,15 @@ func (r report) failures() error {
 		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
 	}
 	return errors.Join(failures...)
+}
+
+func (r report) totals() reportTotals {
+	return reportTotals{
+		retained:        r.totalRetained,
+		expected:        r.expectedRetained,
+		unexpected:      r.totalRetained - r.expectedRetained,
+		staleExclusions: len(r.unmatchedExcludes),
+	}
 }
 
 func (r report) string() string {
