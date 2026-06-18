@@ -54,7 +54,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 			report.exclusionCounts[pattern]++
 		}
 
-		excludedBy = sortedStrings(excludedBy)
+		excludedBy = slices.Sorted(slices.Values(excludedBy))
 		key := groupKey{
 			path:       obj.path.normalized(),
 			typeName:   obj.typeName,
@@ -149,18 +149,8 @@ func (r report) writeSummary(out *strings.Builder) {
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
 	if len(r.exclusionCounts) > 0 {
 		out.WriteString("\nretained objects by exclusion:")
-		for _, pattern := range sortedMapKeys(r.exclusionCounts) {
+		for _, pattern := range slices.Sorted(maps.Keys(r.exclusionCounts)) {
 			fmt.Fprintf(out, "\n  %s: %d", pattern, r.exclusionCounts[pattern])
 		}
 	}
-}
-
-func sortedMapKeys[V any](values map[string]V) []string {
-	return slices.Sorted(maps.Keys(values))
-}
-
-func sortedStrings(values []string) []string {
-	sorted := slices.Clone(values)
-	slices.Sort(sorted)
-	return sorted
 }
