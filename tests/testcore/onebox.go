@@ -265,6 +265,34 @@ func (c *TemporalImpl) Stop() error {
 		errs = append(errs, app.Stop(ctx))
 	}
 
+	// A stopped fx.App still retains its entire dig graph. The functional-test
+	// harness keeps each *TestCluster reachable via per-test cleanup closures,
+	// so holding stopped apps here pins every cluster's whole graph. Drop them
+	// now that they're stopped so the graphs become collectible.
+	c.fxApps = nil
+	c.clients = clients{}
+	c.logger = nil
+	c.namespaceRegistries = nil
+	c.chasmEngine = nil
+	c.chasmVisibilityMgr = nil
+	c.dcClient = nil
+	c.metadataMgr = nil
+	c.clusterMetadataMgr = nil
+	c.shardMgr = nil
+	c.taskMgr = nil
+	c.executionManager = nil
+	c.namespaceReplicationQueue = nil
+	c.abstractDataStoreFactory = nil
+	c.visibilityStoreFactory = nil
+	c.captureMetricsHandler = nil
+	c.spanExporters = nil
+	c.serviceFxOptions = nil
+	c.chasmRegistry = nil
+	c.hostsByProtocolByService = nil
+	c.taskCategoryRegistry = nil
+	c.replicationStreamRecorder = nil
+	c.taskQueueRecorder = nil
+
 	return multierr.Combine(errs...)
 }
 

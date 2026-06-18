@@ -307,7 +307,7 @@ jobs:
           artifact_name_suffix: unit-test
 
   leak-test:
-    name: Goroutine leak test
+    name: Resource leak test
     needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     env:
@@ -322,7 +322,7 @@ jobs:
       - name: Prepare Go
         uses: ./.github/actions/prepare-go
 
-      - name: Run goroutine leak test
+      - name: Run resource leak test
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: make LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m" leak-test
 

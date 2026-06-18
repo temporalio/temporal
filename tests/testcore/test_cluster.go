@@ -547,10 +547,13 @@ func newArchiverBase(
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
+	esConfig := tc.host.esConfig
+	logger := tc.host.logger
+
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UseSQLVisibility() && tc.host.esConfig != nil {
-		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
+	if !UseSQLVisibility() && esConfig != nil {
+		if err := deleteIndex(esConfig, logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
 	}
