@@ -5695,20 +5695,28 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	var identity string
 	switch op := request.Operation.(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY
+		identity = op.TerminateActivitiesOperation.GetIdentity()
+	case *workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY
+	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY
+		identity = op.CancelActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW
 		identity = op.TerminationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW
 		identity = op.ResetOperation.GetIdentity()
 		for _, postOp := range op.ResetOperation.GetPostResetOperations() {
 			if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
@@ -5922,28 +5930,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	var operationType enumspb.BatchOperationType
-	switch operationTypeString {
-	case batcher.BatchTypeCancel:
-		operationType = enumspb.BATCH_OPERATION_TYPE_CANCEL
-	case batcher.BatchTypeSignal:
-		operationType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
-	case batcher.BatchTypeTerminate:
-		operationType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
-	case batcher.BatchTypeDelete:
-		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
-	case batcher.BatchTypeReset:
-		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
-	case batcher.BatchTypeUpdateOptions:
-		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
-	case batcher.BatchTypeUpdateActivitiesOptions:
-		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
-	case batcher.BatchTypeResetActivities:
-		operationType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
-	case batcher.BatchTypeUnpauseActivities:
-		operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
-	default:
-		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
+	operationType := batchOperationTypeFromString(operationTypeString)
+	if operationType == enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED {
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.String("batch-operation-type", operationTypeString))
 	}
 
@@ -6031,11 +6019,23 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	var operations []*batchpb.BatchOperationInfo
 	for _, execution := range resp.GetExecutions() {
+		// Batch operations started before the operation type was recorded in the
+		// memo do not have this field, so they default to the zero value
+		// BATCH_OPERATION_TYPE_UNSPECIFIED.
+		var operationType enumspb.BatchOperationType
+		if typePayload, ok := execution.GetMemo().GetFields()[batcher.BatchOperationTypeMemo]; ok {
+			var operationTypeString string
+			if err := payload.Decode(typePayload, &operationTypeString); err != nil {
+				return nil, err
+			}
+			operationType = batchOperationTypeFromString(operationTypeString)
+		}
 		operations = append(operations, &batchpb.BatchOperationInfo{
-			JobId:     execution.GetExecution().GetWorkflowId(),
-			State:     getBatchOperationState(execution.GetStatus()),
-			StartTime: execution.GetStartTime(),
-			CloseTime: execution.GetCloseTime(),
+			JobId:         execution.GetExecution().GetWorkflowId(),
+			State:         getBatchOperationState(execution.GetStatus()),
+			StartTime:     execution.GetStartTime(),
+			CloseTime:     execution.GetCloseTime(),
+			OperationType: operationType,
 		})
 	}
 	return &workflowservice.ListBatchOperationsResponse{
@@ -6760,6 +6760,35 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 		operationState = enumspb.BATCH_OPERATION_STATE_FAILED
 	}
 	return operationState
+}
+
+// batchOperationTypeFromString maps the batch operation type as stored in the
+// batcher workflow memo (see batcher.BatchType* constants) back to its enum
+// value. Batch operations started before the type was recorded in the memo do
+// not have this field and therefore map to BATCH_OPERATION_TYPE_UNSPECIFIED.
+func batchOperationTypeFromString(operationTypeString string) enumspb.BatchOperationType {
+	switch operationTypeString {
+	case batcher.BatchTypeCancel:
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL
+	case batcher.BatchTypeSignal:
+		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
+	case batcher.BatchTypeTerminate:
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE
+	case batcher.BatchTypeDelete:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE
+	case batcher.BatchTypeReset:
+		return enumspb.BATCH_OPERATION_TYPE_RESET
+	case batcher.BatchTypeUpdateOptions:
+		return enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+	case batcher.BatchTypeUpdateActivitiesOptions:
+		return enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
+	case batcher.BatchTypeResetActivities:
+		return enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
+	case batcher.BatchTypeUnpauseActivities:
+		return enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
+	default:
+		return enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
+	}
 }
 
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(

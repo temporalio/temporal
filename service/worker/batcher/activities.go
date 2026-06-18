@@ -76,13 +76,15 @@ type batchWorkerProcessor func(
 
 // page represents a page of workflow executions to be processed
 type page struct {
-	executionInfos []*workflowpb.WorkflowExecutionInfo
-	submittedCount int
-	successCount   int
-	errorCount     int
-	nextPageToken  []byte
-	pageNumber     int
-	prev, next     *page
+	// Deprecated, use archetypeExecutionInfo
+	executionInfos         []*workflowpb.WorkflowExecutionInfo
+	archetypeExecutionInfo []*commonpb.Execution
+	submittedCount         int
+	successCount           int
+	errorCount             int
+	nextPageToken          []byte
+	pageNumber             int
+	prev, next             *page
 }
 
 // hasNext returns true if there are more pages to fetch
@@ -146,26 +148,60 @@ func fetchPage(
 		}, nil
 	}
 
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize:      int32(pageSize),
-		NextPageToken: pageToken,
-		Query:         config.adjustedQuery,
-	})
-	if err != nil {
-		var invalidArgErr *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgErr) {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+	// If Terminate/Cancel/Delete Activities batch type, we need to fetch activity executions instead of workflow executions
+	var executionInfos []*workflowpb.WorkflowExecutionInfo
+	var archetypeExecutionInfo []*commonpb.Execution
+	var nextPageToken []byte
+	if false {
+		resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
+			&workflowservice.ListActivityExecutionsRequest{
+				PageSize:      int32(pageSize),
+				NextPageToken: pageToken,
+				Query:         config.adjustedQuery,
+			})
+		if err != nil {
+			var invalidArgErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgErr) {
+				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+			}
+			return nil, err
 		}
-		return nil, err
+
+		archetypeExecutionInfo := make([]*commonpb.Execution, 0, len(resp.Executions))
+		for _, wf := range resp.GetExecutions() {
+			archetypeExecutionInfo = append(archetypeExecutionInfo, &commonpb.Execution{
+				Archetype:  enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: wf.GetActivityId(),
+				RunId:      wf.GetRunId(),
+			})
+		}
+		nextPageToken = resp.NextPageToken
+	} else {
+		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+		if err != nil {
+			var invalidArgErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgErr) {
+				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+			}
+			return nil, err
+		}
+
+		executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
+		for _, wf := range resp.Executions {
+			executionInfos = append(executionInfos, wf)
+		}
+		nextPageToken = resp.NextPageToken
 	}
 
-	executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
-	executionInfos = append(executionInfos, resp.Executions...)
-
 	return &page{
-		executionInfos: executionInfos,
-		nextPageToken:  resp.NextPageToken,
-		pageNumber:     pageNumber,
+		executionInfos:         executionInfos,
+		archetypeExecutionInfo: archetypeExecutionInfo,
+		nextPageToken:          nextPageToken,
+		pageNumber:             pageNumber,
 	}, nil
 }
 
@@ -499,6 +535,40 @@ func (a *activities) processSingleTask(
 	}
 
 	switch operation := batchOperation.Request.Operation.(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err = frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: executionInfo.Execution.WorkflowId,
+					RunId:      executionInfo.Execution.RunId,
+					Identity:   operation.TerminateActivitiesOperation.GetIdentity(),
+					Reason:     operation.TerminateActivitiesOperation.GetReason(),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err = frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: executionInfo.Execution.WorkflowId,
+					RunId:      executionInfo.Execution.RunId,
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		err = processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err = frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: executionInfo.Execution.WorkflowId,
+					RunId:      executionInfo.Execution.RunId,
+					Identity:   operation.CancelActivitiesOperation.GetIdentity(),
+					Reason:     operation.CancelActivitiesOperation.GetReason(),
+				})
+				return err
+			})
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {

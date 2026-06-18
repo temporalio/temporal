@@ -1117,6 +1117,61 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	s.Equal(input1, returnedData)
 }
 
+// TestListBatchOperations verifies that ListBatchOperations surfaces the
+// operation type recorded when the batch operation was started.
+func (s *ClientMiscTestSuite) TestListBatchOperations() {
+	workflowFn := func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool { return false })
+	}
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+		ID:                       uuid.NewString(),
+		TaskQueue:                s.TaskQueue(),
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, workflowFn)
+	s.NoError(err)
+
+	jobID := uuid.NewString()
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{},
+		},
+		Executions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: workflowRun.GetID(),
+				RunId:      workflowRun.GetRunID(),
+			},
+		},
+		JobId:  jobID,
+		Reason: "test",
+	})
+	s.NoError(err)
+
+	// The batch operation is itself a workflow indexed in visibility, so it may
+	// take a moment to become listable.
+	var listed *batchpb.BatchOperationInfo
+	s.Eventually(func() bool {
+		resp, err := s.SdkClient().WorkflowService().ListBatchOperations(context.Background(), &workflowservice.ListBatchOperationsRequest{
+			Namespace: s.Namespace().String(),
+		})
+		if err != nil {
+			return false
+		}
+		for _, op := range resp.GetOperationInfo() {
+			if op.GetJobId() == jobID {
+				listed = op
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.NotNil(listed, "batch operation %s was not returned by ListBatchOperations", jobID)
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, listed.GetOperationType())
+}
+
 func (s *ClientMiscTestSuite) TestBatchReset() {
 	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
 	var count atomic.Int32
