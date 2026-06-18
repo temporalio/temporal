@@ -325,8 +325,8 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	// Set current version
 	s.setCurrentVersion(env, deploymentName, currentBuildID)
 	env.waitForTaskQueueVersioningInfo(
-		s.T(),
 		s.Context(),
+		s.T(),
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -1204,19 +1204,6 @@ func (s *TaskQueueStatsVersionSuite) createVersionsInTaskQueue(ctx context.Conte
 		s.NotNil(env.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 		s.NotNil(env.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	}, 10*time.Second, 200*time.Millisecond)
-}
-
-func (s *taskQueueStatsContext) findVersionTaskQueue(
-	taskQueues []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue,
-	tqName string,
-	tqType enumspb.TaskQueueType,
-) *workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue {
-	for _, tq := range taskQueues {
-		if tq.GetName() == tqName && tq.GetType() == tqType {
-			return tq
-		}
-	}
-	return nil
 }
 
 // TODO (Shivam): Remove this guy.

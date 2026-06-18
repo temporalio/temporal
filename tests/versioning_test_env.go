@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/await"
@@ -25,8 +26,8 @@ func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) *Versioning
 }
 
 func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(
-	tb testing.TB,
 	ctx context.Context,
+	tb testing.TB,
 	tq *taskqueuepb.TaskQueue,
 	expectedCurrentVersion string,
 	expectedRampingVersion string,
@@ -45,4 +46,17 @@ func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(
 		require.Equal(t, expectedRampingVersion, resp.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		require.Equal(t, rampingPercentage, resp.GetVersioningInfo().GetRampingVersionPercentage())
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func (env *VersioningTestEnv) findVersionTaskQueue(
+	taskQueues []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+) *workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue {
+	for _, tq := range taskQueues {
+		if tq.GetName() == tqName && tq.GetType() == tqType {
+			return tq
+		}
+	}
+	return nil
 }
