@@ -1,13 +1,6 @@
 // Package leakcheck is a goroutine-leak regression test for the functional
-// test infrastructure. It guards against the class of bug that drove the
-// functional-test OOMs: per-cluster goroutines and gRPC connections not
-// released when a test cluster shuts down. The functional suite builds hundreds
-// of clusters in one process, so any per-cluster leak accumulates until OOM.
-//
-// It builds and tears down full test clusters (running a trivial workflow on
-// each so the full frontend → history → matching → SDK worker path is
-// exercised) and asserts via goleak that a clean shutdown leaves no new
-// goroutine stacks behind.
+// test infrastructure. It detects per-cluster goroutines and gRPC connections not
+// being released when a test cluster shuts down.
 //
 // Tunable via env:
 //
