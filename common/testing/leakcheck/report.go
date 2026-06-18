@@ -85,7 +85,6 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	for _, group := range groupByKey {
 		report.retainedObjects = append(report.retainedObjects, *group)
 	}
-	slices.Sort(report.unmatchedExcludes)
 	slices.SortFunc(report.retainedObjects, func(a objectGroup, b objectGroup) int {
 		if c := cmp.Compare(b.count, a.count); c != 0 {
 			return c
@@ -98,6 +97,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 		}
 		return cmp.Compare(strings.Join(a.excludedBy, "\x00"), strings.Join(b.excludedBy, "\x00"))
 	})
+	slices.Sort(report.unmatchedExcludes)
 	return report
 }
 
