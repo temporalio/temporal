@@ -14,7 +14,7 @@ import (
 // that remain reachable after GC.
 type ObjectGraphLeakCheck struct {
 	objects  []trackedObject
-	excludes []string
+	excludes []exclusion
 }
 
 type trackedObject struct {
@@ -30,7 +30,7 @@ type Option func(*ObjectGraphLeakCheck)
 // matches pattern. A trailing '*' matches any suffix.
 func WithExclude(pattern string) Option {
 	return func(t *ObjectGraphLeakCheck) {
-		t.excludes = append(t.excludes, pattern)
+		t.excludes = append(t.excludes, newExclusion(pattern))
 	}
 }
 
