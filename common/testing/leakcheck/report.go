@@ -107,7 +107,7 @@ func (r report) failures() error {
 		if len(group.excludedBy) > 0 {
 			continue
 		}
-		failures = append(failures, fmt.Errorf("retained graph object %s (%s) retained %d times", group.path, group.typeName, group.count))
+		failures = append(failures, fmt.Errorf("retained object %s (%s) retained %d times", group.path, group.typeName, group.count))
 	}
 	for _, pattern := range r.unmatchedExcludes {
 		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
