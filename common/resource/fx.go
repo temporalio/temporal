@@ -260,7 +260,8 @@ func ClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 ) client.Factory {
-	factory := factoryProvider.NewFactory(
+	return factoryProvider.NewFactory(
+		lc,
 		rpcFactory,
 		membershipMonitor,
 		metricsHandler,
@@ -270,14 +271,6 @@ func ClientFactoryProvider(
 		logger,
 		throttledLogger,
 	)
-	// Stop the factory on shutdown so the background goroutines and pooled gRPC
-	// connections owned by the clients it created are released. Stop is not part
-	// of the Factory interface so that third-party implementations are not forced
-	// to implement it; implementations that do have Stop benefit from cleanup.
-	if s, ok := factory.(interface{ Stop() }); ok {
-		lc.Append(fx.StopHook(s.Stop))
-	}
-	return factory
 }
 
 func ClientBeanProvider(

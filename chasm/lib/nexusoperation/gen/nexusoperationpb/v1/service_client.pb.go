@@ -41,9 +41,7 @@ func NewNexusOperationServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	lc.Append(fx.StopHook(cancel))
-	connections := history.NewConnectionPool(ctx, resolver, rpcFactory, NewNexusOperationServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
+	connections := history.NewConnectionPool(lc, resolver, rpcFactory, NewNexusOperationServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[NexusOperationServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(

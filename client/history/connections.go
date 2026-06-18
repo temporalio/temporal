@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -44,7 +45,7 @@ type (
 )
 
 func NewConnectionPool[C any](
-	ctx context.Context,
+	lc fx.Lifecycle,
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory RPCFactory,
 	clientCtor func(grpc.ClientConnInterface) C,
@@ -61,11 +62,11 @@ func NewConnectionPool[C any](
 		logger:                 logger,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	// Close cached conns whose host leaves the membership ring. The watcher runs
-	// until ctx is cancelled (i.e. the owning client is shut down). The cached
-	// connections themselves are owned and closed by the RPCFactory that dialed
-	// them.
+	// until the fx lifecycle stops the owning client.
 	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
+	lc.Append(fx.StopHook(cancel))
 	return c
 }
 
@@ -92,6 +93,12 @@ func watchMembershipForClose[C any](
 	for {
 		select {
 		case <-ctx.Done():
+			// Close all cached connections so their gRPC background goroutines exit.
+			conns.Range(func(k, v any) bool {
+				_ = v.(clientConnection[C]).grpcConn.Close() //nolint:revive // unchecked-type-assertion
+				conns.Delete(k)
+				return true
+			})
 			return
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {

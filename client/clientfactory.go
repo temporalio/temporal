@@ -3,7 +3,6 @@
 package client
 
 import (
-	"context"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -22,6 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -39,6 +39,7 @@ type (
 	// FactoryProvider can be used to provide a customized client Factory implementation.
 	FactoryProvider interface {
 		NewFactory(
+			lc fx.Lifecycle,
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
@@ -54,6 +55,7 @@ type (
 	NamespaceIDToNameFunc func(id namespace.ID) (namespace.Name, error)
 
 	rpcClientFactory struct {
+		lc                    fx.Lifecycle
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
@@ -62,11 +64,6 @@ type (
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
-		// clientCtx bounds the lifetime of background goroutines started by
-		// clients this factory creates (history connection pools, matching
-		// partition cache and connection eviction). Cancelled by Stop.
-		clientCtx       context.Context
-		clientCtxCancel context.CancelFunc
 	}
 
 	factoryProviderImpl struct {
@@ -84,6 +81,7 @@ func NewFactoryProvider() FactoryProvider {
 
 // NewFactory creates an instance of client factory that knows how to dispatch RPC calls.
 func (p *factoryProviderImpl) NewFactory(
+	lc fx.Lifecycle,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
@@ -93,8 +91,8 @@ func (p *factoryProviderImpl) NewFactory(
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) Factory {
-	clientCtx, clientCtxCancel := context.WithCancel(context.Background())
 	return &rpcClientFactory{
+		lc:                    lc,
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
@@ -103,16 +101,7 @@ func (p *factoryProviderImpl) NewFactory(
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
-		clientCtx:             clientCtx,
-		clientCtxCancel:       clientCtxCancel,
 	}
-}
-
-// Stop cancels the lifetime context shared by clients created by this
-// factory, terminating their background membership watchers and closing
-// pooled gRPC connections.
-func (cf *rpcClientFactory) Stop() {
-	cf.clientCtxCancel()
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
@@ -121,7 +110,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return nil, err
 	}
 	client := history.NewClient(
-		cf.clientCtx,
+		cf.lc,
 		cf.dynConfig,
 		resolver,
 		cf.logger,
@@ -150,8 +139,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
-	client := matching.NewClient(
-		cf.clientCtx,
+	rawClient := matching.NewClient(
+		cf.lc,
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider, cf.logger),
@@ -163,8 +152,9 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
+	client := matchingservice.MatchingServiceClient(rawClient)
 	if cf.metricsHandler != nil {
-		client = matching.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
+		client = matching.NewMetricClient(rawClient, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/testing/nettest"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -37,7 +38,7 @@ func TestErrLookup(t *testing.T) {
 	serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 	serviceResolver.EXPECT().Members().Return(nil).AnyTimes()
 	client := history.NewClient(
-		context.Background(),
+		fxtest.NewLifecycle(t),
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
 		log.NewTestLogger(),
@@ -131,7 +132,7 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 
 			// Send 3 requests to verify that we re-use a connection for the last request.
 			client := history.NewClient(
-				context.Background(),
+				fxtest.NewLifecycle(t),
 				dynamicconfig.NewNoopCollection(),
 				serviceResolver,
 				log.NewTestLogger(),
