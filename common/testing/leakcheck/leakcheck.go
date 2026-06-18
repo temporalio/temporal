@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"runtime"
 	runtimedebug "runtime/debug"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -14,17 +13,15 @@ import (
 // ObjectGraphLeakCheck tracks objects reachable from roots and reports objects
 // that remain reachable after GC.
 type ObjectGraphLeakCheck struct {
-	objects    []trackedObject
-	excludes   []string
-	rootCounts map[string]int
+	objects  []trackedObject
+	excludes []string
 }
 
 type trackedObject struct {
-	matchPath   string
-	displayPath string
-	typeName    string
-	collected   *atomic.Bool
-	cleanup     runtime.Cleanup
+	path      string
+	typeName  string
+	collected *atomic.Bool
+	cleanup   runtime.Cleanup
 }
 
 type Option func(*ObjectGraphLeakCheck)
@@ -41,9 +38,7 @@ func WithExclude(pattern string) Option {
 // Track after the code under test has finished creating the objects that should
 // be released.
 func NewObjectGraphLeakCheck(opts ...Option) ObjectGraphLeakCheck {
-	t := ObjectGraphLeakCheck{
-		rootCounts: make(map[string]int),
-	}
+	t := ObjectGraphLeakCheck{}
 	for _, opt := range opts {
 		opt(&t)
 	}
@@ -51,18 +46,10 @@ func NewObjectGraphLeakCheck(opts ...Option) ObjectGraphLeakCheck {
 }
 
 // Track snapshots all pointer objects reachable from root. rootPath is the
-// stable path used for exclusion matching; reports add a per-root index so
-// repeated roots are distinguishable.
+// stable path used for exclusion matching and report grouping.
 func (t *ObjectGraphLeakCheck) Track(rootPath string, root any) {
-	if t.rootCounts == nil {
-		t.rootCounts = make(map[string]int)
-	}
-	rootIndex := t.rootCounts[rootPath]
-	t.rootCounts[rootPath]++
-	displayRootPath := fmt.Sprintf("%s[%d]", rootPath, rootIndex)
-
 	walker := newGraphWalker()
-	walker.walk(reflect.ValueOf(root), rootPath, displayRootPath)
+	walker.walk(reflect.ValueOf(root), rootPath)
 	t.objects = append(t.objects, walker.objects...)
 }
 
@@ -71,28 +58,7 @@ func (t *ObjectGraphLeakCheck) Track(rootPath string, root any) {
 // any tracked object.
 func (t *ObjectGraphLeakCheck) Check() (string, error) {
 	settleLeakCheck()
-	var report objectGraphReport
-	matchedExcludes := make(map[string]bool, len(t.excludes))
-	for _, obj := range t.objects {
-		excludedBy := t.matchingExcludes(obj)
-		for _, pattern := range excludedBy {
-			matchedExcludes[pattern] = true
-		}
-		if obj.collected.Load() {
-			continue
-		}
-		report.retainedObjects = append(report.retainedObjects, retainedObject{
-			matchPath:   obj.matchPath,
-			displayPath: obj.displayPath,
-			typeName:    obj.typeName,
-			excludedBy:  excludedBy,
-		})
-	}
-	for _, pattern := range t.excludes {
-		if !matchedExcludes[pattern] {
-			report.unmatchedExcludes = append(report.unmatchedExcludes, pattern)
-		}
-	}
+	report := newObjectGraphReport(t.objects, t.excludes)
 	return report.String(), report.failures()
 }
 
@@ -106,22 +72,6 @@ func settleLeakCheck() {
 	}
 }
 
-func (t *ObjectGraphLeakCheck) matchingExcludes(obj trackedObject) []string {
-	var matches []string
-	matchesPattern := func(pattern string, value string) bool {
-		if prefix, ok := strings.CutSuffix(pattern, "*"); ok {
-			return strings.HasPrefix(value, prefix)
-		}
-		return value == pattern
-	}
-	for _, pattern := range t.excludes {
-		if matchesPattern(pattern, obj.matchPath) || matchesPattern(pattern, obj.typeName) {
-			matches = append(matches, pattern)
-		}
-	}
-	return matches
-}
-
 type graphWalker struct {
 	objects []trackedObject
 	seen    map[uintptr]struct{}
@@ -133,7 +83,7 @@ func newGraphWalker() graphWalker {
 	}
 }
 
-func (w *graphWalker) walk(v reflect.Value, matchPath string, displayPath string) {
+func (w *graphWalker) walk(v reflect.Value, path string) {
 	if !v.IsValid() {
 		return
 	}
@@ -153,29 +103,29 @@ func (w *graphWalker) walk(v reflect.Value, matchPath string, displayPath string
 			return
 		}
 		w.seen[addr] = struct{}{}
-		if obj, ok := trackPointerObject(addr, matchPath, displayPath, v.Type().String()); ok {
+		if obj, ok := trackPointerObject(addr, path, v.Type().String()); ok {
 			w.objects = append(w.objects, obj)
 		}
-		w.walk(v.Elem(), matchPath, displayPath)
+		w.walk(v.Elem(), path)
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
-			w.walk(v.Field(i), matchPath+"."+field.Name, displayPath+"."+field.Name)
+			w.walk(v.Field(i), path+"."+field.Name)
 		}
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < v.Len(); i++ {
-			w.walk(v.Index(i), fmt.Sprintf("%s[%d]", matchPath, i), fmt.Sprintf("%s[%d]", displayPath, i))
+			w.walk(v.Index(i), fmt.Sprintf("%s[%d]", path, i))
 		}
 	case reflect.Map:
 		iter := v.MapRange()
 		for i := 0; iter.Next(); i++ {
-			w.walk(iter.Key(), fmt.Sprintf("%s[key%d]", matchPath, i), fmt.Sprintf("%s[key%d]", displayPath, i))
-			w.walk(iter.Value(), fmt.Sprintf("%s[%d]", matchPath, i), fmt.Sprintf("%s[%d]", displayPath, i))
+			w.walk(iter.Key(), fmt.Sprintf("%s[key%d]", path, i))
+			w.walk(iter.Value(), fmt.Sprintf("%s[%d]", path, i))
 		}
 	}
 }
 
-func trackPointerObject(addr uintptr, matchPath string, displayPath string, typeName string) (trackedObject, bool) {
+func trackPointerObject(addr uintptr, path string, typeName string) (trackedObject, bool) {
 	collected := &atomic.Bool{}
 	var cleanup runtime.Cleanup
 	ok := true
@@ -193,10 +143,9 @@ func trackPointerObject(addr uintptr, matchPath string, displayPath string, type
 		return trackedObject{}, false
 	}
 	return trackedObject{
-		matchPath:   matchPath,
-		displayPath: displayPath,
-		typeName:    typeName,
-		collected:   collected,
-		cleanup:     cleanup,
+		path:      path,
+		typeName:  typeName,
+		collected: collected,
+		cleanup:   cleanup,
 	}, true
 }
