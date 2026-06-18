@@ -487,6 +487,7 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	// be collected.
 	s.otelExporter = nil
 	s.testClusterConfig = nil
+	s.Logger = nil
 
 	return err
 }

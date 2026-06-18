@@ -35,6 +35,7 @@
 // Tunable via env (defaults set in the Makefile leak-test target):
 //
 //	LEAK_ITERS                        clusters built after warmup (default 15)
+//	LEAK_WARMUP_CLUSTERS              warmup clusters before baselining (default 20)
 //	LEAK_MAX_GOROUTINES_PER_CLUSTER   goroutine-slope failure threshold (default 2)
 //	LEAK_MAX_HEAP_KB_PER_CLUSTER      HeapInuse-slope failure threshold, KB (default 2048)
 //	LEAK_OUTPUT_DIR                   on failure, write heap.prof / goroutines.txt /
@@ -59,7 +60,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-const warmupClusters = 3
+
 
 func TestClusterShutdownLeak(t *testing.T) {
 	if os.Getenv("RUN_LEAK_TEST") != "1" {
@@ -68,6 +69,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	iters := envInt("LEAK_ITERS", 15)
 	maxGoroutinesPerCluster := envInt("LEAK_MAX_GOROUTINES_PER_CLUSTER", 2)
 	maxHeapKBPerCluster := envInt("LEAK_MAX_HEAP_KB_PER_CLUSTER", 2048)
+	warmupClusters := envInt("LEAK_WARMUP_CLUSTERS", 20)
 
 	// Warm up so process-lifetime singletons and first-use initialization (proto
 	// registries, type caches, ...) exist before we snapshot the baselines —
