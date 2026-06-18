@@ -922,6 +922,7 @@ func (a *Activity) unpause(
 	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
 		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
+	scheduleTime = a.respectStartDelay(scheduleTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
