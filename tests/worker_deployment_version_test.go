@@ -197,43 +197,40 @@ func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx co
 func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a version workflow
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Set the version as current
-	err := s.setCurrent(env, tv, false)
+	err := s.setCurrent(env, s.tv(), false)
 	s.NoError(err)
 
 	// ForceCAN
-	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(s.tv().DeploymentSeries(), s.tv().BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, tv.ClientIdentity())
+	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, s.tv().ClientIdentity())
 	s.NoError(err)
 
 	// verifying we see our registered workers in the version deployment even after a CAN
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
-		resp, err := s.describeVersion(env, tv)
+		resp, err := s.describeVersion(env, s.tv())
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(s.tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		a.Equal(s.tv().ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(s.tv().ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
 		a.Len(resp.GetVersionTaskQueues(), 1)
 		a.Len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(), 1)
 
 		// verify that the version state is intact even after a CAN
-		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
-		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRoutingChangedTime())
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
@@ -245,15 +242,12 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a version workflow
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Create a modified state with metadata to verify override works
 	overrideState := &deploymentspb.VersionLocalState{
-		Version:    tv.DeploymentVersion(),
+		Version:    s.tv().DeploymentVersion(),
 		CreateTime: timestamppb.New(time.Now()),
 		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 		Metadata: &deploymentpb.VersionMetadata{
@@ -262,7 +256,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 			},
 		},
 		TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-			tv.TaskQueue().GetName(): {
+			s.tv().TaskQueue().GetName(): {
 				TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 				},
@@ -288,19 +282,19 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 	}
 
 	// Send ForceCAN signal with override state
-	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(s.tv().DeploymentSeries(), s.tv().BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, tv.ClientIdentity())
+	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, s.tv().ClientIdentity())
 	s.NoError(err)
 
 	// Verify that the override state is used after CAN (metadata should be present)
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
-		resp, err := s.describeVersion(env, tv)
+		resp, err := s.describeVersion(env, s.tv())
 		if !a.NoError(err) {
 			return
 		}
@@ -317,48 +311,42 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
-	go s.pollFromDeployment(ctx, env, tv)
+	go s.pollFromDeployment(s.Context(), env, s.tv())
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 
-		resp, err := s.describeVersion(env, tv)
+		resp, err := s.describeVersion(env, s.tv())
 		a.NoError(err)
 
-		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(s.tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		a.Equal(s.tv().ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(s.tv().ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 
 		a.Len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(), numberOfDeployments)
-		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 
 		a.Len(resp.GetVersionTaskQueues(), numberOfDeployments)
-		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
 	}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_ConcurrentPollers() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
-	root, err := tqid.PartitionFromProto(tv.TaskQueue(), env.Namespace().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	root, err := tqid.PartitionFromProto(s.tv().TaskQueue(), env.Namespace().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
 	for p := range 4 {
-		tv2 := tv.WithTaskQueue(root.TaskQueue().NormalPartition(p).RpcName())
+		tv2 := s.tv().WithTaskQueue(root.TaskQueue().NormalPartition(p).RpcName())
 		for range 3 {
-			go s.pollFromDeployment(ctx, env, tv2)
-			go s.pollActivityFromDeployment(ctx, env, tv2)
+			go s.pollFromDeployment(s.Context(), env, tv2)
+			go s.pollActivityFromDeployment(s.Context(), env, tv2)
 		}
 	}
 
@@ -366,18 +354,18 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
-		resp, err := s.describeVersion(env, tv)
+		resp, err := s.describeVersion(env, s.tv())
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
-		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
+		a.Equal(s.tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		a.Equal(s.tv().ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
+		a.Equal(s.tv().ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		a.Len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(), 2)
-		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 		a.Len(resp.GetVersionTaskQueues(), 2)
-		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
+		a.Equal(s.tv().TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -388,42 +376,40 @@ func (s *DeploymentVersionSuite) tv() *testvars.TestVars {
 //nolint:forbidigo
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 	tv2 := s.tv().WithBuildIDNumber(2)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Start deployment workflow 2 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// non-current deployments have never been used and have no drainage info
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
 
 	// SetCurrent tv1
 	err := s.setCurrent(env, tv1, true)
 	s.NoError(err)
 
 	// Both versions have no drainage info and tv1 has it's status updated to current
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, 0)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
 
 	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	err = s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
-	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, 0)
 	s.Greater(changed1, baseTime)
 	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should now be "drained"
-	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, testVersionDrainageVisibilityGracePeriod)
 	s.Greater(changed2, changed1)
@@ -432,31 +418,29 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 	tv2 := s.tv().WithBuildIDNumber(2)
 
 	// start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// start deployment workflow 2 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// non-current deployments have never been used and have no drainage info
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
 
 	// SetCurrent tv1
 	err := s.setCurrent(env, tv1, true)
 	s.NoError(err)
 
 	// both versions have no drainage info and tv1 has it's status updated to current
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, 0)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, 0)
+	s.checkVersionDrainageAndVersionStatus(env, tv2, &deploymentpb.VersionDrainageInfo{}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, 0)
 
 	// start a pinned workflow on v1
-	run := s.startPinnedWorkflow(ctx, env, tv1)
+	run := s.startPinnedWorkflow(s.Context(), env, tv1)
 
 	baseTime := time.Now()
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
@@ -464,28 +448,28 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.NoError(err)
 
 	// tv1 should now be "draining" for visibilityGracePeriod duration
-	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed1, checked1 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, 0)
 	s.Greater(changed1, baseTime)
 	s.GreaterOrEqual(checked1, changed1)
 
 	// tv1 should still be "draining" for visibilityGracePeriod duration
-	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed2, checked2 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, testVersionDrainageVisibilityGracePeriod)
 	s.Equal(changed2, changed1)
 	s.Greater(checked2, checked1)
 
 	// tv1 should still be "draining" after a refresh intervals
-	changed3, checked3 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed3, checked3 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, testVersionDrainageRefreshInterval)
 	s.Equal(changed3, changed1)
 	s.Greater(checked3, checked2)
 
 	// terminate workflow
-	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -497,7 +481,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.NoError(err)
 
 	// tv1 should now be "drained"
-	changed4, checked4 := s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	changed4, checked4 := s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, 0)
 	s.Greater(changed4, changed3)
@@ -541,12 +525,10 @@ func (s *DeploymentVersionSuite) startUnpinnedWorkflow(ctx context.Context, env 
 
 func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRamping() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Make it current
 	err := s.setCurrent(env, tv1, false)
@@ -596,25 +578,23 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 
 	// Override the dynamic config so that we can verify we don't get any unexpected masked errors.
 	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Create a deployment version
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Set version as current
 	err := s.setCurrent(env, tv1, false)
 	s.NoError(err)
 
 	// Deleting this version should fail since the version is current
-	s.tryDeleteVersion(ctx, env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
+	s.tryDeleteVersion(env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -627,25 +607,23 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Create a deployment version
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Set version as ramping
 	err := s.setRamping(env, tv1, 0)
 	s.NoError(err)
 
 	// Deleting this version should fail since the version is ramping
-	s.tryDeleteVersion(ctx, env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
+	s.tryDeleteVersion(env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -659,22 +637,21 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 	env := s.newTestEnv()
 
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Create a deployment version
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	//nolint:forbidigo
 	time.Sleep(2 * time.Second) // todo (Shivam): remove this after the above skip is removed
 
 	// delete should succeed
-	s.tryDeleteVersion(ctx, env, tv1, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -691,12 +668,10 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Make the version current
 	err := s.setCurrent(env, tv1, false)
@@ -704,32 +679,30 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 
 	// Start another version workflow
 	tv2 := s.tv().WithBuildIDNumber(2)
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// Setting this version to current should start the drainage workflow for version1 and make it draining
 	err = s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
 	// Version should be draining
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1, &deploymentpb.VersionDrainageInfo{
+	s.checkVersionDrainageAndVersionStatus(env, tv1, &deploymentpb.VersionDrainageInfo{
 		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, 0)
 
 	// delete should fail
-	s.tryDeleteVersion(ctx, env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsDraining, tv1.DeploymentVersionStringV32()), false)
+	s.tryDeleteVersion(env, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsDraining, tv1.DeploymentVersionStringV32()), false)
 
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Make the version current
 	err := s.setCurrent(env, tv1, false)
@@ -737,20 +710,20 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 
 	// Start another version workflow
 	tv2 := s.tv().WithBuildIDNumber(2)
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// Setting this version to current should start the drainage workflow for version1
 	err = s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
 	// Signal the first version to be drained. Only do this in tests.
-	s.signalAndWaitForDrained(ctx, env, tv1)
+	s.signalAndWaitForDrained(env, tv1)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
-	s.tryDeleteVersion(ctx, env, tv1, fmt.Sprintf(workerdeployment.ErrVersionHasPollers, tv1.DeploymentVersionStringV32()), false)
+	s.tryDeleteVersion(env, tv1, fmt.Sprintf(workerdeployment.ErrVersionHasPollers, tv1.DeploymentVersionStringV32()), false)
 }
 
-func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *DeploymentVersionSuite) signalAndWaitForDrained(env *testcore.TestEnv, tv *testvars.TestVars) {
 	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
@@ -783,7 +756,7 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, en
 	}, 10*time.Second, time.Second)
 }
 
-func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars, moreExpectedVersions ...*testvars.TestVars) {
+func (s *DeploymentVersionSuite) waitForPollers(env *testcore.TestEnv, tv *testvars.TestVars, moreExpectedVersions ...*testvars.TestVars) {
 	expectedVersionsStr := []string{tv.DeploymentVersionStringV32()}
 	for _, tv2 := range moreExpectedVersions {
 		if !tv2.ExternalDeploymentVersion().Equal(tv.ExternalDeploymentVersion()) {
@@ -791,7 +764,7 @@ func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, env *testco
 		}
 	}
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -810,7 +783,7 @@ func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, env *testco
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars, moreUnexpectedVersions ...*testvars.TestVars) {
+func (s *DeploymentVersionSuite) waitForNoPollers(env *testcore.TestEnv, tv *testvars.TestVars, moreUnexpectedVersions ...*testvars.TestVars) {
 	unexpectedVersionsStr := []string{tv.DeploymentVersionStringV32()}
 	for _, tv2 := range moreUnexpectedVersions {
 		if !tv2.ExternalDeploymentVersion().Equal(tv.ExternalDeploymentVersion()) {
@@ -818,7 +791,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, env *test
 		}
 	}
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -849,13 +822,12 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0)
 	// Set deployment register error backoff to zero so to speed up the test.
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second))
-	ctx := s.Context()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
 
 	// max out the versions
 	for i := range testMaxVersionsInDeployment {
 		tvs[i] = s.tv().WithBuildIDNumber(i)
-		s.startVersionWorkflow(ctx, env, tvs[i])
+		s.startVersionWorkflow(s.Context(), env, tvs[i])
 	}
 
 	// Make tvs[0] current
@@ -884,25 +856,25 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 			}
 		}
 	}()
-	s.waitForPollers(ctx, env, tvs[0], tvs...)
+	s.waitForPollers(env, tvs[0], tvs...)
 
 	tvMax := s.tv().WithBuildIDNumber(9999)
 
 	cancelPolls()
 
 	// try to add a version and it fails because none of the versions can be deleted
-	s.startVersionWorkflowExpectFailAddVersion(ctx, env, tvMax)
+	s.startVersionWorkflowExpectFailAddVersion(s.Context(), env, tvMax)
 
 	// this waits for no pollers from any of original versions (tvMax pollers should be fine)
-	s.waitForNoPollers(ctx, env, tvs[0], tvs...)
+	s.waitForNoPollers(env, tvs[0], tvs...)
 
 	// try to add the version again, and it succeeds, after deleting tvs[2] version but not tvs[3] (both are eligible)
-	s.startVersionWorkflow(ctx, env, tvMax)
+	s.startVersionWorkflow(s.Context(), env, tvMax)
 
 	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tvMax.DeploymentSeries(),
 		})
@@ -922,26 +894,24 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	env := s.newTestEnv()
 
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
-	s.signalAndWaitForDrained(ctx, env, tv1)
+	s.signalAndWaitForDrained(env, tv1)
 
 	// Wait for pollers going away
-	s.waitForNoPollers(ctx, env, tv1, tv1)
+	s.waitForNoPollers(env, tv1, tv1)
 
 	// delete succeeds
-	s.tryDeleteVersion(ctx, env, tv1, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -956,7 +926,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// idempotency check: deleting the same version again should succeed
-	s.tryDeleteVersion(ctx, env, tv1, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 }
 
 func (s *DeploymentVersionSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
@@ -969,16 +939,14 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	env := s.newTestEnv()
 
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv1.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -988,12 +956,12 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	}, 5*time.Second, time.Second)
 
 	// skipDrainage=true will make delete succeed
-	s.tryDeleteVersion(ctx, env, tv1, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -1008,7 +976,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// idempotency check: deleting the same version again should succeed
-	s.tryDeleteVersion(ctx, env, tv1, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 
 	// Describe Worker Deployment should give not found
 	// describe deployment version gives not found error
@@ -1025,16 +993,14 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	env := s.newTestEnv()
 
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv1.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -1048,18 +1014,18 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		s.tryDeleteVersion(ctx, env, tv1, "", false) //nolint:testifylint // concurrent delete requests are expected to all succeed
+		s.tryDeleteVersion(env, tv1, "", false) //nolint:testifylint // concurrent delete requests are expected to all succeed
 	}()
 	go func() {
 		defer wg.Done()
-		s.tryDeleteVersion(ctx, env, tv1, "", false) //nolint:testifylint // concurrent delete requests are expected to all succeed
+		s.tryDeleteVersion(env, tv1, "", false) //nolint:testifylint // concurrent delete requests are expected to all succeed
 	}()
 	wg.Wait()
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv1.DeploymentSeries(),
 		})
@@ -1080,13 +1046,10 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// Override the dynamic config to verify we don't get any unexpected masked errors.
 	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
-
-	ctx := s.Context()
-	tv := s.tv()
-	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	pollerCtx1, pollerCancel1 := context.WithCancel(s.Context())
 	s.startVersionWorkflow(pollerCtx1, env, tv1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
@@ -1095,7 +1058,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// new version with a different registered task-queue
 	tv2 := s.tv().WithBuildIDNumber(2).WithTaskQueue(testvars.New(s.T()).Any().String())
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// Cancel pollers on task_queue_1 to increase the backlog of tasks
 	pollerCancel1()
@@ -1114,19 +1077,16 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVersion() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
-	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
-	s.startVersionWorkflow(ctx, env, tv1)
+	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	err := s.setCurrent(env, tv1, false)
 	s.NoError(err)
 
 	// new version with a different registered task-queue
-	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-	s.startVersionWorkflow(ctx, env, tv2)
+	tv2 := s.tv().WithBuildIDNumber(2).WithTaskQueue(s.tv().Any().String())
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// SetCurrent tv2
 	err = s.setCurrent(env, tv2, false)
@@ -1140,13 +1100,10 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// Override the dynamic config to verify we don't get any unexpected masked errors.
 	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
-
-	ctx := s.Context()
-	tv := s.tv()
-	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	pollerCtx1, pollerCancel1 := context.WithCancel(s.Context())
 	s.startVersionWorkflow(pollerCtx1, env, tv1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
@@ -1154,8 +1111,8 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 	s.NoError(err)
 
 	// new version with a different registered task-queue
-	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-	s.startVersionWorkflow(ctx, env, tv2)
+	tv2 := s.tv().WithBuildIDNumber(2).WithTaskQueue(s.tv().Any().String())
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// Cancel pollers on task_queue_1 to increase the backlog of tasks
 	pollerCancel1()
@@ -1173,21 +1130,18 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVersion() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-	tv := s.tv()
-	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	err := s.setCurrent(env, tv1, false)
 	s.NoError(err)
 
 	// new version with a different registered task-queue
-	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-	s.startVersionWorkflow(ctx, env, tv2)
+	tv2 := s.tv().WithBuildIDNumber(2).WithTaskQueue(s.tv().Any().String())
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// SetRampingVersion to tv2
 	err = s.setRamping(env, tv2, 0)
@@ -1198,12 +1152,10 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVer
 
 func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	metadata := map[string]*commonpb.Payload{
 		"key1": {Data: testRandomMetadataValue},
@@ -1242,7 +1194,7 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	} else {
 		metadataReq.Version = tv1.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
-	_, err = env.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, metadataReq)
+	_, err = env.FrontendClient().UpdateWorkerDeploymentVersionMetadata(s.Context(), metadataReq)
 	s.NoError(err)
 
 	resp, err = s.describeVersion(env, tv1)
@@ -1259,21 +1211,20 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 }
 
 func (s *DeploymentVersionSuite) createDeploymentAndVersion(
-	ctx context.Context,
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	identity string,
 	computeConfig *computepb.ComputeConfig,
 ) {
 	s.T().Helper()
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 		RequestId:      tv.Any().String(),
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace:         env.Namespace().String(),
 		DeploymentVersion: tv.ExternalDeploymentVersion(),
 		Identity:          identity,
@@ -1293,24 +1244,20 @@ func (s *DeploymentVersionSuite) createDeploymentAndVersion(
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-
-	tv := s.tv()
-	createIdentity := tv.Any().String()
+	createIdentity := s.tv().Any().String()
 	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
 
-	s.createDeploymentAndVersion(ctx, env, tv, createIdentity, &computepb.ComputeConfig{
+	s.createDeploymentAndVersion(env, s.tv(), createIdentity, &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {Provider: validProvider},
 		},
 	})
 
 	// Update compute config with a different identity and a new scaling group.
-	updateIdentity := tv.Any().String()
-	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	updateIdentity := s.tv().Any().String()
+	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg2": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1320,14 +1267,14 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 			},
 		},
 		Identity:  updateIdentity,
-		RequestId: tv.Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Verify both scaling groups exist and LastModifierIdentity is updated.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := s.describeVersion(env, tv)
+		descResp, err := s.describeVersion(env, s.tv())
 		a.NoError(err)
 		info := descResp.GetWorkerDeploymentVersionInfo()
 		a.Equal(updateIdentity, info.GetLastModifierIdentity())
@@ -1345,19 +1292,19 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 	// Verify the compute config summary is reflected in DescribeWorkerDeployment version summaries.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
+			DeploymentName: s.tv().DeploymentSeries(),
 		})
 		a.NoError(err)
 		var versionSummary *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
 		for _, vs := range descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			if vs.GetVersion() == tv.DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
+			if vs.GetVersion() == s.tv().DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
 				versionSummary = vs
 				break
 			}
 		}
-		a.NotNil(versionSummary, "version %s not found in DescribeWorkerDeployment", tv.DeploymentVersionString())
+		a.NotNil(versionSummary, "version %s not found in DescribeWorkerDeployment", s.tv().DeploymentVersionString())
 		a.True(proto.Equal(&computepb.ComputeConfigSummary{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
 				"sg1": {
@@ -1374,18 +1321,18 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 	// Verify the compute config summary is reflected in ListWorkerDeployments latest version summary.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		listResp, err := env.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		listResp, err := env.FrontendClient().ListWorkerDeployments(s.Context(), &workflowservice.ListWorkerDeploymentsRequest{
 			Namespace: env.Namespace().String(),
 		})
 		a.NoError(err)
 		var found *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
 		for _, d := range listResp.GetWorkerDeployments() {
-			if d.GetName() == tv.DeploymentSeries() {
+			if d.GetName() == s.tv().DeploymentSeries() {
 				found = d
 				break
 			}
 		}
-		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", tv.DeploymentSeries())
+		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", s.tv().DeploymentSeries())
 		a.True(proto.Equal(&computepb.ComputeConfigSummary{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
 				"sg1": {
@@ -1402,13 +1349,9 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-
-	tv := s.tv()
 	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
 
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), &computepb.ComputeConfig{
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
 				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
@@ -1418,9 +1361,9 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 	})
 
 	// Partially update sg1's task queue types via field mask.
-	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1429,15 +1372,15 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"task_queue_types"}},
 			},
 		},
-		Identity:  tv.Any().String(),
-		RequestId: tv.Any().String(),
+		Identity:  s.tv().Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Verify task queue types changed but provider is preserved.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := s.describeVersion(env, tv)
+		descResp, err := s.describeVersion(env, s.tv())
 		a.NoError(err)
 		a.True(proto.Equal(&computepb.ComputeConfig{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
@@ -1452,13 +1395,9 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-
-	tv := s.tv()
 	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
 
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), &computepb.ComputeConfig{
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {Provider: validProvider},
 			"sg2": {
@@ -1469,19 +1408,19 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
 	})
 
 	// Remove sg1.
-	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:                        env.Namespace().String(),
-		DeploymentVersion:                tv.ExternalDeploymentVersion(),
+		DeploymentVersion:                s.tv().ExternalDeploymentVersion(),
 		RemoveComputeConfigScalingGroups: []string{"sg1"},
-		Identity:                         tv.Any().String(),
-		RequestId:                        tv.Any().String(),
+		Identity:                         s.tv().Any().String(),
+		RequestId:                        s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Verify only sg2 remains.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := s.describeVersion(env, tv)
+		descResp, err := s.describeVersion(env, s.tv())
 		a.NoError(err)
 		a.True(proto.Equal(&computepb.ComputeConfig{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
@@ -1497,21 +1436,17 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_VersionNotFound() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
 	// Create deployment but no version.
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-		RequestId:      tv.Any().String(),
+		DeploymentName: s.tv().DeploymentSeries(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	_, err = env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1519,8 +1454,8 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_VersionNotFound() {
 				},
 			},
 		},
-		Identity:  tv.Any().String(),
-		RequestId: tv.Any().String(),
+		Identity:  s.tv().Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.Error(err)
 	var notFound *serviceerror.NotFound
@@ -1529,19 +1464,15 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_VersionNotFound() {
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-
-	tv := s.tv()
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), &computepb.ComputeConfig{
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider()},
 		},
 	})
 
-	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg2": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1550,8 +1481,8 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 				},
 			},
 		},
-		Identity:  tv.Any().String(),
-		RequestId: tv.Any().String(),
+		Identity:  s.tv().Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.Error(err)
 	var invalidArg *serviceerror.InvalidArgument
@@ -1561,19 +1492,19 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 	// Verify compute config summary is unchanged — the failed update should not have added sg2.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
+			DeploymentName: s.tv().DeploymentSeries(),
 		})
 		a.NoError(err)
 		var versionSummary *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
 		for _, vs := range descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			if vs.GetVersion() == tv.DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
+			if vs.GetVersion() == s.tv().DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
 				versionSummary = vs
 				break
 			}
 		}
-		a.NotNil(versionSummary, "version %s not found in deployment summaries", tv.DeploymentVersionString())
+		a.NotNil(versionSummary, "version %s not found in deployment summaries", s.tv().DeploymentVersionString())
 		a.True(proto.Equal(&computepb.ComputeConfigSummary{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
 				"sg1": {
@@ -1588,18 +1519,15 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_DeletedVersion() {
 	env := s.newTestEnv()
 
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
-	ctx := s.Context()
-
-	tv := s.tv()
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), nil)
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), nil)
 
 	// Delete the version (skip drainage, no pollers since we created via CreateWorkerDeploymentVersion).
-	s.tryDeleteVersion(ctx, env, tv, "", true)
+	s.tryDeleteVersion(env, s.tv(), "", true)
 
 	// Try to update compute config on the deleted version.
-	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1607,23 +1535,19 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_DeletedVersion() {
 				},
 			},
 		},
-		Identity:  tv.Any().String(),
-		RequestId: tv.Any().String(),
+		Identity:  s.tv().Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.Error(err)
 }
 
 func (s *DeploymentVersionSuite) TestValidateComputeConfig_Valid() {
 	env := s.newTestEnv()
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), nil)
 
-	ctx := s.Context()
-
-	tv := s.tv()
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), nil)
-
-	_, err := env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1631,27 +1555,23 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_Valid() {
 				},
 			},
 		},
-		Identity: tv.Any().String(),
+		Identity: s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Verify the validation had no side effects — no compute config should exist.
-	descResp, err := s.describeVersion(env, tv)
+	descResp, err := s.describeVersion(env, s.tv())
 	s.NoError(err)
 	s.Nil(descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig())
 }
 
 func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
 	env := s.newTestEnv()
+	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), nil)
 
-	ctx := s.Context()
-
-	tv := s.tv()
-	s.createDeploymentAndVersion(ctx, env, tv, tv.Any().String(), nil)
-
-	_, err := env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+	_, err := env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1659,7 +1579,7 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
 				},
 			},
 		},
-		Identity: tv.Any().String(),
+		Identity: s.tv().Any().String(),
 	})
 	s.Error(err)
 	var invalidArg *serviceerror.InvalidArgument
@@ -1670,22 +1590,18 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
 func (s *DeploymentVersionSuite) TestValidateComputeConfig_VersionNotFound() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
 	// No deployment or version created — validate should still work since
 	// the WCI validates independently.
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-		RequestId:      tv.Any().String(),
+		DeploymentName: s.tv().DeploymentSeries(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+	_, err = env.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(s.Context(), &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
 		Namespace:         env.Namespace().String(),
-		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		DeploymentVersion: s.tv().ExternalDeploymentVersion(),
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -1693,13 +1609,12 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_VersionNotFound() {
 				},
 			},
 		},
-		Identity: tv.Any().String(),
+		Identity: s.tv().Any().String(),
 	})
 	s.NoError(err)
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
-	ctx context.Context,
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	expectedDrainageInfo *deploymentpb.VersionDrainageInfo,
@@ -1731,14 +1646,13 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 }
 
 func (s *DeploymentVersionSuite) checkVersionStatusInDeployment(
-	ctx context.Context,
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	expectedStatus enumspb.WorkerDeploymentVersionStatus,
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		})
@@ -1757,14 +1671,13 @@ func (s *DeploymentVersionSuite) checkVersionStatusInDeployment(
 }
 
 func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
-	ctx context.Context,
 	env *testcore.TestEnv,
 	wf *commonpb.WorkflowExecution,
 	expectedOverride *workflowpb.VersioningOverride,
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: wf,
 		})
@@ -1938,7 +1851,6 @@ func (s *DeploymentVersionSuite) startWorkflow(
 }
 
 func (s *DeploymentVersionSuite) tryDeleteVersion(
-	ctx context.Context,
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	expectedError string,
@@ -1953,7 +1865,7 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	} else {
 		req.Version = tv.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
-	_, err := env.FrontendClient().DeleteWorkerDeploymentVersion(ctx, req)
+	_, err := env.FrontendClient().DeleteWorkerDeploymentVersion(s.Context(), req)
 	if expectedError == "" {
 		s.NoError(err)
 	} else {
@@ -1961,15 +1873,15 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	}
 }
 
-func (s *DeploymentVersionSuite) setAndCheckOverride(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars, override *workflowpb.VersioningOverride) {
-	s.setAndCheckOverrideWithExpectedOutput(ctx, env, tv, override, override)
+func (s *DeploymentVersionSuite) setAndCheckOverride(env *testcore.TestEnv, tv *testvars.TestVars, override *workflowpb.VersioningOverride) {
+	s.setAndCheckOverrideWithExpectedOutput(env, tv, override, override)
 }
 
-func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars, inputOverride, expectedOutputOverride *workflowpb.VersioningOverride) {
+func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(env *testcore.TestEnv, tv *testvars.TestVars, inputOverride, expectedOutputOverride *workflowpb.VersioningOverride) {
 	optsIn := &workflowpb.WorkflowExecutionOptions{VersioningOverride: inputOverride}
 	optsOut := &workflowpb.WorkflowExecutionOptions{VersioningOverride: expectedOutputOverride}
 	// Set input override --> describe workflow shows the expected output override
-	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                env.Namespace().String(),
 		WorkflowExecution:        tv.WorkflowExecution(),
 		WorkflowExecutionOptions: optsIn,
@@ -1978,146 +1890,131 @@ func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(ctx conte
 	})
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), optsOut))
-	s.checkDescribeWorkflowAfterOverride(ctx, env, tv.WorkflowExecution(), expectedOutputOverride)
-	s.checkWorkflowUpdateOptionsEventIdentity(ctx, env, tv.WorkflowExecution(), tv.ClientIdentity())
+	s.checkDescribeWorkflowAfterOverride(env, tv.WorkflowExecution(), expectedOutputOverride)
+	s.checkWorkflowUpdateOptionsEventIdentity(s.Context(), env, tv.WorkflowExecution(), tv.ClientIdentity())
 }
 
 // The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_CacheMissAndHits() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
-	opts := &workflowpb.WorkflowExecutionOptions{VersioningOverride: s.makePinnedOverride(tv)}
+	opts := &workflowpb.WorkflowExecutionOptions{VersioningOverride: s.makePinnedOverride(s.tv())}
 
 	// Setting a pinned override should fail since the version does not exist
-	resp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	resp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                env.Namespace().String(),
-		WorkflowExecution:        tv.WorkflowExecution(),
+		WorkflowExecution:        s.tv().WorkflowExecution(),
 		WorkflowExecutionOptions: opts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-		Identity:                 tv.ClientIdentity(),
+		Identity:                 s.tv().ClientIdentity(),
 	})
 	s.Error(err)
 	s.Nil(resp)
 
 	// Start a versioned poller which shall create a version; however, the cache TTL is not expired yet. This would result in a cache hit which would return
 	// a stale value for the version presence in the task queue.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Setting a pinned override should fail since the stale cache entry is returned.
-	resp, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	resp, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                env.Namespace().String(),
-		WorkflowExecution:        tv.WorkflowExecution(),
+		WorkflowExecution:        s.tv().WorkflowExecution(),
 		WorkflowExecutionOptions: opts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-		Identity:                 tv.ClientIdentity(),
+		Identity:                 s.tv().ClientIdentity(),
 	})
 	s.Error(err)
 	s.Nil(resp)
 
 	// Wait for the cache TTL to expire
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                env.Namespace().String(),
-			WorkflowExecution:        tv.WorkflowExecution(),
+			WorkflowExecution:        s.tv().WorkflowExecution(),
 			WorkflowExecutionOptions: opts,
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-			Identity:                 tv.ClientIdentity(),
+			Identity:                 s.tv().ClientIdentity(),
 		})
 		return err == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The Pinned Override should have now succeeded with no error. Verify that the
 	// the workflow shows the override.
-	s.checkDescribeWorkflowAfterOverride(ctx, env, tv.WorkflowExecution(), opts.VersioningOverride)
+	s.checkDescribeWorkflowAfterOverride(env, s.tv().WorkflowExecution(), opts.VersioningOverride)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set unpinned override --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makeAutoUpgradeOverride())
+	s.setAndCheckOverride(env, s.tv(), s.makeAutoUpgradeOverride())
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
-	s.setAndCheckOverride(ctx, env, tv, nil)
+	s.setAndCheckOverride(env, s.tv(), nil)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makePinnedOverride(tv))
+	s.setAndCheckOverride(env, s.tv(), s.makePinnedOverride(s.tv()))
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
-	s.setAndCheckOverride(ctx, env, tv, nil)
+	s.setAndCheckOverride(env, s.tv(), nil)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Pinned update with empty mask --> describe workflow shows no change
-	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:         env.Namespace().String(),
-		WorkflowExecution: tv.WorkflowExecution(),
+		WorkflowExecution: s.tv().WorkflowExecution(),
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			VersioningOverride: s.makePinnedOverride(tv),
+			VersioningOverride: s.makePinnedOverride(s.tv()),
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{}},
 	})
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
-	s.checkDescribeWorkflowAfterOverride(ctx, env, tv.WorkflowExecution(), nil)
+	s.checkDescribeWorkflowAfterOverride(env, s.tv().WorkflowExecution(), nil)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
-	tv := s.tv()
-	tv1 := tv.WithBuildIDNumber(1)
-	tv2 := tv.WithBuildIDNumber(2)
+	tv1 := s.tv().WithBuildIDNumber(1)
+	tv2 := s.tv().WithBuildIDNumber(2)
 
 	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
-	s.startVersionWorkflow(ctx, env, tv1)
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set pinned override 1 --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makePinnedOverride(tv1))
+	s.setAndCheckOverride(env, s.tv(), s.makePinnedOverride(tv1))
 
 	// 3. Set pinned override 2 --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makePinnedOverride(tv2))
+	s.setAndCheckOverride(env, s.tv(), s.makePinnedOverride(tv2))
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPinnedSuccess() {
@@ -2126,18 +2023,17 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPi
 	if !useV32 {
 		s.T().Skip("Implied pinned overrides are only supported in v3.2+")
 	}
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Set tv1 to current, so that the test workflow will be naturally pinned to tv1.
 	err := s.setCurrent(env, tv1, true)
 	s.NoError(err)
 
 	// Start a workflow pinned to tv1.
-	run := s.startPinnedWorkflow(ctx, env, tv1)
+	run := s.startPinnedWorkflow(s.Context(), env, tv1)
 
 	noVersionPinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
 		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -2153,7 +2049,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPi
 	}}
 
 	// 1. Set pinned override without a version --> describe workflow shows the override with pinned override version set to tv1.
-	s.setAndCheckOverrideWithExpectedOutput(ctx, env, tv1.WithWorkflowID(run.GetID()), noVersionPinnedOverride, yesVersionPinnedOverride)
+	s.setAndCheckOverrideWithExpectedOutput(env, tv1.WithWorkflowID(run.GetID()), noVersionPinnedOverride, yesVersionPinnedOverride)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPinnedError() {
@@ -2162,18 +2058,17 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPi
 	if !useV32 {
 		s.T().Skip("Implied pinned overrides are only supported in v3.2+")
 	}
-	ctx := s.Context()
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Set tv1 to current, so that the test workflow will run on v1.
 	err := s.setCurrent(env, tv1, true)
 	s.NoError(err)
 
 	// Start an auto-upgrade workflow.
-	run := s.startUnpinnedWorkflow(ctx, env, tv1)
+	run := s.startUnpinnedWorkflow(s.Context(), env, tv1)
 
 	noVersionPinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
 		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -2184,7 +2079,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPi
 	// 1. Set pinned override without a version --> errors because workflow is not already pinned to a version
 	optsIn := &workflowpb.WorkflowExecutionOptions{VersioningOverride: noVersionPinnedOverride}
 	// Set input override --> describe workflow shows the expected output override
-	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                env.Namespace().String(),
 		WorkflowExecution:        tv1.WithWorkflowID(run.GetID()).WorkflowExecution(),
 		WorkflowExecutionOptions: optsIn,
@@ -2201,61 +2096,50 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPi
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set unpinned override --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makeAutoUpgradeOverride())
+	s.setAndCheckOverride(env, s.tv(), s.makeAutoUpgradeOverride())
 
 	// 2. Set unpinned override --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makeAutoUpgradeOverride())
+	s.setAndCheckOverride(env, s.tv(), s.makeAutoUpgradeOverride())
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set unpinned override --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makeAutoUpgradeOverride())
+	s.setAndCheckOverride(env, s.tv(), s.makeAutoUpgradeOverride())
 
 	// 2. Set pinned override 1 --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makePinnedOverride(tv))
+	s.setAndCheckOverride(env, s.tv(), s.makePinnedOverride(s.tv()))
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// start an unversioned workflow
-	s.startWorkflow(env, tv, nil)
+	s.startWorkflow(env, s.tv(), nil)
 
 	// 1. Set pinned override 1 --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makePinnedOverride(tv))
+	s.setAndCheckOverride(env, s.tv(), s.makePinnedOverride(s.tv()))
 
 	// 2. Set unpinned override --> describe workflow shows the override
-	s.setAndCheckOverride(ctx, env, tv, s.makeAutoUpgradeOverride())
+	s.setAndCheckOverride(env, s.tv(), s.makeAutoUpgradeOverride())
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
@@ -2265,10 +2149,10 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 	err := s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
@@ -2308,11 +2192,11 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.waitForPollers(ctx, env, tv1, tv2)
+	s.waitForPollers(env, tv1, tv2)
 
 	// Start the workflow. The workflow shall start on version 2, by default, since it is the current version.
 	wfTV := s.tv()
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 		TaskQueue: tv1.TaskQueue().String(),
 		ID:        wfTV.WorkflowID(),
 	}, "waitingWorkflow")
@@ -2331,7 +2215,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	// Pin the workflow to version 1 (both versions are on the same task queue).
 	// Use Eventually to bypass version membership cache checks.
 	s.Eventually(func() bool {
-		_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx,
+		_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(),
 			&workflowservice.UpdateWorkflowExecutionOptionsRequest{
 				Namespace: env.Namespace().String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -2347,7 +2231,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
-	s.checkDescribeWorkflowAfterOverride(ctx, env,
+	s.checkDescribeWorkflowAfterOverride(env,
 		&commonpb.WorkflowExecution{
 			WorkflowId: wfTV.WorkflowID(),
 			RunId:      run.GetRunID(),
@@ -2355,7 +2239,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 		pinnedOverride)
 
 	// Wait for version 1 to show up as DRAINING
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1,
+	s.checkVersionDrainageAndVersionStatus(env, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		},
@@ -2363,29 +2247,27 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 		0)
 
 	// Verify via DescribeWorkerDeployment that the version status is updated
-	s.checkVersionStatusInDeployment(ctx, env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+	s.checkVersionStatusInDeployment(env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
 
 	// Signal workflow to complete
-	s.NoError(env.SdkClient().SignalWorkflow(ctx,
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(),
 		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
 
 	// Wait for workflow to complete and verify it ran on version 1
 	var result string
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal("done from v1", result, "Workflow should have completed on version 1")
 }
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
 	deploymentName := fmt.Sprintf("test-start-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
 	tv1 := s.tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue")
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2414,7 +2296,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	var run sdkclient.WorkflowRun
 	s.Eventually(func() bool {
 		var startErr error
-		run, startErr = env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		run, startErr = env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv1.TaskQueue().String(),
 			ID:        wfTV.WorkflowID(),
 			VersioningOverride: &sdkclient.PinnedVersioningOverride{
@@ -2425,7 +2307,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
-	s.checkDescribeWorkflowAfterOverride(ctx, env,
+	s.checkDescribeWorkflowAfterOverride(env,
 		&commonpb.WorkflowExecution{
 			WorkflowId: wfTV.WorkflowID(),
 			RunId:      run.GetRunID(),
@@ -2440,7 +2322,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		})
 
 	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1,
+	s.checkVersionDrainageAndVersionStatus(env, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		},
@@ -2448,22 +2330,20 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		0)
 
 	// Verify via DescribeWorkerDeployment that the version status is updated
-	s.checkVersionStatusInDeployment(ctx, env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+	s.checkVersionStatusInDeployment(env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
 
 	// Signal workflow to complete
-	s.NoError(env.SdkClient().SignalWorkflow(ctx,
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(),
 		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
 
 	// Wait for workflow to complete and verify it ran on version 1
 	var result string
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal("done from v1", result, "Workflow should have completed on version 1")
 }
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned_WithConflictPolicy() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 
 	deploymentName := fmt.Sprintf("test-start-conflict-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
 	tv1 := s.tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-conflict-task-queue")
@@ -2471,10 +2351,10 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 	err := s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
@@ -2516,7 +2396,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	defer w2.Stop()
 
 	s.Eventually(func() bool {
-		_, startErr := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		_, startErr := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv2.TaskQueue().String(),
 			ID:        wfTV.WorkflowID(),
 		}, "waitingWorkflow")
@@ -2528,7 +2408,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	var run sdkclient.WorkflowRun
 	s.Eventually(func() bool {
 		var startErr error
-		run, startErr = env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		run, startErr = env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv1.TaskQueue().String(),
 			ID:        wfTV.WorkflowID(),
 			VersioningOverride: &sdkclient.PinnedVersioningOverride{
@@ -2540,7 +2420,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
-	s.checkDescribeWorkflowAfterOverride(ctx, env,
+	s.checkDescribeWorkflowAfterOverride(env,
 		&commonpb.WorkflowExecution{
 			WorkflowId: wfTV.WorkflowID(),
 			RunId:      run.GetRunID(),
@@ -2555,7 +2435,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		})
 
 	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1,
+	s.checkVersionDrainageAndVersionStatus(env, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		},
@@ -2563,29 +2443,27 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		0)
 
 	// Verify via DescribeWorkerDeployment that the version status is updated
-	s.checkVersionStatusInDeployment(ctx, env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+	s.checkVersionStatusInDeployment(env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
 
 	// Signal workflow to complete
-	s.NoError(env.SdkClient().SignalWorkflow(ctx,
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(),
 		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
 
 	// Wait for workflow to complete and verify it ran on version 1
 	var result string
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal("done from v1", result, "Workflow should have completed on version 1")
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
 	deploymentName := fmt.Sprintf("test-sws-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
 	tv1 := s.tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-task-queue")
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2615,7 +2493,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 	var run sdkclient.WorkflowRun
 	s.Eventually(func() bool {
 		var startErr error
-		run, startErr = env.SdkClient().SignalWithStartWorkflow(ctx,
+		run, startErr = env.SdkClient().SignalWithStartWorkflow(s.Context(),
 			wfTV.WorkflowID(),
 			"start-signal", // signal name
 			nil,            // signal arg
@@ -2631,7 +2509,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
-	s.checkDescribeWorkflowAfterOverride(ctx, env,
+	s.checkDescribeWorkflowAfterOverride(env,
 		&commonpb.WorkflowExecution{
 			WorkflowId: wfTV.WorkflowID(),
 			RunId:      run.GetRunID(),
@@ -2646,7 +2524,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 		})
 
 	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1,
+	s.checkVersionDrainageAndVersionStatus(env, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		},
@@ -2654,22 +2532,20 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 		0)
 
 	// Verify via DescribeWorkerDeployment that the version status is updated
-	s.checkVersionStatusInDeployment(ctx, env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+	s.checkVersionStatusInDeployment(env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
 
 	// Signal workflow to complete
-	s.NoError(env.SdkClient().SignalWorkflow(ctx,
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(),
 		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
 
 	// Wait for workflow to complete and verify it ran on version 1
 	var result string
-	s.NoError(run.Get(ctx, &result))
+	s.NoError(run.Get(s.Context(), &result))
 	s.Equal("done from v1", result, "Workflow should have completed on version 1")
 }
 
 func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
-
-	ctx := s.Context()
 
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
@@ -2679,10 +2555,10 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
-	s.startVersionWorkflow(ctx, env, tv1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
-	s.startVersionWorkflow(ctx, env, tv2)
+	s.startVersionWorkflow(s.Context(), env, tv2)
 	err := s.setCurrent(env, tv2, true)
 	s.NoError(err)
 
@@ -2724,11 +2600,11 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.waitForPollers(ctx, env, tv1, tv2)
+	s.waitForPollers(env, tv1, tv2)
 
 	// Start a workflow on the current version (v2)
 	wfTV := s.tv()
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 		TaskQueue: tv1.TaskQueue().String(),
 		ID:        wfTV.WorkflowID(),
 	}, "waitingWorkflow")
@@ -2736,7 +2612,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 
 	// Wait for the workflow to start and complete its first workflow task (creates a reset point)
 	s.Eventually(func() bool {
-		hist := env.SdkClient().GetWorkflowHistory(ctx, wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		hist := env.SdkClient().GetWorkflowHistory(s.Context(), wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
 			if err != nil {
@@ -2751,7 +2627,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 
 	// Find the first workflow task complete event ID for the reset point
 	var resetEventID int64
-	hist := env.SdkClient().GetWorkflowHistory(ctx, wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	hist := env.SdkClient().GetWorkflowHistory(s.Context(), wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for hist.HasNext() {
 		event, err := hist.Next()
 		s.NoError(err)
@@ -2766,7 +2642,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 	var resetResp *workflowservice.ResetWorkflowExecutionResponse
 	s.Eventually(func() bool {
 		var resetErr error
-		resetResp, resetErr = env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		resetResp, resetErr = env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: wfTV.WorkflowID(),
@@ -2803,7 +2679,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 	newRunID := resetResp.RunId
 
 	// Verify the reset workflow has the pinned override
-	s.checkDescribeWorkflowAfterOverride(ctx, env,
+	s.checkDescribeWorkflowAfterOverride(env,
 		&commonpb.WorkflowExecution{
 			WorkflowId: wfTV.WorkflowID(),
 			RunId:      newRunID,
@@ -2818,7 +2694,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 		})
 
 	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
-	s.checkVersionDrainageAndVersionStatus(ctx, env, tv1,
+	s.checkVersionDrainageAndVersionStatus(env, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 		},
@@ -2826,16 +2702,16 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 		0)
 
 	// Verify via DescribeWorkerDeployment that the version status is DRAINING
-	s.checkVersionStatusInDeployment(ctx, env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+	s.checkVersionStatusInDeployment(env, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
 
 	// Signal the reset workflow to complete
-	s.NoError(env.SdkClient().SignalWorkflow(ctx,
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(),
 		wfTV.WorkflowID(), newRunID, "complete", nil))
 
 	// Wait for the reset workflow to complete and verify it ran on version 1
-	resetRun := env.SdkClient().GetWorkflow(ctx, wfTV.WorkflowID(), newRunID)
+	resetRun := env.SdkClient().GetWorkflow(s.Context(), wfTV.WorkflowID(), newRunID)
 	var result string
-	s.NoError(resetRun.Get(ctx, &result))
+	s.NoError(resetRun.Get(s.Context(), &result))
 	s.Equal("done from v1", result, "Reset workflow should have completed on version 1")
 }
 
@@ -2851,14 +2727,11 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(createVersionFirst bool) {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	// start some unversioned workflows
 	workflowType := "UpdateOptionsBatchTestFunc"
 	workflows := make([]*commonpb.WorkflowExecution, 0)
 	for range 5 {
-		run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, workflowType)
+		run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: s.tv().TaskQueue().Name}, workflowType)
 		s.NoError(err)
 		workflows = append(workflows, &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -2866,12 +2739,12 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 		})
 	}
 
-	pinnedOverride := s.makePinnedOverride(tv)
+	pinnedOverride := s.makePinnedOverride(s.tv())
 	batchJobID := uuid.NewString()
 
 	if createVersionFirst {
 		// Start a versioned poller which shall create a version
-		s.startVersionWorkflow(ctx, env, tv)
+		s.startVersionWorkflow(s.Context(), env, s.tv())
 	}
 
 	// start batch update-options operation
@@ -2879,7 +2752,7 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 tv.ClientIdentity(),
+				Identity:                 s.tv().ClientIdentity(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedOverride},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
@@ -2891,32 +2764,32 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 	s.NoError(err)
 
 	if !createVersionFirst {
-		s.checkBatchOperationFails(ctx, env, batchJobID, len(workflows))
+		s.checkBatchOperationFails(env, batchJobID, len(workflows))
 		for _, wf := range workflows {
-			s.checkDescribeWorkflowAfterOverride(ctx, env, wf, nil)
+			s.checkDescribeWorkflowAfterOverride(env, wf, nil)
 		}
 		return
 	}
 
 	// wait til batch completes successfully
-	s.checkListAndWaitForBatchCompletion(ctx, env, batchJobID)
+	s.checkListAndWaitForBatchCompletion(env, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {
-		s.checkDescribeWorkflowAfterOverride(ctx, env, wf, pinnedOverride)
-		s.checkWorkflowUpdateOptionsEventIdentity(ctx, env, wf, tv.ClientIdentity())
+		s.checkDescribeWorkflowAfterOverride(env, wf, pinnedOverride)
+		s.checkWorkflowUpdateOptionsEventIdentity(s.Context(), env, wf, s.tv().ClientIdentity())
 	}
 
 	// unset with empty update opts with mutation mask
 	batchJobID = uuid.NewString()
-	err = s.startBatchJobWithinConcurrentJobLimit(ctx, env, &workflowservice.StartBatchOperationRequest{
+	err = s.startBatchJobWithinConcurrentJobLimit(env, &workflowservice.StartBatchOperationRequest{
 		Namespace:  env.Namespace().String(),
 		JobId:      batchJobID,
 		Reason:     "test",
 		Executions: workflows,
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 tv.ClientIdentity(),
+				Identity:                 s.tv().ClientIdentity(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
@@ -2925,18 +2798,18 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 	s.NoError(err)
 
 	// wait til batch completes
-	s.checkListAndWaitForBatchCompletion(ctx, env, batchJobID)
+	s.checkListAndWaitForBatchCompletion(env, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {
-		s.checkDescribeWorkflowAfterOverride(ctx, env, wf, nil)
-		s.checkWorkflowUpdateOptionsEventIdentity(ctx, env, wf, tv.ClientIdentity())
+		s.checkDescribeWorkflowAfterOverride(env, wf, nil)
+		s.checkWorkflowUpdateOptionsEventIdentity(s.Context(), env, wf, s.tv().ClientIdentity())
 	}
 }
-func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, env *testcore.TestEnv, req *workflowservice.StartBatchOperationRequest) error {
+func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(env *testcore.TestEnv, req *workflowservice.StartBatchOperationRequest) error {
 	var err error
 	s.Eventually(func() bool {
-		_, err = env.FrontendClient().StartBatchOperation(ctx, req)
+		_, err = env.FrontendClient().StartBatchOperation(s.Context(), req)
 		if err == nil {
 			return true
 		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
@@ -2947,10 +2820,10 @@ func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(ctx conte
 	return err
 }
 
-func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.Context, env *testcore.TestEnv, jobID string) {
+func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(env *testcore.TestEnv, jobID string) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		listResp, err := env.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
+		listResp, err := env.FrontendClient().ListBatchOperations(s.Context(), &workflowservice.ListBatchOperationsRequest{
 			Namespace: env.Namespace().String(),
 		})
 		a.NoError(err)
@@ -2962,7 +2835,7 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		descResp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
 			Namespace: env.Namespace().String(),
 			JobId:     jobID,
 		})
@@ -2972,10 +2845,10 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 	}, 10*time.Second, 50*time.Millisecond)
 }
 
-func (s *DeploymentVersionSuite) checkBatchOperationFails(ctx context.Context, env *testcore.TestEnv, jobID string, numWorkflows int) {
+func (s *DeploymentVersionSuite) checkBatchOperationFails(env *testcore.TestEnv, jobID string, numWorkflows int) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		descResp, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
 			Namespace: env.Namespace().String(),
 			JobId:     jobID,
 		})
@@ -3010,39 +2883,36 @@ func (s *DeploymentVersionSuite) makeAutoUpgradeOverride() *workflowpb.Versionin
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
-	override := s.makePinnedOverride(tv)
+	override := s.makePinnedOverride(s.tv())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          tv.Any().String(),
+		RequestId:          s.tv().Any().String(),
 		Namespace:          env.Namespace().String(),
-		WorkflowId:         tv.WorkflowID(),
-		WorkflowType:       tv.WorkflowType(),
-		TaskQueue:          tv.TaskQueue(),
-		Identity:           tv.WorkerIdentity(),
+		WorkflowId:         s.tv().WorkflowID(),
+		WorkflowType:       s.tv().WorkflowType(),
+		TaskQueue:          s.tv().TaskQueue(),
+		Identity:           s.tv().WorkerIdentity(),
 		VersioningOverride: override,
 	}
 
 	// First call should fail since the version to override is not present in the task queue.
-	_, err0 := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	_, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.Error(err0)
 
 	// Start a versioned poller which shall create the version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the StartWorkflowExecution call succeeding.
 	var resp *workflowservice.StartWorkflowExecutionResponse
 	s.Eventually(func() bool {
 		var err error
-		resp, err = env.FrontendClient().StartWorkflowExecution(ctx, request)
+		resp, err = env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		return err == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The StartWorkflowExecution should now succeed with no error. Verify that the workflow shows the override.
-	s.checkDescribeWorkflowAfterOverride(ctx, env, &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(),
+	s.checkDescribeWorkflowAfterOverride(env, &commonpb.WorkflowExecution{
+		WorkflowId: s.tv().WorkflowID(),
 		RunId:      resp.GetRunId(),
 	}, override)
 }
@@ -3050,74 +2920,65 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_C
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	override := s.makeAutoUpgradeOverride()
 	wf := &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(),
-		RunId:      s.startWorkflow(env, tv, override),
+		WorkflowId: s.tv().WorkflowID(),
+		RunId:      s.startWorkflow(env, s.tv(), override),
 	}
-	s.checkDescribeWorkflowAfterOverride(ctx, env, wf, override)
+	s.checkDescribeWorkflowAfterOverride(env, wf, override)
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
-	override := s.makePinnedOverride(tv)
+	override := s.makePinnedOverride(s.tv())
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          env.Namespace().String(),
-		WorkflowId:         tv.WorkflowID(),
-		WorkflowType:       tv.WorkflowType(),
-		TaskQueue:          tv.TaskQueue(),
-		Identity:           tv.ClientIdentity(),
-		RequestId:          tv.RequestID(),
+		WorkflowId:         s.tv().WorkflowID(),
+		WorkflowType:       s.tv().WorkflowType(),
+		TaskQueue:          s.tv().TaskQueue(),
+		Identity:           s.tv().ClientIdentity(),
+		RequestId:          s.tv().RequestID(),
 		SignalName:         "test-signal",
 		SignalInput:        nil,
 		VersioningOverride: override,
 	}
 
 	// Since the version to override is not present in the task queue, the call should fail.
-	_, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+	_, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), request)
 	s.Error(err)
 
 	// Start a versioned poller which shall create the version; the version must be present before it can be set as an override.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the SignalWithStartWorkflowExecution call succeeding.
 	var resp *workflowservice.SignalWithStartWorkflowExecutionResponse
 	s.Eventually(func() bool {
 		var err error
-		resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+		resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), request)
 		return err == nil && resp.GetStarted()
 	}, 10*time.Second, 500*time.Millisecond)
 
 	wf := &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(),
+		WorkflowId: s.tv().WorkflowID(),
 		RunId:      resp.GetRunId(),
 	}
-	s.checkDescribeWorkflowAfterOverride(ctx, env, wf, override)
+	s.checkDescribeWorkflowAfterOverride(env, wf, override)
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverride() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-	tv := s.tv()
-
 	override := s.makeAutoUpgradeOverride()
 
-	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          env.Namespace().String(),
-		WorkflowId:         tv.WorkflowID(),
-		WorkflowType:       tv.WorkflowType(),
-		TaskQueue:          tv.TaskQueue(),
-		Identity:           tv.ClientIdentity(),
-		RequestId:          tv.RequestID(),
+		WorkflowId:         s.tv().WorkflowID(),
+		WorkflowType:       s.tv().WorkflowType(),
+		TaskQueue:          s.tv().TaskQueue(),
+		Identity:           s.tv().ClientIdentity(),
+		RequestId:          s.tv().RequestID(),
 		SignalName:         "test-signal",
 		SignalInput:        nil,
 		VersioningOverride: override,
@@ -3126,10 +2987,10 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithUnpinn
 	s.True(resp.GetStarted())
 
 	wf := &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(),
+		WorkflowId: s.tv().WorkflowID(),
 		RunId:      resp.GetRunId(),
 	}
-	s.checkDescribeWorkflowAfterOverride(ctx, env, wf, override)
+	s.checkDescribeWorkflowAfterOverride(env, wf, override)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
@@ -3137,21 +2998,19 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
 
 	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
 	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	tv1 := s.tv().WithBuildIDNumber(1)
 
-	ctx := s.Context()
-	tv := s.tv().WithBuildIDNumber(1)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
-	s.startVersionWorkflow(ctx, env, tv)
-
-	vd := s.getTaskQueueVersionData(env, tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	vd := s.getTaskQueueVersionData(env, tv1, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv1.ExternalDeploymentVersion())
 	s.Equal(int64(0), vd.GetRevisionNumber())
 	s.False(vd.GetDeleted())
 
 	// Wait for pollers to go away
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
-			TaskQueue:     tv.TaskQueue(),
+			TaskQueue:     tv1.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
 		require.NoError(t, err)
@@ -3159,43 +3018,43 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
 	}, 5*time.Second, time.Second)
 
 	// Delete the version
-	s.tryDeleteVersion(ctx, env, tv, "", false)
+	s.tryDeleteVersion(env, tv1, "", false)
 	// Verify the version is gone from the task queue
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		vd = s.getTaskQueueVersionData(env, tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+		vd = s.getTaskQueueVersionData(env, tv1, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv1.ExternalDeploymentVersion())
 		require.New(t).Nil(vd)
 	}, time.Second*5, time.Millisecond*200)
 
 	// Verify the version is gone from the deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
+			DeploymentName: tv1.DeploymentSeries(),
 		})
 		a.NoError(err)
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 			//nolint:staticcheck // SA1019 deprecated Version will clean up later
-			a.NotEqual(tv.DeploymentVersionString(), vs.Version)
+			a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
 		}
 	}, time.Second*5, time.Millisecond*200)
 
 	// Poll again to recreate the version
 
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, tv1)
 
 	// Verify the version is back (undeleted) in the deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
+			DeploymentName: tv1.DeploymentSeries(),
 		})
 		a.NoError(err)
 		found := false
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 			//nolint:staticcheck // SA1019 deprecated Version will clean up later
-			if vs.Version == tv.DeploymentVersionString() {
+			if vs.Version == tv1.DeploymentVersionString() {
 				found = true
 			}
 		}
@@ -3203,7 +3062,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// Ensure the version data revived properly in the task queue
-	vd = s.getTaskQueueVersionData(env, tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	vd = s.getTaskQueueVersionData(env, tv1, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv1.ExternalDeploymentVersion())
 	s.Equal(int64(0), vd.GetRevisionNumber())
 	s.False(vd.GetDeleted())
 }
@@ -3242,20 +3101,16 @@ func (s *DeploymentVersionSuite) getTaskQueueVersionData(
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
-	deploymentName := tv.DeploymentSeries()
-	buildID := tv.BuildID()
-	requestID := tv.Any().String()
-	identity := tv.Any().String()
+	deploymentName := s.tv().DeploymentSeries()
+	buildID := s.tv().BuildID()
+	requestID := s.tv().Any().String()
+	identity := s.tv().Any().String()
 
 	// First create the deployment
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
-		RequestId:      tv.Any().String(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
@@ -3268,7 +3123,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	}
 
 	// Create a version in the deployment
-	resp, err := env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	resp, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -3284,13 +3139,13 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	// Verify the version exists via DescribeWorkerDeploymentVersion
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
-			Version:   tv.DeploymentVersionString(),
+			Version:   s.tv().DeploymentVersionString(),
 		})
 		a.NoError(err)
 		a.NotNil(descResp.GetWorkerDeploymentVersionInfo())
-		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descResp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion()))
+		a.Equal(s.tv().DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descResp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion()))
 		a.NotNil(descResp.GetWorkerDeploymentVersionInfo().GetCreateTime())
 		a.True(proto.Equal(computeConfig, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -3300,14 +3155,14 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	// Verify the version shows up in deployment's version summaries with CREATED status and correct compute config summary.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: deploymentName,
 		})
 		a.NoError(err)
 		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
 		versionSummary := descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0]
-		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(versionSummary.GetDeploymentVersion()))
+		a.Equal(s.tv().DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(versionSummary.GetDeploymentVersion()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, versionSummary.GetStatus())
 		a.True(proto.Equal(&computepb.ComputeConfigSummary{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
@@ -3321,7 +3176,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	// Verify the compute config summary is reflected in ListWorkerDeployments latest version summary.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		listResp, err := env.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		listResp, err := env.FrontendClient().ListWorkerDeployments(s.Context(), &workflowservice.ListWorkerDeploymentsRequest{
 			Namespace: env.Namespace().String(),
 		})
 		a.NoError(err)
@@ -3346,52 +3201,48 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_TaskQueueInVersionInfo() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
-	deploymentName := tv.DeploymentSeries()
-	buildID := tv.BuildID()
+	deploymentName := s.tv().DeploymentSeries()
+	buildID := s.tv().BuildID()
 
 	// Create the deployment
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
-		RequestId:      tv.Any().String(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Create the version explicitly
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        buildID,
 		},
-		RequestId: tv.Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Verify the version starts with CREATED status
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
-			Version:   tv.DeploymentVersionString(),
+			Version:   s.tv().DeploymentVersionString(),
 		})
 		a.NoError(err)
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Poll from the version to register a task queue
-	go s.pollFromDeployment(ctx, env, tv)
+	go s.pollFromDeployment(s.Context(), env, s.tv())
 
 	// Verify the task queue shows up and status transitions to INACTIVE
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
-			Version:   tv.DeploymentVersionString(),
+			Version:   s.tv().DeploymentVersionString(),
 		})
 		a.NoError(err)
 		tqInfos := descResp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()
@@ -3399,25 +3250,25 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 
 		found := false
 		for _, tqInfo := range tqInfos {
-			if tqInfo.GetName() == tv.TaskQueue().GetName() {
+			if tqInfo.GetName() == s.tv().TaskQueue().GetName() {
 				found = true
 				break
 			}
 		}
-		a.True(found, "expected task queue %q in version info, got %v", tv.TaskQueue().GetName(), tqInfos)
+		a.True(found, "expected task queue %q in version info, got %v", s.tv().TaskQueue().GetName(), tqInfos)
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, 30*time.Second, 500*time.Millisecond)
 
 	// Verify the version shows up in deployment's version summaries with INACTIVE status
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: deploymentName,
 		})
 		a.NoError(err)
 		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
-		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
+		a.Equal(s.tv().DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 }
@@ -3425,24 +3276,20 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
-	deploymentName := tv.DeploymentSeries()
-	buildID := tv.BuildID()
-	requestID := tv.Any().String()
+	deploymentName := s.tv().DeploymentSeries()
+	buildID := s.tv().BuildID()
+	requestID := s.tv().Any().String()
 
 	// First create the deployment
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
-		RequestId:      tv.Any().String(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Create a version
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -3453,7 +3300,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() 
 	s.NoError(err)
 
 	// Create the same version again with same request ID - should be idempotent
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -3467,25 +3314,21 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists_DifferentRequestID() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
-	deploymentName := tv.DeploymentSeries()
-	buildID := tv.BuildID()
-	requestID1 := tv.Any().String()
-	requestID2 := tv.Any().String()
+	deploymentName := s.tv().DeploymentSeries()
+	buildID := s.tv().BuildID()
+	requestID1 := s.tv().Any().String()
+	requestID2 := s.tv().Any().String()
 
 	// First create the deployment
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
-		RequestId:      tv.Any().String(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
 	// Create a version
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -3496,7 +3339,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists
 	s.NoError(err)
 
 	// Try to create the same version with different request ID - should fail
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
@@ -3512,18 +3355,14 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_DeploymentNotFound() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
 	// Try to create a version for a deployment that doesn't exist
-	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: tv.DeploymentSeries(),
-			BuildId:        tv.BuildID(),
+			DeploymentName: s.tv().DeploymentSeries(),
+			BuildId:        s.tv().BuildID(),
 		},
-		RequestId: tv.Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.Error(err)
 	var notFound *serviceerror.NotFound
@@ -3554,8 +3393,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidArgs()
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *DeploymentVersionSuite) {
 			env := s.newTestEnv()
-			ctx := s.Context()
-			_, err := env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+			_, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 				Namespace: env.Namespace().String(),
 				DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 					DeploymentName: tc.deploymentName,
@@ -3574,21 +3412,17 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidArgs()
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AutoCreatedByPoller_ConflictWithExplicitCreate() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
 	// Create version via polling (auto-creates deployment and version)
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Try to explicitly create the same version with a different request ID
-	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: tv.DeploymentSeries(),
-			BuildId:        tv.BuildID(),
+			DeploymentName: s.tv().DeploymentSeries(),
+			BuildId:        s.tv().BuildID(),
 		},
-		RequestId: tv.Any().String(),
+		RequestId: s.tv().Any().String(),
 	})
 	s.Error(err)
 	var alreadyExists *serviceerror.AlreadyExists
@@ -3598,17 +3432,13 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AutoCreatedBy
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersions() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
-	deploymentName := tv.DeploymentSeries()
+	deploymentName := s.tv().DeploymentSeries()
 
 	// First create the deployment
-	_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: deploymentName,
-		RequestId:      tv.Any().String(),
+		RequestId:      s.tv().Any().String(),
 	})
 	s.NoError(err)
 
@@ -3628,27 +3458,27 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	}
 
 	// Create first version
-	tv1 := tv.WithBuildIDNumber(1)
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	tv1 := s.tv().WithBuildIDNumber(1)
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        tv1.BuildID(),
 		},
-		RequestId:     tv.Any().String(),
+		RequestId:     s.tv().Any().String(),
 		ComputeConfig: computeConfig1,
 	})
 	s.NoError(err)
 
 	// Create second version
-	tv2 := tv.WithBuildIDNumber(2)
-	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	tv2 := s.tv().WithBuildIDNumber(2)
+	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        tv2.BuildID(),
 		},
-		RequestId:     tv.Any().String(),
+		RequestId:     s.tv().Any().String(),
 		ComputeConfig: computeConfig2,
 	})
 	s.NoError(err)
@@ -3656,7 +3486,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	// Verify both versions show up in deployment's version summaries
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descResp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		descResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: deploymentName,
 		})
@@ -3667,7 +3497,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	// Verify compute configs via DescribeWorkerDeploymentVersion
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descV1, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descV1, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv1.DeploymentVersionString(),
 		})
@@ -3677,7 +3507,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		descV2, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descV2, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv2.DeploymentVersionString(),
 		})
@@ -3694,24 +3524,20 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidComputeConfig_ReturnsPromptly() {
 	env := s.newTestEnv()
 
-	ctx := s.Context()
-
-	tv := s.tv()
-
 	// Create a version via polling, which auto-creates the deployment and keeps
 	// the deployment workflow active with lazy-creation processing.
-	s.startVersionWorkflow(ctx, env, tv)
+	s.startVersionWorkflow(s.Context(), env, s.tv())
 
 	// Immediately attempt to create another version on the same deployment with
 	// invalid compute config. This should return an InvalidArgument error
 	// promptly (not time out with "too many requests").
-	tv2 := tv.WithBuildIDNumber(2)
+	tv2 := s.tv().WithBuildIDNumber(2)
 	invalidProvider := computeprovider.TestInvokeComputeProviderInvalidComputeProvider()
 	start := time.Now()
-	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+	_, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: tv.DeploymentSeries(),
+			DeploymentName: s.tv().DeploymentSeries(),
 			BuildId:        tv2.BuildID(),
 		},
 		RequestId: tv2.Any().String(),
@@ -3784,19 +3610,17 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *DeploymentVersionSuite) {
 			env := s.newTestEnv()
-			ctx := s.Context()
-			tv := s.tv()
-			deploymentName := tv.DeploymentSeries()
+			deploymentName := s.tv().DeploymentSeries()
 
 			// Create the deployment first
-			_, err := env.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+			_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
 				DeploymentName: deploymentName,
-				RequestId:      tv.Any().String(),
+				RequestId:      s.tv().Any().String(),
 			})
 			s.NoError(err)
 
-			_, err = env.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+			_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 				Namespace: env.Namespace().String(),
 				DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 					DeploymentName: deploymentName,
