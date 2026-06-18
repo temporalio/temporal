@@ -9,10 +9,12 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	objectleak "go.temporal.io/server/common/testing/leakcheck"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/goleak"
 )
@@ -48,6 +50,21 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
 }
 
+var objectLeakOpts = []objectleak.Option{
+	// TODO: TestCluster itself remains retained while the teardown fixes are
+	// reverted.
+	objectleak.WithExclude("cluster"),
+
+	// TODO: Persistence test base state remains retained through TestCluster.
+	objectleak.WithExclude("cluster.testBase*"),
+
+	// TODO: Stopped TemporalImpl service state remains retained through TestCluster.
+	objectleak.WithExclude("cluster.host*"),
+
+	// TODO: Archiver test configuration remains retained through TestCluster.
+	objectleak.WithExclude("cluster.archiverBase*"),
+}
+
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
 // test infrastructure. It detects per-cluster goroutines not being released when
 // a test cluster shuts down.
@@ -57,6 +74,7 @@ var goleakOpts = []goleak.Option{
 //	LEAK_ITERS         clusters built after warmup
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
 //	LEAK_OUTPUT_DIR    directory for diagnostics on failure
+//	LEAK_GC_SETTLE_TIMEOUT maximum time to settle object leak checks
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
@@ -73,11 +91,23 @@ func TestClusterShutdownLeak(t *testing.T) {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		t.Fatalf("LEAK_OUTPUT_DIR: %v", err)
 	}
+	gcSettleTimeout, err := time.ParseDuration(os.Getenv("LEAK_GC_SETTLE_TIMEOUT"))
+	if err != nil {
+		t.Fatal("LEAK_GC_SETTLE_TIMEOUT must be set to a positive duration")
+	}
+	if gcSettleTimeout <= 0 {
+		t.Fatal("LEAK_GC_SETTLE_TIMEOUT must be set to a positive duration")
+	}
+
+	leakOpts := append([]objectleak.Option{}, objectLeakOpts...)
+	leakOpts = append(leakOpts, objectleak.WithGCSettleTimeout(gcSettleTimeout))
+	leakCheck, err := objectleak.NewObjectLeakCheck(leakOpts...)
+	require.NoError(t, err)
 
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunTeardownCluster(t)
+		buildRunTeardownCluster(t, &leakCheck)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
@@ -86,38 +116,41 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
-		buildRunTeardownCluster(t)
+		buildRunTeardownCluster(t, &leakCheck)
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	if err := goleak.Find(append(goleakOpts, baseline)...); err != nil {
-		t.Error(err)
+	goleakErr := goleak.Find(append(goleakOpts, baseline)...)
+	goleakReport := "no unexpected goroutines\n"
+	if goleakErr != nil {
+		goleakReport = goleakErr.Error() + "\n"
+	}
+	writeReport(t, outputDir, "goleak_report.txt", goleakReport)
 
-		// Write the goroutine report to the output directory.
-		reportPath := filepath.Join(outputDir, "goleak_report.txt")
-		if err := os.WriteFile(reportPath, []byte(err.Error()+"\n"), 0o644); err != nil {
-			t.Logf("failed to write goroutine dump: %v", err)
-		} else {
-			t.Logf("goroutine dump written to %s", reportPath)
-		}
+	// Verify that no cluster references leaked.
+	leakCheckStart := time.Now()
+	leakReport, leakErr := leakCheck.Check()
+	t.Logf("object leak check settled in %s", time.Since(leakCheckStart).Round(time.Millisecond))
+	reportPath := filepath.Join(outputDir, "objectleak_report.txt")
+	writeReport(t, outputDir, "objectleak_report.txt", leakReport+"\n")
+	writeProfile(t, outputDir, "goroutine", "goroutines_all.txt", 2)
+	writeProfile(t, outputDir, "heap", "heap.pb.gz", 0)
+	writeProfile(t, outputDir, "heap", "heap.txt", 1)
+	writeProfile(t, outputDir, "allocs", "allocs.pb.gz", 0)
+	writeProfile(t, outputDir, "allocs", "allocs.txt", 1)
 
-		// Write the full goroutine profile to the output directory.
-		profilePath := filepath.Join(outputDir, "goroutines_all.txt")
-		var pprofDump bytes.Buffer
-		if err := pprof.Lookup("goroutine").WriteTo(&pprofDump, 2); err != nil {
-			t.Logf("failed to capture goroutine pprof dump: %v", err)
-		} else if err := os.WriteFile(profilePath, pprofDump.Bytes(), 0o644); err != nil {
-			t.Logf("failed to write goroutine pprof dump: %v", err)
-		} else {
-			t.Logf("goroutine pprof dump written to %s", profilePath)
-		}
+	if goleakErr != nil {
+		t.Error(goleakErr)
+	}
+	if leakErr != nil {
+		t.Errorf("cluster references leaked; see %s", reportPath)
 	}
 }
 
 // buildRunTeardownCluster creates a dedicated cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
-func buildRunTeardownCluster(t *testing.T) {
+func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
@@ -132,7 +165,39 @@ func buildRunTeardownCluster(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NoError(t, run.Get(context.Background(), nil))
+
+		leakCheck.Track("cluster", env.GetTestCluster())
 	})
 }
 
 func smokeWorkflow(workflow.Context) error { return nil }
+
+func writeReport(t *testing.T, outputDir string, fileName string, contents string) {
+	t.Helper()
+	path := filepath.Join(outputDir, fileName)
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Logf("failed to write %s: %v", fileName, err)
+	} else {
+		t.Logf("wrote %s", path)
+	}
+}
+
+func writeProfile(t *testing.T, outputDir string, profileName string, fileName string, debug int) {
+	t.Helper()
+	profile := pprof.Lookup(profileName)
+	if profile == nil {
+		t.Logf("profile %q is unavailable", profileName)
+		return
+	}
+	var dump bytes.Buffer
+	if err := profile.WriteTo(&dump, debug); err != nil {
+		t.Logf("failed to capture %s profile: %v", profileName, err)
+		return
+	}
+	path := filepath.Join(outputDir, fileName)
+	if err := os.WriteFile(path, dump.Bytes(), 0o644); err != nil {
+		t.Logf("failed to write %s profile: %v", profileName, err)
+	} else {
+		t.Logf("%s profile written to %s", profileName, path)
+	}
+}
