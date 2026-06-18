@@ -1,7 +1,8 @@
 package leakcheck
 
 import (
-	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -29,22 +30,15 @@ func (p path) field(name string) path {
 }
 
 func (p path) index(index int) path {
-	return p.append(pathSegment{kind: pathSegmentIndex, value: fmt.Sprint(index)})
+	return p.append(pathSegment{kind: pathSegmentIndex, value: strconv.Itoa(index)})
 }
 
 func (p path) mapKey(index int) path {
-	return p.append(pathSegment{kind: pathSegmentMapKey, value: fmt.Sprint(index)})
+	return p.append(pathSegment{kind: pathSegmentMapKey, value: strconv.Itoa(index)})
 }
 
 func (p path) append(segment pathSegment) path {
-	next := make(path, 0, len(p)+1)
-	next = append(next, p...)
-	next = append(next, segment)
-	return next
-}
-
-func (p path) String() string {
-	return p.format(false)
+	return append(slices.Clone(p), segment)
 }
 
 func (p path) normalized() string {

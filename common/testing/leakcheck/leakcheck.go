@@ -59,5 +59,5 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	report := newReport(t.objects, t.excludes)
-	return report.String(), report.failures()
+	return report.string(), report.failures()
 }
