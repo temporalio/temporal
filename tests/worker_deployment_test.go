@@ -37,16 +37,16 @@ type (
 )
 
 func TestWorkerDeploymentSuite(t *testing.T) {
-	parallelsuite.Run(t, &WorkerDeploymentSuite{})
+	testcore.UseSuiteScopedCluster(t)                              //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &WorkerDeploymentSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
-// Each test gets a dedicated, worker-enabled cluster since this suite mutates
+// Tests share a dedicated, worker-enabled cluster since this suite mutates
 // cluster-global deployment state and drives deployment system workflows.
 // Additional per-test options may be passed in opts.
 func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
-		testcore.WithWorkerService("worker deployment system workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
 
 		// Make sure we don't hit the rate limiter in tests
@@ -66,7 +66,6 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 		}),
 
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1000),
-		testcore.WithDynamicConfig(dynamicconfig.VisibilityPersistenceSlowQueryThreshold, 60*time.Second),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
