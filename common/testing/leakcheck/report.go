@@ -1,9 +1,11 @@
 package leakcheck
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -26,7 +28,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	report := report{
 		exclusionCounts: make(map[string]int),
 	}
-	activeExclusions := append(exclusions(nil), excludes...)
+	activeExclusions := slices.Clone(excludes)
 
 	type groupKey struct {
 		path       string
@@ -35,7 +37,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	}
 	groupByKey := make(map[groupKey]*objectGroup)
 	for _, obj := range objects {
-		excludedBy := activeExclusions.Match(obj)
+		excludedBy := activeExclusions.match(obj)
 		if obj.collected.Load() {
 			continue
 		}
@@ -73,7 +75,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	for _, group := range groupByKey {
 		report.retainedObjects = append(report.retainedObjects, *group)
 	}
-	sort.Strings(report.unmatchedExcludes)
+	slices.Sort(report.unmatchedExcludes)
 	sortObjectGroups(report.retainedObjects)
 	return report
 }
@@ -92,7 +94,7 @@ func (r report) failures() error {
 	return errors.Join(failures...)
 }
 
-func (r report) String() string {
+func (r report) string() string {
 	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 {
 		return ""
 	}
@@ -118,17 +120,17 @@ func (r report) String() string {
 }
 
 func sortObjectGroups(groups []objectGroup) {
-	sort.Slice(groups, func(i int, j int) bool {
-		if groups[i].count != groups[j].count {
-			return groups[i].count > groups[j].count
+	slices.SortFunc(groups, func(a objectGroup, b objectGroup) int {
+		if c := cmp.Compare(b.count, a.count); c != 0 {
+			return c
 		}
-		if groups[i].path != groups[j].path {
-			return groups[i].path < groups[j].path
+		if c := cmp.Compare(a.path, b.path); c != 0 {
+			return c
 		}
-		if groups[i].typeName != groups[j].typeName {
-			return groups[i].typeName < groups[j].typeName
+		if c := cmp.Compare(a.typeName, b.typeName); c != 0 {
+			return c
 		}
-		return strings.Join(groups[i].excludedBy, "\x00") < strings.Join(groups[j].excludedBy, "\x00")
+		return cmp.Compare(strings.Join(a.excludedBy, "\x00"), strings.Join(b.excludedBy, "\x00"))
 	})
 }
 
@@ -145,16 +147,11 @@ func (r report) writeSummary(out *strings.Builder) {
 }
 
 func sortedMapKeys[V any](values map[string]V) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(values))
 }
 
 func sortedStrings(values []string) []string {
-	sorted := append([]string(nil), values...)
-	sort.Strings(sorted)
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
 	return sorted
 }

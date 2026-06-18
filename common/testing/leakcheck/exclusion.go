@@ -19,7 +19,7 @@ func newExclusion(pattern string) (exclusion, error) {
 	return exclusion{pattern: pattern}, nil
 }
 
-func (xs exclusions) Match(obj trackedObject) []string {
+func (xs exclusions) match(obj trackedObject) []string {
 	var matches []string
 	path := obj.path.normalized()
 	for i := range xs {
@@ -55,7 +55,8 @@ func hasSpecificPathIndex(path string) bool {
 		}
 		end += i
 		index := path[i+1 : end]
-		if allDigits(index) || strings.HasPrefix(index, "key") && allDigits(strings.TrimPrefix(index, "key")) {
+		keyIndex, hasKeyPrefix := strings.CutPrefix(index, "key")
+		if allDigits(index) || hasKeyPrefix && allDigits(keyIndex) {
 			return true
 		}
 		i = end + 1
