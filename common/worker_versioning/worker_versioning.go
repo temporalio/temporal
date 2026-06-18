@@ -662,7 +662,7 @@ func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *d
 	return override.GetOneTime().GetTargetDeploymentVersion()
 }
 
-func GetOverrideTargetVersionForReactivation(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+func GetOverrideTargetDeploymentVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
 	if OverrideIsPinned(override) {
 		return GetOverridePinnedVersion(override)
 	}

@@ -986,8 +986,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Pinned and one-time overrides are inherited if Task Queue of new run is compatible with the override version.
 	var inheritedVersioningOverride *workflowpb.VersioningOverride
-	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) ||
-		worker_versioning.GetOverrideOneTimeTargetVersion(o) != nil {
+	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.GetOverrideTargetDeploymentVersion(o) != nil {
 		inheritedVersioningOverride = o
 		newTQ := attributes.GetTaskQueue().GetName()
 		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||

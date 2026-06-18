@@ -2670,30 +2670,11 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	// If a OneTimeOverride is still pending when this WFT issues Continue-As-New, carry it to the new run so the move can still be
-	// attempted there. If the move already succeeded, it was cleared during WFT completion before this
-	// Continue-As-New path runs.
 	previousVersioningOverride := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride()
-	pendingOneTimeOverrideTarget := worker_versioning.GetOverrideOneTimeTargetVersion(previousVersioningOverride)
-	hasPendingOneTimeOverride := pendingOneTimeOverrideTarget != nil
 
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	// Pending one-time override is also inherited as one-time state.
 	var inheritedVersioningOverride *workflowpb.VersioningOverride
-	if hasPendingOneTimeOverride {
-		inheritedVersioningOverride = previousVersioningOverride
-		newTQ := taskQueue
-		if newTQ != previousExecutionInfo.GetTaskQueue() {
-			// Querying matching since the TQ used for the pendingOneTimeOverride could not have the version present in it's userData
-			newTQInOneTimeTarget, err := IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, pendingOneTimeOverrideTarget)
-			if err != nil {
-				return nil, fmt.Errorf("error determining continue-as-new task queue presence in one-time override target version: %w", err)
-			}
-			if !newTQInOneTimeTarget {
-				inheritedVersioningOverride = nil
-			}
-		}
-	} else if worker_versioning.OverrideIsPinned(previousVersioningOverride) {
+	if worker_versioning.OverrideIsPinned(previousVersioningOverride) {
 		inheritedVersioningOverride = previousVersioningOverride
 		newTQ := taskQueue
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
@@ -9664,18 +9645,10 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 
 func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		worker_versioning.OverrideIsPinned(override) {
-		if v := override.GetPinned().GetVersion(); v != nil {
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(override); v != nil {
 			return v.GetDeploymentName()
 		}
-		//nolint:staticcheck // SA1019: worker versioning v0.31
-		if vs := override.GetPinnedVersion(); vs != "" {
-			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(vs)
-			return v.GetDeploymentName()
-		}
-		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return override.GetDeployment().GetSeriesName()
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return v.GetDeploymentName()
@@ -9685,17 +9658,10 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 
 func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		worker_versioning.OverrideIsPinned(override) {
-		if v := override.GetPinned().GetVersion(); v != nil {
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(override); v != nil {
 			return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 		}
-		//nolint:staticcheck // SA1019: worker versioning v0.31
-		if vs := override.GetPinnedVersion(); vs != "" {
-			return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs))
-		}
-		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()))
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
@@ -9708,7 +9674,7 @@ func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.Versioning
 	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
 		if override.GetAutoUpgrade() {
 			return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-		} else if worker_versioning.OverrideIsPinned(override) {
+		} else if worker_versioning.GetOverrideTargetDeploymentVersion(override) != nil {
 			return enumspb.VERSIONING_BEHAVIOR_PINNED
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30

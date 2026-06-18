@@ -47,7 +47,7 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
-	targetVersion := worker_versioning.GetOverrideTargetVersionForReactivation(override)
+	targetVersion := worker_versioning.GetOverrideTargetDeploymentVersion(override)
 	if targetVersion == nil {
 		return
 	}

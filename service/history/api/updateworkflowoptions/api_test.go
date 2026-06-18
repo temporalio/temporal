@@ -187,6 +187,14 @@ func TestMergeOptions_VersionOverrideOneofNestedMask(t *testing.T) {
 			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version"}},
 		},
 		{
+			name: "one_time target version deployment name field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.deployment_name"}},
+		},
+		{
+			name: "one_time target version build id field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.build_id"}},
+		},
+		{
 			name: "pinned oneof field",
 			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.pinned"}},
 		},
