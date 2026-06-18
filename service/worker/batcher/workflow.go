@@ -180,6 +180,10 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	}
 
 	switch op := params.GetOperation().(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
