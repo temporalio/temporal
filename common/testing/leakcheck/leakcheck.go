@@ -51,9 +51,7 @@ func WithGCSettleTimeout(timeout time.Duration) Option {
 	}
 }
 
-// NewObjectLeakCheck creates an object leak checker. Add roots with
-// Track after the code under test has finished creating the objects that should
-// be released.
+// NewObjectLeakCheck creates an object leak checker.
 func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 	t := ObjectLeakCheck{
 		gcSettleTimeout: defaultGCSettleTimeout,
@@ -66,11 +64,10 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 	return t, nil
 }
 
-// Track snapshots all pointer objects reachable from root. rootPath is the
-// stable path used for exclusion matching and report grouping.
-func (t *ObjectLeakCheck) Track(rootPath string, root any) {
+// Track walks all values reachable from root and tracks pointer objects it finds.
+func (t *ObjectLeakCheck) Track(root any) {
 	walker := newObjectWalker()
-	walker.track(rootPath, root)
+	walker.track(root)
 	t.roots++
 	t.objects = append(t.objects, walker.objects...)
 }

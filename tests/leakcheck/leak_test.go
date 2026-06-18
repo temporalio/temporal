@@ -51,18 +51,16 @@ var goleakOpts = []goleak.Option{
 }
 
 var objectLeakOpts = []objectleak.Option{
-	// TODO: TestCluster itself remains retained while the teardown fixes are
-	// reverted.
-	objectleak.WithExclude("cluster"),
-
-	// TODO: Persistence test base state remains retained through TestCluster.
-	objectleak.WithExclude("cluster.testBase*"),
-
-	// TODO: Stopped TemporalImpl service state remains retained through TestCluster.
-	objectleak.WithExclude("cluster.host*"),
-
-	// TODO: Archiver test configuration remains retained through TestCluster.
-	objectleak.WithExclude("cluster.archiverBase*"),
+	// TODO: TestEnv remains retained while teardown fixes are reverted.
+	objectleak.WithExclude("*testcore.TestEnv"),
+	objectleak.WithExclude("Assertions*"),
+	objectleak.WithExclude("FunctionalTestBase*"),
+	objectleak.WithExclude("ctx*"),
+	objectleak.WithExclude("dedicatedGuard*"),
+	objectleak.WithExclude("sdkClient*"),
+	objectleak.WithExclude("sdkWorker*"),
+	objectleak.WithExclude("taskPoller*"),
+	objectleak.WithExclude("tv*"),
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
@@ -166,7 +164,7 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 		require.NoError(t, err)
 		require.NoError(t, run.Get(context.Background(), nil))
 
-		leakCheck.Track("cluster", env.GetTestCluster())
+		leakCheck.Track(env)
 	})
 }
 

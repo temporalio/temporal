@@ -21,10 +21,6 @@ type pathSegment struct {
 	value string
 }
 
-func newPath(root string) path {
-	return path{{kind: pathSegmentField, value: root}}
-}
-
 func (p path) field(name string) path {
 	return p.append(pathSegment{kind: pathSegmentField, value: name})
 }

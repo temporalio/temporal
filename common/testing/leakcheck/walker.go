@@ -25,8 +25,8 @@ func newObjectWalker() objectWalker {
 	}
 }
 
-func (w *objectWalker) track(rootPath string, root any) {
-	w.walk(reflect.ValueOf(root), newPath(rootPath))
+func (w *objectWalker) track(root any) {
+	w.walk(reflect.ValueOf(root), nil)
 }
 
 func (w *objectWalker) walk(v reflect.Value, path path) {

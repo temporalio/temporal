@@ -104,7 +104,7 @@ func newReport(objects []trackedObject, trackedRoots int, excludes exclusions) r
 func (r report) failures() error {
 	var failures []error
 	for _, group := range r.unexpectedObjects {
-		failures = append(failures, fmt.Errorf("retained object %s (%s) retained %d times", group.path, group.typeName, group.count))
+		failures = append(failures, fmt.Errorf("retained object %s retained %d times", group.name(), group.count))
 	}
 	for _, pattern := range r.unmatchedExcludes {
 		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
@@ -131,7 +131,7 @@ func (r report) string() string {
 			return
 		}
 		for _, group := range groups {
-			fmt.Fprintf(&out, "  %dx %s (%s)\n", group.count, group.path, group.typeName)
+			fmt.Fprintf(&out, "  %dx %s\n", group.count, group.name())
 		}
 	}
 	out.WriteByte('\n')
@@ -153,4 +153,11 @@ func (r report) writeSummary(out *strings.Builder) {
 	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
 	fmt.Fprintf(out, "retained objects: %d total, %d expected, %d unexpected\n", r.totalRetained, r.expectedRetained, r.totalRetained-r.expectedRetained)
 	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
+}
+
+func (g objectGroup) name() string {
+	if g.path == "" {
+		return g.typeName
+	}
+	return fmt.Sprintf("%s (%s)", g.path, g.typeName)
 }
