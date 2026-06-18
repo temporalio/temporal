@@ -2658,7 +2658,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
-		newTQ := taskQueue
+		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
@@ -2670,15 +2670,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	previousVersioningOverride := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride()
-
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	var inheritedVersioningOverride *workflowpb.VersioningOverride
-	if worker_versioning.OverrideIsPinned(previousVersioningOverride) {
-		inheritedVersioningOverride = previousVersioningOverride
-		newTQ := taskQueue
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
-			inheritedVersioningOverride = nil
+			pinnedOverride = nil
 		}
 	}
 
@@ -2697,7 +2695,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
-		newTQ := taskQueue
+		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			// Cross-TQ CAN: check if new TQ is in parent's deployment
 			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
@@ -2771,7 +2769,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		RootExecutionInfo:            rootExecutionInfo,
 		InheritedBuildId:             inheritedBuildId,
 		InheritedPinnedVersion:       inheritedPinnedVersion,
-		VersioningOverride:           inheritedVersioningOverride,
+		VersioningOverride:           pinnedOverride,
 		DeclinedTargetVersionUpgrade: declinedTargetVersionUpgrade,
 		TimeSkippingStatePropagation: stateProp,
 	}
