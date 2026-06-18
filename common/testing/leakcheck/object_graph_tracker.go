@@ -12,7 +12,7 @@ import (
 	"unsafe"
 )
 
-// ObjectGraphLeakCheck tracks objects reachable from a root and reports objects
+// ObjectGraphLeakCheck tracks objects reachable from roots and reports objects
 // that remain reachable after GC.
 type ObjectGraphLeakCheck struct {
 	objects  []trackedObject
@@ -36,18 +36,22 @@ func WithExclude(pattern string) Option {
 	}
 }
 
-func NewObjectGraphLeakCheck(rootPath string, root any, opts ...Option) ObjectGraphLeakCheck {
+func NewObjectGraphLeakCheck(opts ...Option) ObjectGraphLeakCheck {
 	t := ObjectGraphLeakCheck{}
 	for _, opt := range opts {
 		opt(&t)
 	}
-	walker := newGraphWalker()
-	walker.walk(reflect.ValueOf(root), rootPath)
-	t.objects = walker.objects
 	return t
 }
 
+func (t *ObjectGraphLeakCheck) Track(rootPath string, root any) {
+	walker := newGraphWalker()
+	walker.walk(reflect.ValueOf(root), rootPath)
+	t.objects = append(t.objects, walker.objects...)
+}
+
 func (t ObjectGraphLeakCheck) Check() (string, error) {
+	settleLeakCheck()
 	var report objectGraphReport
 	matchedExcludes := make(map[string]bool, len(t.excludes))
 	for _, obj := range t.objects {
@@ -72,22 +76,8 @@ func (t ObjectGraphLeakCheck) Check() (string, error) {
 	return report.String(), report.failures()
 }
 
-func CheckAll(checks ...ObjectGraphLeakCheck) (string, error) {
-	settleLeakCheck()
-	var failures []error
-	var reports []string
-	for _, check := range checks {
-		report, err := check.Check()
-		if report != "" {
-			reports = append(reports, report)
-		}
-		failures = append(failures, err)
-	}
-	return strings.Join(reports, "\n"), errors.Join(failures...)
-}
-
-// settleLeakCheck gives stopped services, runtime timers, and GC enough time to
-// release teardown-only references before leak probes sample object reachability.
+// settleLeakCheck gives pending cleanups, runtime timers, and GC enough time to
+// release short-lived references before leak probes sample object reachability.
 func settleLeakCheck() {
 	for range 200 {
 		runtime.GC()
