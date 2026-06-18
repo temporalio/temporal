@@ -49,8 +49,7 @@ type workflowTasksAndActivitiesPollerParams struct {
 
 // taskQueueStatsContext holds the per-test environment and configuration for task queue stats tests.
 type taskQueueStatsContext struct {
-	testcore.Env
-	*require.Assertions
+	*VersioningTestEnv
 	tb              testing.TB
 	ctx             context.Context
 	usePriMatcher   bool
@@ -75,18 +74,17 @@ func newTaskQueueStatsContext(
 	}
 	opts = append(opts, behavior.Options()...)
 	opts = append(opts, extraOpts...)
-	env := testcore.NewEnv(t, opts...)
+	env := newVersioningTestEnv(t, opts...)
 	behavior.InjectHooks(env)
 	return &taskQueueStatsContext{
-		Env:             env,
-		Assertions:      require.New(t),
-		tb:              t,
-		ctx:             ctx,
-		usePriMatcher:   usePriMatcher,
-		minPriority:     1,
-		maxPriority:     5,
-		defaultPriority: 3,
-		partitionCount:  2, // kept low to reduce test time on CI
+		VersioningTestEnv: env,
+		tb:                t,
+		ctx:               ctx,
+		usePriMatcher:     usePriMatcher,
+		minPriority:       1,
+		maxPriority:       5,
+		defaultPriority:   3,
+		partitionCount:    2, // kept low to reduce test time on CI
 	}
 }
 
@@ -309,18 +307,16 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(s.Context(), 120*time.Second)
-	defer cancel()
-
 	tqName := "tq-" + common.GenerateRandomString(5)
 	deploymentName := testcore.RandomizeStr("deployment")
 	currentBuildID := "v1"
 	rampingBuildID := "v2"
 
-	pollCtx, cancelPoll := context.WithCancel(ctx)
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, currentBuildID)
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, rampingBuildID)
-	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
+	pollerCtx, cancelPoller := context.WithCancel(s.Context())
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, currentBuildID)
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, rampingBuildID)
+	// Stopping the pollers so that we verify the backlog expectations
+	cancelPoller()
 
 	// Set ramping version to 30%
 	rampPercentage := 30
@@ -328,6 +324,20 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 
 	// Set current version
 	s.setCurrentVersion(env, deploymentName, currentBuildID)
+	env.waitForTaskQueueVersioningInfo(
+		s.T(),
+		s.Context(),
+		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        currentBuildID,
+		}),
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        rampingBuildID,
+		}),
+		float32(rampPercentage),
+	)
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
@@ -460,16 +470,14 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
-	defer cancel()
-
 	deploymentName := testcore.RandomizeStr("deployment")
 	tqName := "tq-" + common.GenerateRandomString(5)
 	currentBuildID := "v1"
 
-	pollCtx, cancelPoll := context.WithCancel(ctx)
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, currentBuildID)
-	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
+	pollerCtx, cancelPoller := context.WithCancel(s.Context())
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, currentBuildID)
+	// Stopping the pollers so that we verify the backlog expectations
+	cancelPoller()
 
 	// Set current version.
 	s.setCurrentVersion(env, deploymentName, currentBuildID)
@@ -522,16 +530,14 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
-	defer cancel()
-
 	deploymentName := testcore.RandomizeStr("deployment")
 	tqName := "tq-" + common.GenerateRandomString(5)
 	rampingBuildID := "v2"
 
-	pollCtx, cancelPoll := context.WithCancel(ctx)
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, rampingBuildID)
-	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
+	pollerCtx, cancelPoller := context.WithCancel(s.Context())
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, rampingBuildID)
+	// Stopping the pollers so that we verify the backlog expectations
+	cancelPoller()
 
 	// Set current to unversioned (nil current version).
 	s.setCurrentVersion(env, deploymentName, "")
@@ -590,16 +596,15 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	currentBuildID := "v1"
 	inactiveBuildID := "v2"
 
-	pollCtx, cancelPoll := context.WithCancel(s.Context())
-
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, currentBuildID)
-	s.createVersionsInTaskQueue(pollCtx, env, tqName, deploymentName, inactiveBuildID)
+	pollerCtx, cancelPoller := context.WithCancel(s.Context())
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, currentBuildID)
+	s.createVersionsInTaskQueue(pollerCtx, env, tqName, deploymentName, inactiveBuildID)
 
 	// Set current version
 	s.setCurrentVersion(env, deploymentName, currentBuildID)
 
 	// Stopping the pollers so that we verify the backlog expectations
-	cancelPoll()
+	cancelPoller()
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflows := 10 * env.partitionCount
@@ -759,7 +764,7 @@ func (s *TaskQueueStatsVersionSuite) requireWDVTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(s.T(), label, stats, expectation)
+	validateTaskQueueStats(s.Assertions, label, stats, expectation)
 }
 
 // requireLegacyTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition scenarios.
@@ -780,7 +785,7 @@ func (s *TaskQueueStatsVersionSuite) requireLegacyTaskQueueStatsRelaxed(
 	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
 	// to account for ceiling operations across partitions
 	expectation.MaxExtraTasks = env.partitionCount
-	validateTaskQueueStats(s.T(), label, stats, expectation)
+	validateTaskQueueStats(s.Assertions, label, stats, expectation)
 }
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
@@ -1092,10 +1097,8 @@ func (s *taskQueueStatsContext) describeWDVTaskQueueStats(
 	if err != nil {
 		return nil, false, err
 	}
-	for _, tq := range resp.GetVersionTaskQueues() {
-		if tq.GetName() == tqName && tq.GetType() == tqType {
-			return tq.GetStats(), true, nil
-		}
+	if tq := s.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, tqType); tq != nil {
+		return tq.GetStats(), true, nil
 	}
 	return nil, false, nil
 }
@@ -1198,7 +1201,22 @@ func (s *TaskQueueStatsVersionSuite) createVersionsInTaskQueue(ctx context.Conte
 		})
 		s.NoError(err)
 		s.NotNil(resp)
+		s.NotNil(env.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+		s.NotNil(env.findVersionTaskQueue(resp.GetVersionTaskQueues(), tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func (s *taskQueueStatsContext) findVersionTaskQueue(
+	taskQueues []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+) *workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue {
+	for _, tq := range taskQueues {
+		if tq.GetName() == tqName && tq.GetType() == tqType {
+			return tq
+		}
+	}
+	return nil
 }
 
 // TODO (Shivam): Remove this guy.
@@ -1410,7 +1428,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 			require.EqualValuesf(t, expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
 
-		validateTaskQueueStats(t, label, resp.Stats, expectation)
+		validateTaskQueueStats(require.New(t), label, resp.Stats, expectation)
 		if s.usePriMatcher && expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
 			s.validateTaskQueueStatsByPriority(t, label, resp.StatsByPriorityKey, expectation)
@@ -1471,7 +1489,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithEnhancedMode(
 				return
 			}
 
-			validateTaskQueueStats(t, "DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", info.Stats, expectation)
+			validateTaskQueueStats(require.New(t), "DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", info.Stats, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1507,7 +1525,7 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 		for _, info := range resp.VersionTaskQueues {
 			if info.Name == tqName || info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
-				validateTaskQueueStats(t, label, info.Stats, expectation)
+				validateTaskQueueStats(require.New(t), label, info.Stats, expectation)
 				if s.usePriMatcher && expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
 					s.validateTaskQueueStatsByPriority(t, label, info.StatsByPriorityKey, expectation)
@@ -1551,7 +1569,7 @@ func (s *taskQueueStatsContext) validateTaskQueueStatsByPriority(
 		}
 
 		require.Containsf(t, stats, i, "%s: stats should contain priority %d", label, i)
-		validateTaskQueueStats(t, fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
+		validateTaskQueueStats(require.New(t), fmt.Sprintf("%s_Pri[%d]", label, i), stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
 	require.GreaterOrEqualf(t, taskQueueExpectation.BacklogCount, accBacklogCount,
@@ -1584,23 +1602,23 @@ func validateTaskQueueStatsStrict(
 }
 
 func validateTaskQueueStats(
-	t require.TestingT,
+	require *require.Assertions,
 	label string,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	require.GreaterOrEqual(t, stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
+	require.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	require.LessOrEqual(t, stats.ApproximateBacklogCount, maxApproximateBacklogCount,
+	require.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
 		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
 
-	require.Equal(t, stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	require.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }
