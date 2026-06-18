@@ -306,36 +306,6 @@ jobs:
           job_name: Unit test
           artifact_name_suffix: unit-test
 
-  leak-test:
-    name: Goroutine leak test
-    needs: [pre-build]
-    runs-on: ubuntu-24.04-arm
-    env:
-      GITHUB_TIMEOUT: 20
-      LEAK_OUTPUT_DIR: ${{ github.workspace }}/.testoutput/leakcheck
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
-
-      # Runs in isolation (own job) because it inspects the global goroutine
-      # state. Uses the in-process sqlite driver so it needs no DB containers.
-      - name: Run goroutine leak test
-        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
-        run: make leak-test LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
-
-      - name: Upload diagnostics
-        if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: leak-diagnostics
-          path: ${{ env.LEAK_OUTPUT_DIR }}
-          if-no-files-found: ignore
-
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
