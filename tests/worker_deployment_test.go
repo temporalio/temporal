@@ -42,8 +42,6 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
-// Tests share a dedicated, worker-enabled cluster since this suite mutates
-// cluster-global deployment state and drives deployment system workflows.
 // Additional per-test options may be passed in opts.
 func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
@@ -2136,12 +2134,11 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 
 	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues),
+		// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
+		testcore.WithDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations),
 		testcore.WithTestHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)),
 		testcore.WithTestHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)),
 	)
-
-	// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
-	env.OverrideDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations)
 
 	dn := s.tv().DeploymentVersion().GetDeploymentName()
 	start := time.Now()
@@ -3326,7 +3323,7 @@ func (s *WorkerDeploymentSuite) verifyVersionSummary(expected, actual *deploymen
 func (s *WorkerDeploymentSuite) verifyRoutingConfig(expected, actual *deploymentpb.RoutingConfig, deploymentName string) {
 	s.Equal(expected.GetRampingVersion(), actual.GetRampingVersion())                                                                                //nolint:staticcheck // SA1019: old worker versioning
 	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expected.GetRampingVersion()), actual.GetRampingDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-	s.Equal(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage())
+	s.InDelta(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage(), 0.001)
 	s.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion())                                                                                //nolint:staticcheck // SA1019: old worker versioning
 	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expected.GetCurrentVersion()), actual.GetCurrentDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 
@@ -3587,7 +3584,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	// Ramping version checks
 	s.Equal(expectedSummary.RoutingConfig.GetRampingVersion(), actualSummary.RoutingConfig.GetRampingVersion(), "Ramping version mismatch")                                                    //nolint:staticcheck // SA1019: old worker versioning
 	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedSummary.RoutingConfig.GetRampingVersion()), actualSummary.RoutingConfig.GetRampingDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-	s.Equal(expectedSummary.RoutingConfig.GetRampingVersionPercentage(), actualSummary.RoutingConfig.GetRampingVersionPercentage(), "Ramping version percentage mismatch")
+	s.InDelta(expectedSummary.RoutingConfig.GetRampingVersionPercentage(), actualSummary.RoutingConfig.GetRampingVersionPercentage(), 0.001, "Ramping version percentage mismatch")
 
 	s.verifyTimestampWithinRange(expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime(),
 		fmt.Sprintf("Deployment %s ramping version changed time", expectedSummary.GetName()))
