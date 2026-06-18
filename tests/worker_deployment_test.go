@@ -372,7 +372,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 		a.NotNil(versionSummaries[0].GetVersion())
 		a.NotNil(versionSummaries[1].GetVersion())
 		a.Equal(versionSummaries[0].GetVersion(), secondVersion.DeploymentVersionString())
-		a.Equal(versionSummaries[1].GetVersion(), env.Tv().DeploymentVersionString())
+		a.Equal(versionSummaries[1].GetVersion(), env.Tv().DeploymentVersionString()) //nolint:staticcheck // SA1019: old worker versioning
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
@@ -463,7 +463,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		cT = resp.GetConflictToken()
 	}, time.Second*10, time.Millisecond*1000)
 
@@ -3229,7 +3229,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 			Version:   env.Tv().DeploymentVersionString(),
 		})
 		a.NoError(err)
-		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: old worker versioning
 	}, time.Second*5, time.Millisecond*200)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
