@@ -281,7 +281,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
-		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+		defer func() { dedicatedGuard = nil }()
+		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
 			t.Fatal(err)
 		}
 	})
@@ -446,12 +447,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 		}
 
-		var err error
-		e.sdkClient, err = sdkclient.Dial(clientOptions)
+		client, err := sdkclient.Dial(clientOptions)
 		if err != nil {
 			e.t.Fatalf("Failed to create SDK client: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkClient.Close() })
+		e.sdkClient = client
+		e.t.Cleanup(func() {
+			defer func() { client = nil }()
+			client.Close()
+		})
 	})
 	return e.sdkClient
 }
@@ -460,11 +464,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
 	e.sdkWorkerOnce.Do(func() {
 		client := e.SdkClient() // Ensure client is initialized
-		e.sdkWorker = sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
-		if err := e.sdkWorker.Start(); err != nil {
+		worker := sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
+		if err := worker.Start(); err != nil {
 			e.t.Fatalf("Failed to start SDK worker: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkWorker.Stop() })
+		e.sdkWorker = worker
+		e.t.Cleanup(func() {
+			defer func() { worker = nil }()
+			worker.Stop()
+		})
 	})
 	return e.sdkWorker
 }
