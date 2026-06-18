@@ -509,13 +509,15 @@ mixed-brain-test: clean-test-output
 	@CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v $(MIXED_BRAIN_TEST_ROOT) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
 
-LEAK_OUTPUT_DIR ?= $(TEST_OUTPUT_ROOT)/leakcheck
-LEAK_ITERS      ?= 15
-LEAK_TIMEOUT    ?= 5m
+LEAK_OUTPUT_DIR    ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS         ?= 15
+LEAK_ITERS_WARMUP  ?= 3
+LEAK_TIMEOUT       ?= 5m
 leak-test:
 	@printf $(COLOR) "Run goroutine-leak regression test (sqlite, no Docker)..."
 	@mkdir -p $(LEAK_OUTPUT_DIR)
 	LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
 		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
 		go test -run TestClusterShutdownLeak -count=1 -v \
 			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \

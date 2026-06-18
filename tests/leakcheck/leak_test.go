@@ -11,8 +11,9 @@
 //
 // Tunable via env:
 //
-//	LEAK_ITERS        clusters built after warmup (set by the Makefile)
-//	LEAK_OUTPUT_DIR   on failure, write goroutines.txt here (CI uploads it)
+//	LEAK_ITERS         clusters built after warmup
+//	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
+//	LEAK_OUTPUT_DIR    on failure, write goroutines.txt here (CI uploads it)
 package leakcheck
 
 import (
@@ -36,13 +37,17 @@ const sqliteConnOpener = "database/sql.(*DB).connectionOpener"
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
-		t.Fatal("LEAK_ITERS must be set to a positive integer (set by the Makefile leak-test target)")
+		t.Fatal("LEAK_ITERS must be set to a positive integer")
+	}
+	warmup, err := strconv.Atoi(os.Getenv("LEAK_ITERS_WARMUP"))
+	if err != nil {
+		t.Fatal("LEAK_ITERS_WARMUP must be set to a positive integer")
 	}
 
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	// Those are one-time costs, not per-cluster leaks.
-	for range 3 {
+	for range warmup {
 		buildRunTeardownCluster(t)
 	}
 
