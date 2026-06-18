@@ -802,7 +802,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
+				RampingVersion:                      env.Tv().DeploymentVersionString(),
 				RampingVersionPercentage:            50,
 				RampingVersionChangedTime:           setRampingUpdateTime,
 				RampingVersionPercentageChangedTime: setRampingUpdateTime,
@@ -811,7 +811,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RampingSinceTime:     setRampingUpdateTime,
@@ -841,7 +841,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
+				RampingVersion:                      env.Tv().DeploymentVersionString(),
 				RampingVersionPercentage:            50,
 				RampingVersionChangedTime:           setRampingUpdateTime,
 				RampingVersionPercentageChangedTime: setRampingUpdateTime,
@@ -862,7 +862,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setRampingUpdateTime,
@@ -895,7 +895,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 				RampingVersionPercentage:            0,
 				RampingVersionChangedTime:           setRampingAsCurrentUpdateTime,
 				RampingVersionPercentageChangedTime: setRampingAsCurrentUpdateTime,
-				CurrentVersion:                      rampingVersionVars.DeploymentVersionString(),
+				CurrentVersion:                      env.Tv().DeploymentVersionString(),
 				CurrentVersionChangedTime:           setRampingAsCurrentUpdateTime,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
@@ -914,7 +914,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setRampingAsCurrentUpdateTime,
@@ -965,7 +965,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 				{
-					Version:    rampingVersionVars.DeploymentVersionString(),
+					Version:    env.Tv().DeploymentVersionString(),
 					CreateTime: versionCreateTime,
 					DrainageInfo: &deploymentpb.VersionDrainageInfo{
 						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
@@ -1188,7 +1188,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
+				RampingVersion:                      env.Tv().DeploymentVersionString(),
 				RampingVersionPercentage:            75, // ramping version percentage is updated to 75
 				RampingVersionChangedTime:           setRampingUpdateTime,
 				RampingVersionPercentageChangedTime: modifyRampingPercentageTime, // timestamp is updated as the ramp percentage changed from 50 -> 75
@@ -1197,7 +1197,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    modifyRampingPercentageTime,
@@ -1241,7 +1241,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			Name:       env.Tv().DeploymentSeries(),
 			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
+				RampingVersion:                      env.Tv().DeploymentVersionString(),
 				RampingVersionPercentage:            50,
 				RampingVersionChangedTime:           setRampingUpdateTime,
 				RampingVersionPercentageChangedTime: setRampingUpdateTime,
@@ -1250,7 +1250,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           version1CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setRampingUpdateTime,
@@ -1300,7 +1300,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           version1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
 					RoutingUpdateTime:    unsetRampingUpdateTime,
@@ -1332,15 +1332,14 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 	env := s.newTestEnv()
 
 	versionCreateTime := timestamppb.Now()
-	rampingVersionVars := env.Tv()
-	s.startVersionWorkflow(env, rampingVersionVars)
+	s.startVersionWorkflow(env, env.Tv())
 
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, false, 50, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 50, true, "")
 
 	// set ramping version as current
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(env, rampingVersionVars, true, "")
+	s.setCurrentVersion(env, env.Tv(), true, "")
 
 	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
@@ -1356,12 +1355,12 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 				RampingVersionPercentage:            0,                    // no ramping info should be set
 				RampingVersionChangedTime:           setCurrentUpdateTime, // ramping version got updated to ""
 				RampingVersionPercentageChangedTime: setCurrentUpdateTime, // ramping version got updated to ""
-				CurrentVersion:                      rampingVersionVars.DeploymentVersionString(),
+				CurrentVersion:                      env.Tv().DeploymentVersionString(),
 				CurrentVersionChangedTime:           setCurrentUpdateTime,
 			},
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
-					Version:              rampingVersionVars.DeploymentVersionString(),
+					Version:              env.Tv().DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setCurrentUpdateTime,
@@ -1381,11 +1380,10 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_Unset_Ramp() {
 	env := s.newTestEnv()
 
-	rampingVersionVars := env.Tv()
-	s.startVersionWorkflow(env, rampingVersionVars)
+	s.startVersionWorkflow(env, env.Tv())
 
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, false, 50, true, "")
-	s.setAndVerifyRampingVersion(env, rampingVersionVars, true, 0, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), false, 50, true, "")
+	s.setAndVerifyRampingVersion(env, env.Tv(), true, 0, true, "")
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching() {
@@ -3916,10 +3914,6 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AfterDelete_CanRecrea
 	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
 	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
 	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
-}
-
-func (s *WorkerDeploymentSuite) tv() *testvars.TestVars {
-	return testvars.New(s.T())
 }
 
 func (s *WorkerDeploymentSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
