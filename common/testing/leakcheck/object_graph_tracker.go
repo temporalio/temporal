@@ -48,23 +48,86 @@ func NewObjectGraphTracker(rootPath string, root any, opts ...Option) ObjectGrap
 }
 
 func (t ObjectGraphTracker) Failures() error {
-	var failures []error
+	return t.report().failures()
+}
+
+func (t ObjectGraphTracker) Report() string {
+	return t.report().String()
+}
+
+func (t ObjectGraphTracker) report() objectGraphReport {
+	var report objectGraphReport
+	matchedExcludes := make(map[string]bool, len(t.excludes))
 	for _, obj := range t.objects {
-		if obj.collected.Load() || t.excluded(obj) {
+		excludedBy := t.matchingExcludes(obj)
+		for _, pattern := range excludedBy {
+			matchedExcludes[pattern] = true
+		}
+		if obj.collected.Load() {
+			continue
+		}
+		report.retainedObjects = append(report.retainedObjects, retainedObject{
+			path:       obj.path,
+			typeName:   obj.typeName,
+			excludedBy: excludedBy,
+		})
+	}
+	for _, pattern := range t.excludes {
+		if !matchedExcludes[pattern] {
+			report.unmatchedExcludes = append(report.unmatchedExcludes, pattern)
+		}
+	}
+	return report
+}
+
+type objectGraphReport struct {
+	retainedObjects   []retainedObject
+	unmatchedExcludes []string
+}
+
+type retainedObject struct {
+	path       string
+	typeName   string
+	excludedBy []string
+}
+
+func (r objectGraphReport) failures() error {
+	var failures []error
+	for _, obj := range r.retainedObjects {
+		if len(obj.excludedBy) > 0 {
 			continue
 		}
 		failures = append(failures, fmt.Errorf("retained graph object %s (%s)", obj.path, obj.typeName))
 	}
+	for _, pattern := range r.unmatchedExcludes {
+		failures = append(failures, fmt.Errorf("object graph exclusion %q did not match any object", pattern))
+	}
 	return errors.Join(failures...)
 }
 
-func (t ObjectGraphTracker) excluded(obj trackedObject) bool {
+func (r objectGraphReport) String() string {
+	var lines []string
+	for _, obj := range r.retainedObjects {
+		line := fmt.Sprintf("retained graph object %s (%s)", obj.path, obj.typeName)
+		if len(obj.excludedBy) > 0 {
+			line += fmt.Sprintf(" [excluded by %s]", strings.Join(obj.excludedBy, ", "))
+		}
+		lines = append(lines, line)
+	}
+	for _, pattern := range r.unmatchedExcludes {
+		lines = append(lines, fmt.Sprintf("object graph exclusion %q did not match any object", pattern))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (t ObjectGraphTracker) matchingExcludes(obj trackedObject) []string {
+	var matches []string
 	for _, pattern := range t.excludes {
 		if matchesPattern(pattern, obj.path) || matchesPattern(pattern, obj.typeName) {
-			return true
+			matches = append(matches, pattern)
 		}
 	}
-	return false
+	return matches
 }
 
 func matchesPattern(pattern string, value string) bool {
@@ -115,6 +178,7 @@ func (w *graphWalker) walk(v reflect.Value, objPath string) {
 	case reflect.Map:
 		iter := v.MapRange()
 		for i := 0; iter.Next(); i++ {
+			w.walk(iter.Key(), fmt.Sprintf("%s[key%d]", objPath, i))
 			w.walk(iter.Value(), fmt.Sprintf("%s[%d]", objPath, i))
 		}
 	}
