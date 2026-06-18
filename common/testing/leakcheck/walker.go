@@ -19,7 +19,7 @@ type trackedObject struct {
 	cleanup   runtime.Cleanup
 }
 
-func newGraphWalker() objectWalker {
+func newObjectWalker() objectWalker {
 	return objectWalker{
 		seen: make(map[uintptr]struct{}),
 	}
@@ -56,17 +56,17 @@ func (w *objectWalker) walk(v reflect.Value, path objectPath) {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
-			w.walk(v.Field(i), path.Field(field.Name))
+			w.walk(v.Field(i), path.field(field.Name))
 		}
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < v.Len(); i++ {
-			w.walk(v.Index(i), path.Index(i))
+			w.walk(v.Index(i), path.index(i))
 		}
 	case reflect.Map:
 		iter := v.MapRange()
 		for i := 0; iter.Next(); i++ {
-			w.walk(iter.Key(), path.MapKey(i))
-			w.walk(iter.Value(), path.Index(i))
+			w.walk(iter.Key(), path.mapKey(i))
+			w.walk(iter.Value(), path.index(i))
 		}
 	}
 }
