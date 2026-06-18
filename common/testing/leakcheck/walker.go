@@ -68,6 +68,8 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 			w.walk(iter.Key(), path.mapKey(i))
 			w.walk(iter.Value(), path.index(i))
 		}
+	default:
+		return
 	}
 }
 
@@ -82,6 +84,7 @@ func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject
 				ok = false
 			}
 		}()
+		//nolint:govet // The checker must attach cleanup to reflected heap addresses.
 		cleanup = runtime.AddCleanup((*byte)(unsafe.Pointer(addr)), func(collected *atomic.Bool) {
 			collected.Store(true)
 		}, collected)
