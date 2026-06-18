@@ -97,7 +97,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 			t.Logf("failed to create goroutine dump: %v", err)
 		} else {
 			_ = goleak.Find(opts...)
-			f.Close()
+			if err := f.Close(); err != nil {
+				t.Logf("failed to close goroutine dump: %v", err)
+			}
 			t.Logf("goroutine dump written to %s/goroutines.txt", outputDir)
 		}
 	}
