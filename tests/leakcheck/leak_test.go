@@ -32,7 +32,7 @@ import (
 
 var opts = []goleak.Option{
 	// The sqlite plugin keeps one *sql.DB (and its connectionOpener) per
-	// file DSN for the process lifetime — by design, not a per-cluster leak.
+	// file DSN for the process lifetime by design, not a per-cluster leak.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 }
 
