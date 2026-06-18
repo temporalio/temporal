@@ -37,6 +37,9 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 		excludedBy string
 	}
 	groupByKey := make(map[groupKey]*objectGroup)
+
+	// Classify each retained object and fold equivalent normalized paths into
+	// a single report row.
 	for _, obj := range objects {
 		excludedBy := activeExclusions.match(obj)
 		if obj.collected.Load() {
@@ -68,11 +71,16 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 		}
 		group.count++
 	}
+
+	// Exclusions that never matched any tracked object are stale and should be
+	// removed with the fix that made them unnecessary.
 	for _, exclusion := range activeExclusions {
 		if !exclusion.matched {
 			report.unmatchedExcludes = append(report.unmatchedExcludes, exclusion.pattern)
 		}
 	}
+
+	// Keep report output stable across map iteration order and repeated runs.
 	for _, group := range groupByKey {
 		report.retainedObjects = append(report.retainedObjects, *group)
 	}
