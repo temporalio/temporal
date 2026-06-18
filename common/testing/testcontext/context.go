@@ -169,8 +169,6 @@ func (s *contextState) release() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ctx = nil
-	s.cancel = nil
-	s.decorators = nil
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
