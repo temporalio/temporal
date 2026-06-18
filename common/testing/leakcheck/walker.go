@@ -13,7 +13,7 @@ type objectWalker struct {
 }
 
 type trackedObject struct {
-	path      objectPath
+	path      path
 	typeName  string
 	collected *atomic.Bool
 	cleanup   runtime.Cleanup
@@ -26,10 +26,10 @@ func newObjectWalker() objectWalker {
 }
 
 func (w *objectWalker) track(rootPath string, root any) {
-	w.walk(reflect.ValueOf(root), newObjectPath(rootPath))
+	w.walk(reflect.ValueOf(root), newPath(rootPath))
 }
 
-func (w *objectWalker) walk(v reflect.Value, path objectPath) {
+func (w *objectWalker) walk(v reflect.Value, path path) {
 	if !v.IsValid() {
 		return
 	}
@@ -71,7 +71,7 @@ func (w *objectWalker) walk(v reflect.Value, path objectPath) {
 	}
 }
 
-func trackPointerObject(addr uintptr, path objectPath, typeName string) (trackedObject, bool) {
+func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject, bool) {
 	collected := &atomic.Bool{}
 	var cleanup runtime.Cleanup
 	ok := true

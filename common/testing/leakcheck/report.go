@@ -7,23 +7,23 @@ import (
 	"strings"
 )
 
-type objectLeakReport struct {
-	retainedObjects   []retainedObjectGroup
+type report struct {
+	retainedObjects   []objectGroup
 	totalRetained     int
 	excludedRetained  int
 	exclusionCounts   map[string]int
 	unmatchedExcludes []string
 }
 
-type retainedObjectGroup struct {
+type objectGroup struct {
 	path       string
 	typeName   string
 	excludedBy []string
 	count      int
 }
 
-func newObjectLeakReport(objects []trackedObject, excludes exclusions) objectLeakReport {
-	report := objectLeakReport{
+func newReport(objects []trackedObject, excludes exclusions) report {
+	report := report{
 		exclusionCounts: make(map[string]int),
 	}
 	activeExclusions := append(exclusions(nil), excludes...)
@@ -33,7 +33,7 @@ func newObjectLeakReport(objects []trackedObject, excludes exclusions) objectLea
 		typeName   string
 		excludedBy string
 	}
-	groupByKey := make(map[groupKey]*retainedObjectGroup)
+	groupByKey := make(map[groupKey]*objectGroup)
 	for _, obj := range objects {
 		excludedBy := activeExclusions.Match(obj)
 		if obj.collected.Load() {
@@ -56,7 +56,7 @@ func newObjectLeakReport(objects []trackedObject, excludes exclusions) objectLea
 		}
 		group := groupByKey[key]
 		if group == nil {
-			group = &retainedObjectGroup{
+			group = &objectGroup{
 				path:       key.path,
 				typeName:   key.typeName,
 				excludedBy: excludedBy,
@@ -74,11 +74,11 @@ func newObjectLeakReport(objects []trackedObject, excludes exclusions) objectLea
 		report.retainedObjects = append(report.retainedObjects, *group)
 	}
 	sort.Strings(report.unmatchedExcludes)
-	sortRetainedObjectGroups(report.retainedObjects)
+	sortObjectGroups(report.retainedObjects)
 	return report
 }
 
-func (r objectLeakReport) failures() error {
+func (r report) failures() error {
 	var failures []error
 	for _, group := range r.retainedObjects {
 		if len(group.excludedBy) > 0 {
@@ -92,32 +92,32 @@ func (r objectLeakReport) failures() error {
 	return errors.Join(failures...)
 }
 
-func (r objectLeakReport) String() string {
+func (r report) String() string {
 	if r.totalRetained == 0 && len(r.unmatchedExcludes) == 0 {
 		return ""
 	}
 
-	var lines []string
-	lines = append(lines, r.summaryLines()...)
-	lines = append(lines, "", "retained objects:")
+	var out strings.Builder
+	r.writeSummary(&out)
+	out.WriteString("\n\nretained objects:\n")
 
 	for _, group := range r.retainedObjects {
-		line := fmt.Sprintf("  %dx %s (%s)", group.count, group.path, group.typeName)
+		fmt.Fprintf(&out, "  %dx %s (%s)", group.count, group.path, group.typeName)
 		if len(group.excludedBy) > 0 {
-			line += fmt.Sprintf(" [excluded by %s]", strings.Join(group.excludedBy, ", "))
+			fmt.Fprintf(&out, " [excluded by %s]", strings.Join(group.excludedBy, ", "))
 		}
-		lines = append(lines, line)
+		out.WriteByte('\n')
 	}
 	if len(r.unmatchedExcludes) > 0 {
-		lines = append(lines, "", "stale exclusions:")
+		out.WriteString("\nstale exclusions:\n")
 	}
 	for _, pattern := range r.unmatchedExcludes {
-		lines = append(lines, fmt.Sprintf("  %s", pattern))
+		fmt.Fprintf(&out, "  %s\n", pattern)
 	}
-	return strings.Join(lines, "\n")
+	return strings.TrimSuffix(out.String(), "\n")
 }
 
-func sortRetainedObjectGroups(groups []retainedObjectGroup) {
+func sortObjectGroups(groups []objectGroup) {
 	sort.Slice(groups, func(i int, j int) bool {
 		if groups[i].count != groups[j].count {
 			return groups[i].count > groups[j].count
@@ -132,19 +132,16 @@ func sortRetainedObjectGroups(groups []retainedObjectGroup) {
 	})
 }
 
-func (r objectLeakReport) summaryLines() []string {
-	lines := []string{
-		"object leak report",
-		fmt.Sprintf("retained objects: %d total, %d excluded, %d unexcluded", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained),
-		fmt.Sprintf("stale exclusions: %d", len(r.unmatchedExcludes)),
-	}
+func (r report) writeSummary(out *strings.Builder) {
+	out.WriteString("object leak report\n")
+	fmt.Fprintf(out, "retained objects: %d total, %d excluded, %d unexcluded\n", r.totalRetained, r.excludedRetained, r.totalRetained-r.excludedRetained)
+	fmt.Fprintf(out, "stale exclusions: %d", len(r.unmatchedExcludes))
 	if len(r.exclusionCounts) > 0 {
-		lines = append(lines, "retained objects by exclusion:")
+		out.WriteString("\nretained objects by exclusion:\n")
 		for _, pattern := range sortedMapKeys(r.exclusionCounts) {
-			lines = append(lines, fmt.Sprintf("  %s: %d", pattern, r.exclusionCounts[pattern]))
+			fmt.Fprintf(out, "  %s: %d\n", pattern, r.exclusionCounts[pattern])
 		}
 	}
-	return lines
 }
 
 func sortedMapKeys[V any](values map[string]V) []string {
