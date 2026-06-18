@@ -28,6 +28,7 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 	report := report{
 		exclusionCounts: make(map[string]int),
 	}
+
 	// Matching mutates exclusion.matched for stale-exclusion detection.
 	activeExclusions := slices.Clone(excludes)
 
@@ -85,7 +86,18 @@ func newReport(objects []trackedObject, excludes exclusions) report {
 		report.retainedObjects = append(report.retainedObjects, *group)
 	}
 	slices.Sort(report.unmatchedExcludes)
-	sortObjectGroups(report.retainedObjects)
+	slices.SortFunc(report.retainedObjects, func(a objectGroup, b objectGroup) int {
+		if c := cmp.Compare(b.count, a.count); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.path, b.path); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.typeName, b.typeName); c != 0 {
+			return c
+		}
+		return cmp.Compare(strings.Join(a.excludedBy, "\x00"), strings.Join(b.excludedBy, "\x00"))
+	})
 	return report
 }
 
@@ -126,21 +138,6 @@ func (r report) string() string {
 		fmt.Fprintf(&out, "  %s\n", pattern)
 	}
 	return strings.TrimSuffix(out.String(), "\n")
-}
-
-func sortObjectGroups(groups []objectGroup) {
-	slices.SortFunc(groups, func(a objectGroup, b objectGroup) int {
-		if c := cmp.Compare(b.count, a.count); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.path, b.path); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.typeName, b.typeName); c != 0 {
-			return c
-		}
-		return cmp.Compare(strings.Join(a.excludedBy, "\x00"), strings.Join(b.excludedBy, "\x00"))
-	})
 }
 
 func (r report) writeSummary(out *strings.Builder) {
