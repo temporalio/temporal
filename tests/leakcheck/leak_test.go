@@ -30,17 +30,19 @@ import (
 	"go.uber.org/goleak"
 )
 
-// ignoreSQLiteConnOpener filters the background goroutine the sqlite plugin
-// keeps alive per file DSN for the process lifetime. That is by design, not a
-// per-cluster leak; sqlite is dev/test-only.
-var ignoreSQLiteConnOpener = goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener")
+var opts = []goleak.Option{
+	// The sqlite plugin keeps one *sql.DB (and its connectionOpener) per
+	// file DSN for the process lifetime — by design, not a per-cluster leak.
+	// sqlite is dev/test-only; the functional OOMs were on cassandra.
+	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
+}
 
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
 		t.Fatal("LEAK_ITERS must be set to a positive integer")
 	}
-	warmup, err := strconv.Atoi(os.Getenv("LEAK_ITERS_WARMUP"))
+	warmupIters, err := strconv.Atoi(os.Getenv("LEAK_ITERS_WARMUP"))
 	if err != nil {
 		t.Fatal("LEAK_ITERS_WARMUP must be set to a positive integer")
 	}
@@ -54,12 +56,12 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
-	for range warmup {
+	for range warmupIters {
 		buildRunTeardownCluster(t)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
-	_ = goleak.Find(ignoreSQLiteConnOpener)
+	_ = goleak.Find(opts...)
 	baseline := goleak.IgnoreCurrent()
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
@@ -69,7 +71,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	goleak.VerifyNone(t, baseline, ignoreSQLiteConnOpener)
+	goleak.VerifyNone(t, append([]goleak.Option{baseline}, opts...)...)
 
 	// On failure, write a goroutine dump to the output directory.
 	if t.Failed() {
@@ -77,7 +79,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 		if err != nil {
 			t.Logf("failed to create goroutine dump: %v", err)
 		} else {
-			_ = goleak.Find(ignoreSQLiteConnOpener)
+			_ = goleak.Find(opts...)
 			f.Close()
 			t.Logf("goroutine dump written to %s/goroutines.txt", outputDir)
 		}
@@ -85,8 +87,8 @@ func TestClusterShutdownLeak(t *testing.T) {
 }
 
 // buildRunTeardownCluster creates a freshly-built dedicated worker-service
-// cluster, runs a trivial workflow on it to exercise the full server path, then
-// tears it down.
+// cluster, runs a trivial workflow on it to exercise the full server path,
+// then tears it down.
 func buildRunTeardownCluster(t *testing.T) {
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
