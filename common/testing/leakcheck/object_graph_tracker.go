@@ -39,23 +39,13 @@ func NewObjectGraphLeakCheck(rootPath string, root any, opts ...Option) ObjectGr
 	for _, opt := range opts {
 		opt(&t)
 	}
-	walker := graphWalker{
-		seen: make(map[uintptr]struct{}),
-	}
+	walker := newGraphWalker()
 	walker.walk(reflect.ValueOf(root), rootPath)
 	t.objects = walker.objects
 	return t
 }
 
-func (t ObjectGraphLeakCheck) Failures() error {
-	return t.report().failures()
-}
-
-func (t ObjectGraphLeakCheck) Report() string {
-	return t.report().String()
-}
-
-func (t ObjectGraphLeakCheck) report() objectGraphReport {
+func (t ObjectGraphLeakCheck) Check() (string, error) {
 	var report objectGraphReport
 	matchedExcludes := make(map[string]bool, len(t.excludes))
 	for _, obj := range t.objects {
@@ -77,7 +67,7 @@ func (t ObjectGraphLeakCheck) report() objectGraphReport {
 			report.unmatchedExcludes = append(report.unmatchedExcludes, pattern)
 		}
 	}
-	return report
+	return report.String(), report.failures()
 }
 
 type objectGraphReport struct {
@@ -139,6 +129,12 @@ func (t ObjectGraphLeakCheck) matchingExcludes(obj trackedObject) []string {
 type graphWalker struct {
 	objects []trackedObject
 	seen    map[uintptr]struct{}
+}
+
+func newGraphWalker() graphWalker {
+	return graphWalker{
+		seen: make(map[uintptr]struct{}),
+	}
 }
 
 func (w *graphWalker) walk(v reflect.Value, objPath string) {
