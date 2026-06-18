@@ -103,14 +103,14 @@ func TestClusterShutdownLeak(t *testing.T) {
 		}
 
 		// Write the full goroutine profile to the output directory.
-		pprofPath := filepath.Join(outputDir, "goroutines_all.txt")
+		profilePath := filepath.Join(outputDir, "goroutines_all.txt")
 		var pprofDump bytes.Buffer
 		if err := pprof.Lookup("goroutine").WriteTo(&pprofDump, 2); err != nil {
 			t.Logf("failed to capture goroutine pprof dump: %v", err)
-		} else if err := os.WriteFile(pprofPath, pprofDump.Bytes(), 0o644); err != nil {
+		} else if err := os.WriteFile(profilePath, pprofDump.Bytes(), 0o644); err != nil {
 			t.Logf("failed to write goroutine pprof dump: %v", err)
 		} else {
-			t.Logf("goroutine pprof dump written to %s", pprofPath)
+			t.Logf("goroutine pprof dump written to %s", profilePath)
 		}
 	}
 }
