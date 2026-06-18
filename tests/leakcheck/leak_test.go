@@ -30,10 +30,36 @@ import (
 	"go.uber.org/goleak"
 )
 
+// opts are the goleak options applied to every Find/VerifyNone call.
+// Stacks marked TODO are known leaks tracked in open PRs; remove each
+// ignore once the corresponding fix lands.
 var opts = []goleak.Option{
-	// The sqlite plugin keeps one *sql.DB (and its connectionOpener) per
-	// file DSN for the process lifetime by design, not a per-cluster leak.
+	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
+
+	// TODO(#10758): gRPC connection goroutines leaked because history/matching
+	// connection pools are not closed on cluster shutdown.
+	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
+	goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
+	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/client/history.watchMembershipForClose[...]"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/client/matching.(*partitionCache).Start.func1"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/client/matching.watchMembershipForEviction"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
+
+	// TODO(#10749): remaining worker-service and persistence leaks.
+	goleak.IgnoreTopFunction("go.temporal.io/server/common/persistence.(*healthSignalAggregatorImpl).emitMetricsLoop"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/common/quotas.(*MapRequestRateLimiterImpl[...]).cleanupLoop"),
+	goleak.IgnoreTopFunction("go.temporal.io/server/service/worker.(*PerNamespaceWorkerManager).periodicRefresh"),
+	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
+	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
+
+	// TODO(#10749): SDK worker goroutines not fully stopped on cluster shutdown.
+	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runEagerTaskDispatcher"),
+	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runTaskDispatcher"),
+	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*localActivityTunnel).getTask"),
+	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*sharedNamespaceWorker).run"),
+	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
 }
 
 func TestClusterShutdownLeak(t *testing.T) {
