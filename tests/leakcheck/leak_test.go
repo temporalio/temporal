@@ -33,7 +33,6 @@ import (
 var opts = []goleak.Option{
 	// The sqlite plugin keeps one *sql.DB (and its connectionOpener) per
 	// file DSN for the process lifetime — by design, not a per-cluster leak.
-	// sqlite is dev/test-only; the functional OOMs were on cassandra.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 }
 
