@@ -71,7 +71,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	goleak.VerifyNone(t, append([]goleak.Option{baseline}, opts...)...)
+	goleak.VerifyNone(t, append(opts, baseline)...)
 
 	// On failure, write a goroutine dump to the output directory.
 	if t.Failed() {
