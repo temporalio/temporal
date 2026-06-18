@@ -7736,7 +7736,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
 
-		for cycle := 0; cycle < 2; cycle++ {
+		for range 2 {
 			_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
