@@ -121,7 +121,7 @@ func (r report) string() string {
 	r.writeSummary(&out)
 
 	writeGroups := func(title string, groups []objectGroup) {
-		fmt.Fprintf(&out, "\n\n%s:\n", title)
+		fmt.Fprintf(&out, "\n%s:\n", title)
 		if len(groups) == 0 {
 			out.WriteString("  none\n")
 			return
@@ -130,11 +130,13 @@ func (r report) string() string {
 			fmt.Fprintf(&out, "  %dx %s (%s)\n", group.count, group.path, group.typeName)
 		}
 	}
+	out.WriteByte('\n')
 	writeGroups("unexpected retained objects", r.unexpectedObjects)
+	out.WriteByte('\n')
 	writeGroups("expected retained objects", r.expectedObjects)
 
 	if len(r.unmatchedExcludes) > 0 {
-		out.WriteString("\n\nstale exclusions:\n")
+		out.WriteString("\nstale exclusions:\n")
 	}
 	for _, pattern := range r.unmatchedExcludes {
 		fmt.Fprintf(&out, "  %s\n", pattern)
