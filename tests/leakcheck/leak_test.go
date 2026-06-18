@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-	objectleak "go.temporal.io/server/common/testing/leakcheck"
+	"go.temporal.io/server/common/testing/objectleak"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/goleak"
 )

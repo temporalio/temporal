@@ -1,4 +1,4 @@
-package leakcheck
+package objectleak
 
 import (
 	"reflect"
@@ -13,6 +13,7 @@ type objectWalker struct {
 }
 
 type trackedObject struct {
+	addr      uintptr
 	path      path
 	typeName  string
 	collected *atomic.Bool
@@ -93,6 +94,7 @@ func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject
 		return trackedObject{}, false
 	}
 	return trackedObject{
+		addr:      addr,
 		path:      path,
 		typeName:  typeName,
 		collected: collected,

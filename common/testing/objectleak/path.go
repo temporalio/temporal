@@ -1,4 +1,4 @@
-package leakcheck
+package objectleak
 
 import (
 	"slices"
