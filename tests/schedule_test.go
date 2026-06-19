@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -75,65 +76,273 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 }
 
 func TestScheduleCHASM(t *testing.T) {
-	runSharedScheduleTests(t, chasmContextFactory)
-
-	// CHASM-only tests
-	newContext := chasmContextFactory
-	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { testCreateScheduleAlreadyExists(t, newContext) })
-	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { testCreateScheduleDuplicateSdkError(t, true) })
-	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { testPatchRejectsExcessBackfillers(t, newContext) })
-	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, false) })
-	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, true) })
-	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, false) })
-	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, true) })
-	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { testMigrationCallbackAttach(t, newContext) })
-	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
-	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
-	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
-	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
-	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
-	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
-	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
-	t.Run("TestPausedDropsCatchup", func(t *testing.T) { testPausedDropsCatchup(t, newContext) })
-	t.Run("TestFutureActionTimesAdvanceWhilePaused", func(t *testing.T) { testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
+	parallelsuite.Run(t, &ScheduleCHASMSuite{})
 }
 
 func TestScheduleV1(t *testing.T) {
-	runSharedScheduleTests(t, v1ContextFactory)
-
-	// V1-only tests
-	newContext := v1ContextFactory
-	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { testCreateScheduleDuplicateSdkError(t, false) })
-	t.Run("TestCHASMCanListV1Schedules", func(t *testing.T) { testCHASMCanListV1Schedules(t, newContext) })
-	t.Run("TestRefresh", func(t *testing.T) { testRefresh(t, newContext) })
-	t.Run("TestListBeforeRun", func(t *testing.T) { testListBeforeRun(t, newContext) })
-	t.Run("TestRateLimit", func(t *testing.T) { testRateLimit(t, newContext) })
-	t.Run("TestNextTimeCache", func(t *testing.T) { testNextTimeCache(t, newContext) })
-	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { testCreatesCHASMSentinel(t, newContext) })
-	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { testSkipsCHASMSentinelWhenDisabled(t, newContext) })
-	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { testUpdateScheduleMemoRejected(t, newContext) })
+	parallelsuite.RunLegacySequential(t, &ScheduleV1Suite{}) //nolint:staticcheck // SA1019: V1 scheduler tests require the worker service.
 }
 
-func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
-	t.Run("TestBasics", func(t *testing.T) { testBasics(t, newContext) })
-	t.Run("TestInput", func(t *testing.T) { testInput(t, newContext) })
-	t.Run("TestLastCompletionAndError", func(t *testing.T) { testLastCompletionAndError(t, newContext) })
-	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
-	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { testListSchedulesReturnsWorkflowStatus(t, newContext) })
-	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { testUpdateIntervalTakesEffect(t, newContext) })
-	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { testListScheduleMatchingTimes(t, newContext) })
-	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { testLimitMemoSpecSize(t, newContext) })
-	t.Run("TestCountSchedules", func(t *testing.T) { testCountSchedules(t, newContext) })
-	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
-	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
-	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
-	t.Run("TestUpdateScheduleRequestIDTooLong", func(t *testing.T) { testUpdateScheduleRequestIDTooLong(t, newContext) })
-	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { testUpdateScheduleBlobSizeLimit(t, newContext) })
-	t.Run("TestListSchedulesPagination", func(t *testing.T) { testListSchedulesPagination(t, newContext) })
-	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
-	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { testListSchedulesFilterByScheduleID(t, newContext) })
-	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { testBufferSizeReportedWhenBuffered(t, newContext) })
+type ScheduleCHASMSuite struct {
+	parallelsuite.Suite[*ScheduleCHASMSuite]
+}
+
+func (s *ScheduleCHASMSuite) TestBasics() {
+	testBasics(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestInput() {
+	testInput(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestLastCompletionAndError() {
+	testLastCompletionAndError(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestScheduleContinuesAfterWorkflowRetryFailure() {
+	testScheduleContinuesAfterWorkflowRetryFailure(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestListSchedulesReturnsWorkflowStatus() {
+	testListSchedulesReturnsWorkflowStatus(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUpdateIntervalTakesEffect() {
+	testUpdateIntervalTakesEffect(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestListScheduleMatchingTimes() {
+	testListScheduleMatchingTimes(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestLimitMemoSpecSize() {
+	testLimitMemoSpecSize(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestCountSchedules() {
+	testCountSchedules(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestSchedule_InternalTaskQueue() {
+	testScheduleInternalTaskQueue(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestDeletedScheduleOperations() {
+	testDeletedScheduleOperations(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUnpauseResumesProcessing() {
+	testCHASMUnpauseResumesProcessing(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUpdateScheduleRequestIDTooLong() {
+	testUpdateScheduleRequestIDTooLong(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUpdateScheduleBlobSizeLimit() {
+	testUpdateScheduleBlobSizeLimit(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestListSchedulesPagination() {
+	testListSchedulesPagination(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestListSchedulesFilterAndEntryFields() {
+	testListSchedulesFilterAndEntryFields(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestListSchedulesFilterByScheduleId() {
+	testListSchedulesFilterByScheduleID(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestBufferSizeReportedWhenBuffered() {
+	testBufferSizeReportedWhenBuffered(s.T(), chasmContextFactory)
+}
+
+// CHASM-only tests
+func (s *ScheduleCHASMSuite) TestCreateScheduleAlreadyExists() {
+	testCreateScheduleAlreadyExists(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestCreateScheduleDuplicateSdkError() {
+	testCreateScheduleDuplicateSdkError(s.T(), true)
+}
+
+func (s *ScheduleCHASMSuite) TestPatchRejectsExcessBackfillers() {
+	testPatchRejectsExcessBackfillers(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestDoubleReset_HSMCallbacks() {
+	testScheduledWorkflowDoubleReset(s.T(), chasmContextFactory, false)
+}
+
+func (s *ScheduleCHASMSuite) TestDoubleReset_ChasmCallbacks() {
+	testScheduledWorkflowDoubleReset(s.T(), chasmContextFactory, true)
+}
+
+func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallback_HSMCallbacks() {
+	testResetWithAdditionalCallback(s.T(), chasmContextFactory, false)
+}
+
+func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallback_ChasmCallbacks() {
+	testResetWithAdditionalCallback(s.T(), chasmContextFactory, true)
+}
+
+func (s *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
+	testMigrationCallbackAttach(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestCreatesWorkflowSentinel() {
+	testCreatesWorkflowSentinel(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestSkipsWorkflowSentinelWhenDisabled() {
+	testSkipsWorkflowSentinelWhenDisabled(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
+	testUpdateScheduleMemo(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestUpdateScheduleMemoOnly() {
+	testUpdateScheduleMemoOnly(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestStateSizeBytesReported() {
+	testStateSizeBytesReported(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestSingleDateScheduleCloses() {
+	testSingleDateScheduleCloses(s.T(), s.Context(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestMultiDateScheduleCloses() {
+	testMultiDateScheduleCloses(s.T(), s.Context(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestPausedDropsCatchup() {
+	testPausedDropsCatchup(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestFutureActionTimesAdvanceWhilePaused() {
+	testFutureActionTimesAdvanceWhilePaused(s.T(), chasmContextFactory)
+}
+
+func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
+	testScheduledWorkflowContinueAsNewCompletion(s.T(), chasmContextFactory)
+}
+
+type ScheduleV1Suite struct {
+	parallelsuite.Suite[*ScheduleV1Suite]
+}
+
+func (s *ScheduleV1Suite) TestBasics() {
+	testBasics(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestInput() {
+	testInput(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestLastCompletionAndError() {
+	testLastCompletionAndError(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestScheduleContinuesAfterWorkflowRetryFailure() {
+	testScheduleContinuesAfterWorkflowRetryFailure(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListSchedulesReturnsWorkflowStatus() {
+	testListSchedulesReturnsWorkflowStatus(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestUpdateIntervalTakesEffect() {
+	testUpdateIntervalTakesEffect(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListScheduleMatchingTimes() {
+	testListScheduleMatchingTimes(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestLimitMemoSpecSize() {
+	testLimitMemoSpecSize(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestCountSchedules() {
+	testCountSchedules(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestSchedule_InternalTaskQueue() {
+	testScheduleInternalTaskQueue(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestDeletedScheduleOperations() {
+	testDeletedScheduleOperations(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestUnpauseResumesProcessing() {
+	testCHASMUnpauseResumesProcessing(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestUpdateScheduleRequestIDTooLong() {
+	testUpdateScheduleRequestIDTooLong(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestUpdateScheduleBlobSizeLimit() {
+	testUpdateScheduleBlobSizeLimit(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListSchedulesPagination() {
+	testListSchedulesPagination(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListSchedulesFilterAndEntryFields() {
+	testListSchedulesFilterAndEntryFields(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListSchedulesFilterByScheduleId() {
+	testListSchedulesFilterByScheduleID(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestBufferSizeReportedWhenBuffered() {
+	testBufferSizeReportedWhenBuffered(s.T(), v1ContextFactory)
+}
+
+// V1-only tests
+func (s *ScheduleV1Suite) TestCreateScheduleDuplicateSdkError() {
+	testCreateScheduleDuplicateSdkError(s.T(), false)
+}
+
+func (s *ScheduleV1Suite) TestCHASMCanListV1Schedules() {
+	testCHASMCanListV1Schedules(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestRefresh() {
+	testRefresh(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestListBeforeRun() {
+	testListBeforeRun(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestRateLimit() {
+	testRateLimit(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestNextTimeCache() {
+	testNextTimeCache(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestCreatesCHASMSentinel() {
+	testCreatesCHASMSentinel(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestSkipsCHASMSentinelWhenDisabled() {
+	testSkipsCHASMSentinelWhenDisabled(s.T(), v1ContextFactory)
+}
+
+func (s *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
+	testUpdateScheduleMemoRejected(s.T(), v1ContextFactory)
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
@@ -3599,6 +3808,15 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 // after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
 // bucket on opposite sides of the rollout land on different stacks.
 func TestScheduleCreationRolloutPercent(t *testing.T) {
+	parallelsuite.RunLegacySequential(t, &ScheduleCreationRolloutPercentSuite{}) //nolint:staticcheck // SA1019: test requires the worker service.
+}
+
+type ScheduleCreationRolloutPercentSuite struct {
+	parallelsuite.Suite[*ScheduleCreationRolloutPercentSuite]
+}
+
+func (suite *ScheduleCreationRolloutPercentSuite) TestScheduleCreationRolloutPercent() {
+	t := suite.T()
 	opts := append(scheduleCommonOpts(t),
 		// V1 worker is needed because at 50% rollout some schedules land on V1.
 		testcore.WithWorkerService("V1 scheduler"),
@@ -3674,7 +3892,7 @@ func TestScheduleCreationRolloutPercent(t *testing.T) {
 
 // testSingleDateScheduleCloses verifies that a CHASM schedule configured with
 // a single calendar date closes after its one workflow completes.
-func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
+func testSingleDateScheduleCloses(t *testing.T, ctx context.Context, newContext contextFactory) {
 	shortIdleTime := 3 * time.Second
 	tweakables := chasmscheduler.DefaultTweakables
 	tweakables.IdleTime = shortIdleTime
@@ -3693,7 +3911,7 @@ func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		return nil
 	}, workflow.RegisterOptions{Name: wfType})
 
-	ctx := newContext(testcore.NewContext())
+	ctx = newContext(ctx)
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -3756,7 +3974,7 @@ func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
 
 // testMultiDateScheduleCloses verifies that a CHASM schedule configured with
 // two calendar dates closes after both workflows complete.
-func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
+func testMultiDateScheduleCloses(t *testing.T, ctx context.Context, newContext contextFactory) {
 	shortIdleTime := 3 * time.Second
 	tweakables := chasmscheduler.DefaultTweakables
 	tweakables.IdleTime = shortIdleTime
@@ -3788,7 +4006,7 @@ func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
 		}
 	}
 
-	ctx := newContext(testcore.NewContext())
+	ctx = newContext(ctx)
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -4014,6 +4232,15 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 // ScheduleNextActionTime search attribute is published to visibility and is
 // queryable through the frontend ListSchedules API.
 func TestScheduleNextActionTimeVisibility(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleNextActionTimeVisibilitySuite{})
+}
+
+type ScheduleNextActionTimeVisibilitySuite struct {
+	parallelsuite.Suite[*ScheduleNextActionTimeVisibilitySuite]
+}
+
+func (suite *ScheduleNextActionTimeVisibilitySuite) TestScheduleNextActionTimeVisibility() {
+	t := suite.T()
 	opts := scheduleCommonOpts(t)
 	s := testcore.NewEnv(t, opts...)
 
@@ -4100,6 +4327,15 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 // behind it. The counts aren't surfaced on the list entry, so we assert via the
 // query rather than by reading the entry's SAs.
 func TestScheduleCountsVisibility(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleCountsVisibilitySuite{})
+}
+
+type ScheduleCountsVisibilitySuite struct {
+	parallelsuite.Suite[*ScheduleCountsVisibilitySuite]
+}
+
+func (suite *ScheduleCountsVisibilitySuite) TestScheduleCountsVisibility() {
+	t := suite.T()
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 	newContext := chasmContextFactory
 
