@@ -572,10 +572,8 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 // Testing DeleteVersion
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
-	env := s.newTestEnv()
-
 	// Override the dynamic config so that we can verify we don't get any unexpected masked errors.
-	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Create a deployment version
@@ -632,9 +630,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Create a deployment version
@@ -811,13 +807,13 @@ func (s *DeploymentVersionSuite) waitForNoPollers(env *testcore.TestEnv, tv *tes
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 3*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
-	// we don't want the version to drain in this test
-	env.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second)
-	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0)
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 3*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment),
+		// we don't want the version to drain in this test
+		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0),
+	)
 	// Set deployment register error backoff to zero so to speed up the test.
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second))
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
@@ -889,9 +885,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
@@ -934,9 +928,7 @@ func (s *DeploymentVersionSuite) skipBeforeVersion(version workerdeployment.Depl
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
@@ -988,9 +980,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
@@ -1040,10 +1030,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 
 // VersionMissingTaskQueues
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentVersion() {
-	env := s.newTestEnv()
-
 	// Override the dynamic config to verify we don't get any unexpected masked errors.
-	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true))
 	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
@@ -1094,10 +1082,8 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVer
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingVersion() {
-	env := s.newTestEnv()
-
 	// Override the dynamic config to verify we don't get any unexpected masked errors.
-	env.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true))
 	tv1 := s.tv().WithBuildIDNumber(1).WithTaskQueue(s.tv().Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
@@ -1514,9 +1500,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 }
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_DeletedVersion() {
-	env := s.newTestEnv()
-
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	s.createDeploymentAndVersion(env, s.tv(), s.tv().Any().String(), nil)
 
 	// Delete the version (skip drainage, no pollers since we created via CreateWorkerDeploymentVersion).
@@ -2992,10 +2976,8 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithUnpinn
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
-	env := s.newTestEnv()
-
 	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
-	env.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond))
 	tv1 := s.tv().WithBuildIDNumber(1)
 
 	s.startVersionWorkflow(s.Context(), env, tv1)
