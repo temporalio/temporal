@@ -453,8 +453,8 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 		}
 		e.sdkClient = client
 		e.t.Cleanup(func() {
-			defer func() { client = nil }()
 			client.Close()
+			client = nil
 		})
 	})
 	return e.sdkClient
@@ -470,8 +470,8 @@ func (e *TestEnv) SdkWorker() sdkworker.Worker {
 		}
 		e.sdkWorker = worker
 		e.t.Cleanup(func() {
-			defer func() { worker = nil }()
 			worker.Stop()
+			worker = nil
 		})
 	})
 	return e.sdkWorker
