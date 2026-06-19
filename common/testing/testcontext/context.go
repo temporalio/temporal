@@ -77,7 +77,7 @@ func WithTimeout(timeout time.Duration) Option {
 
 // AttachDecorator applies decorator to the test-scoped context once for key.
 // Reusing the same key is a no-op. If the test context does not exist yet,
-// AttachDecorator creates it with the default timeout. Call For with WithTimeout
+// AttachDecorator creates it with the default timeout. Call [For] with [WithTimeout]
 // first when using a custom timeout.
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
 	tb.Helper()
