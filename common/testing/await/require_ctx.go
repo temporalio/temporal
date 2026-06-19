@@ -100,26 +100,34 @@ func run(
 		parentCtx = extension.Context()
 	}
 	deadline := start.Add(cfg.totalTimeout)
+	deadlineCause := ""
 	if !extension.Deadline.IsZero() && extension.Deadline.Before(deadline) {
 		deadline = extension.Deadline
+		deadlineCause = testcontextDeadlineCause(extension.Limit, parentIsTestContext)
 	}
 
 	// Cap at the parent context's deadline if it's earlier than our timeout.
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
+		deadlineCause = testcontextDeadlineCause(extension.Limit, parentIsTestContext)
 	}
 
 	effectiveTimeout := max(0, time.Until(deadline))
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
 
-	report := timeoutReport{effectiveTimeout: effectiveTimeout}
+	report := timeoutReport{
+		effectiveTimeout:    effectiveTimeout,
+		configuredTimeout:   cfg.totalTimeout,
+		attemptTimeout:      cfg.attemptTimeout,
+		testExtensionReport: extension.Report,
+		deadlineCause:       deadlineCause,
+	}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
 		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			report.reportAttemptErrors(tb)
-			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
+			failContextCanceled(tb, report, funcName, err)
 			return
 		}
 
@@ -131,7 +139,9 @@ func run(
 		t := &T{tb: tb, ctx: attemptCtx}
 
 		// Run attempt.
+		attemptStart := time.Now()
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
+		report.recordAttemptDuration(time.Since(attemptStart))
 		attemptCancel()
 		if res.panicVal != nil {
 			panic(res.panicVal) // propagate to caller
@@ -165,13 +175,15 @@ func run(
 
 		// Parent context was canceled during the attempt (not our deadline).
 		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			report.reportAttemptErrors(tb)
-			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
+			failContextCanceled(tb, report, funcName, err)
 			return
 		}
 
 		// Our deadline expired.
 		if deadlineReached(deadline) {
+			if deadlineCause != "" {
+				extension.SuppressCleanupReport()
+			}
 			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
 			return
 		}
@@ -184,6 +196,22 @@ func run(
 		// Wait for pollInterval, or context is canceled or deadline is reached.
 		sleep(awaitCtx, deadline, cfg.pollInterval)
 	}
+}
+
+func failContextCanceled(tb testing.TB, report timeoutReport, funcName string, err error) {
+	tb.Helper()
+	report.reportAttemptErrors(tb)
+	tb.Fatalf("%v", fmt.Errorf("%s: context canceled before condition was satisfied: %w", funcName, err))
+}
+
+func testcontextDeadlineCause(limit string, parentIsTestContext bool) string {
+	if limit != "" {
+		return limit
+	}
+	if parentIsTestContext {
+		return "test context deadline"
+	}
+	return "parent context deadline"
 }
 
 // attemptResult describes how an attempt terminated. Exactly one of the

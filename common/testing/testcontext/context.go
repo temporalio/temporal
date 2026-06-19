@@ -2,6 +2,8 @@ package testcontext
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -15,6 +17,9 @@ const (
 	defaultTimeout        = 90 * time.Second
 	defaultMaxTestTimeout = 2 * time.Minute
 	testNameMetadataKey   = "temporal-test-name"
+
+	deadlineLimitTestContextCap = "test context extension cap"
+	deadlineLimitGoTestTimeout  = "go test timeout"
 )
 
 type contextStore struct {
@@ -38,13 +43,21 @@ type contextDecorator struct {
 	decorate func(context.Context) context.Context
 }
 
+type extensionGrant struct {
+	duration time.Duration
+	elapsed  time.Duration
+}
+
 // Extension describes the effect of an EnsureRemaining call.
 type Extension struct {
 	Deadline time.Time
 	Granted  time.Duration
+	Report   string
+	Limit    string
 
 	currentContext context.Context
 	contexts       []context.Context
+	state          *contextState
 }
 
 // AppliesTo reports whether ctx is the test-scoped context observed by
@@ -61,6 +74,13 @@ func (e Extension) AppliesTo(ctx context.Context) bool {
 // Context returns the current test-scoped context after EnsureRemaining.
 func (e Extension) Context() context.Context {
 	return e.currentContext
+}
+
+// SuppressCleanupReport marks the timeout as already reported.
+func (e Extension) SuppressCleanupReport() {
+	if e.state != nil {
+		e.state.markTimeoutReported()
+	}
 }
 
 // DefaultTimeout returns the effective default timeout for test-scoped contexts.
@@ -116,14 +136,19 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 }
 
 type contextState struct {
-	mu                sync.Mutex
-	ctx               context.Context
-	contexts          []context.Context
-	cancels           []context.CancelFunc
-	testStart         time.Time
-	originalTimeout   time.Duration
-	decorators        map[any]struct{}
-	orderedDecorators []contextDecorator
+	mu                      sync.Mutex
+	ctx                     context.Context
+	contexts                []context.Context
+	cancels                 []context.CancelFunc
+	testStart               time.Time
+	originalTimeout         time.Duration
+	decorators              map[any]struct{}
+	orderedDecorators       []contextDecorator
+	extensionGrants         []extensionGrant
+	extensionDenied         int
+	extensionRequestedTotal time.Duration
+	deadlineLimit           string
+	timeoutReported         bool
 }
 
 func getContextState(tb testing.TB, timeout time.Duration) *contextState {
@@ -141,7 +166,7 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		originalTimeout: timeout,
 		decorators:      make(map[any]struct{}),
 	}
-	st.setDeadline(tb, st.testStart.Add(timeout))
+	st.setDeadline(tb, st.testStart.Add(timeout), "")
 	testContexts.byTest[tb] = st
 
 	tb.Cleanup(func() {
@@ -150,8 +175,8 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		testContexts.Lock()
 		delete(testContexts.byTest, tb)
 		testContexts.Unlock()
-		if err == context.DeadlineExceeded {
-			tb.Errorf("test exceeded timeout of %v", st.currentTimeout())
+		if errors.Is(err, context.DeadlineExceeded) && st.markTimeoutReported() {
+			tb.Errorf("%v", st.timeoutExceededError(err))
 		}
 	})
 	return st
@@ -195,19 +220,31 @@ func (s *contextState) ensureRemainingUntil(tb testing.TB, target time.Time) Ext
 		return s.extension(currentDeadline, 0)
 	}
 
+	s.extensionRequestedTotal += requested
+	limit := ""
 	capDeadline := s.testStart.Add(max(maxTestTimeout(), s.originalTimeout))
 	if capDeadline.Before(target) {
 		target = capDeadline
+		limit = deadlineLimitTestContextCap
 	}
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(target) {
 		target = goTestDeadline
+		limit = deadlineLimitGoTestTimeout
 	}
 	granted := target.Sub(currentDeadline)
 	if granted <= 0 {
+		if limit != "" {
+			s.deadlineLimit = limit
+		}
+		s.extensionDenied++
 		return s.extension(currentDeadline, 0)
 	}
 
-	s.setDeadline(tb, target)
+	s.extensionGrants = append(s.extensionGrants, extensionGrant{
+		duration: granted,
+		elapsed:  time.Since(s.testStart),
+	})
+	s.setDeadline(tb, target, limit)
 	return s.extension(target, granted)
 }
 
@@ -215,8 +252,11 @@ func (s *contextState) extension(deadline time.Time, granted time.Duration) Exte
 	return Extension{
 		Deadline:       deadline,
 		Granted:        granted,
+		Report:         s.extensionReportLocked(),
+		Limit:          s.deadlineLimit,
 		currentContext: s.ctx,
 		contexts:       append([]context.Context(nil), s.contexts...),
+		state:          s,
 	}
 }
 
@@ -267,9 +307,9 @@ func (s *contextState) err() error {
 	return s.ctx.Err()
 }
 
-func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) {
+func (s *contextState) setDeadline(tb testing.TB, deadline time.Time, limit string) {
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
-		deadline = goTestDeadline
+		limit = deadlineLimitGoTestTimeout
 	}
 
 	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
@@ -283,6 +323,7 @@ func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) {
 	s.ctx = ctx
 	s.contexts = append(s.contexts, ctx)
 	s.cancels = append(s.cancels, cancel)
+	s.deadlineLimit = limit
 }
 
 func (s *contextState) cancel() {
@@ -293,14 +334,89 @@ func (s *contextState) cancel() {
 	}
 }
 
-func (s *contextState) currentTimeout() time.Duration {
+func (s *contextState) timeoutExceededError(err error) error {
+	return fmt.Errorf("%w: %s", err, s.timeoutExceededMessage())
+}
+
+func (s *contextState) markTimeoutReported() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.timeoutReported {
+		return false
+	}
+	s.timeoutReported = true
+	return true
+}
+
+func (s *contextState) timeoutExceededMessage() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	currentTimeout := s.originalTimeout
 	if deadline, ok := s.ctx.Deadline(); ok {
-		return deadline.Sub(s.testStart)
+		currentTimeout = deadline.Sub(s.testStart)
 	}
-	return s.originalTimeout
+	if s.deadlineLimit == deadlineLimitGoTestTimeout {
+		return s.withExtensionReportLocked(fmt.Sprintf("test exceeded go test timeout before test context timeout of %v", reportDuration(s.originalTimeout)))
+	}
+	if currentTimeout <= s.originalTimeout {
+		return s.withExtensionReportLocked(fmt.Sprintf("test exceeded timeout of %v", reportDuration(s.originalTimeout)))
+	}
+	if currentTimeout-s.originalTimeout < s.extensionRequestedTotal {
+		return s.withExtensionReportLocked(fmt.Sprintf(
+			"test exceeded test context extension cap of %v (originally %v, extensions requested total %v)",
+			reportDuration(maxTestTimeout()),
+			reportDuration(s.originalTimeout),
+			reportDuration(s.extensionRequestedTotal),
+		))
+	}
+	return s.withExtensionReportLocked(fmt.Sprintf("test exceeded extended timeout of %v (originally %v)", reportDuration(currentTimeout), reportDuration(s.originalTimeout)))
+}
+
+func (s *contextState) withExtensionReportLocked(message string) string {
+	if report := s.extensionReportLocked(); report != "" {
+		return message + "\n" + report
+	}
+	return message
+}
+
+func (s *contextState) extensionReportLocked() string {
+	if len(s.extensionGrants) == 0 && s.extensionDenied == 0 {
+		return ""
+	}
+	if len(s.extensionGrants) == 0 {
+		return contextExtensionDeniedMessage(s.extensionDenied)
+	}
+	var total time.Duration
+	for _, grant := range s.extensionGrants {
+		total += grant.duration
+	}
+	message := fmt.Sprintf("ctx extensions   = %d (+%v total)", len(s.extensionGrants), reportDuration(total))
+	for i, grant := range s.extensionGrants {
+		message += fmt.Sprintf("\n  %d. +%v after %v", i+1, reportDuration(grant.duration), reportDuration(grant.elapsed))
+	}
+	if s.extensionDenied > 0 {
+		message += fmt.Sprintf("\n%s", contextExtensionDeniedMessage(s.extensionDenied))
+	}
+	return message
+}
+
+func contextExtensionDeniedMessage(count int) string {
+	if count == 1 {
+		return "1 context extension denied"
+	}
+	return fmt.Sprintf("%d context extensions denied", count)
+}
+
+func reportDuration(d time.Duration) string {
+	if d > -time.Millisecond && d < time.Millisecond {
+		rounded := d.Round(time.Microsecond)
+		if rounded == 0 {
+			return "0µs"
+		}
+		return rounded.String()
+	}
+	return d.Round(time.Millisecond).String()
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
