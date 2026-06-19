@@ -48,10 +48,9 @@ func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.T
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -60,25 +59,25 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_san_diego",
 	})
 	s.NoError(err)
 	nsID := descResp.GetNamespaceInfo().GetId()
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace: "ns_name_san_diego",
 	})
 	s.NoError(err)
 	s.Equal("ns_name_san_diego-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
 
-	descResp2, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp2, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id: nsID,
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
@@ -92,10 +91,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour))
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -104,26 +102,26 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_san_diego",
 	})
 	s.NoError(err)
 	nsID := descResp.GetNamespaceInfo().GetId()
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace:            "ns_name_san_diego",
 		NamespaceDeleteDelay: durationpb.New(0),
 	})
 	s.NoError(err)
 	s.Equal("ns_name_san_diego-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
 
-	descResp2, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp2, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id: nsID,
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
@@ -137,10 +135,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -149,25 +146,25 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_san_diego",
 	})
 	s.NoError(err)
 	nsID := descResp.GetNamespaceInfo().GetId()
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		NamespaceId: nsID,
 	})
 	s.NoError(err)
 	s.Equal("ns_name_san_diego-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
 
-	descResp2, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp2, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id: nsID,
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
@@ -181,10 +178,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -193,13 +189,13 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_san_diego",
 	})
 	s.NoError(err)
 	nsID := descResp.GetNamespaceInfo().GetId()
 
-	_, err = env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	_, err = env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace:   "ns_name_san_diego",
 		NamespaceId: nsID,
 	})
@@ -208,10 +204,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_seattle",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -220,7 +215,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_seattle",
 	})
 	s.NoError(err)
@@ -230,7 +225,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	var executions []*commonpb.WorkflowExecution
 	for i := range 100 {
 		wid := "wf_id_" + strconv.Itoa(i)
-		resp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    "ns_name_seattle",
 			WorkflowId:   wid,
@@ -246,27 +241,27 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 
 	// Terminate some workflow executions.
 	for _, execution := range executions[:30] {
-		_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         "ns_name_seattle",
 			WorkflowExecution: execution,
 		})
 		s.NoError(err)
 	}
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace: "ns_name_seattle",
 	})
 	s.NoError(err)
 	s.Equal("ns_name_seattle-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
 
-	descResp2, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp2, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id: nsID,
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
@@ -275,7 +270,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 		}
 
 		for _, execution := range executions {
-			_, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: "ns_name_seattle",
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: execution.GetWorkflowId(),
@@ -291,10 +286,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	retention := 24 * time.Hour
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_los_angeles",
 		Description:                      "Namespace to delete",
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
@@ -303,7 +297,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	})
 	s.NoError(err)
 
-	descResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_los_angeles",
 	})
 	s.NoError(err)
@@ -314,7 +308,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	var executions []*commonpb.WorkflowExecution
 	for i := range 10 {
 		wid := "wf_id_" + strconv.Itoa(i)
-		resp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    "ns_name_los_angeles",
 			WorkflowId:   wid,
@@ -337,7 +331,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 			env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 		)
 
-		err = env.GetTestCluster().ExecutionManager().DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+		err = env.GetTestCluster().ExecutionManager().DeleteWorkflowExecution(s.Context(), &persistence.DeleteWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: nsID,
 			WorkflowID:  execution.GetWorkflowId(),
@@ -347,20 +341,20 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 		s.NoError(err)
 	}
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace: "ns_name_los_angeles",
 	})
 	s.NoError(err)
 	s.Equal("ns_name_los_angeles-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
 
-	descResp2, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	descResp2, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id: nsID,
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 
 	s.Eventually(func() bool {
-		_, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
@@ -369,7 +363,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 		}
 
 		for _, execution := range executions {
-			_, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: "ns_name_los_angeles",
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: execution.GetWorkflowId(),
@@ -391,9 +385,8 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_CrossNamespaceChild() {
 func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	tv := testvars.New(s.T())
 	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.ProtectedNamespaces, []string{tv.NamespaceName().String()}))
-	ctx := s.Context()
 
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        tv.NamespaceName().String(),
 		Description:                      tv.Any().String(),
 		WorkflowExecutionRetentionPeriod: tv.Any().InfiniteTimeout(),
@@ -402,7 +395,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	})
 	s.NoError(err)
 
-	delResp, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	delResp, err := env.OperatorClient().DeleteNamespace(s.Context(), &operatorservice.DeleteNamespaceRequest{
 		Namespace: tv.NamespaceName().String(),
 	})
 	s.Error(err)
@@ -415,10 +408,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 
 func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 	env := s.newTestEnv()
-	ctx := s.Context()
 
 	nsName := "ns_weak_" + uuid.NewString()
-	_, err := env.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        nsName,
 		Description:                      "weak consistency test",
 		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
@@ -432,7 +424,7 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 	// Cache is populated by the periodic refresh, so the weak path should eventually succeed.
 	var weakResp *workflowservice.DescribeNamespaceResponse
 	s.Eventually(func() bool {
-		weakResp, err = env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		weakResp, err = env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Namespace:       nsName,
 			WeakConsistency: true,
 		})
@@ -443,7 +435,7 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 		return err == nil
 	}, 5*testcore.NamespaceCacheRefreshInterval, 100*time.Millisecond) //nolint:forbidigo
 
-	strongResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	strongResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: nsName,
 	})
 	s.NoError(err)
@@ -453,7 +445,7 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 
 	// Lookup by ID should also work via the weak path.
 	nsID := strongResp.GetNamespaceInfo().GetId()
-	weakByIDResp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	weakByIDResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Id:              nsID,
 		WeakConsistency: true,
 	})
@@ -461,7 +453,7 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 	s.Equal(nsName, weakByIDResp.GetNamespaceInfo().GetName())
 
 	// Non-existent namespace should return NamespaceNotFound.
-	_, err = env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	_, err = env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 		Namespace:       "ns_does_not_exist_" + uuid.NewString(),
 		WeakConsistency: true,
 	})
