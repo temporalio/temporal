@@ -73,14 +73,15 @@ type TestEnv struct {
 
 	Logger log.Logger
 
-	cluster        *TestCluster
-	nsName         namespace.Name
-	nsID           namespace.ID
-	taskPoller     *taskpoller.TaskPoller
-	t              *testing.T
-	tv             *testvars.TestVars
-	ctx            context.Context
-	dedicatedGuard *dedicatedClusterGuard
+	cluster          *TestCluster
+	nsName           namespace.Name
+	nsID             namespace.ID
+	taskPoller       *taskpoller.TaskPoller
+	t                *testing.T
+	tv               *testvars.TestVars
+	ctx              context.Context
+	dedicatedGuard   *dedicatedClusterGuard
+	allowGlobalHooks bool
 
 	sdkClientOnce sync.Once
 	sdkClient     sdkclient.Client
@@ -97,6 +98,7 @@ type testOptions struct {
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	testHooks                []testhooks.Hook
+	hasGlobalTestHook        bool
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 }
@@ -245,7 +247,7 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 func WithTestHook(hook testhooks.Hook) TestOption {
 	return func(o *testOptions) {
 		if hook.Scope() == testhooks.ScopeGlobal {
-			o.dedicatedCluster = true
+			o.hasGlobalTestHook = true
 		}
 		o.testHooks = append(o.testHooks, hook)
 	}
@@ -261,6 +263,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
+	}
+	if options.hasGlobalTestHook && !testClusterRouter.hasSuiteScoped(t) {
+		options.dedicatedCluster = true
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
@@ -315,6 +320,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
+		allowGlobalHooks:   testClusterRouter.hasSuiteScoped(t),
 	}
 	t.Cleanup(func() {
 		defer func() { dedicatedGuard = nil }()
@@ -358,14 +364,14 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 //
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
-// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+// - For global hooks: requires a dedicated cluster, except for suite-scoped legacy clusters.
 func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared {
+		if e.isShared && !e.allowGlobalHooks {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
