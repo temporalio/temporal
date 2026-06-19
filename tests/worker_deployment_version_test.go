@@ -74,7 +74,6 @@ func TestDeploymentVersionSuite(t *testing.T) {
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
-
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 1),
@@ -91,6 +90,11 @@ func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testco
 
 		// Test reactivation cache for all versioning tests.
 		testcore.WithDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("v3").WithBuildID("b")
+		}),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
@@ -1039,7 +1043,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 	s.NoError(err)
 
 	// new version with a different registered task-queue
-	tv2 := env.Tv().WithBuildIDNumber(2).WithTaskQueue(testvars.New(s.T()).Any().String())
+	tv2 := env.Tv().WithBuildIDNumber(2).WithTaskQueue(env.Tv().Any().String())
 	s.startVersionWorkflow(s.Context(), env, tv2)
 
 	// Cancel pollers on task_queue_1 to increase the backlog of tasks
@@ -2434,12 +2438,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_ReactivateVersionOnPinned() {
-	env := s.newTestEnv(
-		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
-		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
-			return tv.WithDeploymentSeries("v3").WithBuildID("b")
-		}),
-	)
+	env := s.newTestEnv()
 	tv1 := env.Tv()
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
