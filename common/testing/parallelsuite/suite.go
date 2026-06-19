@@ -46,7 +46,7 @@ type Suite[T testingSuite] struct {
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-// ctx overrides the suite's context; nil means use the default (lazy testcontext.New).
+// ctx overrides the suite's context; nil means use the default (lazy testcontext.For).
 //
 //nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
 func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
@@ -88,7 +88,7 @@ func (s *Suite[T]) T() *testing.T {
 func (s *Suite[T]) Context() context.Context {
 	s.ctxOnce.Do(func() {
 		if s.ctx == nil {
-			s.ctx = testcontext.New(s.T())
+			s.ctx = testcontext.For(s.T())
 		}
 	})
 	return s.ctx
