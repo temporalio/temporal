@@ -66,7 +66,7 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
-			return tv.WithDeploymentSeries("worker_deployment").WithBuildID("1")
+			return tv.WithDeploymentSeries("wv").WithBuildID("b")
 		}),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
@@ -2768,7 +2768,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 				Name:       env.Tv().DeploymentSeries(),
 				CreateTime: v1CreateTime,
 				RoutingConfig: &deploymentpb.RoutingConfig{
-					CurrentVersion:                      env.Tv().DeploymentVersionString(),
+					CurrentVersion:                      tv1.DeploymentVersionString(),
 					CurrentVersionChangedTime:           newCurrentV1UpdateTime,
 					RampingVersion:                      "",
 					RampingVersionPercentage:            0,
@@ -2777,7 +2777,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 				},
 				VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 					{
-						Version:              env.Tv().DeploymentVersionString(),
+						Version:              tv1.DeploymentVersionString(),
 						CreateTime:           v1CreateTime,
 						DrainageInfo:         nil,
 						RoutingUpdateTime:    newCurrentV1UpdateTime,
@@ -2818,7 +2818,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 		a := require.New(t)
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
-			Version:   env.Tv().DeploymentVersionString(),
+			Version:   tv1.DeploymentVersionString(),
 		})
 		a.NoError(err)
 		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
@@ -2846,7 +2846,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 				},
 				VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 					{
-						Version:              env.Tv().DeploymentVersionString(),
+						Version:              tv1.DeploymentVersionString(),
 						CreateTime:           v1CreateTime,
 						RoutingUpdateTime:    newCurrentV3UpdateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
