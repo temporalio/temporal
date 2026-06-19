@@ -2123,11 +2123,8 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
 
-	// Use shorter, explicit deployment series names to avoid truncation issues
-	// Include workflow version in deployment name to avoid conflicts in parallel tests
-	deploymentName := fmt.Sprintf("test-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
-	tv1 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-task-queue") // Pinned target (INACTIVE)
-	tv2 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-task-queue") // Current version
+	tv1 := env.Tv().WithBuildIDNumber(1) // Pinned target (INACTIVE)
+	tv2 := env.Tv().WithBuildIDNumber(2) // Current version
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
@@ -2244,8 +2241,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
 
-	deploymentName := fmt.Sprintf("test-start-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
-	tv1 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue")
+	tv1 := env.Tv()
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
@@ -2327,9 +2323,8 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned_WithConflictPolicy() {
 	env := s.newTestEnv()
 
-	deploymentName := fmt.Sprintf("test-start-conflict-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
-	tv1 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-conflict-task-queue")
-	tv2 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-conflict-task-queue")
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := env.Tv().WithBuildIDNumber(2)
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
@@ -2527,11 +2522,8 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
 	env := s.newTestEnv()
 
-	// Use shorter, explicit deployment series names to avoid truncation issues
-	// Include workflow version in deployment name to avoid conflicts in parallel tests
-	deploymentName := fmt.Sprintf("test-reset-reactivate-wfv%d", workerdeployment.VersionDataRevisionNumber)
-	tv1 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-reset-task-queue") // Pinned target (INACTIVE)
-	tv2 := env.Tv().WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-reset-task-queue") // Current version
+	tv1 := env.Tv().WithBuildIDNumber(1) // Pinned target (INACTIVE)
+	tv2 := env.Tv().WithBuildIDNumber(2) // Current version
 
 	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
 	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
