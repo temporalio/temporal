@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
@@ -252,6 +253,7 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 // NewEnv creates a new test environment with access to a Temporal cluster.
 func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
+	setupStart := time.Now()
 
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
@@ -302,6 +304,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
+
+	// Extend the test context deadline to account for environment setup time.
+	testcontext.EnsureRemaining(t, testcontext.DefaultTimeout()+time.Since(setupStart))
 
 	env := &TestEnv{
 		FunctionalTestBase: base,
