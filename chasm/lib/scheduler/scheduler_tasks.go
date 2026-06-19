@@ -53,7 +53,7 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
-	scheduler.eventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
+	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
 		Counter(metrics.ScheduleIdleTask.Name()).
@@ -214,7 +214,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 
-			s.eventLog(ctx).LogEvent(ctx,
+			s.getOrCreateEventLog(ctx).LogEvent(ctx,
 				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
 			// Now that running workflow state has been refreshed, scheduler tasks can be

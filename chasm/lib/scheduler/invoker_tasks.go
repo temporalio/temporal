@@ -435,7 +435,7 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 		Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
 		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
-	invoker.eventLog(ctx).LogEvent(ctx, "processBufferTask executed")
+	invoker.getOrCreateEventLog(ctx).LogEvent(ctx, "processBufferTask executed")
 
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()

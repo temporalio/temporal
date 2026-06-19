@@ -50,7 +50,7 @@ func (g *Generator) Generate(ctx chasm.MutableContext) {
 
 // scheduleTask schedules a GeneratorTask at the given time.
 func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
-	g.eventLog(ctx).LogEvent(ctx,
+	g.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("scheduled generatorTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
