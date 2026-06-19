@@ -20,18 +20,18 @@ const (
 type ObjectLeakCheck struct {
 	objects         []trackedObject
 	roots           int
-	excludes        patterns
+	expected        patterns
 	pruneTypes      patterns
 	gcSettleTimeout time.Duration
 }
 
 type Option func(*ObjectLeakCheck) error
 
-// WithExclude skips retained-object failures whose reflected path or type name
-// matches pattern. A trailing '*' matches any suffix.
-func WithExclude(pattern string) Option {
+// WithExpected marks retained objects whose reflected path or type name matches
+// pattern as expected. A trailing '*' matches any suffix.
+func WithExpected(pattern string) Option {
 	return func(t *ObjectLeakCheck) error {
-		t.excludes = append(t.excludes, newPattern(pattern))
+		t.expected = append(t.expected, newPattern(pattern))
 		return nil
 	}
 }
@@ -80,8 +80,9 @@ func (t *ObjectLeakCheck) Track(root any) {
 }
 
 // Check settles GC, then returns a full retained-object report and an error for
-// retained objects not covered by exclusions, exclusions that no longer match
-// any tracked object, or prune rules that did not match during tracking.
+// retained objects not covered by expected patterns, expected patterns that no
+// longer match any tracked object, or prune rules that did not match during
+// tracking.
 func (t *ObjectLeakCheck) Check() (string, error) {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
@@ -104,13 +105,13 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		runtimedebug.FreeOSMemory()
 		runtime.Gosched()
 
-		report = newReport(t.objects, t.roots, t.excludes, t.pruneTypes)
+		report = newReport(t.objects, t.roots, t.expected, t.pruneTypes)
 		err = report.failures()
 		now := time.Now()
 
 		// Wait for the report totals to stop changing instead of returning on
 		// the first passing report. This lets delayed cleanup callbacks remove
-		// both unexpected objects and now-stale exclusions before we decide.
+		// both unexpected objects and now-stale expected patterns before we decide.
 		if totals := report.totals(); !haveLastTotals || totals != lastTotals {
 			lastTotals = totals
 			haveLastTotals = true

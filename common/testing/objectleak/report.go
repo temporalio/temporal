@@ -9,33 +9,33 @@ import (
 )
 
 type report struct {
-	unexpectedObjects              []objectGroup
-	expectedObjects                []objectGroup
-	trackedRoots                   int
-	totalRetainedObservations      int
-	totalRetainedObjects           int
-	expectedRetainedObservations   int
-	expectedRetainedObjects        int
-	unexpectedRetainedObservations int
-	unexpectedRetainedObjects      int
-	unmatchedExcludes              []string
-	unmatchedPrunes                []string
+	unexpectedObjects         []objectGroup
+	expectedObjects           []objectGroup
+	trackedRoots              int
+	totalRetainedPaths        int
+	totalRetainedObjects      int
+	expectedRetainedPaths     int
+	expectedRetainedObjects   int
+	unexpectedRetainedPaths   int
+	unexpectedRetainedObjects int
+	unmatchedExpected         []string
+	unmatchedPrunes           []string
 }
 
 type objectGroup struct {
-	path         string
-	typeName     string
-	observations int
-	addresses    map[uintptr]struct{}
+	path      string
+	typeName  string
+	paths     int
+	addresses map[uintptr]struct{}
 }
 
-func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pruneTypes patterns) report {
+func newReport(objects []trackedObject, trackedRoots int, expected patterns, pruneTypes patterns) report {
 	report := report{
 		trackedRoots: trackedRoots,
 	}
 
-	// Matching mutates pattern.matched for stale-exclusion detection.
-	activeExclusions := slices.Clone(excludes)
+	// Matching mutates pattern.matched for stale-expected pattern detection.
+	activeExpected := slices.Clone(expected)
 
 	type groupKey struct {
 		path     string
@@ -54,15 +54,15 @@ func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pru
 			continue
 		}
 
-		excludedBy := activeExclusions.matchObject(obj)
-		report.totalRetainedObservations++
+		expectedBy := activeExpected.matchObject(obj)
+		report.totalRetainedPaths++
 		retainedAddresses[obj.addr] = struct{}{}
-		expected := len(excludedBy) > 0
+		expected := len(expectedBy) > 0
 		if expected {
-			report.expectedRetainedObservations++
+			report.expectedRetainedPaths++
 			expectedAddresses[obj.addr] = struct{}{}
 		} else {
-			report.unexpectedRetainedObservations++
+			report.unexpectedRetainedPaths++
 			unexpectedAddresses[obj.addr] = struct{}{}
 		}
 
@@ -80,16 +80,16 @@ func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pru
 			}
 			groupByKey[key] = group
 		}
-		group.observations++
+		group.paths++
 		group.addresses[obj.addr] = struct{}{}
 	}
 	report.totalRetainedObjects = len(retainedAddresses)
 	report.expectedRetainedObjects = len(expectedAddresses)
 	report.unexpectedRetainedObjects = len(unexpectedAddresses)
 
-	// Exclusions that never matched any tracked object are stale and should be
-	// removed with the fix that made them unnecessary.
-	report.unmatchedExcludes = activeExclusions.unmatched()
+	// Expected patterns that never matched any tracked object are stale and
+	// should be removed with the fix that made them unnecessary.
+	report.unmatchedExpected = activeExpected.unmatched()
 	report.unmatchedPrunes = pruneTypes.unmatched()
 
 	// Keep report output stable across map iteration order and repeated runs.
@@ -105,7 +105,7 @@ func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pru
 			if c := cmp.Compare(b.objectCount(), a.objectCount()); c != 0 {
 				return c
 			}
-			if c := cmp.Compare(b.observations, a.observations); c != 0 {
+			if c := cmp.Compare(b.paths, a.paths); c != 0 {
 				return c
 			}
 			if c := cmp.Compare(a.path, b.path); c != 0 {
@@ -116,21 +116,21 @@ func newReport(objects []trackedObject, trackedRoots int, excludes patterns, pru
 	}
 	sortGroups(report.unexpectedObjects)
 	sortGroups(report.expectedObjects)
-	slices.Sort(report.unmatchedExcludes)
+	slices.Sort(report.unmatchedExpected)
 	slices.Sort(report.unmatchedPrunes)
 	return report
 }
 
 func (r report) failures() error {
 	var failures []error
-	for _, group := range r.unexpectedObjects {
-		failures = append(failures, fmt.Errorf("retained %s at %s", formatCount(group.objectCount(), "object"), group.name()))
+	if len(r.unexpectedObjects) > 0 {
+		failures = append(failures, errors.New("unexpected retained objects"))
 	}
-	for _, pattern := range r.unmatchedExcludes {
-		failures = append(failures, fmt.Errorf("object exclusion %q did not match any object", pattern))
+	if len(r.unmatchedExpected) > 0 {
+		failures = append(failures, errors.New("stale expected patterns"))
 	}
-	for _, pattern := range r.unmatchedPrunes {
-		failures = append(failures, fmt.Errorf("object prune %q did not match any type", pattern))
+	if len(r.unmatchedPrunes) > 0 {
+		failures = append(failures, errors.New("stale prunes"))
 	}
 	return errors.Join(failures...)
 }
@@ -139,7 +139,7 @@ func (r report) totals() [3]int {
 	return [3]int{
 		r.totalRetainedObjects,
 		r.unexpectedRetainedObjects,
-		len(r.unmatchedExcludes) + len(r.unmatchedPrunes),
+		len(r.unmatchedExpected) + len(r.unmatchedPrunes),
 	}
 }
 
@@ -162,10 +162,10 @@ func (r report) string() string {
 	out.WriteByte('\n')
 	writeGroups("expected retained objects", r.expectedObjects)
 
-	if len(r.unmatchedExcludes) > 0 {
-		out.WriteString("\nstale exclusions:\n")
+	if len(r.unmatchedExpected) > 0 {
+		out.WriteString("\nstale expected patterns:\n")
 	}
-	for _, pattern := range r.unmatchedExcludes {
+	for _, pattern := range r.unmatchedExpected {
 		fmt.Fprintf(&out, "  %s\n", pattern)
 	}
 
@@ -183,10 +183,10 @@ func (r report) writeSummary(out *strings.Builder) {
 	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
 	fmt.Fprintf(
 		out,
-		"retained observations: %d total, %d expected, %d unexpected\n",
-		r.totalRetainedObservations,
-		r.expectedRetainedObservations,
-		r.unexpectedRetainedObservations,
+		"retained paths: %d total, %d expected, %d unexpected\n",
+		r.totalRetainedPaths,
+		r.expectedRetainedPaths,
+		r.unexpectedRetainedPaths,
 	)
 	fmt.Fprintf(
 		out,
@@ -195,8 +195,6 @@ func (r report) writeSummary(out *strings.Builder) {
 		r.expectedRetainedObjects,
 		r.unexpectedRetainedObjects,
 	)
-	fmt.Fprintf(out, "stale exclusions: %d\n", len(r.unmatchedExcludes))
-	fmt.Fprintf(out, "stale prunes: %d", len(r.unmatchedPrunes))
 }
 
 func (g objectGroup) name() string {
@@ -212,10 +210,10 @@ func (g objectGroup) objectCount() int {
 
 func (g objectGroup) counts() string {
 	objects := g.objectCount()
-	if g.observations == objects {
+	if g.paths == objects {
 		return formatCount(objects, "object")
 	}
-	return fmt.Sprintf("%s, %s", formatCount(g.observations, "observation"), formatCount(objects, "object"))
+	return fmt.Sprintf("%s, %s", formatCount(g.paths, "path"), formatCount(objects, "object"))
 }
 
 func formatCount(count int, label string) string {
