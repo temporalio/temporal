@@ -76,6 +76,22 @@ func TestIdleTask_Execute(t *testing.T) {
 	require.True(t, sched.Closed)
 }
 
+func TestIdleTask_ExecuteInitializesMissingEventLog(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	sched.EventLog = chasm.NewEmptyField[*scheduler.EventLog]()
+
+	handler := newIdleHandler(10 * time.Minute)
+	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
+	require.NoError(t, err)
+	require.True(t, sched.Closed)
+
+	eventLog := sched.EventLog.Get(ctx)
+	require.Len(t, eventLog.Events, 1)
+	require.Equal(t, "schedule closed from idle timer", eventLog.Events[0].Message)
+}
+
 func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()

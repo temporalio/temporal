@@ -26,6 +26,46 @@ func NewEventLog(ctx chasm.MutableContext) *EventLog {
 	}
 }
 
+func (s *Scheduler) eventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := s.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	s.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (g *Generator) eventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := g.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	g.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (i *Invoker) eventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := i.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	i.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (b *Backfiller) eventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := b.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	b.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
 func (e *EventLog) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
