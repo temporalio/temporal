@@ -73,15 +73,14 @@ type TestEnv struct {
 
 	Logger log.Logger
 
-	cluster          *TestCluster
-	nsName           namespace.Name
-	nsID             namespace.ID
-	taskPoller       *taskpoller.TaskPoller
-	t                *testing.T
-	tv               *testvars.TestVars
-	ctx              context.Context
-	dedicatedGuard   *dedicatedClusterGuard
-	allowGlobalHooks bool
+	cluster        *TestCluster
+	nsName         namespace.Name
+	nsID           namespace.ID
+	taskPoller     *taskpoller.TaskPoller
+	t              *testing.T
+	tv             *testvars.TestVars
+	ctx            context.Context
+	dedicatedGuard *dedicatedClusterGuard
 
 	sdkClientOnce sync.Once
 	sdkClient     sdkclient.Client
@@ -97,8 +96,6 @@ type testOptions struct {
 	dedicatedReason          string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
-	testHooks                []testhooks.Hook
-	hasGlobalTestHook        bool
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 }
@@ -243,16 +240,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
-// WithTestHook injects a test hook for the duration of the test.
-func WithTestHook(hook testhooks.Hook) TestOption {
-	return func(o *testOptions) {
-		if hook.Scope() == testhooks.ScopeGlobal {
-			o.hasGlobalTestHook = true
-		}
-		o.testHooks = append(o.testHooks, hook)
-	}
-}
-
 // NewEnv creates a new test environment with access to a Temporal cluster.
 func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
@@ -263,9 +250,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
-	}
-	if options.hasGlobalTestHook && !testClusterRouter.hasSuiteScoped(t) {
-		options.dedicatedCluster = true
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 	if options.dedicatedReason != "" {
@@ -320,7 +304,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
-		allowGlobalHooks:   testClusterRouter.hasSuiteScoped(t),
 	}
 	t.Cleanup(func() {
 		defer func() { dedicatedGuard = nil }()
@@ -343,9 +326,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
-	}
-	for _, hook := range options.testHooks {
-		env.InjectHook(hook)
 	}
 
 	return env
@@ -371,7 +351,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !e.allowGlobalHooks {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")

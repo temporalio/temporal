@@ -1387,7 +1387,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching() {
-	env := s.newTestEnv(testcore.WithTestHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)))
+	env := s.newTestEnv()
+	env.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -1456,7 +1457,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 // TestSetWorkerDeploymentRampingVersion_UnversionedRamp_Batching verifies that the batching functionality works
 // when ramping unversioned.
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_UnversionedRamp_Batching() {
-	env := s.newTestEnv(testcore.WithTestHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)))
+	env := s.newTestEnv()
+	env.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -1639,7 +1641,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 }
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
-	env := s.newTestEnv(testcore.WithTestHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)))
+	env := s.newTestEnv()
+	env.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -2129,9 +2132,9 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues),
 		// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
 		testcore.WithDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations),
-		testcore.WithTestHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)),
-		testcore.WithTestHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)),
 	)
+	env.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize))
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500))
 
 	dn := env.Tv().DeploymentVersion().GetDeploymentName()
 	start := time.Now()
