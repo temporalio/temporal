@@ -3070,8 +3070,6 @@ func (s *DeploymentVersionSuite) getTaskQueueVersionData(
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	env := s.newTestEnv()
-
-	deploymentName := env.Tv().DeploymentSeries()
 	buildID := env.Tv().BuildID()
 	requestID := env.Tv().Any().String()
 	identity := env.Tv().Any().String()
@@ -3079,7 +3077,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	// First create the deployment
 	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: deploymentName,
+		DeploymentName: env.Tv().DeploymentSeries(),
 		RequestId:      env.Tv().Any().String(),
 	})
 	s.NoError(err)
@@ -3096,7 +3094,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	resp, err := env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		Identity:      identity,
@@ -3127,7 +3125,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		a := require.New(t)
 		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
 		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
@@ -3152,12 +3150,12 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		a.NoError(err)
 		var found *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
 		for _, d := range listResp.GetWorkerDeployments() {
-			if d.GetName() == deploymentName {
+			if d.GetName() == env.Tv().DeploymentSeries() {
 				found = d
 				break
 			}
 		}
-		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", deploymentName)
+		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", env.Tv().DeploymentSeries())
 		a.True(proto.Equal(&computepb.ComputeConfigSummary{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
 				"sg1": {
@@ -3170,14 +3168,12 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_TaskQueueInVersionInfo() {
 	env := s.newTestEnv()
-
-	deploymentName := env.Tv().DeploymentSeries()
 	buildID := env.Tv().BuildID()
 
 	// Create the deployment
 	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: deploymentName,
+		DeploymentName: env.Tv().DeploymentSeries(),
 		RequestId:      env.Tv().Any().String(),
 	})
 	s.NoError(err)
@@ -3186,7 +3182,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		RequestId: env.Tv().Any().String(),
@@ -3234,7 +3230,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 		a := require.New(t)
 		descDeployResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
 		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
@@ -3245,15 +3241,13 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() {
 	env := s.newTestEnv()
-
-	deploymentName := env.Tv().DeploymentSeries()
 	buildID := env.Tv().BuildID()
 	requestID := env.Tv().Any().String()
 
 	// First create the deployment
 	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: deploymentName,
+		DeploymentName: env.Tv().DeploymentSeries(),
 		RequestId:      env.Tv().Any().String(),
 	})
 	s.NoError(err)
@@ -3262,7 +3256,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() 
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		RequestId: requestID,
@@ -3273,7 +3267,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() 
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		RequestId: requestID,
@@ -3283,8 +3277,6 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() 
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists_DifferentRequestID() {
 	env := s.newTestEnv()
-
-	deploymentName := env.Tv().DeploymentSeries()
 	buildID := env.Tv().BuildID()
 	requestID1 := env.Tv().Any().String()
 	requestID2 := env.Tv().Any().String()
@@ -3292,7 +3284,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists
 	// First create the deployment
 	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: deploymentName,
+		DeploymentName: env.Tv().DeploymentSeries(),
 		RequestId:      env.Tv().Any().String(),
 	})
 	s.NoError(err)
@@ -3301,7 +3293,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		RequestId: requestID1,
@@ -3312,7 +3304,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        buildID,
 		},
 		RequestId: requestID2,
@@ -3402,12 +3394,10 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AutoCreatedBy
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersions() {
 	env := s.newTestEnv()
 
-	deploymentName := env.Tv().DeploymentSeries()
-
 	// First create the deployment
 	_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      env.Namespace().String(),
-		DeploymentName: deploymentName,
+		DeploymentName: env.Tv().DeploymentSeries(),
 		RequestId:      env.Tv().Any().String(),
 	})
 	s.NoError(err)
@@ -3432,7 +3422,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        tv1.BuildID(),
 		},
 		RequestId:     env.Tv().Any().String(),
@@ -3445,7 +3435,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 		Namespace: env.Namespace().String(),
 		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 			BuildId:        tv2.BuildID(),
 		},
 		RequestId:     env.Tv().Any().String(),
@@ -3458,7 +3448,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 		a := require.New(t)
 		descResp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
-			DeploymentName: deploymentName,
+			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
 		a.Len(descResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 2)
@@ -3580,12 +3570,11 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *DeploymentVersionSuite) {
 			env := s.newTestEnv()
-			deploymentName := env.Tv().DeploymentSeries()
 
 			// Create the deployment first
 			_, err := env.FrontendClient().CreateWorkerDeployment(s.Context(), &workflowservice.CreateWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
-				DeploymentName: deploymentName,
+				DeploymentName: env.Tv().DeploymentSeries(),
 				RequestId:      env.Tv().Any().String(),
 			})
 			s.NoError(err)
@@ -3593,7 +3582,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 			_, err = env.FrontendClient().CreateWorkerDeploymentVersion(s.Context(), &workflowservice.CreateWorkerDeploymentVersionRequest{
 				Namespace: env.Namespace().String(),
 				DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: deploymentName,
+					DeploymentName: env.Tv().DeploymentSeries(),
 					BuildId:        env.Tv().BuildID(),
 				},
 				RequestId:     env.Tv().Any().String(),
