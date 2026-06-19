@@ -372,7 +372,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 		a.NotNil(versionSummaries[0].GetVersion())
 		a.NotNil(versionSummaries[1].GetVersion())
 		a.Equal(versionSummaries[0].GetVersion(), secondVersion.DeploymentVersionString())
-		a.Equal(versionSummaries[1].GetVersion(), env.Tv().DeploymentVersionString()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Equal(versionSummaries[1].GetVersion(), firstVersion.DeploymentVersionString())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
