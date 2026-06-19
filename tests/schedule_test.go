@@ -2688,12 +2688,11 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 		Paused: true,
 	}
 
-	ctx := s.Context()
-	handle, err := s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	handle, err := s.SdkClient().ScheduleClient().Create(s.Context(), schedOpts)
 	s.NoError(err)
 	defer func() { _ = handle.Delete(context.Background()) }()
 
-	_, err = s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	_, err = s.SdkClient().ScheduleClient().Create(s.Context(), schedOpts)
 	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
 }
 
@@ -3824,7 +3823,6 @@ func (suite *ScheduleCreationRolloutPercentSuite) TestScheduleCreationRolloutPer
 		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerCreationRolloutPercent, 50),
 	)
 	s := testcore.NewEnv(t, opts...)
-	ctx := s.Context()
 	nsName := s.Namespace().String()
 	nsID := s.NamespaceID().String()
 
@@ -3848,7 +3846,7 @@ func (suite *ScheduleCreationRolloutPercentSuite) TestScheduleCreationRolloutPer
 	}
 
 	for _, sid := range []string{chasmSID, v1SID} {
-		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		_, err := s.FrontendClient().CreateSchedule(s.Context(), &workflowservice.CreateScheduleRequest{
 			Namespace:  nsName,
 			ScheduleId: sid,
 			Schedule:   mkSchedule(),
@@ -3861,7 +3859,7 @@ func (suite *ScheduleCreationRolloutPercentSuite) TestScheduleCreationRolloutPer
 	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
 	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
 	describeOnCHASM := func(sid string) error {
-		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(s.Context(), &schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		})
@@ -3881,7 +3879,7 @@ func (suite *ScheduleCreationRolloutPercentSuite) TestScheduleCreationRolloutPer
 	// takes a moment to be queryable after creation, so poll.
 	for _, sid := range []string{chasmSID, v1SID} {
 		require.Eventually(t, func() bool {
-			_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			_, err := s.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 				Namespace:  nsName,
 				ScheduleId: sid,
 			})
