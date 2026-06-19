@@ -5,6 +5,7 @@ package temporal.server.api.deployment.v1;
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/compute/v1/config.proto";
+import "temporal/api/compute/v1/validation.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -150,6 +151,9 @@ message VersionLocalState {
 
   // Cached compute config summary, kept in sync with the WCI on each compute config update.
   temporal.api.compute.v1.ComputeConfigSummary compute_config = 18;
+
+  // Cached WCI validation status, updated when WCI signals this version workflow.
+  temporal.api.compute.v1.WorkerDeploymentVersionValidationStatus validation_status = 19;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -233,6 +237,16 @@ message WorkerDeploymentVersionSummary {
   // Compute config summary for this version. Synced from the version workflow on each compute config update.
   // Also set by the deployment workflow at version creation time if a compute config was provided.
   temporal.api.compute.v1.ComputeConfigSummary compute_config = 13;
+
+  // WCI validation status for this version. Synced from the version workflow when WCI signals a status change.
+  temporal.api.compute.v1.WorkerDeploymentVersionValidationStatus validation_status = 14;
+}
+
+// Aggregates WCI validation status counts across all versions in a Worker Deployment.
+message WorkerDeploymentValidationSummary {
+  int32 connected_count = 1;
+  int32 failed_count = 2;
+  int32 unknown_count = 3;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -552,6 +566,8 @@ message WorkerDeploymentWorkflowMemo {
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
+  // Aggregated WCI validation status counts across all versions.
+  WorkerDeploymentValidationSummary validation_summary = 7;
 }
 
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
@@ -562,6 +578,8 @@ message WorkerDeploymentSummary {
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
   temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
+  // Aggregated WCI validation status counts across all versions.
+  WorkerDeploymentValidationSummary validation_summary = 7;
 }
 
 // Input for the activity that validates compute config scaling groups via

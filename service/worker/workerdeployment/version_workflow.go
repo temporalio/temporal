@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	computepb "go.temporal.io/api/compute/v1"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -226,6 +227,18 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.setStateChanged()
 		})
 	}
+
+	// Receive WCI validation status updates and propagate to the deployment workflow memo.
+	syncValidationStatusChannel := workflow.GetSignalChannel(ctx, wciiface.SignalSyncValidationStatus)
+	d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+
+		var vs wciiface.ValidationStatus
+		c.Receive(ctx, &vs)
+		d.VersionState.ValidationStatus = wciValidationStatusToProto(&vs)
+		d.syncSummary(ctx) // propagate updated ValidationStatus to deployment workflow
+	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
@@ -1056,6 +1069,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 		ComputeConfig:        s.ComputeConfig,
+		ValidationStatus:     s.ValidationStatus,
 	}
 }
 
