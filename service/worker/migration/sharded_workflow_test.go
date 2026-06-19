@@ -431,10 +431,10 @@ const childWorkerID = "test-sharded-child-worker"
 //
 // Two problems it solves:
 //
-//  1. The production child workflow accesses
-//     workflow.GetInfo(ctx).ParentWorkflowExecution.ID; this panics when the
-//     workflow has no parent (nil pointer dereference). childDirectRunner
-//     provides a real parent so ParentWorkflowExecution is non-nil.
+//  1. The production child signals its parent execution (checkpoint and
+//     progress rollups), which the nil-parent guard in run() skips when the
+//     child runs as root. childDirectRunner provides a real parent so
+//     ParentWorkflowExecution is non-nil and those signal paths execute.
 //
 //  2. env.SignalWorkflow targets the top-level execution (childDirectRunner),
 //     not the child execution. childDirectRunner therefore relays the

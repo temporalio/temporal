@@ -250,7 +250,7 @@ type shardedParentState struct {
 	liveExecs map[string]workflow.Execution
 
 	// liveRunIDs is the insertion-ordered slice of live child run IDs.
-	// wireCount tracks how many of these have been wired into the
+	// wiredCount tracks how many of these have been wired into the
 	// selector; after each sel.Select, newly appended children are wired.
 	liveRunIDs []string
 	wiredCount int
@@ -568,18 +568,11 @@ func (ps *shardedParentState) onChildCompleted(ctx workflow.Context, runID strin
 		ps.reachedEnd = true
 	}
 
-	// Promote the successor to full rate if one was started. The
-	// successor's run ID is the last entry in liveRunIDs that is still
-	// live (i.e., the one started from this child's checkpoint).
-	// We use successorStarted to know whether a successor was launched
-	// for this particular child; if so, find it by scanning backwards
-	// through liveRunIDs for a still-live child that we haven't
-	// previously promoted.
+	// Promote the successor to full rate if one was started for this
+	// child. Handover is sequential (at most one successor in flight), so
+	// the successor is simply the remaining live child other than this
+	// one; successorStarted records whether one was launched.
 	if ps.successorStarted[runID] {
-		// Find the successor: scan liveRunIDs for the first live child
-		// after this one's position. Since handover is sequential (at
-		// most one in flight), the successor is simply any remaining
-		// live child.
 		for _, candidateRunID := range ps.liveRunIDs {
 			if candidateRunID == runID {
 				continue

@@ -58,10 +58,9 @@ type (
 	}
 
 	// shardedWorkerComponent registers the sharded force-replication
-	// workflow + ReplicateBatch activity on their dedicated TQ. Holds an
-	// *activities-sized clone so its activity registration is isolated
-	// from the default-TQ worker — sharded inject paths don't accidentally
-	// land on the legacy MigrationActivityTQ.
+	// workflows and the activities they call on a dedicated task queue.
+	// It holds its own *activities so its activity registration targets
+	// the sharded TQ rather than the legacy MigrationActivityTQ.
 	shardedWorkerComponent struct {
 		activities *activities
 	}
@@ -86,9 +85,7 @@ func NewResult(params initParams) (fxResult, error) {
 	}, nil
 }
 
-// NewShardedResult constructs the sharded WorkerComponent. The component
-// owns its own *activities clone so registration against the sharded TQ
-// doesn't bleed into the legacy worker.
+// NewShardedResult constructs the sharded WorkerComponent.
 func NewShardedResult(params initParams) (fxResult, error) {
 	a, err := newActivitiesFromParams(params, shardedForceReplicationWorkflowName)
 	if err != nil {

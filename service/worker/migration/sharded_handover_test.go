@@ -19,9 +19,9 @@ package migration
 // CHILD tests run shardedForceReplicationWorker directly as ROOT. env.SetContinueAsNewSuggested(true)
 // targets the production child's env directly so the CAN-hint code path executes. The
 // trade-off is that workflow.GetInfo(ctx).ParentWorkflowExecution is nil for root
-// workflows, which triggers a nil pointer dereference in the current production code
-// (sharded_workflow.go). See TestChild_ThrottledHitsHint_PausesUntilPromoted and the
-// note in TestChild_CheckpointAtHint_StopsListing for details.
+// workflows (handled by the guard in run()), so the parent-directed checkpoint and
+// progress signals are skipped. See TestChild_ThrottledHitsHint_PausesUntilPromoted and
+// the note in TestChild_CheckpointAtHint_StopsListing for details.
 
 import (
 	"context"
@@ -457,7 +457,7 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 // child lifecycle: a promoted child (not throttled) lists a namespace, dispatches
 // batches, and returns ReachedEnd=true with the correct VerifiedCount.
 // This uses childDirectRunner (real child with parent) so ParentWorkflowExecution
-// is non-nil, sidestepping the production nil-guard bug.
+// is non-nil and the parent-directed checkpoint/progress signals fire.
 func TestChild_PromotedAndCheckpoints_VerifiedCountAccumulated(t *testing.T) {
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestWorkflowEnvironment()

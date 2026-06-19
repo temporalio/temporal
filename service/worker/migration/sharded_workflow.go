@@ -40,9 +40,6 @@ func shardedForceReplicationWorker(ctx workflow.Context, params shardedChildPara
 		params:           &params,
 		namespaceID:      params.NamespaceID,
 		targetShardCount: params.TargetShardCount,
-		// buckets and batches default to usable zero values (their maps are
-		// lazily initialised on first mutation).
-		//
 		// Handover=true → started mid-handover (predecessor still running);
 		// runs at half rate until promoted. Handover=false → first child, no
 		// predecessor, full rate from the start.
@@ -186,7 +183,7 @@ func (s *shardedWorkflowState) startBackgroundCoroutines(ctx workflow.Context, p
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		for {
 			if err := workflow.NewTimer(gCtx, 60*time.Second).Get(gCtx, nil); err != nil {
-				return // ctx cancelled — workflow is completing
+				return
 			}
 			// The parent is alive for the whole child lifetime — it awaits all
 			// children before completing or continuing-as-new, and a child is
@@ -231,7 +228,9 @@ func (s *shardedWorkflowState) listUntilCheckpointOrEnd(ctx workflow.Context, pa
 			})
 		}
 
-		// Opportunistically pack and dispatch batches from the buckets.
+		// Ship whatever this page made packable in streaming priority
+		// (relax=false: fullest shards first) so dispatch slots stay busy
+		// while listing continues; the drain pass handles the remainder.
 		for s.tryPackStreaming(ctx, false) { //nolint:revive // intentional empty body
 		}
 
@@ -400,7 +399,7 @@ func (s *shardedWorkflowState) waitForDispatchSlot(ctx workflow.Context) {
 
 // recordVerified accumulates one batch's verified-exec delta into the
 // child's running count and emits the per-batch counter metric.
-// No-op when verified == 0 so batches with only inject (DisableVerification)
+// No-op when verified <= 0 so batches with only inject (DisableVerification)
 // don't add zeros to the count.
 func (s *shardedWorkflowState) recordVerified(verified int64) {
 	if verified <= 0 {

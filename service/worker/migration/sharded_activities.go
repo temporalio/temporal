@@ -32,9 +32,9 @@ type (
 // via AdminService.AddOrUpdateRemoteCluster (which fetches HistoryShardCount
 // from the remote at registration time and stores it) — a prerequisite for
 // force replication, since the source generates replication tasks against
-// it. ClusterMetadata refreshes the cache every minute, so the value can be
-// at most that stale; shard count never changes for a live cluster so this
-// is fine.
+// it. ClusterMetadata refreshes the cache roughly every minute by default,
+// so the value can be slightly stale; shard count never changes for a live
+// cluster so this is fine.
 func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
 	info, ok := a.clusterMetadata.GetAllClusterInfo()[req.TargetClusterName]
 	if !ok {
@@ -170,7 +170,6 @@ func (a *activities) evaluateVerifyIteration(
 	shards shardVerifyTracker,
 	doneCount, execCount int,
 ) (bool, replicateBatchResult, error) {
-	// Clean completion — every exec verified.
 	if doneCount >= execCount {
 		return true, replicateBatchResult{
 			CompletedShards: shards.allCompleted(),
@@ -178,7 +177,6 @@ func (a *activities) evaluateVerifyIteration(
 		}, nil
 	}
 
-	// Per-shard cumulative no-progress backstop.
 	if sErr := a.checkStuckShard(req, shards, execs, verified, doneCount, execCount); sErr != nil {
 		return false, replicateBatchResult{}, sErr
 	}

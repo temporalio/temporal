@@ -21,10 +21,9 @@ const (
 
 	// releaseShardsSignalName carries mid-flight ReleaseShards signals
 	// from active replicate-batch activities back to their parent
-	// workflow (the child). Drain-mode shard completions are gone in
-	// the new design, so this signal only fires while the activity is
-	// still running normally and the child needs to free the shard early
-	// so a successor can pack against it.
+	// workflow (the child). It fires while the activity is still running
+	// so the child can free a completed shard early and let a successor
+	// pack against it.
 	releaseShardsSignalName = "ReleaseShards"
 
 	// shardedCheckpointSignalName is sent by a child to the parent at
@@ -331,8 +330,8 @@ type shardedProgressPayload struct {
 }
 
 // shardedBatchReq is the per-batch activity input. Executions is the
-// per-shard, per-BID nested payload — the workflow has marked every
-// shard appearing as a top-level key in shardInFlight before dispatch,
+// per-shard, per-BID nested payload — the workflow has claimed every
+// shard appearing as a top-level key into inFlight before dispatch,
 // and the activity is responsible for either signal-releasing each shard
 // mid-flight or listing it in the return value's CompletedShards set.
 type shardedBatchReq struct {
@@ -353,9 +352,10 @@ type shardedBatchReq struct {
 
 // replicateBatchResult is the activity's return payload.
 //
-// CompletedShards is informational (the dispatch coroutine's defer clears
-// heldByBatch + shardInFlight regardless), but keeping it in the result
-// gives metrics a clean handle on "which shards this batch finished".
+// CompletedShards is informational (the dispatch coroutine's defer,
+// releaseAll, clears the batch's held set and its inFlight shards
+// regardless), but keeping it in the result gives metrics a clean handle
+// on "which shards this batch finished".
 type replicateBatchResult struct {
 	CompletedShards []int32
 
@@ -376,8 +376,8 @@ type replicateBatchHeartbeat struct {
 // releaseShardsPayload is the body of the mid-flight ReleaseShards signal
 // an activity sends to its parent workflow when the cumulative idle cost
 // across its completed-but-not-yet-released shards crosses IdleShardCost.
-// The workflow handler clears these shards from shardInFlight +
-// heldByBatch[BatchID] so the packer can immediately dispatch new work
+// The workflow handler (releaseShards) clears these shards from inFlight
+// and held[BatchID] so the packer can immediately dispatch new work
 // against them while the activity stays running on its still-pending
 // shards.
 type releaseShardsPayload struct {
