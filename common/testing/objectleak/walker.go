@@ -47,12 +47,13 @@ func (w *objectWalker) walk(v reflect.Value, path path) {
 		if v.IsNil() {
 			return
 		}
-		addr := v.Pointer()
+		ptr := v.UnsafePointer()
+		addr := uintptr(ptr)
 		if _, ok := w.seen[addr]; ok {
 			return
 		}
 		w.seen[addr] = struct{}{}
-		if obj, ok := trackPointerObject(addr, path, v.Type().String()); ok {
+		if obj, ok := trackPointerObject(ptr, addr, path, v.Type().String()); ok {
 			w.objects = append(w.objects, obj)
 		}
 		if w.shouldPrune(v.Type()) {
@@ -86,7 +87,7 @@ func (w *objectWalker) shouldPrune(t reflect.Type) bool {
 	return w.pruneTypes.matchType(t)
 }
 
-func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject, bool) {
+func trackPointerObject(ptr unsafe.Pointer, addr uintptr, path path, typeName string) (trackedObject, bool) {
 	collected := &atomic.Bool{}
 	var cleanup runtime.Cleanup
 	ok := true
@@ -98,7 +99,7 @@ func trackPointerObject(addr uintptr, path path, typeName string) (trackedObject
 			}
 		}()
 		//nolint:govet // The checker must attach cleanup to reflected heap addresses.
-		cleanup = runtime.AddCleanup((*byte)(unsafe.Pointer(addr)), func(collected *atomic.Bool) {
+		cleanup = runtime.AddCleanup((*byte)(ptr), func(collected *atomic.Bool) {
 			collected.Store(true)
 		}, collected)
 	}()
