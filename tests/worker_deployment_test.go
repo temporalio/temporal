@@ -66,7 +66,7 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
-			return tv.WithDeploymentSeries("wv").WithBuildID("b")
+			return tv.WithDeploymentSeries("wd").WithBuildID("b")
 		}),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
