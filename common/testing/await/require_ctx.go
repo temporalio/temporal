@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
@@ -18,6 +20,10 @@ const softDeadlockTimeoutEnvVar = "TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT"
 // context is cancelled (soft deadlock). Capped further by the overall await
 // deadline. Each new attempt gets a fresh context with this same cap.
 const defaultSoftDeadlockTimeout = 30 * time.Second
+
+// postAwaitTestTimeout leaves test-scoped contexts time for assertions and
+// cleanup after Await returns.
+const postAwaitTestTimeout = 10 * time.Second
 
 func softDeadlockTimeout() time.Duration {
 	if s := os.Getenv(softDeadlockTimeoutEnvVar); s != "" {
@@ -87,19 +93,20 @@ func run(
 		return
 	}
 
-	deadline := time.Now().Add(cfg.totalTimeout)
+	start := time.Now()
+	extension := testcontext.EnsureRemaining(tb, cfg.totalTimeout+postAwaitTestTimeout)
+	parentIsTestContext := extension.AppliesTo(parentCtx)
+	if extension.Granted > 0 && parentIsTestContext {
+		parentCtx = extension.Context()
+	}
+	deadline := start.Add(cfg.totalTimeout)
+	if !extension.Deadline.IsZero() && extension.Deadline.Before(deadline) {
+		deadline = extension.Deadline
+	}
 
 	// Cap at the parent context's deadline if it's earlier than our timeout.
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
-	}
-
-	// Cap at the test's deadline if it's earlier than our deadline.
-	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
-	if d, ok := tb.(interface{ Deadline() (time.Time, bool) }); ok {
-		if testDeadline, hasDeadline := d.Deadline(); hasDeadline && testDeadline.Before(deadline) {
-			deadline = testDeadline
-		}
 	}
 
 	effectiveTimeout := max(0, time.Until(deadline))

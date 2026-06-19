@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	defaultTimeout      = 90 * time.Second
-	testNameMetadataKey = "temporal-test-name"
+	defaultTimeout        = 90 * time.Second
+	defaultMaxTestTimeout = 2 * time.Minute
+	testNameMetadataKey   = "temporal-test-name"
 )
 
 type contextStore struct {
@@ -35,6 +36,31 @@ type config struct {
 type contextDecorator struct {
 	key      any
 	decorate func(context.Context) context.Context
+}
+
+// Extension describes the effect of an EnsureRemaining call.
+type Extension struct {
+	Deadline time.Time
+	Granted  time.Duration
+
+	currentContext context.Context
+	contexts       []context.Context
+}
+
+// AppliesTo reports whether ctx is the test-scoped context observed by
+// EnsureRemaining.
+func (e Extension) AppliesTo(ctx context.Context) bool {
+	for _, testCtx := range e.contexts {
+		if ctx == testCtx {
+			return true
+		}
+	}
+	return false
+}
+
+// Context returns the current test-scoped context after EnsureRemaining.
+func (e Extension) Context() context.Context {
+	return e.currentContext
 }
 
 // DefaultTimeout returns the effective default timeout for test-scoped contexts.
@@ -90,11 +116,14 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 }
 
 type contextState struct {
-	mu         sync.Mutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-	timeout    time.Duration
-	decorators map[any]struct{}
+	mu                sync.Mutex
+	ctx               context.Context
+	contexts          []context.Context
+	cancels           []context.CancelFunc
+	testStart         time.Time
+	originalTimeout   time.Duration
+	decorators        map[any]struct{}
+	orderedDecorators []contextDecorator
 }
 
 func getContextState(tb testing.TB, timeout time.Duration) *contextState {
@@ -107,17 +136,12 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		return st
 	}
 
-	ctx, cancel := context.WithTimeout(tb.Context(), timeout)
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
-
 	st := &contextState{
-		ctx:        ctx,
-		cancel:     cancel,
-		timeout:    timeout,
-		decorators: make(map[any]struct{}),
+		testStart:       time.Now(),
+		originalTimeout: timeout,
+		decorators:      make(map[any]struct{}),
 	}
+	st.setDeadline(tb, st.testStart.Add(timeout))
 	testContexts.byTest[tb] = st
 
 	tb.Cleanup(func() {
@@ -127,10 +151,73 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		delete(testContexts.byTest, tb)
 		testContexts.Unlock()
 		if err == context.DeadlineExceeded {
-			tb.Errorf("test exceeded timeout of %v", st.timeout)
+			tb.Errorf("test exceeded timeout of %v", st.currentTimeout())
 		}
 	})
 	return st
+}
+
+// EnsureRemaining extends the test-scoped context so at least d remains from
+// now, if its current deadline is earlier. It is capped so the total test
+// timeout never exceeds max(maxTestTimeout, configuredTimeout). If tb has no
+// test context created by this package, EnsureRemaining is a no-op.
+//
+// Existing context values returned by earlier calls to For keep their
+// original deadline; call For again after EnsureRemaining to observe the
+// extended deadline.
+func EnsureRemaining(tb testing.TB, d time.Duration) Extension {
+	tb.Helper()
+	if d <= 0 {
+		return Extension{}
+	}
+
+	testContexts.Lock()
+	st, ok := testContexts.byTest[tb]
+	testContexts.Unlock()
+	if !ok {
+		return Extension{}
+	}
+
+	return st.ensureRemainingUntil(tb, time.Now().Add(d))
+}
+
+func (s *contextState) ensureRemainingUntil(tb testing.TB, target time.Time) Extension {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	currentDeadline, ok := s.ctx.Deadline()
+	if !ok {
+		return Extension{}
+	}
+
+	requested := target.Sub(currentDeadline)
+	if requested <= 0 {
+		return s.extension(currentDeadline, 0)
+	}
+
+	capDeadline := s.testStart.Add(max(maxTestTimeout(), s.originalTimeout))
+	if capDeadline.Before(target) {
+		target = capDeadline
+	}
+	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(target) {
+		target = goTestDeadline
+	}
+	granted := target.Sub(currentDeadline)
+	if granted <= 0 {
+		return s.extension(currentDeadline, 0)
+	}
+
+	s.setDeadline(tb, target)
+	return s.extension(target, granted)
+}
+
+func (s *contextState) extension(deadline time.Time, granted time.Duration) Extension {
+	return Extension{
+		Deadline:       deadline,
+		Granted:        granted,
+		currentContext: s.ctx,
+		contexts:       append([]context.Context(nil), s.contexts...),
+	}
 }
 
 func (s *contextState) configure(tb testing.TB, cfg config) {
@@ -139,8 +226,8 @@ func (s *contextState) configure(tb testing.TB, cfg config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if cfg.timeoutSet && cfg.timeout != s.timeout {
-		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.timeout, cfg.timeout)
+	if cfg.timeoutSet && cfg.timeout != s.originalTimeout {
+		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.originalTimeout, cfg.timeout)
 	}
 
 }
@@ -163,7 +250,9 @@ func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator
 		return
 	}
 	s.ctx = decorator.decorate(s.ctx)
+	s.contexts = append(s.contexts, s.ctx)
 	s.decorators[decorator.key] = struct{}{}
+	s.orderedDecorators = append(s.orderedDecorators, decorator)
 }
 
 func (s *contextState) context() context.Context {
@@ -176,6 +265,42 @@ func (s *contextState) err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ctx.Err()
+}
+
+func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) {
+	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
+		deadline = goTestDeadline
+	}
+
+	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
+
+	// Annotate gRPC requests with the test name for OTEL tracing.
+	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
+
+	for _, decorator := range s.orderedDecorators {
+		ctx = decorator.decorate(ctx)
+	}
+	s.ctx = ctx
+	s.contexts = append(s.contexts, ctx)
+	s.cancels = append(s.cancels, cancel)
+}
+
+func (s *contextState) cancel() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.cancels) - 1; i >= 0; i-- {
+		s.cancels[i]()
+	}
+}
+
+func (s *contextState) currentTimeout() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if deadline, ok := s.ctx.Deadline(); ok {
+		return deadline.Sub(s.testStart)
+	}
+	return s.originalTimeout
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
@@ -198,4 +323,8 @@ func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
 
 	// 3. Default timeout.
 	return defaultTimeout
+}
+
+func maxTestTimeout() time.Duration {
+	return defaultMaxTestTimeout * debug.TimeoutMultiplier
 }
