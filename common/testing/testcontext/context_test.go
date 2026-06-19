@@ -2,6 +2,7 @@ package testcontext
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -161,5 +162,109 @@ func TestEnvTimeout(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(time.Second), deadline)
 		})
+	})
+}
+
+func TestEnsureRemaining(t *testing.T) {
+	t.Run("extends when remaining time is too short", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			start := time.Now()
+			ctx := For(t, WithTimeout(100*time.Millisecond))
+			originalDeadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
+
+			extension := EnsureRemaining(t, 250*time.Millisecond)
+			require.Equal(t, 150*time.Millisecond, extension.ExtendedBy)
+			require.Equal(t, start.Add(250*time.Millisecond), extension.Deadline)
+
+			refreshed := For(t)
+			refreshedDeadline, ok := refreshed.Deadline()
+			require.True(t, ok)
+			require.Equal(t, extension.Deadline, refreshedDeadline)
+		})
+	})
+
+	t.Run("caps ensured remaining time", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			start := time.Now()
+			ctx := For(t, WithTimeout(100*time.Millisecond))
+			originalDeadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
+
+			extension := EnsureRemaining(t, 10*time.Minute)
+			require.Equal(t, maxTimeout-100*time.Millisecond, extension.ExtendedBy)
+			require.Equal(t, start.Add(maxTimeout), extension.Deadline)
+		})
+	})
+
+	t.Run("replays decorators", func(t *testing.T) {
+		type key struct{}
+
+		For(t, WithTimeout(100*time.Millisecond))
+		AttachDecorator(t, key{}, func(ctx context.Context) context.Context {
+			return context.WithValue(ctx, key{}, "decorated")
+		})
+		ctx := For(t)
+		require.Equal(t, "decorated", ctx.Value(key{}))
+
+		extension := EnsureRemaining(t, time.Second)
+		require.Positive(t, extension.ExtendedBy)
+
+		refreshed := For(t)
+		require.Equal(t, "decorated", refreshed.Value(key{}))
+	})
+
+	t.Run("preserves test name metadata", func(t *testing.T) {
+		For(t, WithTimeout(100*time.Millisecond))
+		extension := EnsureRemaining(t, time.Second)
+		require.Positive(t, extension.ExtendedBy)
+
+		refreshed := For(t)
+		md, ok := metadata.FromOutgoingContext(refreshed)
+		require.True(t, ok)
+		require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
+	})
+
+	t.Run("preserves original configured timeout", func(t *testing.T) {
+		For(t, WithTimeout(100*time.Millisecond))
+		extension := EnsureRemaining(t, time.Second)
+		require.Positive(t, extension.ExtendedBy)
+
+		For(t, WithTimeout(100*time.Millisecond))
+	})
+
+	t.Run("recognizes older context after repeated extensions", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			original := For(t, WithTimeout(5*time.Millisecond))
+
+			extension := EnsureRemaining(t, 10*time.Millisecond)
+			firstRefresh := extension.CurrentContext()
+			require.True(t, extension.Contains(original))
+			require.True(t, extension.Contains(firstRefresh))
+
+			extension = EnsureRemaining(t, 20*time.Millisecond)
+			require.True(t, extension.Contains(original))
+			require.True(t, extension.Contains(firstRefresh))
+			require.True(t, extension.Contains(extension.CurrentContext()))
+		})
+	})
+
+	t.Run("safe concurrent calls", func(t *testing.T) {
+		For(t, WithTimeout(100*time.Millisecond))
+
+		var wg sync.WaitGroup
+		var negative atomic.Int32
+		for range 8 {
+			wg.Go(func() {
+				extension := EnsureRemaining(t, 10*time.Millisecond)
+				if extension.ExtendedBy < 0 {
+					negative.Add(1)
+				}
+			})
+		}
+		wg.Wait()
+		require.Zero(t, negative.Load())
 	})
 }
