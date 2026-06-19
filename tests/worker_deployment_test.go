@@ -586,7 +586,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	s.setCurrentVersion(env, firstVersion, true, "")
 
 	routingInfo := &deploymentpb.RoutingConfig{
-		CurrentVersion:            env.Tv().DeploymentVersionString(),
+		CurrentVersion:            firstVersion.DeploymentVersionString(),
 		CurrentVersionChangedTime: setCurrentTime,
 	}
 
@@ -602,7 +602,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 	}
 	currentVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-		Version:              env.Tv().DeploymentVersionString(),
+		Version:              firstVersion.DeploymentVersionString(),
 		CreateTime:           createVersion1Time,
 		DrainageInfo:         nil,
 		RampingSinceTime:     nil,
