@@ -3,9 +3,10 @@ package await
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
@@ -20,12 +21,7 @@ const softDeadlockTimeoutEnvVar = "TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT"
 const defaultSoftDeadlockTimeout = 30 * time.Second
 
 func softDeadlockTimeout() time.Duration {
-	if s := os.Getenv(softDeadlockTimeoutEnvVar); s != "" {
-		if d, err := time.ParseDuration(s); err == nil {
-			return d
-		}
-	}
-	return defaultSoftDeadlockTimeout
+	return effectiveEnvDuration(softDeadlockTimeoutEnvVar, defaultSoftDeadlockTimeout)
 }
 
 // hardDeadlockTimeoutEnvVar overrides the default hard-deadlock timeout.
@@ -40,12 +36,18 @@ const hardDeadlockTimeoutEnvVar = "TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT"
 const defaultHardDeadlockTimeout = 10 * time.Second
 
 func hardDeadlockTimeout() time.Duration {
-	if s := os.Getenv(hardDeadlockTimeoutEnvVar); s != "" {
-		if d, err := time.ParseDuration(s); err == nil {
-			return d
-		}
-	}
-	return defaultHardDeadlockTimeout
+	return effectiveEnvDuration(hardDeadlockTimeoutEnvVar, defaultHardDeadlockTimeout)
+}
+
+// postAwaitTimeoutReserveEnvVar overrides the default post-await reserve.
+// Parsed as a Go duration, e.g. "10s".
+const postAwaitTimeoutReserveEnvVar = "TEMPORAL_AWAIT_POST_TIMEOUT_RESERVE"
+
+// defaultPostAwaitTimeoutReserve is the minimum time for *after* Await returns.
+const defaultPostAwaitTimeoutReserve = 10 * time.Second
+
+func postAwaitTimeoutReserve() time.Duration {
+	return effectiveEnvDuration(postAwaitTimeoutReserveEnvVar, defaultPostAwaitTimeoutReserve)
 }
 
 // Require polls condition until it returns without assertion failures, or
@@ -87,21 +89,30 @@ func run(
 		return
 	}
 
-	deadline := time.Now().Add(cfg.totalTimeout)
+	start := time.Now()
+
+	// Reserve enough test-context time for the await itself plus post-await reserve.
+	extension := testcontext.EnsureRemaining(tb, cfg.totalTimeout+postAwaitTimeoutReserve())
+
+	// Only swap in the refreshed context if the caller passed a [testcontext].
+	if extension.ExtendedBy > 0 && extension.Contains(parentCtx) {
+		parentCtx = extension.CurrentContext()
+	}
+
+	// Use the shortest applicable deadline: await timeout, test-context cap, or
+	// parent context deadline.
+	deadline := start.Add(cfg.totalTimeout)
+	if !extension.Deadline.IsZero() && extension.Deadline.Before(deadline) {
+		deadline = extension.Deadline
+	}
 
 	// Cap at the parent context's deadline if it's earlier than our timeout.
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
 	}
 
-	// Cap at the test's deadline if it's earlier than our deadline.
-	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
-	if d, ok := tb.(interface{ Deadline() (time.Time, bool) }); ok {
-		if testDeadline, hasDeadline := d.Deadline(); hasDeadline && testDeadline.Before(deadline) {
-			deadline = testDeadline
-		}
-	}
-
+	// Deadline capping can leave no time to run; report that as 0, not a
+	// negative duration.
 	effectiveTimeout := max(0, time.Until(deadline))
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
@@ -143,8 +154,8 @@ func run(
 		report.recordErrors(t.errors)
 
 		// Attempt-timeout expiry: attemptCtx is done but awaitCtx is not.
-		// Record nothing special - the attempt's recorded errors (if any)
-		// already describe what went wrong; otherwise we just retry.
+		// An attempt timeout is retryable while the await is still active. Track
+		// it separately so the final report identifies the responsible timeout.
 		attemptHitOwnTimeout := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
 		if attemptHitOwnTimeout {
 			report.recordAttemptTimeout()
