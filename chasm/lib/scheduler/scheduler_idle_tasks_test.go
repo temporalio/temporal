@@ -85,6 +85,8 @@ func TestIdleTask_ExecuteInitializesEventLogMissingFromOlderTree(t *testing.T) {
 	sched := env.Scheduler
 	// Simulate a Scheduler tree persisted before EventLog was introduced.
 	sched.EventLog = chasm.NewEmptyField[*scheduler.EventLog]()
+	_, ok := sched.EventLog.TryGet(ctx)
+	require.False(t, ok)
 
 	handler := newIdleHandler(10 * time.Minute)
 	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
