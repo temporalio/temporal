@@ -44,7 +44,7 @@ func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(
 		protorequire.ProtoEqual(t, worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedRampingVersion), resp.GetVersioningInfo().GetRampingDeploymentVersion())
 		require.Equal(t, expectedCurrentVersion, resp.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		require.Equal(t, expectedRampingVersion, resp.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		require.Equal(t, rampingPercentage, resp.GetVersioningInfo().GetRampingVersionPercentage())
+		require.InDelta(t, rampingPercentage, resp.GetVersioningInfo().GetRampingVersionPercentage(), 0.001)
 	}, 10*time.Second, 200*time.Millisecond)
 }
 

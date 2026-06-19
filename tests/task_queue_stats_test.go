@@ -1589,23 +1589,23 @@ func validateTaskQueueStatsStrict(
 }
 
 func validateTaskQueueStats(
-	require *require.Assertions,
+	a *require.Assertions,
 	label string,
 	stats *taskqueuepb.TaskQueueStats,
 	expectation taskQueueExpectations,
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	require.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
+	a.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
 		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	require.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
+	a.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
 		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
 
-	require.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
 }
