@@ -450,7 +450,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 	_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(s.Context(), &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      env.Namespace().String(),
 		DeploymentName: env.Tv().DeploymentSeries(),
-		Version:        env.Tv().DeploymentVersionString(),
+		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cT,
 	})
 	s.NoError(err)
@@ -463,7 +463,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 			DeploymentName: env.Tv().DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Equal(firstVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		cT = resp.GetConflictToken()
 	}, time.Second*10, time.Millisecond*1000)
 
