@@ -64,8 +64,9 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1000),
 
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
-			return tv.WithBuildIDNumber(1)
+			return tv.WithDeploymentSeries("worker_deployment").WithBuildID("1")
 		}),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
