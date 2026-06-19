@@ -1153,7 +1153,7 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
 	if count >= int64(limit) {
-		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum worker deployments in namespace (%d)", limit))
 	}
 
 	// Start the deployment workflow
@@ -1485,7 +1485,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum worker deployments in namespace (%d)", limit))
 		}
 	}
 
