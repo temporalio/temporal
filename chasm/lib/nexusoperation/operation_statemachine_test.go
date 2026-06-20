@@ -416,6 +416,7 @@ func TestTransitionSucceeded(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+				"impl":            "chasm",
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "succeeded"
@@ -524,6 +525,7 @@ func TestTransitionFailed(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+				"impl":            "chasm",
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "failed"
@@ -632,6 +634,7 @@ func TestTransitionCanceled(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+				"impl":            "chasm",
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "canceled"
@@ -733,6 +736,7 @@ func TestTransitionTimedOut(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+				"impl":            "chasm",
 			}
 			timeoutCountTags := maps.Clone(countTags)
 			timeoutCountTags["timeout_type"] = tc.event.Failure.GetTimeoutFailureInfo().GetTimeoutType().String()
@@ -851,6 +855,7 @@ func TestTransitionTerminated(t *testing.T) {
 				"nexus_service":   "test-service",
 				"nexus_operation": "test-operation",
 				"workflowType":    standaloneOperationWorkflowTypeName,
+				"impl":            "chasm",
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "terminated"

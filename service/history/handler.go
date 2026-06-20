@@ -81,6 +81,7 @@ type (
 
 		tokenSerializer              *tasktoken.Serializer
 		config                       *configs.Config
+		nexusOperationsConfig        *nexusoperations.Config
 		eventNotifier                events.Notifier
 		deepHealthCheckHandler       deepHealthCheckHandler
 		logger                       log.Logger
@@ -117,6 +118,7 @@ type (
 		fx.In
 
 		Config                       *configs.Config
+		NexusOperationsConfig        *nexusoperations.Config
 		Logger                       log.SnTaggedLogger
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
@@ -2161,6 +2163,8 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		request.Links,
 		request.GetSuccess(),
 		opErr,
+		h.metricsHandler,
+		h.nexusOperationsConfig.ResolvedMetricTagConfig(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)

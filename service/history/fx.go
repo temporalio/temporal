@@ -133,9 +133,10 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 	}
 
 	handler := &Handler{
-		status:          common.DaemonStatusInitialized,
-		config:          args.Config,
-		tokenSerializer: tasktoken.NewSerializer(),
+		status:                common.DaemonStatusInitialized,
+		config:                args.Config,
+		nexusOperationsConfig: args.NexusOperationsConfig,
+		tokenSerializer:       tasktoken.NewSerializer(),
 		deepHealthCheckHandler: deepHealthCheckHandler{
 			healthServer:            args.HealthServer,
 			metricsHandler:          args.MetricsHandler,
