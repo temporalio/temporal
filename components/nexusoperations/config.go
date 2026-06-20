@@ -179,6 +179,7 @@ type Config struct {
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
+	MetricTagConfig                     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -198,6 +199,7 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
+		MetricTagConfig:                     MetricTagConfiguration.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

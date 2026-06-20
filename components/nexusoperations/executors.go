@@ -445,16 +445,25 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
 				e.Links = links
 			})
-			return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+			startedTime := env.Now()
+			if err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 				return TransitionStarted.Apply(operation, EventStarted{
-					Time:       env.Now(),
+					Time:       startedTime,
 					Node:       node,
 					Attributes: event.GetNexusOperationStartedEventAttributes(),
 				})
-			})
+			}); err != nil {
+				return err
+			}
+			e.recordScheduleToStartLatency(operation, node.NamespaceName(), node.WorkflowTypeName(), startedTime)
+			return nil
 		}
 		// Operation completed synchronously. Store the result and update the state machine.
-		return handleSuccessfulOperationResult(node, operation, result.Successful, links)
+		if err := handleSuccessfulOperationResult(node, operation, result.Successful, links); err != nil {
+			return err
+		}
+		e.recordOperationSucceeded(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		return nil
 	})
 }
 
@@ -467,26 +476,36 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	switch {
 	case errors.As(callErr, &serviceErr):
 		if !common.IsRetryableRPCError(callErr) {
-			return handleNonRetryableStartOperationError(node, operation, callErr)
+			return e.failNonRetryable(env, node, operation, callErr)
 		}
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
-		return handleOperationError(node, operation, opErr)
+		if err := handleOperationError(node, operation, opErr); err != nil {
+			return err
+		}
+		// Emit the terminal outcome metric at this live, once-only site (handleOperationError also
+		// runs on the async completion path and on replay, so emission must not live inside it).
+		if opErr.State == nexus.OperationStateCanceled {
+			e.recordOperationCanceled(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		} else {
+			e.recordOperationFailed(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		}
+		return nil
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
-		return handleNonRetryableStartOperationError(node, operation, handlerErr)
+		return e.failNonRetryable(env, node, operation, handlerErr)
 	case errors.Is(callErr, ErrResponseBodyTooLarge):
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(node, operation, callErr)
+		return e.failNonRetryable(env, node, operation, callErr)
 	case errors.Is(callErr, ErrInvalidOperationToken):
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response's operation token is too large.
-		return handleNonRetryableStartOperationError(node, operation, callErr)
+		return e.failNonRetryable(env, node, operation, callErr)
 	case errors.As(callErr, &opTimeoutBelowMinErr):
 		// Not enough time to execute another request, resolve the operation with a timeout.
-		return e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
+		return e.recordOperationTimeout(env, node, opTimeoutBelowMinErr.timeoutType)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -536,6 +555,17 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	return FailedEventDefinition{}.Apply(node.Parent, event)
 }
 
+// failNonRetryable resolves the operation as failed (non-retryable) and emits the terminal
+// failure metric. It wraps handleNonRetryableStartOperationError so emission happens once, at
+// this live processing site, rather than in the event-application path (which also runs on replay).
+func (e taskExecutor) failNonRetryable(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
+	if err := handleNonRetryableStartOperationError(node, operation, callErr); err != nil {
+		return err
+	}
+	e.recordOperationFailed(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+	return nil
+}
+
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(op, EventRescheduled{
@@ -545,19 +575,21 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeScheduleToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToCloseTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	return e.recordOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
 func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	return e.recordOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 
 func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	return e.recordOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
-func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb.TimeoutType) error {
-	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+func (e taskExecutor) recordOperationTimeout(env hsm.Environment, node *hsm.Node, timeoutType enumspb.TimeoutType) error {
+	var timedOutOp Operation
+	if err := hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		timedOutOp = op
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
 			return hsm.TransitionOutput{}, err
@@ -587,7 +619,13 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb
 		return TransitionTimedOut.Apply(op, EventTimedOut{
 			Node: node,
 		})
-	})
+	}); err != nil {
+		return err
+	}
+	// timedOutOp was captured from the transition closure above (the same Operation that
+	// MachineData would return); the timeout transition leaves the metric fields unchanged.
+	e.recordOperationTimedOut(timedOutOp, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
+	return nil
 }
 
 func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
