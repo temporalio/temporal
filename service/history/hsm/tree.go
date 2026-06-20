@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -161,6 +162,8 @@ type NodeBackend interface {
 	GetCurrentVersion() int64
 	// NextTransitionCount returns the current state transition count from the state transition history.
 	NextTransitionCount() int64
+	// GetWorkflowType returns the type of the workflow that owns this state machine tree.
+	GetWorkflowType() *commonpb.WorkflowType
 }
 
 // EventIDFromToken gets the event ID associated with an event load token.
@@ -704,6 +707,11 @@ func (n *Node) root() *Node {
 		root = root.Parent
 	}
 	return root
+}
+
+// WorkflowTypeName returns the type name of the workflow that owns this node's state machine tree.
+func (n *Node) WorkflowTypeName() string {
+	return n.root().backend.GetWorkflowType().GetName()
 }
 
 // compact filters the operation log based on deletion status. For any operation path:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -22,6 +23,10 @@ func (n *NodeBackend) GetCurrentVersion() int64 {
 
 func (n *NodeBackend) NextTransitionCount() int64 {
 	return 3
+}
+
+func (n *NodeBackend) GetWorkflowType() *commonpb.WorkflowType {
+	return &commonpb.WorkflowType{Name: "workflow-type"}
 }
 
 func (n *NodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
