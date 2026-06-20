@@ -8,7 +8,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,6 +29,10 @@ func (n *NodeBackend) NextTransitionCount() int64 {
 
 func (n *NodeBackend) GetWorkflowType() *commonpb.WorkflowType {
 	return &commonpb.WorkflowType{Name: "workflow-type"}
+}
+
+func (n *NodeBackend) GetNamespaceEntry() *namespace.Namespace {
+	return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace-name"}, nil, false, nil, 0)
 }
 
 func (n *NodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {

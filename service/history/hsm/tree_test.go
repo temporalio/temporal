@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -34,6 +35,10 @@ func (b *backend) NextTransitionCount() int64 {
 
 func (b *backend) GetWorkflowType() *commonpb.WorkflowType {
 	return &commonpb.WorkflowType{Name: "workflow-type"}
+}
+
+func (b *backend) GetNamespaceEntry() *namespace.Namespace {
+	return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace-name"}, nil, false, nil, 0)
 }
 
 func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
@@ -186,10 +191,13 @@ func TestNode_WorkflowTypeName(t *testing.T) {
 	l2, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2"}, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
 
-	// All nodes resolve the workflow type via the root backend.
+	// All nodes resolve the workflow type and namespace via the root backend.
 	require.Equal(t, "workflow-type", root.WorkflowTypeName())
 	require.Equal(t, "workflow-type", l1.WorkflowTypeName())
 	require.Equal(t, "workflow-type", l2.WorkflowTypeName())
+	require.Equal(t, "namespace-name", root.NamespaceName())
+	require.Equal(t, "namespace-name", l1.NamespaceName())
+	require.Equal(t, "namespace-name", l2.NamespaceName())
 }
 
 func TestNode_AddChild(t *testing.T) {
