@@ -31,15 +31,12 @@ type (
 )
 
 func TestNamespaceSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                           //nolint:staticcheck // SA1019: namespace deletion tests require the system worker service.
-	parallelsuite.RunLegacySequential(t, &namespaceTestSuite{}) //nolint:staticcheck // SA1019: namespace deletion tests require the system worker service.
+	parallelsuite.RunLegacySequential(t, &namespaceTestSuite{}) //nolint:staticcheck // SA1019: namespace deletion tests use dedicated worker-service clusters.
 }
 
 func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
-		// Run tests at full speed.
-		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceDeleteActivityRPS, 1000000),
-
+		testcore.WithWorkerService("namespace deletion tests require the system worker service"),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	}
