@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -542,6 +543,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Caller-side operation metrics are emitted via a tagged handler; route them to noop
+			// here so these tests keep asserting only the outbound-request metrics.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metrics.NoopMetricsHandler).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
@@ -641,7 +645,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Node:        node,
@@ -672,7 +676,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err := reg.ExecuteTimerTask(
 		env,
@@ -710,6 +714,40 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
+func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
+	env := fakeEnv{node}
+
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+		MetricsHandler: captureHandler,
+		Config:         &nexusoperations.Config{},
+	}))
+
+	require.NoError(t, reg.ExecuteTimerTask(env, node, nexusoperations.ScheduleToCloseTimeoutTask{}))
+
+	snapshot := capture.Snapshot()
+
+	timeoutCount := snapshot[chasmnexus.NexusOperationTimeoutCount.Name()]
+	require.Len(t, timeoutCount, 1)
+	require.Equal(t, int64(1), timeoutCount[0].Value)
+	require.Equal(t, "namespace-name", timeoutCount[0].Tags["namespace"])
+	require.Equal(t, "endpoint", timeoutCount[0].Tags["nexus_endpoint"])
+	require.Equal(t, "workflow-type", timeoutCount[0].Tags["workflowType"])
+	require.Equal(t, "hsm", timeoutCount[0].Tags["impl"])
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(), timeoutCount[0].Tags["timeout_type"])
+
+	// Latency is also recorded for the terminal state.
+	require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+}
+
 func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
@@ -718,7 +756,7 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err := reg.ExecuteTimerTask(
 		env,
@@ -764,7 +802,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	// Transition to STARTED state first
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -976,6 +1014,9 @@ func TestProcessCancelationTask(t *testing.T) {
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Caller-side operation metrics are emitted via a tagged handler; route them to noop
+			// here so these tests keep asserting only the outbound-request metrics.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metrics.NoopMetricsHandler).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
@@ -1276,6 +1317,9 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Caller-side operation metrics are emitted via a tagged handler; route them to noop
+			// here so these tests keep asserting only the outbound-request metrics.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metrics.NoopMetricsHandler).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
@@ -1368,7 +1412,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err = reg.ExecuteTimerTask(
 		env,
@@ -1660,6 +1704,9 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Caller-side operation metrics are emitted via a tagged handler; route them to noop
+			// here so these tests keep asserting only the outbound-request metrics.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metrics.NoopMetricsHandler).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
