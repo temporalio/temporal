@@ -47,7 +47,6 @@ const (
 	testVersionDrainageVisibilityGracePeriod     = 3 * time.Second
 	testLongVersionDrainageRefreshInterval       = 10 * time.Second
 	testLongVersionDrainageVisibilityGracePeriod = 10 * time.Second
-	testVersionMembershipCacheTTL                = 5 * time.Second
 	testMaxVersionsInDeployment                  = 4
 )
 
@@ -69,7 +68,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &DeploymentVersionSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
-// newTestEnv creates a TestEnv with the dynamic config this suite needs.
+// newTestEnv creates a TestEnv with the dynamic config and test variables this suite needs.
 // Additional per-test options may be passed in opts.
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
@@ -77,7 +76,6 @@ func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testco
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 1),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 
@@ -86,14 +84,9 @@ func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testco
 
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testVersionDrainageRefreshInterval),
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testVersionDrainageVisibilityGracePeriod),
-		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, testVersionMembershipCacheTTL),
-
-		// Test reactivation cache for all versioning tests.
-		testcore.WithDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true),
-
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
-			return tv.WithDeploymentSeries("v3").WithBuildID("b")
+			return tv.WithDeploymentSeries("wd").WithBuildID("b")
 		}),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
