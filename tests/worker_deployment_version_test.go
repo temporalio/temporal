@@ -73,6 +73,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
+
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 1),
@@ -84,6 +85,7 @@ func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testco
 
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testVersionDrainageRefreshInterval),
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testVersionDrainageVisibilityGracePeriod),
+
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
 			return tv.WithDeploymentSeries("wd").WithBuildID("b")
@@ -1871,7 +1873,10 @@ func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(env *test
 
 // The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_CacheMissAndHits() {
-	env := s.newTestEnv()
+	env := s.newTestEnv(
+		testcore.WithWorkerService("worker-deployment version membership cache test"),
+		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
+	)
 
 	// start an unversioned workflow
 	s.startWorkflow(env, env.Tv(), nil)
@@ -2846,7 +2851,10 @@ func (s *DeploymentVersionSuite) makeAutoUpgradeOverride() *workflowpb.Versionin
 }
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
-	env := s.newTestEnv()
+	env := s.newTestEnv(
+		testcore.WithWorkerService("worker-deployment version membership cache test"),
+		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
+	)
 
 	override := s.makePinnedOverride(env.Tv())
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -2894,7 +2902,10 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithUnpinnedOverride
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
-	env := s.newTestEnv()
+	env := s.newTestEnv(
+		testcore.WithWorkerService("worker-deployment version membership cache test"),
+		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
+	)
 
 	override := s.makePinnedOverride(env.Tv())
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
