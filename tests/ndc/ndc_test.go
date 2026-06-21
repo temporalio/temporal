@@ -1510,19 +1510,18 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 			},
 		},
 	}
-	switch staleEventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+	if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
 			Identity:   "ndc_functional_test",
 		}}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
 			Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}},
 			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 		}}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
 			AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}},
 		}}

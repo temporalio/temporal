@@ -75,11 +75,11 @@ type metadataMockRecorder struct {
 }
 
 func (r metadataMockRecorder) GetHistoryConfig() *gomock.Call {
-	r.historyOverwritten = true
+	r.metadataMock.historyOverwritten = true
 	return r.MockArchivalMetadata.EXPECT().GetHistoryConfig()
 }
 
 func (r metadataMockRecorder) GetVisibilityConfig() *gomock.Call {
-	r.visibilityOverwritten = true
+	r.metadataMock.visibilityOverwritten = true
 	return r.MockArchivalMetadata.EXPECT().GetVisibilityConfig()
 }

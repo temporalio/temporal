@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -96,7 +97,7 @@ func numGoRoutinesWithFn(fnName string) (int, error) {
 	stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+20)
 	stackRecordsLen, ok := runtime.GoroutineProfile(stackRecords)
 	if !ok {
-		return 0, fmt.Errorf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen)
+		return 0, errors.New(fmt.Sprintf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen))
 	}
 
 	numFound := 0
@@ -125,7 +126,7 @@ func functionName(fn any) (string, error) {
 		return fnName, nil
 	}
 
-	return "", fmt.Errorf("Invalid function %#v", fn)
+	return "", errors.New(fmt.Sprintf("Invalid function %#v", fn))
 }
 
 func functionNameForPC(pc uintptr) (string, bool) {

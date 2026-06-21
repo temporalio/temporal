@@ -145,7 +145,8 @@ func TestMapSlice(t *testing.T) {
 	})
 	t.Run("when given an empty slice should return empty slice", func(t *testing.T) {
 		xs := []int{}
-		var ys []uint32 = MapSlice(xs, func(x int) uint32 { return uint32(x) })
+		var ys []uint32
+		ys = MapSlice(xs, func(x int) uint32 { return uint32(x) })
 		require.Len(t, ys, 0, "mapping over empty slice produced non empty slice got %v", ys)
 	})
 	t.Run("when given a slice and a function should apply function to every element of the original slice", func(t *testing.T) {

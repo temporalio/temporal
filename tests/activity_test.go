@@ -610,10 +610,9 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		var err error
-		switch activityExecutedCount {
-		case 0:
+		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry") //nolint:err113
-		case 1:
+		} else if activityExecutedCount == 1 {
 			err = temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
 		}
 		activityExecutedCount++
@@ -1196,11 +1195,10 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	s.NoError(err)
 	activityFn := func(ctx context.Context) error {
 		var err error
-		switch activityExecutedCount {
-		case 0:
+		if activityExecutedCount == 0 {
 			activity.RecordHeartbeat(ctx, heartbeatDetails)
 			time.Sleep(activityTimeout + time.Second) //nolint:forbidigo
-		case 1:
+		} else if activityExecutedCount == 1 {
 			time.Sleep(activityTimeout / 2)     //nolint:forbidigo
 			err = errors.New("retryable-error") //nolint:err113
 		}

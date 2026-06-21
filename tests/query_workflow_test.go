@@ -252,7 +252,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo
-	var queryWorker worker.Worker = worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
+	var queryWorker worker.Worker
+
+	queryWorker = worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
 	err = queryWorker.Start()
 	s.NoError(err)

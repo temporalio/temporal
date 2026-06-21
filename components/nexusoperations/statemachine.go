@@ -89,9 +89,9 @@ func (o Operation) SetState(state enumsspb.NexusOperationState) {
 }
 
 func (o Operation) recordAttempt(ts time.Time) {
-	o.Attempt++
-	o.LastAttemptCompleteTime = timestamppb.New(ts)
-	o.LastAttemptFailure = nil
+	o.NexusOperationInfo.Attempt++
+	o.NexusOperationInfo.LastAttemptCompleteTime = timestamppb.New(ts)
+	o.NexusOperationInfo.LastAttemptFailure = nil
 }
 
 func (o Operation) cancelRequested(node *hsm.Node) (bool, error) {
@@ -535,9 +535,9 @@ func (c Cancelation) SetState(state enumspb.NexusOperationCancellationState) {
 }
 
 func (c Cancelation) recordAttempt(ts time.Time) {
-	c.Attempt++
-	c.LastAttemptCompleteTime = timestamppb.New(ts)
-	c.LastAttemptFailure = nil
+	c.NexusOperationCancellationInfo.Attempt++
+	c.NexusOperationCancellationInfo.LastAttemptCompleteTime = timestamppb.New(ts)
+	c.NexusOperationCancellationInfo.LastAttemptFailure = nil
 }
 
 func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {

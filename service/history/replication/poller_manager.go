@@ -39,7 +39,7 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([
 	}
 	remoteClusterInfo, ok := allClusters[sourceClusterName]
 	if !ok {
-		return nil, fmt.Errorf("cannot get source cluster %s info from cluster metadata cache", sourceClusterName)
+		return nil, errors.New(fmt.Sprintf("cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
 	}
 
 	// The remote shard count and local shard count must be multiples.
@@ -48,7 +48,7 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([
 		large, small = small, large
 	}
 	if large%small != 0 {
-		return nil, fmt.Errorf("remote shard count %d and local shard count %d are not multiples.", remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount)
+		return nil, errors.New(fmt.Sprintf("remote shard count %d and local shard count %d are not multiples.", remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount))
 	}
 	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount), nil
 }

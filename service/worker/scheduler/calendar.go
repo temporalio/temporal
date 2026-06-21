@@ -506,8 +506,7 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 
 // Parses a single value (integer or day-of-week or month name).
 func parseValue(s string, min, max int, parseMode parseMode) (int, error) {
-	switch parseMode {
-	case parseModeMonth:
+	if parseMode == parseModeMonth {
 		if len(s) >= 3 {
 			s = strings.ToLower(s)
 			for i, month := range monthStrings {
@@ -520,7 +519,7 @@ func parseValue(s string, min, max int, parseMode parseMode) (int, error) {
 				}
 			}
 		}
-	case parseModeDow:
+	} else if parseMode == parseModeDow {
 		if len(s) >= 2 {
 			s = strings.ToLower(s)
 			for i, dow := range dowStrings {

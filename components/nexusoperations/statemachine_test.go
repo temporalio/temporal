@@ -297,8 +297,7 @@ func TestRegenerateTasks(t *testing.T) {
 			}
 			node := newOperationNode(t, &hsmtest.NodeBackend{}, event)
 
-			switch tc.state {
-			case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
+			if tc.state == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Time:        time.Now(),
@@ -307,7 +306,7 @@ func TestRegenerateTasks(t *testing.T) {
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
-			case enumsspb.NEXUS_OPERATION_STATE_STARTED:
+			} else if tc.state == enumsspb.NEXUS_OPERATION_STATE_STARTED {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Time: time.Now(),

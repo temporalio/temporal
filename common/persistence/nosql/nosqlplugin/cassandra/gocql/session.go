@@ -56,7 +56,7 @@ func NewSession(
 
 		sessionInitTime: time.Now().UTC(),
 	}
-	session.Store(gocqlSession)
+	session.Value.Store(gocqlSession)
 	return session, nil
 }
 
@@ -85,8 +85,8 @@ func (s *session) refresh() {
 	}
 
 	s.sessionInitTime = time.Now().UTC()
-	oldSession := s.Load().(*gocql.Session)
-	s.Store(newSession)
+	oldSession := s.Value.Load().(*gocql.Session)
+	s.Value.Store(newSession)
 	go oldSession.Close()
 	s.logger.Warn("gocql wrapper: successfully refreshed gocql session")
 }
