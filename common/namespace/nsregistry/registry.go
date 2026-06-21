@@ -749,7 +749,9 @@ func (r *registry) getNamespaceByIDLocked(id namespace.ID) (*namespace.Namespace
 // getOrReadthroughNamespace returns namespace information if it exists or reads through
 // to the persistence layer and updates internal entry if it doesn't
 func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Namespace, error) {
-	// test-only path: bypass cache so namespace updates are visible immediately
+	// test-only path: bypass cache so namespace updates are visible immediately.
+	// This intentionally uses the read-through lock, so forced refresh serializes
+	// namespace reads. Do not enable this in production.
 	if r.forceNamespaceCacheRefreshOnRead() {
 		r.readthroughLock.Lock()
 		defer r.readthroughLock.Unlock()
@@ -782,7 +784,9 @@ func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Na
 // getOrReadthroughNamespaceByID retrieves the namespace information if it exists or reads through
 // to the persistence layer and updates internal entry if it doesn't
 func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Namespace, error) {
-	// test-only path: bypass cache so namespace updates are visible immediately
+	// test-only path: bypass cache so namespace updates are visible immediately.
+	// This intentionally uses the read-through lock, so forced refresh serializes
+	// namespace reads. Do not enable this in production.
 	if r.forceNamespaceCacheRefreshOnRead() {
 		r.readthroughLock.Lock()
 		defer r.readthroughLock.Unlock()
