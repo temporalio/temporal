@@ -64,7 +64,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomTextField"].Data, fmt.Sprintf("%q", CustomTextField))
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -97,7 +97,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -154,7 +154,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.EqualValues(request.HistoryLength, body[sadefs.HistoryLength])
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -187,7 +187,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -214,7 +214,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 			s.Equal("wid~rid", visibilityTaskKey)
 
 			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
