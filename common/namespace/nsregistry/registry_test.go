@@ -75,6 +75,25 @@ func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces .
 	)
 }
 
+func (s *registrySuite) newForceRefreshNamespaceResponse(
+	id namespace.ID,
+	name string,
+	failoverVersion int64,
+) *persistence.GetNamespaceResponse {
+	return &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: name,
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   failoverVersion,
+		},
+		NotificationVersion: failoverVersion,
+	}
+}
+
 func (s *registrySuite) TearDownTest() {
 	s.controller.Finish()
 }
@@ -763,10 +782,8 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 
 func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	id := namespace.NewID()
-	nsV1 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 1)
-	nsV1.Namespace.FailoverVersion = 1
-	nsV2 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 2)
-	nsV2.Namespace.FailoverVersion = 2
+	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
+	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
 	s.registry = s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
@@ -791,10 +808,8 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 
 func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 	id := namespace.NewID()
-	nsV1 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 1)
-	nsV1.Namespace.FailoverVersion = 1
-	nsV2 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 2)
-	nsV2.Namespace.FailoverVersion = 2
+	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
+	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
 	s.registry = s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
