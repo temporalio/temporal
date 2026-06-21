@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math/rand"
@@ -303,7 +304,7 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry, error) {
 	runtimeProvider := c.chasmRuntimeProvider
 	if runtimeProvider == nil {
-		return nil, nil, nil, fmt.Errorf("chasm runtime is not available")
+		return nil, nil, nil, errors.New("chasm runtime is not available")
 	}
 	engine, visibilityManager, registry := runtimeProvider()
 	return engine, visibilityManager, registry, nil
