@@ -3,7 +3,6 @@ package deleteexecutions
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
