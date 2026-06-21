@@ -3,7 +3,6 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -79,24 +78,22 @@ func (pdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplu
 }
 
 func (pdb *db) AddToBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
-	var query strings.Builder
-	query.WriteString(addBuildIdToTaskQueueMappingQry)
+	query := addBuildIdToTaskQueueMappingQry
 	var params []any
 	for idx, buildId := range request.BuildIds {
-		query.WriteString(fmt.Sprintf("($%d, $%d, $%d)", idx*3+1, idx*3+2, idx*3+3))
+		query += fmt.Sprintf("($%d, $%d, $%d)", idx*3+1, idx*3+2, idx*3+3)
 		if idx < len(request.BuildIds)-1 {
-			query.WriteString(", ")
+			query += ", "
 		}
 		params = append(params, request.NamespaceID, buildId, request.TaskQueueName)
 	}
 
-	_, err := pdb.ExecContext(ctx, query.String(), params...)
+	_, err := pdb.ExecContext(ctx, query, params...)
 	return err
 }
 
 func (pdb *db) RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
-	var query strings.Builder
-	query.WriteString(removeBuildIdToTaskQueueMappingQry)
+	query := removeBuildIdToTaskQueueMappingQry
 	// Golang doesn't support appending a string slice to an any slice which is essentially what we're doing here.
 	params := make([]any, len(request.BuildIds)+2)
 	params[0] = request.NamespaceID
@@ -106,11 +103,11 @@ func (pdb *db) RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request 
 		if idx == len(request.BuildIds)-1 {
 			sep = ")"
 		}
-		query.WriteString(fmt.Sprintf("$%d%s", idx+3, sep))
+		query += fmt.Sprintf("$%d%s", idx+3, sep)
 		params[idx+2] = buildId
 	}
 
-	_, err := pdb.ExecContext(ctx, query.String(), params...)
+	_, err := pdb.ExecContext(ctx, query, params...)
 	return err
 }
 

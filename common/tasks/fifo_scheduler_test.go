@@ -155,14 +155,16 @@ func (s *fifoSchedulerSuite) TestParallelSubmitProcess() {
 		}
 		close(channel)
 
-		endWaitGroup.Go(func() {
+		endWaitGroup.Add(1)
+		go func() {
 			startWaitGroup.Wait()
 
 			for mockTask := range channel {
 				s.scheduler.Submit(mockTask)
 			}
 
-		})
+			endWaitGroup.Done()
+		}()
 		startWaitGroup.Done()
 	}
 	endWaitGroup.Wait()

@@ -3,7 +3,6 @@ package visibility
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 
 	"go.temporal.io/server/api/visibilityservice/v1"
@@ -72,7 +71,12 @@ func (v *VisibilityManagerDual) GetStoreNames() []string {
 }
 
 func (v *VisibilityManagerDual) HasStoreName(stName string) bool {
-	return slices.Contains(v.GetStoreNames(), stName)
+	for _, sn := range v.GetStoreNames() {
+		if sn == stName {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *VisibilityManagerDual) GetIndexName() string {
@@ -231,9 +235,11 @@ func dualWriteWrapper[RequestT any](
 	errs := make([]error, len(ms))
 	wg := sync.WaitGroup{}
 	for i, m := range ms {
-		wg.Go(func() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			errs[i] = fn(m, ctx, request)
-		})
+		}()
 	}
 	wg.Wait()
 	return errors.Join(errs...)

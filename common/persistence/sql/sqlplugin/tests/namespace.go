@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -259,7 +260,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	// cleanup the namespace for pagination test
 	rowsPerPage, err := s.store.SelectFromNamespace(newExecutionContext(), sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
-		PageSize:      new(1000000),
+		PageSize:      util.Ptr(1000000),
 	})
 	switch err {
 	case nil:
@@ -297,7 +298,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	rows := map[string]*sqlplugin.NamespaceRow{}
 	filter := sqlplugin.NamespaceFilter{
 		GreaterThanID: nil,
-		PageSize:      new(numNamespacePerPage),
+		PageSize:      util.Ptr(numNamespacePerPage),
 	}
 	for doContinue := true; doContinue; doContinue = filter.GreaterThanID != nil {
 		rowsPerPage, err := s.store.SelectFromNamespace(newExecutionContext(), filter)

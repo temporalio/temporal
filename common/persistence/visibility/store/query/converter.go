@@ -714,8 +714,10 @@ func (c *QueryConverter[ExprT]) validateValueType(
 }
 
 func IsGroupByFieldAllowed(fieldName string) bool {
-	if slices.Contains(groupByFieldAllowlist, fieldName) {
-		return true
+	for _, allowedField := range groupByFieldAllowlist {
+		if fieldName == allowedField {
+			return true
+		}
 	}
 	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
 		if strings.HasPrefix(fieldName, allowedPrefix) {

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -175,7 +176,7 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
-		RangeID:     new(rangeID),
+		RangeID:     util.Ptr(rangeID),
 	}
 	result, err := s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
 	s.NoError(err)
@@ -206,7 +207,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
-		RangeID:     new(rangeID),
+		RangeID:     util.Ptr(rangeID),
 	}
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
 	s.NoError(err)
@@ -237,7 +238,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
-		RangeID:     new(rangeID + 1),
+		RangeID:     util.Ptr(rangeID + 1),
 	}
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
 	s.NoError(err)

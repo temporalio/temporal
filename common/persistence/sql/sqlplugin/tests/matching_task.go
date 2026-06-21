@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -127,9 +128,9 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	inclusiveMinTaskID := new(taskID)
-	exclusiveMaxTaskID := new(taskID + 1)
-	pageSize := new(1)
+	inclusiveMinTaskID := util.Ptr(taskID)
+	exclusiveMaxTaskID := util.Ptr(taskID + 1)
+	pageSize := util.Ptr(1)
 	filter := sqlplugin.TasksFilter{
 		RangeHash:          testMatchingTaskRangeHash,
 		TaskQueueID:        queueID,
@@ -160,9 +161,9 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(2, int(rowsAffected))
 
-	inclusiveMinTaskID := new(taskID - 1)
-	exclusiveMaxTaskID := new(taskID + 1)
-	pageSize := new(2)
+	inclusiveMinTaskID := util.Ptr(taskID - 1)
+	exclusiveMaxTaskID := util.Ptr(taskID + 1)
+	pageSize := util.Ptr(2)
 	filter := sqlplugin.TasksFilter{
 		RangeHash:          testMatchingTaskRangeHash,
 		TaskQueueID:        queueID,
@@ -226,8 +227,8 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	filter := sqlplugin.TasksFilter{
 		RangeHash:          testMatchingTaskRangeHash,
 		TaskQueueID:        queueID,
-		ExclusiveMaxTaskID: new(taskID + 1),
-		Limit:              new(2),
+		ExclusiveMaxTaskID: util.Ptr(taskID + 1),
+		Limit:              util.Ptr(2),
 	}
 	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -235,9 +236,9 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(2, int(rowsAffected))
 
-	inclusiveMinTaskID := new(taskID - 1)
-	exclusiveMaxTaskID := new(taskID + 1)
-	pageSize := new(2)
+	inclusiveMinTaskID := util.Ptr(taskID - 1)
+	exclusiveMaxTaskID := util.Ptr(taskID + 1)
+	pageSize := util.Ptr(2)
 	filter = sqlplugin.TasksFilter{
 		RangeHash:          testMatchingTaskRangeHash,
 		TaskQueueID:        queueID,
