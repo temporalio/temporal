@@ -223,7 +223,7 @@ func TestMigrateSchedule_FromVisibility_OutputLog(t *testing.T) {
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	byID := map[string]logRec{}
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		var rec logRec
 		require.NoError(t, json.Unmarshal([]byte(line), &rec))
 		byID[rec.ScheduleID] = rec

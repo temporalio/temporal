@@ -89,7 +89,6 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 func intoVersionSets(buildIDToInfo map[string]buildIDInfo) []*persistencespb.CompatibleVersionSet {
 	sets := make([]*persistencespb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
-		info := info
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
 			set = &persistencespb.CompatibleVersionSet{

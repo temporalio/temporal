@@ -5,7 +5,7 @@ package util
 import (
 	"context"
 	"maps"
-	"sort"
+	"slices"
 	"time"
 
 	expconstraints "golang.org/x/exp/constraints"
@@ -39,9 +39,7 @@ func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 // SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
 func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
-	sort.Slice(slice, func(i, j int) bool {
-		return slice[i] < slice[j]
-	})
+	slices.Sort(slice)
 }
 
 // SliceHead returns the first n elements of s. n may be greater than len(s).
@@ -120,8 +118,6 @@ func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([
 	results := make([]OUT, len(input))
 
 	for i, in := range input {
-		i := i
-		in := in
 		go func() {
 			var err error
 			results[i], err = mapper(in)
