@@ -95,16 +95,16 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
 	err := r.Register(lib)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Detached component should have IsDetached() return true
 	detachedRC, ok := r.Component("TestLibrary.DetachedComponent")
-	s.Require().True(ok)
-	s.Require().True(detachedRC.IsDetached())
+	s.True(ok)
+	s.True(detachedRC.IsDetached())
 
 	// Verify that a component without WithDetached() has IsDetached() return false
 	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
-	s.Require().False(normalRC.IsDetached())
+	s.False(normalRC.IsDetached())
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
@@ -134,7 +134,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt1, ok := r.Task("TestLibrary.Task1")
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task1", rt1.FqType())
-	s.Require().Equal("test-task-group", rt1.TaskGroup())
+	s.Equal("test-task-group", rt1.TaskGroup())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
 	require.False(s.T(), ok)
@@ -144,7 +144,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt2, ok := r.TaskFor(tInstance1)
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
-	s.Require().Equal(rt2.FqType(), rt2.TaskGroup())
+	s.Equal(rt2.FqType(), rt2.TaskGroup())
 
 	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
 	require.True(s.T(), ok)
@@ -262,7 +262,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("duplicate search attribute alias panics", func() {
-		s.Require().PanicsWithValue("registrable component validation error: search attribute alias \"MyAlias\" is already defined",
+		s.PanicsWithValue("registrable component validation error: search attribute alias \"MyAlias\" is already defined",
 			func() {
 				chasm.NewRegistrableComponent[*chasm.MockComponent](
 					"Component1",
@@ -276,7 +276,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("duplicate search attribute field panics", func() {
-		s.Require().PanicsWithValue("registrable component validation error: search attribute field \"TemporalBool01\" is already defined",
+		s.PanicsWithValue("registrable component validation error: search attribute field \"TemporalBool01\" is already defined",
 			func() {
 				chasm.NewRegistrableComponent[*chasm.MockComponent](
 					"Component1",
@@ -290,7 +290,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("valid search attributes do not panic", func() {
-		s.Require().NotPanics(func() {
+		s.NotPanics(func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes(
@@ -303,7 +303,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("ExecutionStatus alias is allowed for CHASM components", func() {
-		s.Require().NotPanics(func() {
+		s.NotPanics(func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes(
@@ -314,7 +314,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("TaskQueue preallocated search attribute is allowed", func() {
-		s.Require().NotPanics(func() {
+		s.NotPanics(func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes(
@@ -325,7 +325,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 	})
 
 	s.Run("CHASM system search attribute alias panics", func() {
-		s.Require().PanicsWithValue(
+		s.PanicsWithValue(
 			"registrable component validation error: CHASM search attribute alias \"WorkflowId\" is a CHASM system search attribute",
 			func() {
 				chasm.NewRegistrableComponent[*chasm.MockComponent](
@@ -344,8 +344,8 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		})
 		r := chasm.NewRegistry(s.logger)
 		err := r.Register(lib)
-		s.Require().Error(err)
-		s.Require().Contains(err.Error(), "has Field[*Visibility] but no businessID alias")
+		s.Error(err)
+		s.Contains(err.Error(), "has Field[*Visibility] but no businessID alias")
 	})
 
 	s.Run("component with Visibility field and businessID alias succeeds", func() {
@@ -360,7 +360,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		lib.EXPECT().NexusServiceProcessors().Return(nil)
 		r := chasm.NewRegistry(s.logger)
 		err := r.Register(lib)
-		s.Require().NoError(err)
+		s.NoError(err)
 	})
 
 }
@@ -445,7 +445,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib2.EXPECT().Tasks().Return([]*chasm.RegistrableTask{task})
 		r2 := chasm.NewRegistry(s.logger)
 		err := r2.Register(lib2)
-		s.Require().NoError(err)
+		s.NoError(err)
 
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{task})
 		r := chasm.NewRegistry(s.logger)
@@ -481,14 +481,14 @@ func (s *RegistryTestSuite) TestRegistry_RegisterNexusServices_Success() {
 	lib.EXPECT().NexusServices().Return([]*nexus.Service{svc1, svc2})
 
 	err := r.Register(lib)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	services := r.NexusServices()
-	s.Require().Len(services, 2)
-	s.Require().Contains(services, "Service1")
-	s.Require().Contains(services, "Service2")
-	s.Require().Equal(svc1, services["Service1"])
-	s.Require().Equal(svc2, services["Service2"])
+	s.Len(services, 2)
+	s.Contains(services, "Service1")
+	s.Contains(services, "Service2")
+	s.Equal(svc1, services["Service1"])
+	s.Equal(svc2, services["Service2"])
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterNexusServices_Error() {
@@ -504,7 +504,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterNexusServices_Error() {
 		lib.EXPECT().NexusServices().Return([]*nexus.Service{svc, svc})
 		r := chasm.NewRegistry(s.logger)
 		err := r.Register(lib)
-		s.Require().ErrorContains(err, "is already registered")
+		s.ErrorContains(err, "is already registered")
 	})
 }
 
@@ -522,13 +522,13 @@ func (s *RegistryTestSuite) TestRegistry_RegisterNexusServiceProcessors() {
 	lib.EXPECT().NexusServiceProcessors().Return([]*chasm.NexusServiceProcessor{proc1, proc2})
 
 	err := r.Register(lib)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Verify the processors were registered by attempting to use them
 	// We can verify registration indirectly by trying to register them again which should fail
 	err = r.NexusEndpointProcessor.RegisterServiceProcessor(proc1)
-	s.Require().ErrorContains(err, "already registered")
+	s.ErrorContains(err, "already registered")
 
 	err = r.NexusEndpointProcessor.RegisterServiceProcessor(proc2)
-	s.Require().ErrorContains(err, "already registered")
+	s.ErrorContains(err, "already registered")
 }
