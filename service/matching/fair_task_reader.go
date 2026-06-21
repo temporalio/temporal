@@ -384,6 +384,15 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
 
+	// If this was a write and tasks were filtered (e.g. above readLevel when atEnd=false),
+	// we may need to trigger a read to pick them up from DB. Without this, the reader can
+	// get stuck in {atEnd=false, loadedTasks=0, readPending=false} with no trigger to
+	// start reading. This mirrors the re-check in readTasksImpl after processing
+	// newlyWrittenTasks. (See INC-1722.)
+	if mode == mergeWrite {
+		tr.maybeReadTasksLocked()
+	}
+
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
