@@ -155,6 +155,31 @@ func NewRegistry(
 	enableGlobalNamespaces bool,
 	currentClusterName string,
 	refreshInterval dynamicconfig.DurationPropertyFn,
+	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
+	namespaceStateChangedFn namespace.NamespaceStateChangedFn,
+) *registry {
+	return NewRegistryWithForceNamespaceCacheRefreshOnRead(
+		aPersistence,
+		enableGlobalNamespaces,
+		currentClusterName,
+		refreshInterval,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		forceSearchAttributesCacheRefreshOnRead,
+		metricsHandler,
+		logger,
+		replicationResolverFactory,
+		namespaceStateChangedFn,
+	)
+}
+
+func NewRegistryWithForceNamespaceCacheRefreshOnRead(
+	aPersistence Persistence,
+	enableGlobalNamespaces bool,
+	currentClusterName string,
+	refreshInterval dynamicconfig.DurationPropertyFn,
 	forceNamespaceCacheRefreshOnRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,

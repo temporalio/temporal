@@ -235,7 +235,7 @@ type NamespaceRegistryParams struct {
 }
 
 func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
-	return nsregistry.NewRegistry(
+	return nsregistry.NewRegistryWithForceNamespaceCacheRefreshOnRead(
 		params.MetadataManager,
 		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
 		params.ClusterMetadata.GetCurrentClusterName(),

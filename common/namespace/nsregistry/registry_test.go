@@ -58,7 +58,7 @@ func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces .
 	for _, ns := range forceNamespaceCacheRefreshOnReadNamespaces {
 		forceNamespaceCacheRefreshOnRead[ns] = struct{}{}
 	}
-	return nsregistry.NewRegistry(
+	return nsregistry.NewRegistryWithForceNamespaceCacheRefreshOnRead(
 		s.regPersistence,
 		true,
 		"active",
@@ -784,16 +784,16 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	id := namespace.NewID()
 	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
 	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
-	s.registry = s.newRegistry("foo")
+	registry := s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry.Start()
+	defer registry.Stop()
 
-	ns, err := s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
+	ns, err := registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
 	s.NoError(err)
 	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
@@ -801,7 +801,7 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 		Name: "foo",
 	}).Return(nsV2, nil)
 
-	ns, err = s.registry.GetNamespace(namespace.Name("foo"))
+	ns, err = registry.GetNamespace(namespace.Name("foo"))
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
@@ -810,16 +810,16 @@ func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 	id := namespace.NewID()
 	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
 	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
-	s.registry = s.newRegistry("foo")
+	registry := s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry.Start()
+	defer registry.Stop()
 
-	ns, err := s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
+	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
 	s.NoError(err)
 	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
@@ -827,7 +827,7 @@ func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 		ID: id.String(),
 	}).Return(nsV2, nil)
 
-	ns, err = s.registry.GetNamespaceByID(id)
+	ns, err = registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
