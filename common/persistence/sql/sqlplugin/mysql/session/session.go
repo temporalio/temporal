@@ -7,7 +7,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"strings"
 
@@ -171,7 +170,9 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 	}
 
 	// these attrs are always overriden
-	maps.Copy(attrs, dsnAttrOverrides)
+	for k, v := range dsnAttrOverrides {
+		attrs[k] = v
+	}
 
 	if !paramInterpolationAllowed(dbKind) {
 		if _, ok := attrs[interpolateParamsAttr]; ok {

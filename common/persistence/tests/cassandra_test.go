@@ -276,7 +276,7 @@ func TestCassandraHistoryV2Persistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.Setup(nil)
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -284,7 +284,7 @@ func TestCassandraMetadataPersistenceV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.Setup(nil)
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -292,7 +292,7 @@ func TestCassandraClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.Setup(nil)
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -300,7 +300,7 @@ func TestCassandraQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.Setup(nil)
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -990,6 +990,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 
 			// Start both RangeDeleteMessages call
 			for _, q := range qs {
+				q := q
 				go func() {
 					err := deleteMessages(ctx, q.QueueV2, queueType, queueName, q.maxIDToDelete)
 					q.deleteErrs <- err

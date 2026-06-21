@@ -170,7 +170,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 		rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 		s.NoError(err)
 		s.NotEmpty(rows)
-		s.LessOrEqual(len(rows), filter.PageSize)
+		s.True(len(rows) <= filter.PageSize)
 		for index := range rows {
 			rows[index].ShardID = shardID
 		}
