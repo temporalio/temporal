@@ -43,10 +43,10 @@ func getTaskTTL(expireTime *timestamppb.Timestamp) int64 {
 		return 0
 	}
 
-	expiryTtl := max(
+	expiryTTL := max(
 		// 0 means no ttl, we dont want that.
 		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
 		convert.Int64Ceil(time.Until(expireTime.AsTime()).Seconds()), 1)
 
-	return expiryTtl
+	return expiryTTL
 }
