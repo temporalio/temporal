@@ -703,13 +703,11 @@ func TestClear(t *testing.T) {
 	require.NotNil(t, upd)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := upd.WaitLifecycleStage(
 			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 2*time.Second)
 		require.Equal(t, update.AbortedByServerErr, err)
-	}()
+	})
 
 	reg.Clear()
 	wg.Wait()

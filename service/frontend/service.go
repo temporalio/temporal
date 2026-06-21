@@ -539,22 +539,18 @@ func (s *Service) Stop() {
 	s.logger.Info("ShutdownHandler: Draining traffic")
 	// Gracefully stop gRPC server and HTTP API server concurrently
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.AfterFunc(requestDrainTime, func() {
 			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 			s.server.Stop()
 		})
 		s.server.GracefulStop()
 		t.Stop()
-	}()
+	})
 	if s.httpAPIServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s.httpAPIServer.GracefulStop(requestDrainTime)
-		}()
+		})
 	}
 	wg.Wait()
 

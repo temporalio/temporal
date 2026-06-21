@@ -113,12 +113,11 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":  {},
 	}
 
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
-		if t.Method(i).Name == "DescribeTaskQueue" {
+	for method := range t.Methods() {
+		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + method.Name
+		if method.Name == "DescribeTaskQueue" {
 			apiName += "WithReachability"
 		}
 		if _, ok := apis[apiName]; ok {
@@ -140,11 +139,10 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             {},
 	}
 
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
+	for method := range t.Methods() {
+		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + method.Name
 		if _, ok := apis[apiName]; ok {
 			apiToPriority[apiName] = NamespaceReplicationInducingAPIToPriority[apiName]
 		}

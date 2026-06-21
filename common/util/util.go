@@ -3,12 +3,11 @@
 package util
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"slices"
 	"time"
-
-	expconstraints "golang.org/x/exp/constraints"
 )
 
 // MinTime returns the earlier of two given time.Time
@@ -38,7 +37,7 @@ func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 
 // SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
-func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
+func SortSlice[S ~[]E, E cmp.Ordered](slice S) {
 	slices.Sort(slice)
 }
 
@@ -178,8 +177,10 @@ func RepeatSlice[T any](xs []T, n int) []T {
 }
 
 // Ptr returns a pointer to a copy of v.
+//
+//go:fix inline
 func Ptr[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 // InterruptibleSleep is like time.Sleep but can be interrupted by a context.

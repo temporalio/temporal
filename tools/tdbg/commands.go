@@ -991,10 +991,7 @@ func migrateSchedulesFromVisibility(
 	}
 
 	execute := c.Bool(FlagExecute)
-	workers := c.Int(FlagWorkers)
-	if workers < 1 {
-		workers = 1
-	}
+	workers := max(c.Int(FlagWorkers), 1)
 	wfClient := clientFactory.WorkflowClient(c)
 	adminClient := clientFactory.AdminClient(c)
 
@@ -1084,10 +1081,7 @@ func migrateSchedulesFromStdin(
 	targetStr string,
 ) error {
 	execute := c.Bool(FlagExecute)
-	workers := c.Int(FlagWorkers)
-	if workers < 1 {
-		workers = 1
-	}
+	workers := max(c.Int(FlagWorkers), 1)
 	adminClient := clientFactory.AdminClient(c)
 
 	var summary migrateSummary

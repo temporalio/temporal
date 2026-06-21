@@ -156,10 +156,10 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 }
 
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
-	s.testGetAuthorizerFromConfig("", true, reflect.TypeOf(&noopAuthorizer{}))
+	s.testGetAuthorizerFromConfig("", true, reflect.TypeFor[*noopAuthorizer]())
 }
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigDefault() {
-	s.testGetAuthorizerFromConfig("default", true, reflect.TypeOf(&defaultAuthorizer{}))
+	s.testGetAuthorizerFromConfig("default", true, reflect.TypeFor[*defaultAuthorizer]())
 }
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
 	s.testGetAuthorizerFromConfig("foo", false, nil)

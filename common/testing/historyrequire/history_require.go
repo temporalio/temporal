@@ -32,7 +32,7 @@ type (
 
 var (
 	publicRgx   = regexp.MustCompile("^[A-Z]")
-	typeOfBytes = reflect.TypeOf([]byte(nil))
+	typeOfBytes = reflect.TypeFor[[]byte]()
 )
 
 func New(t require.TestingT) HistoryRequire {

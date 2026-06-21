@@ -3869,10 +3869,8 @@ func (ms *MutableStateImpl) addUsedDeploymentVersionToLoadedSearchAttribute(exis
 	}
 
 	// Check if already exists (deduplicate)
-	for _, existingValue := range existingValues {
-		if existingValue == deploymentVersionStr {
-			return existingValues // Already present, no change
-		}
+	if slices.Contains(existingValues, deploymentVersionStr) {
+		return existingValues // Already present, no change
 	}
 
 	// Add new deployment version to the list
