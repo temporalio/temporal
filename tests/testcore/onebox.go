@@ -302,6 +302,9 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 }
 
 func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry, error) {
+	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
+		return nil, nil, nil, fmt.Errorf("expected exactly one history host for chasm runtime, got %d", numHistoryHosts)
+	}
 	runtimeProvider := c.chasmRuntimeProvider
 	if runtimeProvider == nil {
 		return nil, nil, nil, errors.New("chasm runtime is not available")
