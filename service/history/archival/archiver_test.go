@@ -151,6 +151,7 @@ func TestArchiver(t *testing.T) {
 			},
 		},
 	} {
+		c := c // capture range variable
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 

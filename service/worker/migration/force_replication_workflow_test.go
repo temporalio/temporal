@@ -145,7 +145,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
 				Executions:    []*ExecutionInfo{},
-				NextPageToken: fmt.Appendf(nil, "fake-page-token-%d", currentPageCount),
+				NextPageToken: []byte(fmt.Sprintf("fake-page-token-%d", currentPageCount)),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
 			}, nil

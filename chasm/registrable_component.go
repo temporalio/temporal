@@ -2,7 +2,6 @@ package chasm
 
 import (
 	"fmt"
-	"maps"
 	"reflect"
 
 	"github.com/dgryski/go-farm"
@@ -174,7 +173,9 @@ func WithContextValues(
 		if rc.contextValues == nil {
 			rc.contextValues = make(map[any]any, len(keyVals))
 		}
-		maps.Copy(rc.contextValues, keyVals)
+		for k, v := range keyVals {
+			rc.contextValues[k] = v
+		}
 	}
 }
 

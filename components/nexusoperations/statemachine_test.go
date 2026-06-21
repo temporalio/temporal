@@ -575,6 +575,7 @@ func TestCompleteExternally(t *testing.T) {
 		},
 	}
 	for _, setup := range setups {
+		setup := setup
 		for _, tc := range cases {
 			t.Run(setup.name+"-"+tc.name, func(t *testing.T) {
 				node := setup.fn(t)
@@ -836,6 +837,7 @@ func TestOperationCompareState(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := nexusoperations.Operation{
 				NexusOperationInfo: &persistencespb.NexusOperationInfo{
@@ -913,6 +915,7 @@ func TestCancelationCompareState(t *testing.T) {
 	}
 
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := nexusoperations.Cancelation{
 				NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{

@@ -93,7 +93,7 @@ func getLinksFromHeader(httpHeader http.Header) ([]nexus.Link, error) {
 	if len(headerValues) == 0 {
 		return nil, nil
 	}
-	for encodedLink := range strings.SplitSeq(strings.Join(headerValues, ","), ",") {
+	for _, encodedLink := range strings.Split(strings.Join(headerValues, ","), ",") {
 		link, err := decodeLink(encodedLink)
 		if err != nil {
 			return nil, err

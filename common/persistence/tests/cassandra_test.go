@@ -990,6 +990,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 
 			// Start both RangeDeleteMessages call
 			for _, q := range qs {
+				q := q
 				go func() {
 					err := deleteMessages(ctx, q.QueueV2, queueType, queueName, q.maxIDToDelete)
 					q.deleteErrs <- err

@@ -132,6 +132,7 @@ func TestClientRequestID(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
+		c := c
 		t.Run(c.name, func(t *testing.T) {
 			result, err := client.StartOperation(ctx, "foo", nil, c.request)
 			require.NoError(t, err)
@@ -234,6 +235,7 @@ func TestReaderIO(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := client.StartOperation(ctx, "foo", tc.input, nexus.StartOperationOptions{Header: tc.header, Links: tc.links})
 			require.NoError(t, err)

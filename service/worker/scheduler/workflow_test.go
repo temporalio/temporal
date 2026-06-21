@@ -183,6 +183,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 	env := s.env
 
 	for _, run := range runs {
+		run := run // capture fresh value
 		// set up start
 		matchStart := mock.MatchedBy(func(req *schedulespb.StartWorkflowRequest) bool {
 			return req.Request.WorkflowId == run.id
@@ -1355,6 +1356,7 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 
 	delayedCallbacks := make([]delayedCallback, backfills)
 	for i := range delayedCallbacks {
+		i := i
 		delayedCallbacks[i] = delayedCallback{
 			// test environment seems to get confused if the callback falls on the same instant
 			// as a workflow timer, so use an odd interval to force it to be different.
@@ -1422,6 +1424,7 @@ func (s *workflowSuite) TestHugeBackfillBuffer() {
 
 	delayedCallbacks := make([]delayedCallback, backfills)
 	for i := range delayedCallbacks {
+		i := i
 		delayedCallbacks[i] = delayedCallback{
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
