@@ -1005,7 +1005,7 @@ func migrateSchedulesFromVisibility(
 	defer closeLog()
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Go(func() {
 			for job := range jobs {
 				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
@@ -1093,7 +1093,7 @@ func migrateSchedulesFromStdin(
 
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Go(func() {
 			for job := range jobs {
 				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)

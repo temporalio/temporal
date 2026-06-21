@@ -38,7 +38,7 @@ func formatReportLines(reports []TestReport) []string {
 func formatLinks(urls []string, maxLinks int) string {
 	linkCount := min(len(urls), maxLinks)
 	var parts []string
-	for i := 0; i < linkCount; i++ {
+	for i := range linkCount {
 		parts = append(parts, fmt.Sprintf("[%d](%s)", i+1, urls[i]))
 	}
 	return strings.Join(parts, " ")
