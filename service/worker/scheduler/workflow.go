@@ -687,7 +687,7 @@ func (s *scheduler) processTimeRange(
 	lastAction := start
 	recordedGenerateLatency := false
 	var next GetNextTimeResult
-	for next = s.getNextTime(start); !next.Next.IsZero() && !next.Next.After(end); next = s.getNextTime(next.Next) {
+	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
@@ -907,11 +907,10 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	pauseOnFailure := s.Schedule.Policies.PauseOnFailure && failedStatus && !s.Schedule.State.Paused
 	if pauseOnFailure {
 		s.Schedule.State.Paused = true
-		switch res.Status {
-		case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
+		if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
 			s.Schedule.State.Notes = fmt.Sprintf("paused due to workflow failure: %s: %s", id, res.GetFailure().GetMessage())
 			s.logger.Debug("paused due to workflow failure", "workflow", id, "message", res.GetFailure().GetMessage())
-		case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		} else if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT {
 			s.Schedule.State.Notes = fmt.Sprintf("paused due to workflow timeout: %s", id)
 			s.logger.Debug("paused due to workflow timeout", "workflow", id)
 		}
