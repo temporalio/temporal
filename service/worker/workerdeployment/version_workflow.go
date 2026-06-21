@@ -1072,7 +1072,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	drainage := d.VersionState.GetDrainageInfo()
 	var interval time.Duration
 	var err error
-	if drainage.LastCheckedTime.AsTime().Equal(drainage.LastChangedTime.AsTime()) {
+	if drainage.LastCheckedTime.AsTime() == drainage.LastChangedTime.AsTime() {
 		// this is the first update, so we wait according to the grace period config
 		interval, err = getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 	} else {
@@ -1176,12 +1176,11 @@ func (d *VersionWorkflowRunner) findNewVersionStatus(args *deploymentspb.SyncVer
 }
 
 func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx workflow.Context, newStatus enumspb.VersionDrainageStatus) {
-	switch newStatus {
-	case enumspb.VERSION_DRAINAGE_STATUS_DRAINED:
+	if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
-	case enumspb.VERSION_DRAINAGE_STATUS_DRAINING:
+	} else if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
-	default:
+	} else {
 		// This should only happen if we encounter an error while checking the drainage status of the version
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}

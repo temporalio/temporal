@@ -107,7 +107,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.Equal(schedToStart, rewritten)
+	t.EqualValues(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
 }
@@ -137,7 +137,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.Equal(schedToStart, rewritten)
+	t.EqualValues(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_HISTORY, request.GetForwardInfo().GetTaskSource())
 }
@@ -162,7 +162,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -190,7 +190,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -499,7 +499,7 @@ func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueT
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
 	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-	t.NoError(err)
+	t.Nil(err)
 }
 
 func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, buildId string) {
@@ -507,7 +507,7 @@ func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, b
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
 	t.fwdr, err = newForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client)
-	t.NoError(err)
+	t.Nil(err)
 }
 
 func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {

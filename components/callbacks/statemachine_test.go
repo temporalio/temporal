@@ -44,10 +44,10 @@ func TestValidTransitions(t *testing.T) {
 	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(callback.NextAttemptScheduleTime.AsTime())
-	require.Less(t, dt, time.Millisecond*200)
+	require.True(t, dt < time.Millisecond*200)
 
 	// Assert backoff task is generated
-	require.Len(t, out.Tasks, 1)
+	require.Equal(t, 1, len(out.Tasks))
 	boTask := out.Tasks[0].(callbacks.BackoffTask)
 	require.Equal(t, callback.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
@@ -64,7 +64,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert callback task is generated
-	require.Len(t, out.Tasks, 1)
+	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(callbacks.InvocationTask)
 	require.Equal(t, "http://address:666", cbTask.Destination())
 
@@ -84,7 +84,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
-	require.Empty(t, out.Tasks)
+	require.Equal(t, 0, len(out.Tasks))
 
 	// Reset back to scheduled
 	callback = dup
@@ -104,7 +104,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
-	require.Empty(t, out.Tasks)
+	require.Equal(t, 0, len(out.Tasks))
 }
 
 func TestCompareState(t *testing.T) {
@@ -162,6 +162,7 @@ func TestCompareState(t *testing.T) {
 	}
 
 	for _, tc := range cases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
@@ -184,9 +185,9 @@ func TestCompareState(t *testing.T) {
 			if tc.sign == 0 {
 				require.Equal(t, 0, res)
 			} else if tc.sign > 0 {
-				require.Positive(t, res)
+				require.Greater(t, res, 0)
 			} else {
-				require.Negative(t, res)
+				require.Greater(t, 0, res)
 			}
 		})
 	}

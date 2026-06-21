@@ -321,6 +321,7 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			rules := AddressMatchRules{Rules: tt.args.rules}
 			tt.validateErr(t, rules.Validate(tt.args.rawURL))

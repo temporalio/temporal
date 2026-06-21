@@ -258,7 +258,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Empty(descResp.DescResponse.GetPollers())
+	s.Equal(0, len(descResp.DescResponse.GetPollers()))
 	s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 
 	includeTaskStatus = true
@@ -280,14 +280,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Len(descResp.DescResponse.GetPollers(), 1)
+	s.Equal(1, len(descResp.DescResponse.GetPollers()))
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, makePollMetadata(rps))
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Len(descResp.DescResponse.GetPollers(), 1)
+	s.Equal(1, len(descResp.DescResponse.GetPollers()))
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.True(descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)
 
@@ -310,7 +310,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	// Active poll-er
 	s.tqMgr.Start()
 	s.tqMgr.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
-	s.Len(s.tqMgr.GetAllPollerInfo(), 1)
+	s.Equal(1, len(s.tqMgr.GetAllPollerInfo()))
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)
@@ -320,7 +320,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 
 	// Active adding task
 	s.tqMgr.Start()
-	s.Empty(s.tqMgr.GetAllPollerInfo())
+	s.Equal(0, len(s.tqMgr.GetAllPollerInfo()))
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)

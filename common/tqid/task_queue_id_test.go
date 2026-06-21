@@ -1,6 +1,7 @@
 package tqid
 
 import (
+	"errors"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -44,7 +45,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	a.Equal(nsid, p.NamespaceId())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
-	a.Empty(p.TaskQueue().Name())
+	a.Equal("", p.TaskQueue().Name())
 	a.Equal(stickyName, p.(*StickyPartition).StickyName())
 	a.Equal(stickyName, p.RpcName())
 	a.False(p.IsRoot())
@@ -53,7 +54,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	proto.Name = "/_sys/my-basic-tq-name/23"
 	_, err = PartitionFromProto(proto, nsid, taskType)
 	// sticky queue cannot have non-zero prtn
-	a.ErrorIs(err, ErrNonZeroSticky)
+	a.True(errors.Is(err, ErrNonZeroSticky))
 }
 
 func TestFromProtoPartition_WorkerCommands(t *testing.T) {
