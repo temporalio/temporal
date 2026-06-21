@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -332,10 +333,8 @@ func (r *SchedulerCallbacksTaskHandler) Validate(
 	task *schedulerpb.SchedulerCallbacksTask,
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)
-	for _, start := range invoker.BufferedStarts {
-		if needsCallback(start) {
-			return true, nil
-		}
+	if slices.ContainsFunc(invoker.BufferedStarts, needsCallback) {
+		return true, nil
 	}
 	return false, nil
 }
