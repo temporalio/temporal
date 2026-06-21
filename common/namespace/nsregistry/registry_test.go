@@ -54,18 +54,18 @@ func (s *registrySuite) SetupTest() {
 }
 
 func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces ...string) namespace.Registry {
-	forceNamespaceCacheRefreshOnRead := make(map[string]struct{}, len(forceNamespaceCacheRefreshOnReadNamespaces))
-	for _, ns := range forceNamespaceCacheRefreshOnReadNamespaces {
-		forceNamespaceCacheRefreshOnRead[ns] = struct{}{}
-	}
 	return nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
 		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		func(namespace string) bool {
-			_, ok := forceNamespaceCacheRefreshOnRead[namespace]
-			return ok
+			for _, enabledNamespace := range forceNamespaceCacheRefreshOnReadNamespaces {
+				if namespace == enabledNamespace {
+					return true
+				}
+			}
+			return false
 		},
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
