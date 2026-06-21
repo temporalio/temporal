@@ -729,40 +729,6 @@ func (s *registrySuite) TestGetByNameWithoutReadthrough() {
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
 
-func (s *registrySuite) TestGetByIDWithoutReadthrough() {
-	id := namespace.NewID()
-
-	// registry start will refresh once
-	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
-		Namespaces: nil,
-	}, nil)
-	// second call will readthrough
-	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
-		ID: id.String(),
-	}).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   id.String(),
-				Name: "foo",
-			},
-			Config:            &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
-	}, nil)
-
-	registry := s.newRegistry()
-	registry.Start()
-	defer registry.Stop()
-
-	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
-	var notFound *serviceerror.NamespaceNotFound
-	s.ErrorAs(err, &notFound)
-
-	ns, err = registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
-	s.NoError(err)
-	s.Equal(namespace.Name("foo"), ns.Name())
-}
-
 func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	id := namespace.NewID()
 	nsV1 := &persistence.GetNamespaceResponse{
@@ -809,6 +775,40 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	ns, err = registry.GetNamespace(namespace.Name("foo"))
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+}
+
+func (s *registrySuite) TestGetByIDWithoutReadthrough() {
+	id := namespace.NewID()
+
+	// registry start will refresh once
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: nil,
+	}, nil)
+	// second call will readthrough
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}, nil)
+
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
+
+	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
+	var notFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &notFound)
+
+	ns, err = registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
+	s.NoError(err)
+	s.Equal(namespace.Name("foo"), ns.Name())
 }
 
 func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
