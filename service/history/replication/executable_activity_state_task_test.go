@@ -278,7 +278,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")
-	s.Equal(nil, s.task.HandleErr(err))
+	s.NoError(s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
@@ -303,7 +303,7 @@ func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
 		NamespaceId:      s.task.NamespaceID,
 		WorkflowId:       s.task.WorkflowID,
 		RunId:            s.task.RunID,
-		TaskId:           s.task.ExecutableTask.TaskID(),
+		TaskId:           s.task.TaskID(),
 		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		ScheduledEventId: s.task.req.ScheduledEventId,
 		Version:          s.task.req.Version,
@@ -367,7 +367,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	batchResult, batched := task1.BatchWith(task2)
 	s.True(batched)
 	activityTask, _ := batchResult.(*ExecutableActivityStateTask)
-	s.Equal(2, len(activityTask.activityInfos))
+	s.Len(activityTask.activityInfos, 2)
 	s.assertAttributeEqual(replicationAttribute1, activityTask.activityInfos[0])
 	s.assertAttributeEqual(replicationAttribute2, activityTask.activityInfos[1])
 
@@ -391,7 +391,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		ActivitiesInfo: activityTask.activityInfos,
 	})
 	err := batchResult.Execute()
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_ShouldNotBatch() {

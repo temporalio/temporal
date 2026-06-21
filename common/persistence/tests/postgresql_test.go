@@ -181,7 +181,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {
 	s.TestBase = persistencetests.NewTestBaseWithSQL(
 		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
 	)
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
@@ -190,7 +190,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLMetadataPersistenceSuiteV2() {
 	s.TestBase = persistencetests.NewTestBaseWithSQL(
 		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
 	)
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
@@ -199,7 +199,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLClusterMetadataPersistence() {
 	s.TestBase = persistencetests.NewTestBaseWithSQL(
 		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
 	)
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
@@ -208,7 +208,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
 	s.TestBase = persistencetests.NewTestBaseWithSQL(
 		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
 	)
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
