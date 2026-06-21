@@ -421,8 +421,8 @@ func (s *xdcBaseSuite) enableNamespaceCacheRefreshOnRead(ns string, clusters []*
 			Value: true,
 		},
 	}
-	for _, cluster := range clusters {
-		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ForceNamespaceCacheRefreshOnRead, values)
+	for _, testCluster := range clusters {
+		testCluster.OverrideDynamicConfig(s.T(), dynamicconfig.ForceNamespaceCacheRefreshOnRead, values)
 	}
 }
 
