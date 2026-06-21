@@ -252,7 +252,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
 				workflowTypeName:  new("some random type name"),
-				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
+				status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
@@ -413,7 +413,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: time.Unix(0, 1),
 		latestCloseTime:   time.Unix(0, 10001),
-		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+		status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -454,7 +454,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: time.Unix(0, 10),
 		latestCloseTime:   time.Unix(0, 10001),
-		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+		status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)
@@ -494,7 +494,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: time.Unix(0, 10),
 		latestCloseTime:   time.Unix(0, 10001),
-		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+		status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	req := &archiver.QueryVisibilityRequest{

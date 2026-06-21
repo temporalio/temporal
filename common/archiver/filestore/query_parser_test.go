@@ -130,49 +130,49 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"canceled\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"terminated\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'TIMED_OUT'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -202,7 +202,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = 3",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -314,7 +314,7 @@ func (s *queryParserSuite) TestParse() {
 				earliestCloseTime: time.Unix(0, 2000).UTC(),
 				latestCloseTime:   time.Unix(0, 9999).UTC(),
 				runID:             new("random runID"),
-				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
