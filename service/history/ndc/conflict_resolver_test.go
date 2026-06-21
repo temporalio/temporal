@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -153,7 +152,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		workflowKey,
 		branchToken1,
 		lastEventID1,
-		util.Ptr(version),
+		new(version),
 		workflowKey,
 		branchToken1,
 		requestID,
@@ -289,7 +288,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 		workflowKey,
 		branchToken1,
 		lastEventID1,
-		util.Ptr(version),
+		new(version),
 		workflowKey,
 		branchToken1,
 		gomock.Any(),
@@ -620,7 +619,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 		workflowKey,
 		branchToken1,
 		lastEventID1,
-		util.Ptr(version),
+		new(version),
 		workflowKey,
 		branchToken1,
 		gomock.Any(),
