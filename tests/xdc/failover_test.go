@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -2092,17 +2093,19 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
-	dweResponse, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
-	s.NoError(err)
-	pendingActivities := dweResponse.GetPendingActivities()
-	s.Len(pendingActivities, 1)
-	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
-	heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
-	var heartbeatValue int
-	s.NoError(payloads.Decode(heartbeatPayload, &heartbeatValue))
-	s.Equal(expectedHeartbeatValue, heartbeatValue)
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Equal("worker0", pendingActivities[0].GetLastWorkerIdentity())
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		dweResponse, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		require.NoError(t, err)
+		pendingActivities := dweResponse.GetPendingActivities()
+		require.Len(t, pendingActivities, 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
+		heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
+		var heartbeatValue int
+		require.NoError(t, payloads.Decode(heartbeatPayload, &heartbeatValue))
+		require.Equal(t, expectedHeartbeatValue, heartbeatValue)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
+		require.Equal(t, "worker0", pendingActivities[0].GetLastWorkerIdentity())
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// start worker1
 	worker1.RegisterWorkflow(testWorkflowFn)
