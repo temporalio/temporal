@@ -426,8 +426,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 		polls = 0
 		t.Run(tc.name, func() {
 			for range concurrency {
-				wg.Add(1)
-				go func() {
+				wg.Go(func() {
 					timer := time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-fwdr.AddReqTokenC():
@@ -449,8 +448,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 						atomic.AddInt32(&polls, 1)
 					case <-timer.C:
 					}
-					wg.Done()
-				}()
+				})
 			}
 			t.True(common.AwaitWaitGroup(&wg, time.Second))
 			t.Equal(tc.output, adds)
@@ -474,15 +472,13 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 	startC := make(chan struct{})
 	doneWG := sync.WaitGroup{}
 	for range 10 {
-		doneWG.Add(1)
-		go func() {
+		doneWG.Go(func() {
 			<-startC
 			token1 := <-fwdr.AddReqTokenC()
 			token1.release()
 			token2 := <-fwdr.PollReqTokenC()
 			token2.release()
-			doneWG.Done()
-		}()
+		})
 	}
 
 	maxOutstandingTasks = 10

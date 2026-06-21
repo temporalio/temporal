@@ -130,14 +130,14 @@ func readExpectedCounts(runDir string) (deploymentCount, versionCount int, err e
 			continue // Skip comments and empty lines
 		}
 
-		if strings.HasPrefix(line, "EXPECTED_DEPLOYMENT_WORKFLOWS=") {
-			value := strings.TrimPrefix(line, "EXPECTED_DEPLOYMENT_WORKFLOWS=")
+		if after, ok := strings.CutPrefix(line, "EXPECTED_DEPLOYMENT_WORKFLOWS="); ok {
+			value := after
 			deploymentCount, err = strconv.Atoi(value)
 			if err != nil {
 				return 0, 0, fmt.Errorf("invalid deployment count: %w", err)
 			}
-		} else if strings.HasPrefix(line, "EXPECTED_VERSION_WORKFLOWS=") {
-			value := strings.TrimPrefix(line, "EXPECTED_VERSION_WORKFLOWS=")
+		} else if after, ok := strings.CutPrefix(line, "EXPECTED_VERSION_WORKFLOWS="); ok {
+			value := after
 			versionCount, err = strconv.Atoi(value)
 			if err != nil {
 				return 0, 0, fmt.Errorf("invalid version count: %w", err)
