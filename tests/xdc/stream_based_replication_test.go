@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -138,6 +139,15 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 		s.namespaceID = nsRes.NamespaceInfo.GetId()
 		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 	})
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetTaskQueueRecorder()
+		s.Require().NotNil(recorder)
+		cluster.InjectHook(
+			s.T(),
+			testhooks.NewHook(testhooks.HistoryTasksWritten, recorder.Record),
+			namespace.ID(s.namespaceID),
+		)
+	}
 }
 
 // getRecorder returns the TaskQueueRecorder for the specified cluster index.

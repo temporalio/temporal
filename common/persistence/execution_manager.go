@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -161,7 +162,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 	m.addXDCCacheKV(newWorkflowXDCKVs)
-	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)); ok {
 		hook(
 			request.ShardID,
 			request.RangeID,
@@ -263,7 +264,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
-		if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+		if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)); ok {
 			hook(
 				request.ShardID,
 				request.RangeID,
@@ -988,7 +989,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	if err != nil {
 		return err
 	}
-	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, testhooks.GlobalScope); ok {
+	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, namespace.ID(input.NamespaceID)); ok {
 		hook(input.ShardID, input.RangeID, input.NamespaceID, input.WorkflowID, input.Tasks)
 	}
 	return nil
