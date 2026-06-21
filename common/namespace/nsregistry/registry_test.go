@@ -31,7 +31,6 @@ type (
 
 		controller     *gomock.Controller
 		regPersistence *nsregistry.MockPersistence
-		registry       namespace.Registry
 	}
 )
 
@@ -51,7 +50,6 @@ func (s *registrySuite) SetupTest() {
 	// Return ErrWatchNotSupported to use polling fallback in all tests.
 	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).
 		Return(nil, persistence.ErrWatchNotSupported).AnyTimes()
-	s.registry = s.newRegistry()
 }
 
 func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces ...string) namespace.Registry {
@@ -69,25 +67,6 @@ func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces .
 		namespace.NewDefaultReplicationResolverFactory(),
 		nsregistry.DefaultNamespaceStateChanged,
 	)
-}
-
-func (s *registrySuite) newForceRefreshNamespaceResponse(
-	id namespace.ID,
-	name string,
-	failoverVersion int64,
-) *persistence.GetNamespaceResponse {
-	return &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   id.String(),
-				Name: name,
-			},
-			Config:            &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-			FailoverVersion:   failoverVersion,
-		},
-		NotificationVersion: failoverVersion,
-	}
 }
 
 func (s *registrySuite) TearDownTest() {
@@ -209,20 +188,21 @@ func (s *registrySuite) TestListNamespace() {
 	}, nil)
 
 	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
-	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
+	entryByName1, err := registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.NoError(err)
 	s.Equal(entry1, entryByName1)
-	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
+	entryByID1, err := registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
 	s.NoError(err)
 	s.Equal(entry1, entryByID1)
 
-	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
+	entryByName2, err := registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.NoError(err)
 	s.Equal(entry2, entryByName2)
-	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
+	entryByID2, err := registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
 	s.NoError(err)
 	s.Equal(entry2, entryByID2)
 }
@@ -306,11 +286,12 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	}, nil)
 
 	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	var entriesNotification []*namespace.Namespace
-	s.registry.RegisterStateChangeCallback(
+	registry.RegisterStateChangeCallback(
 		"0",
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			s.False(deletedFromDb)
@@ -468,14 +449,15 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	}, nil)
 
 	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	var entries []*namespace.Namespace
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
-	s.registry.RegisterStateChangeCallback(
+	registry.RegisterStateChangeCallback(
 		"0",
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			defer wg.Done()
@@ -547,22 +529,23 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	}, nil)
 
 	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	coroutineCountGet := 1000
 	waitGroup := &sync.WaitGroup{}
 	startChan := make(chan struct{})
 	testGetFn := func() {
 		<-startChan
-		entryNew, err := s.registry.GetNamespaceByID(id)
+		entryNew, err := registry.GetNamespaceByID(id)
 		switch err.(type) {
 		case nil:
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
 		case *serviceerror.NamespaceNotFound:
 			time.Sleep(4 * time.Second)
-			entryNew, err := s.registry.GetNamespaceByID(id)
+			entryNew, err := registry.GetNamespaceByID(id)
 			s.NoError(err)
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
@@ -657,13 +640,14 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}, nil)
 
 	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	// use WaitGroup and callback to wait until refresh loop picks up delete
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	s.registry.RegisterStateChangeCallback(
+	registry.RegisterStateChangeCallback(
 		"1",
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			if deletedFromDb {
@@ -673,7 +657,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	)
 	wg.Wait()
 
-	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
+	ns2FromRegistry, err := registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.NotNil(ns2FromRegistry)
 	s.NoError(err)
 
@@ -682,7 +666,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 		Name: namespaceRecord1.Namespace.Info.Name,
 	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.Info.Name))
 
-	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
+	ns1FromRegistry, err := registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.Nil(ns1FromRegistry)
 	s.Error(err)
 	var notFound *serviceerror.NamespaceNotFound
@@ -705,9 +689,10 @@ func (s *registrySuite) TestCacheByName() {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
-	ns, err := s.registry.GetNamespace(namespace.Name("foo"))
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
+	ns, err := registry.GetNamespace(namespace.Name("foo"))
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
@@ -731,14 +716,15 @@ func (s *registrySuite) TestGetByNameWithoutReadthrough() {
 		},
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
-	ns, err := s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
+	ns, err := registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 
-	ns, err = s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
+	ns, err = registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
@@ -764,22 +750,45 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 		},
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
-	ns, err := s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
+	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 
-	ns, err = s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
+	ns, err = registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
 
 func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	id := namespace.NewID()
-	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
-	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
+	nsV1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   1,
+		},
+		NotificationVersion: 1,
+	}
+	nsV2 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   2,
+		},
+		NotificationVersion: 2,
+	}
 	registry := s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
@@ -804,8 +813,30 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 
 func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 	id := namespace.NewID()
-	nsV1 := s.newForceRefreshNamespaceResponse(id, "foo", 1)
-	nsV2 := s.newForceRefreshNamespaceResponse(id, "foo", 2)
+	nsV1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   1,
+		},
+		NotificationVersion: 1,
+	}
+	nsV2 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			FailoverVersion:   2,
+		},
+		NotificationVersion: 2,
+	}
 	registry := s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
@@ -917,18 +948,19 @@ func (s *registrySuite) TestNamespaceRename() {
 		}, nil
 	}).MinTimes(1)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 	// Register callback to detect when the rename is applied
 	refreshCompletedCh := make(chan struct{})
-	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+	registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
 		if ns.Name() == "renamed-name" {
 			close(refreshCompletedCh)
 		}
 	})
 
 	// Verify original name works before rename
-	ns, err := s.registry.GetNamespace("original-name")
+	ns, err := registry.GetNamespace("original-name")
 	s.NoError(err)
 	s.Equal(namespace.Name("original-name"), ns.Name())
 	s.Equal(id, ns.ID())
@@ -938,19 +970,19 @@ func (s *registrySuite) TestNamespaceRename() {
 	<-refreshCompletedCh
 
 	// Verify new name works after rename
-	ns, err = s.registry.GetNamespace("renamed-name")
+	ns, err = registry.GetNamespace("renamed-name")
 	s.NoError(err)
 	s.Equal(namespace.Name("renamed-name"), ns.Name())
 	s.Equal(id, ns.ID())
 
 	// Verify ID lookup returns namespace with new name
-	ns, err = s.registry.GetNamespaceByID(id)
+	ns, err = registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(namespace.Name("renamed-name"), ns.Name())
 
 	// Verify old name no longer resolves
 	// Disable readthrough so we only check the cache
-	_, err = s.registry.GetNamespaceWithOptions(
+	_, err = registry.GetNamespaceWithOptions(
 		"original-name",
 		namespace.GetNamespaceOptions{DisableReadthrough: true},
 	)
@@ -1018,11 +1050,12 @@ func (s *registrySuite) TestNamespaceRenameViaRefreshById() {
 		}, nil,
 	).MinTimes(1)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	// Verify original name works
-	ns, err := s.registry.GetNamespace("original-name")
+	ns, err := registry.GetNamespace("original-name")
 	s.NoError(err)
 	s.Equal(namespace.Name("original-name"), ns.Name())
 	s.Equal(id, ns.ID())
@@ -1035,23 +1068,23 @@ func (s *registrySuite) TestNamespaceRenameViaRefreshById() {
 	).Return(nsRenamed, nil).Times(1)
 
 	// Refresh the namespace by ID (triggers updateSingleNamespace)
-	ns, err = s.registry.RefreshNamespaceById(id)
+	ns, err = registry.RefreshNamespaceById(id)
 	s.NoError(err)
 	s.Equal(namespace.Name("renamed-name"), ns.Name())
 
 	// Verify new name works
-	ns, err = s.registry.GetNamespace("renamed-name")
+	ns, err = registry.GetNamespace("renamed-name")
 	s.NoError(err)
 	s.Equal(namespace.Name("renamed-name"), ns.Name())
 	s.Equal(id, ns.ID())
 
 	// Verify ID lookup returns namespace with new name
-	ns, err = s.registry.GetNamespaceByID(id)
+	ns, err = registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(namespace.Name("renamed-name"), ns.Name())
 
 	// Verify old name no longer resolves
-	_, err = s.registry.GetNamespaceWithOptions(
+	_, err = registry.GetNamespaceWithOptions(
 		"original-name",
 		namespace.GetNamespaceOptions{DisableReadthrough: true},
 	)
@@ -1091,14 +1124,15 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 		Namespaces: nil,
 	}, nil)
 
-	s.registry.Start()
-	defer s.registry.Stop()
+	registry := s.newRegistry()
+	registry.Start()
+	defer registry.Stop()
 
 	// first call will get old ns
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
 	}).Return(&nsV1, nil).Times(1)
-	ns, err := s.registry.GetNamespaceByID(id)
+	ns, err := registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
@@ -1106,11 +1140,11 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 		ID: id.String(),
 	}).Return(&nsV2, nil).Times(1)
 
-	ns, err = s.registry.RefreshNamespaceById(id)
+	ns, err = registry.RefreshNamespaceById(id)
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
-	ns, err = s.registry.GetNamespaceByID(id)
+	ns, err = registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
