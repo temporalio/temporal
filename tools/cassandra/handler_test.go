@@ -25,26 +25,26 @@ func (s *HandlerTestSuite) SetupTest() {
 
 func (s *HandlerTestSuite) TestValidateCQLClientConfig() {
 	config := new(CQLClientConfig)
-	s.NotNil(validateCQLClientConfig(config))
+	s.Error(validateCQLClientConfig(config))
 
 	config.Hosts = environment.GetCassandraAddress()
-	s.NotNil(validateCQLClientConfig(config))
+	s.Error(validateCQLClientConfig(config))
 
 	config.Keyspace = "foobar"
-	s.Nil(validateCQLClientConfig(config))
+	s.NoError(validateCQLClientConfig(config))
 }
 
 func (s *HandlerTestSuite) TestParsingOfOptionsMap() {
 	parsedMap := parseOptionsMap("key1=value1 ,key2= value2,key3=value3")
 
-	s.Assert().Equal("value1", parsedMap["key1"])
-	s.Assert().Equal("value2", parsedMap["key2"])
-	s.Assert().Equal("value3", parsedMap["key3"])
-	s.Assert().Equal("", parsedMap["key4"])
+	s.Equal("value1", parsedMap["key1"])
+	s.Equal("value2", parsedMap["key2"])
+	s.Equal("value3", parsedMap["key3"])
+	s.Assert().Empty(parsedMap["key4"])
 
 	parsedMap2 := parseOptionsMap("key1=,=value2")
 
-	s.Assert().Equal(0, len(parsedMap2))
+	s.Assert().Empty(parsedMap2)
 }
 
 func (s *HandlerTestSuite) TestDropKeyspaceError() {
@@ -57,7 +57,7 @@ func (s *HandlerTestSuite) TestDropKeyspaceError() {
 	args := []string{"./tool", "drop-keyspace", "-f", "--keyspace", ""}
 	app := buildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *HandlerTestSuite) TestCreateKeyspaceError() {
@@ -70,5 +70,5 @@ func (s *HandlerTestSuite) TestCreateKeyspaceError() {
 	args := []string{"./tool", "create-keyspace", "--keyspace", ""}
 	app := buildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }

@@ -58,7 +58,7 @@ func TestSDKVersionRecorder(t *testing.T) {
 	sort.SliceStable(info, func(i, j int) bool {
 		return info[i].Name < info[j].Name
 	})
-	assert.Equal(t, 2, len(info))
+	assert.Len(t, info, 2)
 	assert.Equal(t, headers.ClientNameGoSDK, info[0].Name)
 	assert.Equal(t, sdkVersion, info[0].Version)
 	assert.Equal(t, headers.ClientNameTypeScriptSDK, info[1].Name)

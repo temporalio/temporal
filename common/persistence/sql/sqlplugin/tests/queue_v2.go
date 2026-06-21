@@ -277,7 +277,7 @@ func testQueueInsertFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB
 	assert.ErrorContains(t, err, "insert error")
 	require.Len(t, logger.errMsgs, 1)
 	assert.Contains(t, logger.errMsgs[0], "transaction rollback error")
-	assert.Equal(t, db.commitCalls, 0)
+	assert.Equal(t, 0, db.commitCalls)
 }
 
 func testCommitTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
@@ -297,7 +297,7 @@ func testCommitTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "EnqueueMessage failed")
-	assert.Equal(t, db.commitCalls, 1)
+	assert.Equal(t, 1, db.commitCalls)
 }
 
 func testBeginTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
@@ -317,7 +317,7 @@ func testBeginTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "txBegin error")
-	assert.Equal(t, db.commitCalls, 0)
+	assert.Equal(t, 0, db.commitCalls)
 }
 
 func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
@@ -338,7 +338,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "failed to get last messageId")
-	assert.Equal(t, db.commitCalls, 0)
+	assert.Equal(t, 0, db.commitCalls)
 }
 
 func testRangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {

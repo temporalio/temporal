@@ -61,12 +61,12 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 	// Start version found, no later versions. Return nothing.
 	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "10.2", "", s.logger)
 	s.NoError(err)
-	s.Equal(0, len(ans))
+	s.Empty(ans)
 
 	// Start version not found, no later versions. Return nothing.
 	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "10.3", "", s.logger)
 	s.NoError(err)
-	s.Equal(0, len(ans))
+	s.Empty(ans)
 
 	ans, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "2.5.2", "", s.logger)
 	s.NoError(err)
@@ -96,35 +96,35 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirEFS() {
 func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_ReturnsError() {
 	_, err := sortAndFilterVersions(updateTaskTestData.versions, "1.5", "0.5", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "less than end version", "Unexpected error message")
+	s.Containsf(err.Error(), "less than end version", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEndVersion_ReturnsErrorWhenNotFound() {
 	// No versions in range
 	_, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "11.0", "11.2", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
+	s.Containsf(err.Error(), "specified but not found", "Unexpected error message")
 
 	// Versions in range, but nothing for v10.3
 	_, err = readSchemaDir(os.DirFS(s.versionsDir), ".", "0.5", "10.3", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
+	s.Containsf(err.Error(), "specified but not found", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithSameStartAndEnd_ReturnsEmptyList() {
 	ans, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "1.7", "1.7", s.logger)
 	s.NoError(err)
-	assert.Equal(s.T(), 0, len(ans))
+	assert.Empty(s.T(), ans)
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
 	_, err := readSchemaDir(os.DirFS(s.emptyDir), ".", "11.0", "", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
+	s.Containsf(err.Error(), "contains no subDirs", "Unexpected error message")
 
 	_, err = readSchemaDir(os.DirFS(s.emptyDir), ".", "10.1", "", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
+	s.Containsf(err.Error(), "contains no subDirs", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
@@ -206,7 +206,7 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(
 
 	file := dir + "/manifest.json"
 	err := os.WriteFile(file, []byte(input), os.FileMode(0644))
-	s.Nil(err)
+	s.NoError(err)
 
 	m, err := readManifest(os.DirFS(dir), ".")
 	if isErr {
@@ -217,6 +217,6 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(
 	s.Equal(currVer, m.CurrVersion)
 	s.Equal(minVer, m.MinCompatibleVersion)
 	s.Equal(desc, m.Description)
-	s.True(len(m.md5) > 0)
+	s.Positive(len(m.md5))
 	s.Equal(files, m.SchemaUpdateCqlFiles)
 }

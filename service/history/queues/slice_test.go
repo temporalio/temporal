@@ -417,7 +417,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	})
 
 	pendingNamespaceID := []string{uuid.NewString(), uuid.NewString()}
-	s.True(len(pendingNamespaceID) <= shrinkPredicateMaxPendingKeys)
+	s.LessOrEqual(len(pendingNamespaceID), shrinkPredicateMaxPendingKeys)
 	for _, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
 
@@ -441,7 +441,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	namespacePredicate, ok := slice.Scope().Predicate.(*tasks.NamespacePredicate)
 	s.True(ok)
 	for namespaceID := range namespacePredicate.NamespaceIDs {
-		s.True(slices.Index(pendingNamespaceID, namespaceID) != -1)
+		s.NotEqual(slices.Index(pendingNamespaceID, namespaceID), -1)
 	}
 }
 
@@ -705,7 +705,7 @@ func (s *sliceSuite) validateSliceState(
 			currentRange := iterator.Range()
 			previousRange := slice.iterators[idx-1].Range()
 			s.False(currentRange.CanMerge(previousRange))
-			s.True(previousRange.ExclusiveMax.CompareTo(currentRange.InclusiveMin) < 0)
+			s.Negative(previousRange.ExclusiveMax.CompareTo(currentRange.InclusiveMin))
 		}
 	}
 

@@ -271,7 +271,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 		NamespaceId: tests.NamespaceID.String(),
 		Execution:   &execution,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(4), response.GetNextEventId())
 	s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 }
@@ -352,7 +352,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 				Identity:  identity,
 			},
 		})
-		s.Nil(err)
+		s.NoError(err)
 		waitGroup.Done()
 		// right now the next event ID is 5
 	}
@@ -363,7 +363,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 		Execution:           &execution,
 		ExpectedNextEventId: 3,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(4), response.NextEventId)
 
 	// long poll, new event happen before long poll timeout
@@ -375,7 +375,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 		ExpectedNextEventId: 4,
 	})
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
 }
@@ -430,7 +430,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		Execution:           execution,
 		ExpectedNextEventId: 3,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(4), response0.GetNextEventId())
 
 	// long poll, new event happen before long poll timeout
@@ -442,7 +442,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		ExpectedNextEventId: 10,
 	})
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
 
@@ -474,7 +474,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(4), response.GetNextEventId())
 }
 
@@ -775,7 +775,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 
 	// verify that after last query error, the previous pending query is still in the buffer
 	pendingBufferedQueries := qr.GetBufferedIDs()
-	s.Equal(1, len(pendingBufferedQueries))
+	s.Len(pendingBufferedQueries, 1)
 	s.Equal(queryId, pendingBufferedQueries[0])
 }
 
@@ -950,7 +950,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedInvalidToken() {
 		},
 	})
 
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -975,7 +975,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfNoExecution() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1041,7 +1041,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.EqualError(err, "FAILED")
 }
 
@@ -1081,7 +1081,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskCompleted() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1118,7 +1118,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskNotStarted() {
 			TaskToken: taskToken,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1651,7 +1651,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.Equal(int64(5), updatedWorkflowMutation.NextEventID, iVar)
 			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId, iVar)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State, iVar)
-			s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID, iVar)
+			s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID, iVar)
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1718,7 +1718,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
+	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWorkflowTask() {
@@ -2051,7 +2051,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 	_, ok := ms2.GetActivityByActivityID("activity1")
 	s.False(ok)
 
-	s.Len(resp.ActivityTasks, 0)
+	s.Empty(resp.ActivityTasks)
 	s.NotNil(resp.StartedResponse)
 	s.Equal(int64(10), resp.StartedResponse.NextEventId)
 	s.Equal(int64(3), resp.StartedResponse.PreviousStartedEventId)
@@ -2135,7 +2135,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Wo
 	s.Equal(int64(5), activityInfo.ScheduledEventId)          // activity scheduled
 	s.Equal(common.EmptyEventID, activityInfo.StartedEventId) // activity not started
 
-	s.Len(resp.ActivityTasks, 0)
+	s.Empty(resp.ActivityTasks)
 	s.Nil(resp.StartedResponse)
 }
 
@@ -2224,7 +2224,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 			Identity:                   identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
@@ -2268,7 +2268,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 			Identity:                   identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() {
@@ -2490,7 +2490,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
-	s.Equal(1, len(ms2.GetPendingChildExecutionInfos()))
+	s.Len(ms2.GetPendingChildExecutionInfos(), 1)
 	var childID int64
 	for c := range ms2.GetPendingChildExecutionInfos() {
 		childID = c
@@ -2557,7 +2557,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
-	s.Equal(1, len(ms2.GetPendingChildExecutionInfos()))
+	s.Len(ms2.GetPendingChildExecutionInfos(), 1)
 	var childID int64
 	for c := range ms2.GetPendingChildExecutionInfos() {
 		childID = c
@@ -2621,7 +2621,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 		},
 	})
 
-	s.NotNil(err)
+	s.Error(err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
@@ -2638,7 +2638,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 		},
 	})
 
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -2663,7 +2663,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -2687,7 +2687,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -2884,7 +2884,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -2930,7 +2930,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3113,7 +3113,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 		},
 	})
 
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -3139,7 +3139,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3164,7 +3164,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3359,7 +3359,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3403,7 +3403,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3496,7 +3496,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3560,7 +3560,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 			LastHeartbeatDetails: details,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3623,7 +3623,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3682,7 +3682,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 			Details:   detais,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
@@ -3731,7 +3731,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 			Details:   detais,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(7), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3785,7 +3785,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 			Details:   detais,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
@@ -3829,7 +3829,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -3862,7 +3862,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 1*time.Second)
 	addActivityTaskStartedEvent(ms, activityScheduledEvent.EventId, identity)
 	_, _, err := ms.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
-	s.Nil(err)
+	s.NoError(err)
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -3878,7 +3878,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3921,7 +3921,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 1*time.Second)
 	addActivityTaskStartedEvent(ms, activityScheduledEvent.EventId, identity)
 	_, _, err := ms.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEvent.EventId, activityScheduledEvent.EventId, identity)
-	s.Nil(err)
+	s.NoError(err)
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -3939,7 +3939,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -3973,7 +3973,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 			Identity:  identity,
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -4113,7 +4113,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
+	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled() {
@@ -4167,7 +4167,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(12), ms2.GetNextEventID())
@@ -4232,7 +4232,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
@@ -4300,7 +4300,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
@@ -4361,7 +4361,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
@@ -4389,7 +4389,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(hbResponse)
 	s.True(hbResponse.CancelRequested)
 
@@ -4404,7 +4404,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
@@ -4465,7 +4465,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
@@ -4493,7 +4493,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(hbResponse)
 	s.True(hbResponse.CancelRequested)
 
@@ -4508,7 +4508,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
@@ -4600,7 +4600,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 			QueryResults: queryResults,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
@@ -4610,14 +4610,14 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.Len(qr.GetCompletedIDs(), 2)
 	succeeded1, err := qr.GetCompletionState(id1)
 	s.NoError(err)
-	s.EqualValues(succeeded1.Result, result1)
+	s.Equal(succeeded1.Result, result1)
 	s.Equal(workflow.QueryCompletionTypeSucceeded, succeeded1.Type)
 	succeeded2, err := qr.GetCompletionState(id2)
 	s.NoError(err)
-	s.EqualValues(succeeded2.Result, result2)
+	s.Equal(succeeded2.Result, result2)
 	s.Equal(workflow.QueryCompletionTypeSucceeded, succeeded2.Type)
-	s.Len(qr.GetBufferedIDs(), 0)
-	s.Len(qr.GetFailedIDs(), 0)
+	s.Empty(qr.GetBufferedIDs())
+	s.Empty(qr.GetFailedIDs())
 	s.Len(qr.GetUnblockedIDs(), 1)
 	unblocked1, err := qr.GetCompletionState(id3)
 	s.NoError(err)
@@ -4644,7 +4644,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(hbResponse)
 	s.True(hbResponse.CancelRequested)
 
@@ -4659,7 +4659,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 			Details:   payloads.EncodeString("details"),
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
@@ -4715,7 +4715,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
@@ -4820,7 +4820,7 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
@@ -4891,7 +4891,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
+	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
 }
 
 func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() {
@@ -4924,11 +4924,11 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, tl, identity)
 	addTimerFiredEvent(ms, timerID)
 	_, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.Nil(err)
+	s.NoError(err)
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.True(len(gwmsResponse.State.BufferedEvents) > 0)
+	s.Positive(len(gwmsResponse.State.BufferedEvents))
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
@@ -4952,7 +4952,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
@@ -5002,7 +5002,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // Test signal workflow task by adding request ID
@@ -5281,7 +5281,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 	})
 
 	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestRemoveSignalMutableState() {
@@ -5316,7 +5316,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	_, err = s.historyEngine.RemoveSignalMutableState(context.Background(), removeRequest)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
@@ -5575,7 +5575,7 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	})
 	s.NoError(err)
 	s.Nil(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask)
-	s.Equal(len(recordedTasks), 0)
+	s.Empty(recordedTasks)
 }
 
 func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {

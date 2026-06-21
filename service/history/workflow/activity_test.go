@@ -215,7 +215,7 @@ func (s *activitySuite) TestGetPendingActivityInfo_ActivityState() {
 		s.NoError(err)
 		s.NotNil(pi)
 
-		s.Equal(tc.expectedState, pi.State, fmt.Sprintf("failed for paused: %v, cancelRequested: %v, startedEventId: %v", tc.paused, tc.cancelRequested, tc.startedEventId))
+		s.Equal(tc.expectedState, pi.State, "failed for paused: %v, cancelRequested: %v, startedEventId: %v", tc.paused, tc.cancelRequested, tc.startedEventId)
 	}
 }
 
@@ -339,8 +339,8 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.NotNil(ai.PauseInfo)
-	s.Equal(ai.PauseInfo.GetManual().Identity, "test_identity")
-	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
+	s.Equal("test_identity", ai.PauseInfo.GetManual().Identity)
+	s.Equal("test_reason", ai.PauseInfo.GetManual().Reason)
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
@@ -369,8 +369,8 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 	s.NoError(err)
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.NotNil(ai.PauseInfo)
-	s.Equal(ai.PauseInfo.GetManual().Identity, "test_identity")
-	s.Equal(ai.PauseInfo.GetManual().Reason, "test_reason")
+	s.Equal("test_identity", ai.PauseInfo.GetManual().Identity)
+	s.Equal("test_reason", ai.PauseInfo.GetManual().Reason)
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
@@ -391,14 +391,14 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.True(ai.Paused, "ActivityInfo.Paused was not unpaused")
 	prevStamp = ai.Stamp
 	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false, 0)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithNewRun() {
@@ -410,7 +410,7 @@ func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.True(ai.Paused, "ActivityInfo.Paused was not unpaused")
 	prevStamp = ai.Stamp
 	fakeScheduledTime := time.Now().UTC().Add(5 * time.Minute)
 	ai.ScheduledTime = timestamppb.New(fakeScheduledTime)
@@ -421,7 +421,7 @@ func (s *activitySuite) TestUnpauseActivityWithNewRun() {
 	s.NotEqual(fakeScheduledTime, ai.ScheduledTime.AsTime())
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
@@ -438,17 +438,17 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
 	s.NoError(err)
 	s.NotNil(ai.PauseInfo)
-	s.Equal(ai.PauseInfo.GetRuleId(), "rule_id")
+	s.Equal("rule_id", ai.PauseInfo.GetRuleId())
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.True(ai.Paused, "ActivityInfo.Paused was not unpaused")
 
 	prevStamp = ai.Stamp
 	_, err = UnpauseActivityWithReset(s.mockShard, s.mutableState, ai, false, true, 0)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
-	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Nil(ai.LastHeartbeatUpdateTime)
 	s.Nil(ai.LastHeartbeatDetails)

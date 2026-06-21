@@ -32,7 +32,7 @@ func TestDialTracer_DialSuccess(t *testing.T) {
 
 	assert.Positive(t, ndt.connectDuration)
 	assert.Equal(t, addr, ndt.connectAddr)
-	assert.Nil(t, ndt.connectErr)
+	assert.NoError(t, ndt.connectErr)
 }
 
 func TestDialTracer_DialError(t *testing.T) {
@@ -77,7 +77,7 @@ func TestDialTracer_NoConnectStart(t *testing.T) {
 
 	assert.Zero(t, ndt.connectDuration)
 	assert.Equal(t, addr, ndt.connectAddr)
-	assert.Nil(t, ndt.connectErr)
+	assert.NoError(t, ndt.connectErr)
 }
 
 // rewind moves a timestamp back by 1 millisecond to ensure positive durations in tests

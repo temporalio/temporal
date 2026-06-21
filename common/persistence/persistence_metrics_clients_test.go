@@ -56,7 +56,7 @@ func TestExecutionPersistenceClient_DataLossMetrics_EmittedOnDataLossError(t *te
 
 	// Verify error is returned
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, dataLossErr))
+	assert.ErrorIs(t, err, dataLossErr)
 
 	// Verify data loss metrics are emitted
 	snapshot := capture.Snapshot()
@@ -229,7 +229,7 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithWrappedDataLossError(t *
 	tags := recording.Tags
 	assert.Equal(t, "_unknown_", tags[metrics.NamespaceTag("").Key])
 	assert.Equal(t, "test-workflow-id", tags["workflow_id"])
-	assert.Equal(t, "", tags["run_id"]) // No run ID in GetCurrentExecutionRequest
+	assert.Empty(t, tags["run_id"]) // No run ID in GetCurrentExecutionRequest
 }
 
 func TestExecutionPersistenceClient_DataLossMetrics_WithEmptyWorkflowDetails(t *testing.T) {
@@ -283,7 +283,7 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithEmptyWorkflowDetails(t *
 
 	// Verify tags are set with empty workflow details
 	tags := recording.Tags
-	assert.Equal(t, "", tags["workflow_id"])
-	assert.Equal(t, "", tags["run_id"])
+	assert.Empty(t, tags["workflow_id"])
+	assert.Empty(t, tags["run_id"])
 	assert.Equal(t, metrics.PersistenceListConcreteExecutionsScope, tags[metrics.OperationTag("").Key])
 }

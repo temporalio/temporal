@@ -20,7 +20,7 @@ func TestFairLevelComparator(t *testing.T) {
 	m.Put(b, nil)
 	m.Put(c, nil)
 	m.Put(d, nil)
-	assert.Equal(t, m.Keys(), []any{d, b, a, c})
+	assert.Equal(t, []any{d, b, a, c}, m.Keys())
 }
 
 func TestFairLevelMax(t *testing.T) {

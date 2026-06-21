@@ -37,7 +37,7 @@ func TestToString(t *testing.T) {
 	}, 10, "str")
 	assert.NoError(err)
 	result = ToString(p)
-	assert.Equal(`[{"Int":10,"String":"str","Bytes":"MzQ1"}, 10, "str"]`, result)
+	assert.JSONEq(`[{"Int":10,"String":"str","Bytes":"MzQ1"}, 10, "str"]`, result)
 
 	result = ToString(nil)
 	assert.Equal("[]", result)

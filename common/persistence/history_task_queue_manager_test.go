@@ -24,7 +24,7 @@ func TestQueueKey_Determinism(t *testing.T) {
 		SourceCluster: "a",
 		TargetCluster: "b",
 	}.GetQueueName()
-	assert.Equal(t, name, "1_a_b_5aAf7hTg")
+	assert.Equal(t, "1_a_b_5aAf7hTg", name)
 }
 
 // TestQueueKey_Conflicts tests that unique tuples of cluster names containing the delimiter character will not produce

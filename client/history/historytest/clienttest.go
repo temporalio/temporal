@@ -94,7 +94,7 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 			PageSize: 10,
 		})
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(res.DlqTasks))
+		assert.Len(t, res.DlqTasks, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.DlqTasks[0].Metadata.MessageId)
 	})
 
@@ -128,7 +128,7 @@ func readTasks(
 			NextPageToken: nextPageToken,
 		})
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(res.DlqTasks))
+		assert.Len(t, res.DlqTasks, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+i), res.DlqTasks[0].Metadata.MessageId)
 		nextPageToken = res.NextPageToken
 	}

@@ -63,7 +63,7 @@ func TestMetricNameWithSeparatedTags(t *testing.T) {
 
 			if sep == "" {
 				// Tags should be embedded.
-				assert.Equal(t, newName, "test-metric-name3.tag1.123.tag2.456.tag3.789")
+				assert.Equal(t, "test-metric-name3.tag1.123.tag2.456.tag3.789", newName)
 			} else {
 				// Tags will be appended with the separator.
 				assert.True(t, strings.HasPrefix(newName, name))
