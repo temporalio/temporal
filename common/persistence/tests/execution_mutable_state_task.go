@@ -474,7 +474,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		10,
 	)
 	s.Len(loadedTasks, 2)
-	s.Negative(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()))
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
@@ -516,7 +516,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		10,
 	)
 	s.Len(loadedTasks, 2)
-	s.Negative(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()))
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 
 	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -584,7 +584,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	for {
 		response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, request)
 		s.NoError(err)
-		s.LessOrEqual(len(response.Tasks), batchSize)
+		s.True(len(response.Tasks) <= batchSize)
 		loadedTasks = append(loadedTasks, response.Tasks...)
 		if len(response.NextPageToken) == 0 {
 			break

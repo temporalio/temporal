@@ -98,7 +98,7 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	s.readerGroup.RemoveReader(readerID)
 
 	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
-	s.Empty(s.readerGroup.Readers())
+	s.Len(s.readerGroup.Readers(), 0)
 }
 
 func (s *readerGroupSuite) TestForEach() {

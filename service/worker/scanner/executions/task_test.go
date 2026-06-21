@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -55,7 +56,7 @@ func (s *taskTestSuite) TestRun_Success_EmptyResults() {
 		Return(&persistence.ListConcreteExecutionsResponse{}, nil)
 
 	status := task.Run()
-	s.Equal(executor.TaskStatusDone, status)
+	assert.Equal(s.T(), executor.TaskStatusDone, status)
 }
 
 func (s *taskTestSuite) TestRun_PaginationError() {
@@ -67,5 +68,5 @@ func (s *taskTestSuite) TestRun_PaginationError() {
 		Return(nil, errors.New("pagination error"))
 
 	status := task.Run()
-	s.Equal(executor.TaskStatusDefer, status)
+	assert.Equal(s.T(), executor.TaskStatusDefer, status)
 }

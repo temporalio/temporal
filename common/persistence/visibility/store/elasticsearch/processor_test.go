@@ -436,7 +436,7 @@ func (s *processorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Return(metrics.NoopCounterMetricFunc)
 	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
-	s.Empty(visibilityTaskKey)
+	s.Equal("", visibilityTaskKey)
 
 	m := map[string]any{
 		sadefs.VisibilityTaskKey: 1,
@@ -456,7 +456,7 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 	// ensure compatible with dependency
 	source, err := request.Source()
 	s.NoError(err)
-	s.Len(source, 1)
+	s.Equal(1, len(source))
 	var body map[string]map[string]any
 	err = json.Unmarshal([]byte(source[0]), &body)
 	s.NoError(err)
@@ -465,7 +465,7 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorCorruptedData.Name()).Return(metrics.NoopCounterMetricFunc)
 	key := s.esProcessor.extractVisibilityTaskKey(request)
-	s.Empty(key)
+	s.Equal("", key)
 
 	id := "id"
 	request.Id(id)
@@ -497,7 +497,7 @@ func (s *processorSuite) TestIsResponseSuccess() {
 func (s *processorSuite) TestErrorReasonFromResponse() {
 	reason := "error reason"
 	resp := &elastic.BulkResponseItem{Status: 400}
-	s.Empty(extractErrorReason(resp))
+	s.Equal("", extractErrorReason(resp))
 	resp.Error = &elastic.ErrorDetails{Reason: reason}
 	s.Equal(reason, extractErrorReason(resp))
 }

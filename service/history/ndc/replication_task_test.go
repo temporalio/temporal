@@ -75,7 +75,7 @@ func (s *replicationTaskSuite) TestValidateEventsSlice() {
 
 	v, err := validateEventsSlice(eS1, eS2)
 	s.Equal(int64(2), v)
-	s.NoError(err)
+	s.Nil(err)
 
 	v, err = validateEventsSlice(eS1, eS3)
 	s.Equal(int64(0), v)
@@ -137,7 +137,7 @@ func (s *replicationTaskSuite) TestValidateEvents() {
 	}
 
 	v, err := validateEvents(eS1)
-	s.NoError(err)
+	s.Nil(err)
 	s.Equal(int64(2), v)
 
 	v, err = validateEvents(eS2)
@@ -185,7 +185,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
-	s.Len(task.getEvents(), 1)
+	s.Equal(1, len(task.getEvents()))
 	s.Equal(slice2, task.getEvents()[0])
 	s.Equal(int64(13), task.getFirstEvent().EventId)
 	s.Equal(int64(14), task.getLastEvent().EventId)
@@ -294,7 +294,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)
-	s.Len(task.getEvents(), 2)
+	s.Equal(2, len(task.getEvents()))
 	s.Equal(slice1, task.getEvents()[0])
 	s.Equal(slice2, task.getEvents()[1])
 }

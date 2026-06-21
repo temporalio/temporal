@@ -289,7 +289,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.True(s.env.IsWorkflowCompleted())
 			result := s.env.GetWorkflowError()
 			var canErr *workflow.ContinueAsNewError
-			s.Require().ErrorAs(result, &canErr, "result: %v", result)
+			s.Require().True(errors.As(result, &canErr), "result: %v", result)
 
 			s.env.AssertExpectations(s.T())
 
@@ -302,7 +302,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Lenf(state.started, len(runs), "started %#v", state.started)
+		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
 		for _, run := range runs {
 			actual := state.started[run.id]
 			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
@@ -1885,26 +1885,26 @@ func (s *workflowSuite) TestLimitedActions() {
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
-		s.Len(desc.Info.FutureActionTimes, 2)
+		s.Equal(2, len(desc.Info.FutureActionTimes))
 	}, 1*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
-		s.Len(desc.Info.FutureActionTimes, 1)
+		s.Equal(1, len(desc.Info.FutureActionTimes))
 	}, 5*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
-		s.Empty(desc.Info.FutureActionTimes)
-		s.Len(s.runningWorkflows(), 1)
+		s.Equal(0, len(desc.Info.FutureActionTimes))
+		s.Equal(1, len(s.runningWorkflows()))
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		// hasn't updated yet since we slept past :09
-		s.Len(s.runningWorkflows(), 1)
+		s.Equal(1, len(s.runningWorkflows()))
 		s.env.SignalWorkflow(SignalNameRefresh, nil)
 	}, 10*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Empty(s.runningWorkflows())
+		s.Equal(0, len(s.runningWorkflows()))
 	}, 10*time.Minute+1*time.Second)
 
 	s.run(&schedulepb.Schedule{
@@ -2042,7 +2042,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.Equal(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)), CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -2078,7 +2078,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.Equal(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)), CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
@@ -2100,7 +2100,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.Equal(s.env.Now().Sub(baseStartTime), CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestCANByIterations() {

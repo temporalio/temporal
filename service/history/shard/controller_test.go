@@ -457,7 +457,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 
 	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
-	s.Len(s.shardController.ShardIDs(), 1)
+	s.Equal(1, len(s.shardController.ShardIDs()))
 
 	shard.UnloadForOwnershipLost()
 
@@ -465,7 +465,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 		// removal from map happens asynchronously
 		time.Sleep(1 * time.Millisecond)
 	}
-	s.Empty(s.shardController.ShardIDs())
+	s.Equal(0, len(s.shardController.ShardIDs()))
 	s.False(shard.IsValid())
 }
 
@@ -742,7 +742,7 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 
 	// By now the timeout should have occurred.
 	time.Sleep(timeLimit/2 + 100*time.Millisecond)
-	s.Empty(s.shardController.ShardIDs())
+	s.Len(s.shardController.ShardIDs(), 0)
 	s.False(shard.IsValid())
 
 	s.Equal(float64(1), s.readMetricsCounter(
@@ -823,7 +823,7 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 	expectedWait := time.Second / time.Duration(checkQPS) * 2
 	time.Sleep(expectedWait + 100*time.Millisecond)
 
-	s.Empty(s.shardController.ShardIDs())
+	s.Len(s.shardController.ShardIDs(), 0)
 }
 
 // TestShardCounter verifies that we can subscribe to shard count updates, receive them when shards are acquired, and

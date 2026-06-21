@@ -278,7 +278,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")
-	s.NoError(s.task.HandleErr(err))
+	s.Equal(nil, s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
@@ -367,7 +367,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	batchResult, batched := task1.BatchWith(task2)
 	s.True(batched)
 	activityTask, _ := batchResult.(*ExecutableActivityStateTask)
-	s.Len(activityTask.activityInfos, 2)
+	s.Equal(2, len(activityTask.activityInfos))
 	s.assertAttributeEqual(replicationAttribute1, activityTask.activityInfos[0])
 	s.assertAttributeEqual(replicationAttribute2, activityTask.activityInfos[1])
 
@@ -391,7 +391,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		ActivitiesInfo: activityTask.activityInfos,
 	})
 	err := batchResult.Execute()
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_ShouldNotBatch() {

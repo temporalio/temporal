@@ -3,6 +3,7 @@ package deleteexecutions
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -236,8 +237,8 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, "specific_error_from_activity (type: Unavailable, retryable: true)", appErr.Error())
+	require.True(t, stderrors.As(err, &appErr))
+	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {

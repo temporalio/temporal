@@ -486,5 +486,5 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventID,
 		incomingFirstEventVersion,
 	)
-	s.Equal(expectedErr, retryErr)
+	s.Equal(retryErr, expectedErr)
 }

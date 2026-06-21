@@ -83,7 +83,7 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 	shardController := s.newController(cf)
 	shardController.Start()
 
-	s.Empty(shardController.ShardIDs())
+	s.Zero(len(shardController.ShardIDs()))
 
 	shardController.ownership.membershipUpdateCh <- &membership.ChangedEvent{}
 

@@ -221,7 +221,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.status, parsedQuery.status)
+			s.EqualValues(tc.parsedQuery.status, parsedQuery.status)
 		}
 	}
 }

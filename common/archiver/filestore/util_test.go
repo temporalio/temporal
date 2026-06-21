@@ -147,7 +147,7 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 	}
 	actualFileNames, err := listFilesByPrefix(dir, "file_")
 	s.NoError(err)
-	s.Len(actualFileNames, len(expectedFileNames))
+	s.Equal(len(expectedFileNames), len(actualFileNames))
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
@@ -398,16 +398,16 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.NoError(err)
+	s.Nil(err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.NoError(err)
+	s.Nil(err)
 	s.Equal(token, deserializedToken)
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {
 	err := os.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *UtilSuite) assertFileExists(filepath string) {

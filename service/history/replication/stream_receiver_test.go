@@ -124,7 +124,7 @@ func (s *streamReceiverSuite) TestAckMessage_Noop() {
 
 	s.streamReceiver.ackMessage(s.stream)
 
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeUnset() {
@@ -134,7 +134,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeUnset() {
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 	s.NoError(err)
 }
 
@@ -177,7 +177,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Error(err)
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_HasBothWatermark() {
@@ -194,7 +194,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Error(err)
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_NoHighPriorityWatermark() {
@@ -208,7 +208,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 	s.NoError(err)
 }
 
@@ -223,7 +223,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Empty(s.stream.requests)
+	s.Equal(0, len(s.stream.requests))
 	s.NoError(err)
 }
 
@@ -292,7 +292,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Len(tasks, 1)
+			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -300,7 +300,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 
 	err := s.streamReceiver.processMessages(s.stream)
 	s.NoError(err)
-	s.Len(s.taskScheduler.tasks, 1)
+	s.Equal(1, len(s.taskScheduler.tasks))
 	s.IsType(&ExecutableUnknownTask{}, s.taskScheduler.tasks[0])
 	s.Equal(ReceiverModeSingleStack, s.streamReceiver.receiverMode)
 }
@@ -409,7 +409,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Len(tasks, 1)
+			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -418,7 +418,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Len(tasks, 1)
+			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -426,7 +426,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 
 	err := s.streamReceiver.processMessages(s.stream)
 	s.NoError(err)
-	s.Len(s.taskScheduler.tasks, 2)
+	s.Equal(2, len(s.taskScheduler.tasks))
 	s.Equal(ReceiverModeTieredStack, s.streamReceiver.receiverMode)
 }
 

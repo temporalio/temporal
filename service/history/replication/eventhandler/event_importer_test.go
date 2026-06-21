@@ -212,7 +212,7 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 		7,
 		1001,
 	)
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func serializeEvents(serializer serialization.Serializer, events [][]*historypb.HistoryEvent) []*commonpb.DataBlob {
