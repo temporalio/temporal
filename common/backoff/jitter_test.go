@@ -34,7 +34,7 @@ func (s *jitterSuite) TestJitter_Int64() {
 		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.GreaterOrEqual(result, 0)
+		s.GreaterOrEqual(result, int64(0))
 		s.Less(result, input)
 	}
 }
@@ -51,7 +51,7 @@ func (s *jitterSuite) TestJitter_Float64() {
 		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.GreaterOrEqual(result, 0)
+		s.GreaterOrEqual(result, float64(0))
 		s.Less(result, input)
 	}
 }
@@ -68,7 +68,7 @@ func (s *jitterSuite) TestJitter_Duration() {
 		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.GreaterOrEqual(result, 0)
+		s.GreaterOrEqual(result, time.Duration(0))
 		s.Less(result, input)
 	}
 }
