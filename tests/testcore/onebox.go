@@ -325,6 +325,10 @@ func (c *TemporalImpl) registerChasmLibraries(registry *chasm.Registry) error {
 	return nil
 }
 
+func (c *TemporalImpl) decorateChasmRegistry(registry *chasm.Registry) (*chasm.Registry, error) {
+	return registry, c.registerChasmLibraries(registry)
+}
+
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -406,7 +410,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
-			fx.Invoke(c.registerChasmLibraries),
+			fx.Decorate(c.decorateChasmRegistry),
 		)
 		err := app.Err()
 		if err != nil {
@@ -500,7 +504,7 @@ func (c *TemporalImpl) startHistory() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasm.Module,
-			fx.Invoke(c.registerChasmLibraries),
+			fx.Decorate(c.decorateChasmRegistry),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -557,7 +561,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasm.Module,
-			fx.Invoke(c.registerChasmLibraries),
+			fx.Decorate(c.decorateChasmRegistry),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -624,7 +628,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			chasm.Module,
-			fx.Invoke(c.registerChasmLibraries),
+			fx.Decorate(c.decorateChasmRegistry),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()

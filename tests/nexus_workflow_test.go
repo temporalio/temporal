@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -2896,7 +2897,7 @@ func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
 // __temporal_system endpoint.
 func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled bool) {
-	env := s.newTestEnv(chasmEnabled)
+	env := s.newTestEnv(chasmEnabled, testcore.WithChasmLibraries(chasmtests.Library))
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
