@@ -4164,27 +4164,24 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	if tsi == nil {
-		return serviceerror.NewInternal(
-			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
-		)
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		return invalidTransitionError
 	}
 	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
-		return serviceerror.NewInternal(
-			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
-		)
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
+		return invalidTransitionError
 	}
 
-	if tsi.GetAccumulatedSkippedDuration() == nil {
-		tsi.AccumulatedSkippedDuration = durationpb.New(0)
-	}
-	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	// update time
 	if !timeNotSet(attr.TargetTime) {
-		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
 	}
-	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
+	// update enabled state
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
-
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
 		tsi.FastForwardInfo.HasReached = true
 	}
@@ -5841,6 +5838,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
@@ -5855,6 +5853,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		timeSkippingConfigUpdated,
 		workflowUpdateOptions,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
@@ -5943,8 +5942,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
-	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
+	// this flag of timeSkippingConfigUpdated is the source of the truth for if the TSC is updated or not
+	// the contents of the config cannot be used to judge if the config is updated or not, examples:
+	// (1) TSC=nil in handleUseExistingWorkflowOnConflictOptions means nothing is changed
+	// but TSC=nil in MergeAndApplyWorkflowExecutionOptions with update masks means users want to remove the TSC
+	// (2) same TSC with fast-forward in MergeAndApplyWorkflowExecutionOptions logic may
+	// either indicate the TSC is untouched or updated to the same value and should refresh related timer tasks
+	if attributes.GetTimeSkippingConfigUpdated() {
+		tsc := attributes.GetTimeSkippingConfig()
+		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+		if tsi == nil {
 			ms.initTimeSkippingInfo(tsc, nil, event.GetEventId())
 		} else {
 			ms.updateTimeSkippingInfo(tsc, event.GetEventId())
@@ -10005,6 +10012,9 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.timeSkippingInfoUpdated = true
 }
 
+// updateTimeSkippingInfo updates the time skipping info with
+// with new config and the event ID that updates the config
+// we allow updating the config to nil when users want to remove the TSC
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	currentEventID int64,

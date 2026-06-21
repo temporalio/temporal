@@ -1159,7 +1159,8 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1174,7 +1175,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 
 	// unset pinned override with boolean
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1196,7 +1197,8 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1211,7 +1213,8 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 
 	// unset pinned override with empty
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil, true, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1232,7 +1235,8 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1259,7 +1263,8 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1313,7 +1318,8 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 
 	// now we unset the override and check that the base deployment/behavior is in effect
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil, true, "", nil, nil, id, nil, nil, false, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -7254,6 +7260,13 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 // SetSpeculativeWorkflowTaskTimeoutTask, and ToRealTime all rely on this; if it panicked or
 // returned non-zero on a nil chain, every non-time-skipping workflow would break.
 func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
+	s.Run("ExecutionInfoNil", func() {
+		s.mutableState.executionInfo = nil
+		var got time.Duration
+		s.NotPanics(func() { got = s.mutableState.accumulatedSkippedDuration() })
+		s.Equal(time.Duration(0), got)
+	})
+
 	s.Run("TimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 		var got time.Duration
@@ -7909,10 +7922,6 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 	}
 }
 
-// TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig verifies that
-// replaying a WorkflowExecutionOptionsUpdated event with TimeSkippingConfig populates
-// or overwrites executionInfo.TimeSkippingInfo. This is the rebuild path for
-// time-skipping config that is set or changed after workflow start.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
 	initialConfig := &commonpb.TimeSkippingConfig{
 		Enabled:     true,
@@ -7922,62 +7931,103 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		FastForward: durationpb.New(2 * time.Hour)}
 
 	testCases := []struct {
-		name          string
-		existing      *commonpb.TimeSkippingConfig
-		eventConfig   *commonpb.TimeSkippingConfig
-		wantConfig    *commonpb.TimeSkippingConfig
-		wantInfoIsNil bool
+		name              string
+		existing          *commonpb.TimeSkippingConfig
+		eventConfig       *commonpb.TimeSkippingConfig
+		wantConfig        *commonpb.TimeSkippingConfig
+		updatedFlag       bool
+		wantInfoIsNil     bool
+		targetTimeRenewal bool
 	}{
 		{
-			name:        "sets when none exists",
-			existing:    nil,
-			eventConfig: initialConfig,
-			wantConfig:  initialConfig,
+			name:              "sets when none exists",
+			existing:          nil,
+			eventConfig:       initialConfig,
+			wantConfig:        initialConfig,
+			updatedFlag:       true,
+			targetTimeRenewal: true,
 		},
 		{
-			name:        "overwrites existing",
-			existing:    initialConfig,
-			eventConfig: updatedConfig,
-			wantConfig:  updatedConfig,
+			name:              "overwrites existing",
+			existing:          initialConfig,
+			eventConfig:       updatedConfig,
+			wantConfig:        updatedConfig,
+			updatedFlag:       true,
+			targetTimeRenewal: true,
 		},
 		{
-			name:          "nil config leaves info untouched",
-			existing:      nil,
-			eventConfig:   nil,
-			wantInfoIsNil: true,
+			name:              "nil with updated flag set to false",
+			existing:          initialConfig,
+			eventConfig:       nil,
+			wantConfig:        initialConfig,
+			wantInfoIsNil:     false,
+			targetTimeRenewal: false,
+			updatedFlag:       false,
 		},
 		{
-			name:        "nil config preserves existing",
-			existing:    initialConfig,
-			eventConfig: nil,
-			wantConfig:  initialConfig,
+			name:              "nil with updated flag set to true",
+			existing:          initialConfig,
+			eventConfig:       nil,
+			wantConfig:        nil,
+			wantInfoIsNil:     false,
+			targetTimeRenewal: true, // nil config clears FastForwardInfo, so target time changes from timestamp → nil
+			updatedFlag:       true,
+		},
+		{
+			name:              "same config will trigger target time renewal",
+			existing:          initialConfig,
+			eventConfig:       initialConfig,
+			wantInfoIsNil:     false,
+			targetTimeRenewal: true,
+			wantConfig:        initialConfig,
+			updatedFlag:       true,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			if tc.existing != nil {
-				s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tc.existing}
-			}
-
-			event := &historypb.HistoryEvent{
+			// first init the existing TSC to get the TSI
+			initialEvent := &historypb.HistoryEvent{
 				EventId:   int64(2),
 				EventTime: timestamppb.New(time.Now().UTC()),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-						TimeSkippingConfig: tc.eventConfig,
+						TimeSkippingConfig:        tc.existing,
+						TimeSkippingConfigUpdated: true, // always set to true for initial event
 					},
 				},
 			}
-
-			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event)
+			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(initialEvent)
 			s.NoError(err)
+			initialTSI := common.CloneProto(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			// apply the event config
+			updatedEvent := &historypb.HistoryEvent{
+				EventId:   int64(3),
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+						TimeSkippingConfig:        tc.eventConfig,
+						TimeSkippingConfigUpdated: tc.updatedFlag,
+					},
+				},
+			}
+			err = s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(updatedEvent)
+			s.NoError(err)
+			updatedTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
+			if tc.wantConfig != nil {
+				s.True(proto.Equal(tc.wantConfig, updatedTSI.GetConfig()))
+			}
 			if tc.wantInfoIsNil {
-				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+				s.Nil(updatedTSI)
 			} else {
-				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+				if tc.targetTimeRenewal {
+					s.NotEqual(initialTSI.GetFastForwardInfo().GetTargetTime(), updatedTSI.GetFastForwardInfo().GetTargetTime())
+				} else {
+					s.Equal(initialTSI.GetFastForwardInfo().GetTargetTime(), updatedTSI.GetFastForwardInfo().GetTargetTime())
+				}
 			}
 		})
 	}
@@ -8248,7 +8298,10 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 // TestInitTimeSkippingInfo covers 3 basic scenarios this function is called.
 func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 
-	s.Run("InitWithNil_ForExecutionsWithoutTS", func() {
+	// if the inputs are nil, the caller doesn't need to call the TSI
+	// yet we still add this test to ensure the function is safe with an noop implementation
+	// to call with nil inputs
+	s.Run("SafeInitWithNil_ForExecutionsWithoutTS", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 		s.NotPanics(func() {
@@ -8310,6 +8363,34 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 }
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
+
+	s.Run("UpdateTimeSkippingInfo_UpdateWithNil", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		baseTime := s.mutableState.timeSource.Now()
+		currentTSI := &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
+			},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime:    timestamppb.New(baseTime.Add(time.Hour)),
+				SourceEventId: 7,
+				HasReached:    false,
+			},
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo = currentTSI
+		s.mutableState.timeSkippingInfoUpdated = false
+		newEventID := int64(8)
+		s.mutableState.updateTimeSkippingInfo(nil, newEventID)
+		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(newTSI)
+		s.Nil(newTSI.GetConfig())
+		s.Nil(newTSI.GetFastForwardInfo())
+		s.Equal(currentTSI.GetAccumulatedSkippedDuration(), newTSI.GetAccumulatedSkippedDuration())
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
 	s.Run("UpdateTimeSkippingInfo_EnableTS", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()

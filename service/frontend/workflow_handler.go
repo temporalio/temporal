@@ -6313,10 +6313,11 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	)
 
 	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-			fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
-		)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
+		}
 	}
 	return nil
 }

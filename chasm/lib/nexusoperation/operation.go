@@ -327,7 +327,7 @@ func (o *Operation) loadStartArgs(
 		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),
 		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
 		payload:                invocationData.Input,
-		header:                 invocationData.Header,
+		header:                 maps.Clone(invocationData.Header),
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
 	}, nil
@@ -542,10 +542,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		StateTransitionCount:    ctx.ExecutionInfo().StateTransitionCount,
 		StateSizeBytes:          int64(ctx.ExecutionInfo().ApproximateStateSize),
 		SearchAttributes: &commonpb.SearchAttributes{
-			// CustomSearchAttributes returns the component's live map by reference; the
-			// describe response is marshalled after the read lease is released, so clone it
-			// to avoid racing a concurrent mutation (see Scheduler.Describe for the same fix).
-			IndexedFields: maps.Clone(o.Visibility.Get(ctx).CustomSearchAttributes(ctx)),
+			IndexedFields: o.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 		},
 		NexusHeader:  requestData.GetNexusHeader(),
 		UserMetadata: requestData.GetUserMetadata(),

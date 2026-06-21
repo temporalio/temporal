@@ -84,6 +84,7 @@ type mockEventStore struct {
 		identity string,
 		priority *commonpb.Priority,
 		timeSkippingConfig *commonpb.TimeSkippingConfig,
+		timeSkippingUpdated bool,
 		workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 	) (*historypb.HistoryEvent, error)
 
@@ -100,10 +101,11 @@ func (m mockEventStore) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if m.AddWorkflowExecutionOptionsUpdatedEventFunc != nil {
-		return m.AddWorkflowExecutionOptionsUpdatedEventFunc(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, workflowUpdateOptions)
+		return m.AddWorkflowExecutionOptionsUpdatedEventFunc(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, timeSkippingUpdated, workflowUpdateOptions)
 	}
 	return &historypb.HistoryEvent{}, nil
 }

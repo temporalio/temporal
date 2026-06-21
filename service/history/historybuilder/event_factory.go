@@ -407,6 +407,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
@@ -419,6 +420,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			Identity:                    identity,
 			Priority:                    priority,
 			TimeSkippingConfig:          timeSkippingConfig,
+			TimeSkippingConfigUpdated:   timeSkippingConfigUpdated,
 			WorkflowUpdateOptions:       workflowUpdateOptions,
 		},
 	}

@@ -43,13 +43,13 @@ type ScheduleMigrationTestSuite struct {
 }
 
 func TestScheduleMigrationTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleMigrationTestSuite{})
+	testcore.UseSuiteScopedCluster(t)                                   //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &ScheduleMigrationTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -209,10 +209,88 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	s.NoError(err)
 }
 
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentinel() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel")
+	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wf")
+	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			nsID,
+			&workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                nsName,
+				WorkflowId:               v1WorkflowID,
+				WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				Identity:                 "test",
+				RequestId:                uuid.NewString(),
+				WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			},
+			nil, nil, time.Now().UTC(),
+		),
+	)
+	s.NoError(err)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+		},
+	)
+	s.NoError(err)
+
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	s.Contains(unavailableErr.Message, "sentinel")
+}
+
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
 	)
@@ -322,7 +400,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -459,7 +536,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
@@ -666,7 +742,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
@@ -737,7 +812,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCreationAndMigration() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
@@ -839,7 +913,6 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
@@ -975,7 +1048,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
@@ -1086,7 +1158,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -1527,7 +1598,6 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
@@ -1731,7 +1801,6 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
@@ -2042,7 +2111,6 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	t := s.T()
 	env := testcore.NewEnv(
 		t,
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
 		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerMigrationRolloutPercent, 50),

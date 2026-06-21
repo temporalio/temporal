@@ -698,6 +698,11 @@ used here will be the effective RPS from global and per-instance limits. The val
 		50,
 		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
 	)
+	FrontendGlobalWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
+		"frontend.globalNamespaceWorkerDeploymentReadBurstRatio",
+		10,
+		`FrontendGlobalWorkerDeploymentReadBurstRatio is the burst limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion) as a ratio of FrontendGlobalWorkerDeploymentReadRPS. The RPS used here is the effective per-instance RPS after distributing the global limit among available frontend service instances. The value must be 1 or higher.`,
+	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
 		1200,
@@ -1390,6 +1395,11 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	WorkerControllerNoPollerHookWindow = NewGlobalDurationSetting(
+		"matching.workerControllerNoPollerHookWindow",
+		5*time.Second,
+		`WorkerControllerNoPollerHookWindow controls how recently a worker must have polled before skipping the WCI scale-up signal on an incoming query or Nexus task dispatch`,
+	)
 	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
 		"matching.emitTaskDispatchLatencyAtPoll",
 		true,
@@ -1555,6 +1565,12 @@ default as namespace cardinality can be high and this requires a metrics collect
 			DrainBufferTime:    15 * time.Second,
 		},
 		`Settings for partition scale manager.`,
+	)
+	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
+		"matching.partitionScaler",
+		ConvertSimplePartitionScalerSettings,
+		SimplePartitionScalerSettings{},
+		`Settings for simple partition scaler.`,
 	)
 
 	// Worker registry settings
@@ -1821,13 +1837,17 @@ to this require a restart to take effect.`,
 		"history.clientOwnershipCachingUnusedTTL",
 		30*time.Second,
 		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
-for cached shard ownership entries after a membership update.`,
+for cached shard ownership entries after a membership update.
+Should be less than history.connectionCloseDelay so that connections are not
+closed while still cached.`,
 	)
 	HistoryConnectionCloseDelay = NewGlobalDurationSetting(
 		"history.connectionCloseDelay",
-		30*time.Second,
+		60*time.Second,
 		`HistoryConnectionCloseDelay delays closing a cached history connection after its host leaves
-the membership ring, giving in-flight RPCs time to drain before the connection is closed.`,
+the membership ring, giving in-flight RPCs time to drain before the connection is closed.
+Should be greater than history.clientOwnershipCachingUnusedTTL so that connections are not closed
+while still cached.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",

@@ -358,6 +358,7 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 func NewGlobalNamespaceRateLimiter(
 	memberCounter calculator.MemberCounter,
 	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	globalQuotaBurstRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateFn := calculator.NewLoggedNamespaceCalculator(
@@ -373,7 +374,10 @@ func NewGlobalNamespaceRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDynamicRateLimiter(
-					quotas.NewDefaultIncomingRateBurst(func() float64 { return rateFn(req.Caller) }),
+					quotas.NewDefaultRateBurst(
+						func() float64 { return rateFn(req.Caller) },
+						func() float64 { return globalQuotaBurstRatio(req.Caller) },
+					),
 					time.Minute,
 				),
 			)
