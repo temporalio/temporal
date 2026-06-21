@@ -209,8 +209,7 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 	if err != nil {
 		return err
 	}
-	switch params.WorkflowType {
-	case WorkflowTypeDelete:
+	if params.WorkflowType == WorkflowTypeDelete {
 		queryResponse.MaxMessageIDToProcess = params.DeleteParams.MaxMessageID
 		queryResponse.DlqKey = Key{
 			TaskCategoryID: params.DeleteParams.TaskCategoryID,
@@ -233,7 +232,7 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 		queryResponse.LastProcessedMessageID = params.DeleteParams.MaxMessageID
 		queryResponse.NumberOfMessagesProcessed = response.MessagesDeleted
 		return nil
-	case WorkflowTypeMerge:
+	} else if params.WorkflowType == WorkflowTypeMerge {
 		queryResponse.MaxMessageIDToProcess = params.MergeParams.MaxMessageID
 		queryResponse.DlqKey = Key{
 			TaskCategoryID: params.MergeParams.TaskCategoryID,

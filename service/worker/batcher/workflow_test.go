@@ -28,7 +28,7 @@ func TestBatcherSuite(t *testing.T) {
 
 func (s *batcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.env = s.NewTestWorkflowEnvironment()
+	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(BatchWorkflowProtobuf)
 }
 

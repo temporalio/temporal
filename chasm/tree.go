@@ -1619,7 +1619,7 @@ func (n *Node) AddTask(
 		return
 	}
 
-	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
+	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})

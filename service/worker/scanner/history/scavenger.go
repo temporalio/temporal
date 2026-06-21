@@ -121,11 +121,11 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 
 	go s.loadTasks(ctx, reqCh)
 	for range numWorker {
-		s.Add(1)
+		s.WaitGroup.Add(1)
 		go s.taskWorker(ctx, reqCh)
 	}
 
-	s.Wait()
+	s.WaitGroup.Wait()
 
 	s.Lock()
 	defer s.Unlock()
@@ -176,7 +176,7 @@ func (s *Scavenger) taskWorker(
 	taskCh chan taskDetail,
 ) {
 
-	defer s.Done()
+	defer s.WaitGroup.Done()
 
 	for {
 		select {

@@ -90,7 +90,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -149,7 +149,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 
 		if doContinue, resendErr := e.Resend(
 			ctx,
-			e.SourceClusterName(),
+			e.ExecutableTask.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
@@ -161,7 +161,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -176,7 +176,7 @@ func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 			WorkflowId:     e.WorkflowID,
 			RunId:          e.RunID,
 			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-			TaskId:         e.TaskID(),
+			TaskId:         e.ExecutableTask.TaskID(),
 			VisibilityTime: timestamppb.New(e.TaskCreationTime()),
 		}
 	}

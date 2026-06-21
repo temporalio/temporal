@@ -93,7 +93,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -193,7 +193,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 	return e.BackFillEvents(
 		ctx,
-		e.SourceClusterName(),
+		e.ExecutableTask.SourceClusterName(),
 		e.WorkflowKey,
 		lcaItem.EventId+1,
 		startEventVersion,
@@ -266,7 +266,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.TaskID()),
+		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
 	switch taskErr := err.(type) {
@@ -292,7 +292,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.TaskID()),
+					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
 				return err

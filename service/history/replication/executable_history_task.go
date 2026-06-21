@@ -112,7 +112,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -169,7 +169,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 
 		if doContinue, resendErr := e.Resend(
 			ctx,
-			e.SourceClusterName(),
+			e.ExecutableTask.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
@@ -181,7 +181,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -207,7 +207,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.TaskID()),
+					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(err),
 				)
 				return nil
@@ -219,7 +219,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.TaskID()),
+					tag.TaskID(e.ExecutableTask.TaskID()),
 				)
 				return nil
 			}
@@ -230,7 +230,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			NamespaceId:  e.NamespaceID,
 			WorkflowId:   e.WorkflowID,
 			RunId:        e.RunID,
-			TaskId:       e.TaskID(),
+			TaskId:       e.ExecutableTask.TaskID(),
 			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 			FirstEventId: eventBatches[0][0].GetEventId(),
 			NextEventId:  eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
@@ -270,7 +270,7 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 				tag.WorkflowNamespaceID(e.NamespaceID),
 				tag.WorkflowID(e.WorkflowID),
 				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.TaskID()),
+				tag.TaskID(e.ExecutableTask.TaskID()),
 				tag.Error(err),
 			)
 			return nil, nil, err
@@ -284,7 +284,7 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
 		return nil, nil, err

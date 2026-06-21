@@ -160,7 +160,9 @@ func fetchPage(
 	}
 
 	executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
-	executionInfos = append(executionInfos, resp.Executions...)
+	for _, wf := range resp.Executions {
+		executionInfos = append(executionInfos, wf)
+	}
 
 	return &page{
 		executionInfos: executionInfos,

@@ -302,7 +302,7 @@ func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
 		NamespaceId:      s.task.NamespaceID,
 		WorkflowId:       s.task.WorkflowID,
 		RunId:            s.task.RunID,
-		TaskId:           s.task.TaskID(),
+		TaskId:           s.task.ExecutableTask.TaskID(),
 		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		ScheduledEventId: s.task.req.ScheduledEventId,
 		Version:          s.task.req.Version,

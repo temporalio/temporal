@@ -80,7 +80,7 @@ func (e *ExecutableUnknownTask) IsRetryableError(err error) bool {
 func (e *ExecutableUnknownTask) MarkPoisonPill() error {
 	e.Logger.Error("unable to enqueue unknown replication task to DLQ",
 		tag.Task(e.task),
-		tag.TaskID(e.TaskID()),
+		tag.TaskID(e.ExecutableTask.TaskID()),
 	)
 	return nil
 }

@@ -370,10 +370,10 @@ func TestModule(t *testing.T) {
 			name: "merge_replication_tasks_dial_error",
 			configure: func(t *testing.T, params *testParams) {
 				params.setDefaultMergeParams(t)
-				params.workflowParams.MergeParams.SourceCluster = "source-cluster"
-				params.workflowParams.MergeParams.TargetCluster = "current-cluster"
+				params.workflowParams.MergeParams.Key.SourceCluster = "source-cluster"
+				params.workflowParams.MergeParams.Key.TargetCluster = "current-cluster"
 				params.currentClusterName = "current-cluster"
-				params.workflowParams.MergeParams.TaskCategoryID = tasks.CategoryIDReplication
+				params.workflowParams.MergeParams.Key.TaskCategoryID = tasks.CategoryIDReplication
 				params.expectedQueryResp.DlqKey = params.workflowParams.MergeParams.Key
 				var replicationTask tasks.HistoryReplicationTask
 				blob, err := serialization.NewSerializer().SerializeTask(&replicationTask)

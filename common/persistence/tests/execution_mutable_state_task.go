@@ -659,9 +659,9 @@ func (s *testSerializer) SerializeTask(
 ) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
 		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
-			NamespaceId:    fakeTask.NamespaceID,
-			WorkflowId:     fakeTask.WorkflowID,
-			RunId:          fakeTask.RunID,
+			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
+			WorkflowId:     fakeTask.WorkflowKey.WorkflowID,
+			RunId:          fakeTask.WorkflowKey.RunID,
 			TaskType:       fakeTask.GetType(),
 			Version:        fakeTask.Version,
 			TaskId:         fakeTask.TaskID,

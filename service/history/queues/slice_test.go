@@ -432,7 +432,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 			mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
 		}
 
-		slice.add(executable)
+		slice.executableTracker.add(executable)
 	}
 
 	slice.ShrinkScope()

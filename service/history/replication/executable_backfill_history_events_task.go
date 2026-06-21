@@ -88,7 +88,7 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -146,7 +146,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.TaskID()),
+		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -174,7 +174,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.TaskID()),
+					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
 				return err
@@ -207,7 +207,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		}
 		if resendErr := e.BackFillEvents(
 			ctx,
-			e.SourceClusterName(),
+			e.ExecutableTask.SourceClusterName(),
 			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
 			startEvent,
 			startEventVersion,
@@ -223,7 +223,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -239,7 +239,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 				tag.WorkflowNamespaceID(e.NamespaceID),
 				tag.WorkflowID(e.WorkflowID),
 				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.TaskID()),
+				tag.TaskID(e.ExecutableTask.TaskID()),
 				tag.Error(err),
 			)
 			return nil, nil, err
@@ -253,7 +253,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
 		return nil, nil, err

@@ -86,7 +86,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -132,7 +132,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.TaskID()),
+		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -158,7 +158,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.TaskID()),
+					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
 				return err
@@ -209,7 +209,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		if resendErr := e.BackFillEvents(
 			ctx,
-			e.SourceClusterName(),
+			e.ExecutableTask.SourceClusterName(),
 			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
 			startEvent,
 			startEventVersion,

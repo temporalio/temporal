@@ -58,10 +58,10 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 	ctx context.Context,
 	request *historyi.SyncHSMRequest,
 ) (retError error) {
-	namespaceID := namespace.ID(request.GetNamespaceID())
+	namespaceID := namespace.ID(request.WorkflowKey.GetNamespaceID())
 	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.GetWorkflowID(),
-		RunId:      request.GetRunID(),
+		WorkflowId: request.WorkflowKey.GetWorkflowID(),
+		RunId:      request.WorkflowKey.GetRunID(),
 	}
 
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(request.EventVersionHistory)
