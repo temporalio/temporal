@@ -1415,8 +1415,3 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 		Version:           s.version,
 	}
 }
-
-//go:fix inline
-func timePtr(t time.Time) *time.Time {
-	return new(t)
-}
