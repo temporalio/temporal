@@ -120,10 +120,14 @@ func TestNewHTTPHandler(t *testing.T) {
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 		handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+			if err != nil {
+				t.Errorf("ReadAll() error = %v", err)
+			}
 			w.Header().Set("Response-Header", "response-value")
 			_, err = w.Write([]byte("response body"))
-			require.NoError(t, err)
+			if err != nil {
+				t.Errorf("Write() error = %v", err)
+			}
 		}), "test-handler", tp, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
@@ -146,11 +150,17 @@ func TestNewHTTPHandler(t *testing.T) {
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 		handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			payload, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-			require.Equal(t, "request body", string(payload))
+			if err != nil {
+				t.Errorf("ReadAll() error = %v", err)
+			}
+			if string(payload) != "request body" {
+				t.Errorf("payload = %q, want %q", string(payload), "request body")
+			}
 			w.Header().Set("Response-Header", "response-value")
 			_, err = w.Write([]byte("response body"))
-			require.NoError(t, err)
+			if err != nil {
+				t.Errorf("Write() error = %v", err)
+			}
 		}), "test-handler", tp, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))

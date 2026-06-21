@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -400,7 +399,7 @@ func TestRecordInboundSpanStatus_RecordsError(t *testing.T) {
 		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 		ctx, span := tp.Tracer("test").Start(context.Background(), "op")
 
-		err := fmt.Errorf("boom")
+		err := errors.New("boom")
 		recordInboundSpanStatus(ctx, &err)
 		span.End()
 
