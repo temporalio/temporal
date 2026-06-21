@@ -50,16 +50,23 @@ func (s *registrySuite) SetupTest() {
 	// Return ErrWatchNotSupported to use polling fallback in all tests.
 	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).
 		Return(nil, persistence.ErrWatchNotSupported).AnyTimes()
-	s.registry = s.newRegistry(false)
+	s.registry = s.newRegistry()
 }
 
-func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnRead bool) namespace.Registry {
+func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces ...string) namespace.Registry {
+	forceNamespaceCacheRefreshOnRead := make(map[string]struct{}, len(forceNamespaceCacheRefreshOnReadNamespaces))
+	for _, ns := range forceNamespaceCacheRefreshOnReadNamespaces {
+		forceNamespaceCacheRefreshOnRead[ns] = struct{}{}
+	}
 	return nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
 		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
-		dynamicconfig.GetBoolPropertyFn(forceNamespaceCacheRefreshOnRead),
+		func(namespace string) bool {
+			_, ok := forceNamespaceCacheRefreshOnRead[namespace]
+			return ok
+		},
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
 		log.NewTestLogger(),
@@ -760,7 +767,7 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	nsV1.Namespace.FailoverVersion = 1
 	nsV2 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 2)
 	nsV2.Namespace.FailoverVersion = 2
-	s.registry = s.newRegistry(true)
+	s.registry = s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
@@ -782,13 +789,31 @@ func (s *registrySuite) TestGetByNameForceRefreshOnRead() {
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
 
+func (s *registrySuite) TestGetByNameForceRefreshOnReadDisabledForOtherNamespace() {
+	id := namespace.NewID()
+	nsV1 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 1)
+	nsV1.Namespace.FailoverVersion = 1
+	s.registry = s.newRegistry("bar")
+
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
+	}, nil)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespace(namespace.Name("foo"))
+	s.NoError(err)
+	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+}
+
 func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 	id := namespace.NewID()
 	nsV1 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 1)
 	nsV1.Namespace.FailoverVersion = 1
 	nsV2 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 2)
 	nsV2.Namespace.FailoverVersion = 2
-	s.registry = s.newRegistry(true)
+	s.registry = s.newRegistry("foo")
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
@@ -808,6 +833,24 @@ func (s *registrySuite) TestGetByIDForceRefreshOnRead() {
 	ns, err = s.registry.GetNamespaceByID(id)
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+}
+
+func (s *registrySuite) TestGetByIDForceRefreshOnReadDisabledForOtherNamespace() {
+	id := namespace.NewID()
+	nsV1 := newNamespaceResponse(id, "foo", cluster.TestCurrentClusterName, 1)
+	nsV1.Namespace.FailoverVersion = 1
+	s.registry = s.newRegistry("bar")
+
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{nsV1},
+	}, nil)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	ns, err := s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
 
 // TestNamespaceRename validates that when a namespace is renamed via the

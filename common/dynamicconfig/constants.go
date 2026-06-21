@@ -167,12 +167,12 @@ for signal / start / signal with start API if namespace is not active`,
 get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
 search attributes. This should not be turned on in production.`,
 	)
-	ForceNamespaceCacheRefreshOnRead = NewGlobalBoolSetting(
+	ForceNamespaceCacheRefreshOnRead = NewNamespaceBoolSetting(
 		"system.forceNamespaceCacheRefreshOnRead",
 		false,
-		`ForceNamespaceCacheRefreshOnRead forces refreshing namespace cache on a read operation, so we always
-get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
-namespaces. This should not be turned on in production.`,
+		`ForceNamespaceCacheRefreshOnRead forces refreshing namespace cache on a read operation for matching namespaces,
+so we always get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of
+changes in namespaces. This should not be turned on in production.`,
 	)
 	EnableRingpopTLS = NewGlobalBoolSetting(
 		"system.enableRingpopTLS",
