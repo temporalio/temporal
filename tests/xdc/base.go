@@ -312,7 +312,7 @@ func (s *xdcBaseSuite) createNamespace(
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, c := range clusters[1:] {
 				resp := s.describeNamespace(t, c, ns, isGlobal)
-				require.Equal(t, clusterNames, s.namespaceClusterNames(resp))
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
@@ -343,7 +343,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp := s.describeNamespace(t, clusters[inClusterIndex], ns, true)
-		require.Equal(t, clusterNames, s.namespaceClusterNames(resp))
+		require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 		isGlobalNamespace = resp.GetIsGlobalNamespace()
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
@@ -356,7 +356,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 					continue
 				}
 				resp := s.describeNamespace(t, c, ns, true)
-				require.Equal(t, clusterNames, s.namespaceClusterNames(resp))
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
