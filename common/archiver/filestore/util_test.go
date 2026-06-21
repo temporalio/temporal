@@ -438,6 +438,7 @@ func (s *UtilSuite) assertCorrectFileMode(path string) {
 	s.Equal(mode, info.Mode())
 }
 
+//go:fix inline
 func toWorkflowExecutionStatusPtr(in enumspb.WorkflowExecutionStatus) *enumspb.WorkflowExecutionStatus {
-	return &in
+	return new(in)
 }

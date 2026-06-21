@@ -321,8 +321,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	var workerWG sync.WaitGroup
 	for range 10 {
-		workerWG.Add(1)
-		go func() {
+		workerWG.Go(func() {
 			for range 10 {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
 					shard, err := s.shardController.GetShardByID(shardID)
@@ -333,8 +332,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 					s.NotNil(engine)
 				}
 			}
-			workerWG.Done()
-		}()
+		})
 	}
 
 	workerWG.Wait()
@@ -347,8 +345,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 	}
 
 	for range 10 {
-		workerWG.Add(1)
-		go func() {
+		workerWG.Go(func() {
 			for range 10 {
 				for shardID := int32(3); shardID <= numShards; shardID++ {
 					shard, err := s.shardController.GetShardByID(shardID)
@@ -360,13 +357,11 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 					time.Sleep(20 * time.Millisecond)
 				}
 			}
-			workerWG.Done()
-		}()
+		})
 	}
 
 	for range 10 {
-		workerWG.Add(1)
-		go func() {
+		workerWG.Go(func() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= 2; shardID++ {
@@ -380,8 +375,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 			}
 
 			s.True(shardLost)
-			workerWG.Done()
-		}()
+		})
 	}
 
 	workerWG.Wait()
@@ -419,8 +413,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 
 	var workerWG sync.WaitGroup
 	for range 10 {
-		workerWG.Add(1)
-		go func() {
+		workerWG.Go(func() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -434,8 +427,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 			}
 
 			s.True(shardLost)
-			workerWG.Done()
-		}()
+		})
 	}
 
 	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()

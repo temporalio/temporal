@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -215,7 +214,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowID:        util.Ptr("random workflowID"),
+				workflowID:        new("random workflowID"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime: timestamp.UnixOrZeroTimePtr(2000),
@@ -226,8 +225,8 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowID:        util.Ptr("random workflowID"),
-				runID:             util.Ptr("random runID"),
+				workflowID:        new("random workflowID"),
+				runID:             new("random runID"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime:        timestamp.UnixOrZeroTimePtr(12345),
@@ -241,7 +240,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowTypeName:  util.Ptr("some random type name"),
+				workflowTypeName:  new("some random type name"),
 			},
 			record: &archiverspb.VisibilityRecord{
 				CloseTime: timestamp.UnixOrZeroTimePtr(12345),
@@ -252,7 +251,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 			query: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 1000),
 				latestCloseTime:   time.Unix(0, 12345),
-				workflowTypeName:  util.Ptr("some random type name"),
+				workflowTypeName:  new("some random type name"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 			record: &archiverspb.VisibilityRecord{
@@ -388,7 +387,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		earliestCloseTime: time.Unix(0, 1),
 		latestCloseTime:   time.Unix(0, 10001),
-		workflowID:        util.Ptr(testWorkflowID),
+		workflowID:        new(testWorkflowID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

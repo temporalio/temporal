@@ -78,14 +78,12 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 }
 
 func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
-	f := Field[any]{}
-	fT := reflect.TypeOf(f)
+	fT := reflect.TypeFor[Field[any]]()
 	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestChasmMapTypePrefix() {
-	c := Map[string, any]{}
-	cT := reflect.TypeOf(c)
+	cT := reflect.TypeFor[Map[string, any]]()
 	s.True(strings.HasPrefix(cT.String(), chasmMapTypePrefix))
 }
 

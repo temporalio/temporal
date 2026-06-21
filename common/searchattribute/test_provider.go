@@ -135,10 +135,10 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
-		if strings.HasPrefix(alias, "AliasFor") {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
-		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
-			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
+		if after, ok := strings.CutPrefix(alias, "AliasFor"); ok {
+			return after, nil
+		} else if after, ok := strings.CutPrefix(alias, "AliasWithHyphenFor-"); ok {
+			return after, nil
 		}
 		return "", serviceerror.NewInvalidArgument("mapper error")
 	}
