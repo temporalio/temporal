@@ -104,6 +104,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			true,
 			"active",
 			func() time.Duration { return 1 * time.Hour },
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,
 			logger,

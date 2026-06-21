@@ -58,7 +58,7 @@ func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces .
 	for _, ns := range forceNamespaceCacheRefreshOnReadNamespaces {
 		forceNamespaceCacheRefreshOnRead[ns] = struct{}{}
 	}
-	return nsregistry.NewRegistryWithForceNamespaceCacheRefreshOnRead(
+	return nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
 		"active",
