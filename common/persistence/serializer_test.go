@@ -78,42 +78,42 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			// serialize event
 
 			nilEvent, err := serializer.SerializeEvent(nil)
-			s.NoError(err)
+			s.Nil(err)
 			s.Nil(nilEvent)
 
 			dProto, err := serializer.SerializeEvent(event0)
-			s.NoError(err)
+			s.Nil(err)
 			s.NotNil(dProto)
 
 			// serialize batch events
 
 			nilEvents, err := serializer.SerializeEvents(nil)
-			s.NoError(err)
+			s.Nil(err)
 			s.NotNil(nilEvents)
 
 			dsProto, err := serializer.SerializeEvents(history0.Events)
-			s.NoError(err)
+			s.Nil(err)
 			s.NotNil(dsProto)
 
 			// deserialize event
 
 			dNilEvent, err := serializer.DeserializeEvent(nilEvent)
-			s.NoError(err)
+			s.Nil(err)
 			s.Nil(dNilEvent)
 
 			event2, err := serializer.DeserializeEvent(dProto)
-			s.NoError(err)
+			s.Nil(err)
 			s.ProtoEqual(event0, event2)
 
 			// deserialize events
 
 			dNilEvents, err := serializer.DeserializeEvents(nilEvents)
-			s.NoError(err)
+			s.Nil(err)
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
-			s.NoError(err)
+			s.Nil(err)
 			s.ProtoEqual(history0, history2)
 		}()
 	}

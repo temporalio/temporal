@@ -353,7 +353,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
@@ -376,7 +376,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
@@ -448,7 +448,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
@@ -498,7 +498,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
@@ -655,7 +655,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 	targetNamespaceID := s.testNamespaceID
 
 	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", targetNamespaceID, "test-target-workflow-id")
-	s.NoError(err)
+	s.Nil(err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
@@ -741,8 +741,8 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			}
 
 			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr.GetRetryPolicy())
-			assert.NoError(s.T(), err, "expected no error")
-			s.Equal(tt.want, attr.RetryPolicy, "unexpected retry policy")
+			assert.Nil(s.T(), err, "expected no error")
+			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})
 	}
 }

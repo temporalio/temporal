@@ -224,10 +224,10 @@ func TestValidateRetryPolicy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := Validate(tt.input)
 			if tt.wantErr {
-				assert.Error(t, err, "expected error - did not get one")
-				assert.Equal(t, tt.wantErrString, err.Error(), "unexpected error message")
+				assert.NotNil(t, err, "expected error - did not get one")
+				assert.Equal(t, err.Error(), tt.wantErrString, "unexpected error message")
 			} else {
-				assert.NoError(t, err, "unexpected error")
+				assert.Nil(t, err, "unexpected error")
 			}
 		})
 	}

@@ -77,7 +77,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				s.NoError(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
+				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
 	}
@@ -85,7 +85,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	wg.Wait()
 
 	result, lastRetrievedMessageID, err := s.GetReplicationMessages(s.ctx, persistence.EmptyQueueMessageID, numMessages)
-	s.NoError(err, "GetReplicationMessages failed.")
+	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
 	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
 }
@@ -94,32 +94,32 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	clusterAckLevels, err := s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
-	s.Assert().Empty(clusterAckLevels)
+	s.Assert().Len(clusterAckLevels, 0)
 
 	err = s.UpdateAckLevel(s.ctx, 10, "test1")
 	s.Require().NoError(err)
 
 	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
-	s.Len(clusterAckLevels, 1)
-	s.Equal(int64(10), clusterAckLevels["test1"])
+	s.Assert().Len(clusterAckLevels, 1)
+	s.Assert().Equal(int64(10), clusterAckLevels["test1"])
 
 	err = s.UpdateAckLevel(s.ctx, 20, "test1")
 	s.Require().NoError(err)
 
 	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
-	s.Len(clusterAckLevels, 1)
-	s.Equal(int64(20), clusterAckLevels["test1"])
+	s.Assert().Len(clusterAckLevels, 1)
+	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
 
 	err = s.UpdateAckLevel(s.ctx, 25, "test2")
 	s.Require().NoError(err)
 
 	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
-	s.Len(clusterAckLevels, 2)
-	s.Equal(int64(20), clusterAckLevels["test1"])
-	s.Equal(int64(25), clusterAckLevels["test2"])
+	s.Assert().Len(clusterAckLevels, 2)
+	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
+	s.Assert().Equal(int64(25), clusterAckLevels["test2"])
 }
 
 // TestNamespaceReplicationDLQ tests namespace DLQ operations
@@ -154,7 +154,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				s.NoError(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
+				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
 	}
@@ -162,30 +162,30 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	wg.Wait()
 
 	result1, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
-	s.NoError(err, "GetReplicationMessages failed.")
+	s.Nil(err, "GetReplicationMessages failed.")
 	s.NotNil(token)
 	result2, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.NoError(err, "GetReplicationMessages failed.")
-	s.Empty(token)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
 	s.Equal(len(result1)+len(result2), numMessages)
 	_, _, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
-	s.Empty(token)
+	s.Equal(len(token), 0)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
 	err = s.DeleteMessageFromNamespaceDLQ(s.ctx, lastMessageID)
 	s.NoError(err)
 	result3, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.NoError(err, "GetReplicationMessages failed.")
-	s.Empty(token)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
 	s.Equal(len(result3), numMessages-1)
 
 	err = s.RangeDeleteMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, lastMessageID)
 	s.NoError(err)
 	result4, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.NoError(err, "GetReplicationMessages failed.")
-	s.Empty(token)
-	s.Empty(result4)
+	s.Nil(err, "GetReplicationMessages failed.")
+	s.Equal(len(token), 0)
+	s.Equal(len(result4), 0)
 }
 
 // TestNamespaceDLQMetadataOperations tests queue metadata operations

@@ -120,5 +120,5 @@ func TestNamespace_GetCustomData(t *testing.T) {
 	data := ns.GetCustomData("foo")
 	assert.Equal(t, "bar", data)
 	data2 := ns.GetCustomData("fake")
-	assert.Empty(t, data2)
+	assert.Equal(t, "", data2)
 }

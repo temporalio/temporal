@@ -530,7 +530,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					assert.ErrorContains(t, err, s)
 				}
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 			}
 		})
 	}

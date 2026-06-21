@@ -210,7 +210,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	var attr *commonpb.SearchAttributes
 
 	err := saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Nil(err)
 
 	intPayload, err := payload.Encode(1)
 	s.NoError(err)

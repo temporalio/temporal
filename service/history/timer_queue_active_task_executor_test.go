@@ -1137,7 +1137,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 	workflowTask := s.getMutableStateFromCache(workflowKey).GetPendingWorkflowTask()
 	s.NotNil(workflowTask)
-	s.NotEqual(workflowTask.ScheduledEventID, common.EmptyEventID)
+	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(2), workflowTask.Attempt)
 }
@@ -1289,7 +1289,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 
 	workflowTask := s.getMutableStateFromCache(workflowKey).GetPendingWorkflowTask()
 	s.NotNil(workflowTask)
-	s.NotEqual(workflowTask.ScheduledEventID, common.EmptyEventID)
+	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(1), workflowTask.Attempt)
 }
@@ -1640,7 +1640,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 
 	state, status := s.getMutableStateFromCache(workflowKey).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {
@@ -1701,7 +1701,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {
 
 	state, status := s.getMutableStateFromCache(workflowKey).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_WorkflowExpired() {
@@ -1756,7 +1756,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_WorkflowExpir
 
 	state, status := s.getMutableStateFromCache(workflowKey).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() {
@@ -1833,7 +1833,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 		s.False(mutableState.IsWorkflowExecutionRunning())
 		state, status := mutableState.GetWorkflowStateStatus()
 		s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+		s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 
 		s.clearMutableStateFromCache(workflowKey)
 	}
@@ -2034,7 +2034,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 	// Execution should succeed.
 	resp := timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
-	s.NoError(resp.ExecutionErr)
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_ExecutesAllPureTimers() {
@@ -2107,7 +2107,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	// Execution should succeed.
 	resp := timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
-	s.NoError(resp.ExecutionErr)
+	s.Nil(resp.ExecutionErr)
 }
 
 // TestExecuteChasmPureTimerTask_ClosesTransactionWhenInvalid verifies that the
@@ -2309,7 +2309,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	err = timerQueueActiveTaskExecutor.executeStateMachineTimerTask(context.Background(), task)
 	s.NoError(err)
 	s.Equal(2, numInvocations) // two valid tasks within the deadline.
-	s.Len(info.StateMachineTimers, 1)
+	s.Equal(1, len(info.StateMachineTimers))
 	s.Equal(futureDeadline, info.StateMachineTimers[0].Deadline.AsTime())
 }
 

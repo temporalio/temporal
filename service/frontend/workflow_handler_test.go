@@ -1670,9 +1670,9 @@ func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() 
 	s.NotNil(result)
 	s.NotNil(result.Config)
 	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetHistoryArchivalState())
-	s.Empty(result.Config.GetHistoryArchivalUri())
+	s.Equal("", result.Config.GetHistoryArchivalUri())
 	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetVisibilityArchivalState())
-	s.Empty(result.Config.GetVisibilityArchivalUri())
+	s.Equal("", result.Config.GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
@@ -2916,7 +2916,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			var batchParams batchspb.BatchOperationInput
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
-			s.Empty(batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations)
+			s.Len(batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -3040,7 +3040,7 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
 			s.Equal(jobID, request.TerminateRequest.WorkflowExecution.GetWorkflowId())
-			s.Empty(request.TerminateRequest.WorkflowExecution.GetRunId())
+			s.Equal("", request.TerminateRequest.WorkflowExecution.GetRunId())
 			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 		},
 	)
@@ -3228,9 +3228,9 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(now, resp.GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
-	s.Equal(int64(5), resp.TotalOperationCount)
-	s.Equal(int64(3), resp.CompleteOperationCount)
-	s.Equal(int64(1), resp.FailureOperationCount)
+	s.Assert().Equal(int64(5), resp.TotalOperationCount)
+	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
+	s.Assert().Equal(int64(1), resp.FailureOperationCount)
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
@@ -3338,7 +3338,7 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 
 	resp, err := wh.ListBatchOperations(context.Background(), request)
 	s.NoError(err)
-	s.Len(resp.OperationInfo, 1)
+	s.Equal(1, len(resp.OperationInfo))
 	s.Equal(jobID, resp.OperationInfo[0].GetJobId())
 	s.Equal(now, resp.OperationInfo[0].GetStartTime())
 	s.Equal(now, resp.OperationInfo[0].GetCloseTime())
@@ -3887,7 +3887,7 @@ func TestContextNearDeadline(t *testing.T) {
 func TestValidateRequestId(t *testing.T) {
 	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
 	err := validateRequestId(&req.RequestId, 100)
-	assert.NoError(t, err)
+	assert.Nil(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
 }
 
@@ -4204,7 +4204,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 
 	assertMultiOpsErr := func(expectedErrs []error, actual error) {
 		s.Equal("Update-with-Start could not be executed.", actual.Error())
-		s.Equal(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
+		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
 	}
 
 	s.Run("operation with different workflow ID as previous operation is invalid", func() {

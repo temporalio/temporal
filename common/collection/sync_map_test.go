@@ -122,7 +122,7 @@ func TestMap_Pop_ReturnsTrueWhenKeyExists(t *testing.T) {
 func TestMap_PopAll(t *testing.T) {
 	m := collection.NewSyncMap[int, int]()
 	values := m.PopAll()
-	assert.Empty(t, values)
+	assert.Equal(t, 0, len(values))
 
 	m.Set(1, 1)
 	m.Set(2, 2)
@@ -133,7 +133,7 @@ func TestMap_PopAll(t *testing.T) {
 	mCopy := m
 
 	values = m.PopAll()
-	assert.Len(t, values, 3)
+	assert.Equal(t, 3, len(values))
 	sum := 0
 	for _, v := range values {
 		sum += v

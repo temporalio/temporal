@@ -517,7 +517,7 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 	h.NotNil(response.NextPageToken)
-	h.EqualValues(2, len(response.HistoryBatches))
+	h.EqualValues(len(response.HistoryBatches), 2)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_FromToken() {
@@ -557,15 +557,15 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	token, err = deserializeGetHistoryToken(response.NextPageToken)
 	h.NoError(err)
 
-	h.Equal(5, token.HighestPart)
-	h.Equal(5, token.CurrentPart)
-	h.Len(response.HistoryBatches, 3)
+	h.EqualValues(5, token.HighestPart)
+	h.EqualValues(5, token.CurrentPart)
+	h.EqualValues(3, len(response.HistoryBatches))
 	numOfEvents := 0
 	for _, batch := range response.HistoryBatches {
 		numOfEvents += len(batch.Events)
 	}
 
-	h.Equal(4, numOfEvents)
+	h.EqualValues(4, numOfEvents)
 }
 
 func (h *historyArchiverSuite) TestGet_NoHistory() {

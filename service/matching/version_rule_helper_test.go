@@ -11,7 +11,7 @@ import (
 
 func TestFindAssignmentBuildId_NoRules(t *testing.T) {
 	b := FindAssignmentBuildId(nil, "")
-	assert.Empty(t, b)
+	assert.Equal(t, "", b)
 }
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {

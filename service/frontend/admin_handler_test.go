@@ -1066,9 +1066,9 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.NoError(err)
 	s.Equal(resp.GetClusterName(), clusterName)
 	s.Equal(resp.GetClusterId(), clusterID)
-	s.Equal(int32(0), resp.GetHistoryShardCount())
-	s.Equal(int64(0), resp.GetFailoverVersionIncrement())
-	s.Equal(int64(0), resp.GetInitialFailoverVersion())
+	s.Equal(resp.GetHistoryShardCount(), int32(0))
+	s.Equal(resp.GetFailoverVersionIncrement(), int64(0))
+	s.Equal(resp.GetInitialFailoverVersion(), int64(0))
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
 
@@ -1104,9 +1104,9 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.NoError(err)
 	s.Equal(resp.GetClusterName(), clusterName)
 	s.Equal(resp.GetClusterId(), clusterID)
-	s.Equal(int32(0), resp.GetHistoryShardCount())
-	s.Equal(int64(0), resp.GetFailoverVersionIncrement())
-	s.Equal(int64(0), resp.GetInitialFailoverVersion())
+	s.Equal(resp.GetHistoryShardCount(), int32(0))
+	s.Equal(resp.GetFailoverVersionIncrement(), int64(0))
+	s.Equal(resp.GetInitialFailoverVersion(), int64(0))
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
 
@@ -1127,8 +1127,8 @@ func (s *adminHandlerSuite) Test_ListClusters_Success() {
 		PageSize: pageSize,
 	})
 	s.NoError(err)
-	s.Len(resp.Clusters, 1)
-	s.Empty(resp.GetNextPageToken())
+	s.Equal(1, len(resp.Clusters))
+	s.Equal(0, len(resp.GetNextPageToken()))
 }
 
 func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServerBroken() {
@@ -1614,7 +1614,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			s.NoError(err)
 			s.NotNil(response)
-			s.Equal(tc.expectedResponse, *response)
+			s.EqualValues(tc.expectedResponse, *response)
 		})
 	}
 }
@@ -1969,7 +1969,7 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Len(resp.VersionsInfoInternal, 2)
+	s.Equal(2, len(resp.VersionsInfoInternal))
 
 	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
 	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())

@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,7 @@ func TestDescribeHistoryHost(t *testing.T) {
 	})
 	assert.Error(t, err)
 	var sol *serviceerror.ShardOwnershipLost
-	assert.ErrorAs(t, err, &sol)
+	assert.True(t, errors.As(err, &sol))
 
 	mockShard2 := shard.NewTestContext(
 		ctrl,

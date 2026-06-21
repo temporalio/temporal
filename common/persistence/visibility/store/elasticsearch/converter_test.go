@@ -135,7 +135,7 @@ func TestSupportedSelectWhere(t *testing.T) {
 		actualMap, _ := queryParams.Query.Source()
 		actualJson, _ := json.Marshal(actualMap)
 
-		assert.JSONEq(t, expectedJson, string(actualJson), fmt.Sprintf("sql: %s", sql))
+		assert.Equal(t, expectedJson, string(actualJson), fmt.Sprintf("sql: %s", sql))
 	}
 }
 
@@ -165,7 +165,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 
 		actualQueryMap, _ := queryParams.Query.Source()
 		actualQueryJson, _ := json.Marshal(actualQueryMap)
-		assert.JSONEq(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+		assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
 
 		var actualSorterMaps []any
 		for _, sorter := range queryParams.Sorter {
@@ -173,7 +173,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 			actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 		}
 		actualSorterJson, _ := json.Marshal(actualSorterMaps)
-		assert.JSONEq(t, expectedJson.sorter, string(actualSorterJson), fmt.Sprintf("sql: %s", sql))
+		assert.Equal(t, expectedJson.sorter, string(actualSorterJson), fmt.Sprintf("sql: %s", sql))
 	}
 }
 
@@ -187,7 +187,7 @@ func TestSupportedSelectWhereGroupBy(t *testing.T) {
 		if expectedJson.query != "" {
 			actualQueryMap, _ := queryParams.Query.Source()
 			actualQueryJson, _ := json.Marshal(actualQueryMap)
-			assert.JSONEq(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+			assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
 		} else {
 			assert.Nil(t, queryParams.Query)
 		}

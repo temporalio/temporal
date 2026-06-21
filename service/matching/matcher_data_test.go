@@ -154,7 +154,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
+	s.Error(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -181,7 +181,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
+	s.Error(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -264,7 +264,7 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	resp := <-respC
 	s.True(resp.forwarded)
 	s.NoError(resp.forwardErr)
-	s.NotEqual(resp.forwardRes, nil) // typed nil
+	s.True(resp.forwardRes != nil) // typed nil
 	s.Nil(resp.forwardRes.(*matchingservice.QueryWorkflowResponse))
 }
 
@@ -525,9 +525,9 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 		return t.event.TaskId%4 == 0
 	})
 
-	s.Len(removed, 25)
+	s.Equal(25, len(removed))
 	for _, t := range removed {
-		s.Equal(t.event.TaskId%4, 0)
+		s.True(t.event.TaskId%4 == 0)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -537,7 +537,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.NotEqual(t.event.TaskId%4, 0)
+		s.False(t.event.TaskId%4 == 0)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}
@@ -971,7 +971,7 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 		1e-8, // 1 per 1000+ days
 	} {
 		pLow := makeSimpleLimiterParams(lowRate, time.Second)
-		require.Equal(t, pLow.never(), (lowRate == 0))
+		require.True(t, pLow.never() == (lowRate == 0))
 
 		now := time.Now().UnixNano()
 		var ready simpleLimiter
