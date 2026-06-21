@@ -57,29 +57,29 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
 	err := r.Register(lib)
-	s.Require().NoError(err)
+	require.NoError(s.T(), err)
 
 	rc1, ok := r.Component("TestLibrary.Component1")
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Component1", rc1.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Component1", rc1.FqType())
 
 	missingRC, ok := r.Component("TestLibrary.Component2")
-	s.Require().False(ok)
-	s.Require().Nil(missingRC)
+	require.False(s.T(), ok)
+	require.Nil(s.T(), missingRC)
 
 	cInstance1 := chasm.NewMockComponent(ctrl)
 	rc2, ok := r.ComponentFor(cInstance1)
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Component1", rc2.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Component1", rc2.FqType())
 
 	rc2, ok = r.ComponentOf(reflect.TypeOf(cInstance1))
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Component1", rc2.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Component1", rc2.FqType())
 
 	cInstance2 := "invalid component instance"
 	rc3, ok := r.ComponentFor(cInstance2)
-	s.Require().False(ok)
-	s.Require().Nil(rc3)
+	require.False(s.T(), ok)
+	require.Nil(s.T(), rc3)
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
@@ -129,31 +129,31 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	})
 
 	err := r.Register(lib)
-	s.Require().NoError(err)
+	require.NoError(s.T(), err)
 
 	rt1, ok := r.Task("TestLibrary.Task1")
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Task1", rt1.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Task1", rt1.FqType())
 	s.Require().Equal("test-task-group", rt1.TaskGroup())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
-	s.Require().False(ok)
-	s.Require().Nil(missingRT)
+	require.False(s.T(), ok)
+	require.Nil(s.T(), missingRT)
 
 	tInstance1 := testTask2{}
 	rt2, ok := r.TaskFor(tInstance1)
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Task2", rt2.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
 	s.Require().Equal(rt2.FqType(), rt2.TaskGroup())
 
 	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
-	s.Require().True(ok)
-	s.Require().Equal("TestLibrary.Task2", rt2.FqType())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
 
 	tInstance2 := "invalid task instance"
 	rt3, ok := r.TaskFor(tInstance2)
-	s.Require().False(ok)
-	s.Require().Nil(rt3)
+	require.False(s.T(), ok)
+	require.Nil(s.T(), rt3)
 }
 
 func (s *RegistryTestSuite) TestRegistry_Register_LibraryError() {
