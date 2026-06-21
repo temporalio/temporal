@@ -5,6 +5,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -976,9 +977,7 @@ func (d *namespaceHandler) mergeNamespaceData(
 	if old == nil {
 		old = map[string]string{}
 	}
-	for k, v := range new {
-		old[k] = v
-	}
+	maps.Copy(old, new)
 	return old
 }
 
