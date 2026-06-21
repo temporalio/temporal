@@ -67,6 +67,7 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified),
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+		testcore.WithChasmLibraries(tests.Library),
 	)
 
 	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := env.GetTestCluster().Host().ChasmRuntime()
@@ -74,8 +75,6 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 	require.NotNil(t, chasmEngine)
 	require.NotNil(t, chasmVisibilityMgr)
 	require.NotNil(t, chasmRegistry)
-	require.NoError(t, chasmRegistry.Register(tests.Library))
-
 	chasmCtx := chasm.NewEngineContext(env.Context(), chasmEngine)
 	chasmCtx = chasm.NewVisibilityManagerContext(chasmCtx, chasmVisibilityMgr)
 

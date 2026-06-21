@@ -106,6 +106,7 @@ type (
 		serviceFxOptions          map[primitives.ServiceName][]fx.Option
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmRuntimeProvider      func() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry)
+		chasmLibraries            []chasm.Library
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -168,6 +169,7 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
+		ChasmLibraries           []chasm.Library
 	}
 
 	listenHostPort string
@@ -211,6 +213,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
+		chasmLibraries:                   params.ChasmLibraries,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -313,6 +316,15 @@ func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *c
 	return engine, visibilityManager, registry, nil
 }
 
+func (c *TemporalImpl) registerChasmLibraries(registry *chasm.Registry) error {
+	for _, library := range c.chasmLibraries {
+		if err := registry.Register(library); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -394,6 +406,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
+			fx.Invoke(c.registerChasmLibraries),
 		)
 		err := app.Err()
 		if err != nil {
@@ -487,6 +500,7 @@ func (c *TemporalImpl) startHistory() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasm.Module,
+			fx.Invoke(c.registerChasmLibraries),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -543,6 +557,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasm.Module,
+			fx.Invoke(c.registerChasmLibraries),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -609,6 +624,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			chasm.Module,
+			fx.Invoke(c.registerChasmLibraries),
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()

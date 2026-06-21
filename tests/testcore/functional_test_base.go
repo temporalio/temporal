@@ -23,6 +23,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
@@ -105,6 +106,7 @@ type (
 		SharedCluster                   bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		ChasmLibraries                  []chasm.Library
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -133,6 +135,18 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
 	}
+}
+
+func withChasmLibraries(libraries ...chasm.Library) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.ChasmLibraries = append(params.ChasmLibraries, libraries...)
+	}
+}
+
+// WithChasmLibrariesForCluster registers additional CHASM libraries on every
+// service registry in the test cluster.
+func WithChasmLibrariesForCluster(libraries ...chasm.Library) TestClusterOption {
+	return withChasmLibraries(libraries...)
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
@@ -323,6 +337,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMTLS:                      params.EnableMTLS,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
+		ChasmLibraries:                  params.ChasmLibraries,
 		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 

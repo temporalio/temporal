@@ -19,6 +19,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
@@ -147,6 +148,17 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
 		o.dedicatedReason = "custom fx options used"
+	}
+}
+
+// WithChasmLibraries registers additional CHASM libraries on every service
+// registry in the test cluster. This implies a dedicated cluster because CHASM
+// library registration is cluster-global.
+func WithChasmLibraries(libraries ...chasm.Library) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withChasmLibraries(libraries...))
+		o.dedicatedReason = "custom CHASM libraries used"
 	}
 }
 

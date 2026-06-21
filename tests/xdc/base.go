@@ -145,6 +145,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			},
 		}
 		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
+		clusterConfigs[clusterIndex].ChasmLibraries = params.ChasmLibraries
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 
 		var err error

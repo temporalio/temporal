@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
@@ -98,6 +99,7 @@ type (
 		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
 		TokenProvider     auth.TokenProvider
 		TLSConfigProvider *encryption.FixedTLSConfigProvider
+		ChasmLibraries    []chasm.Library
 	}
 
 	TestClusterFactory interface {
@@ -355,6 +357,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		ChasmLibraries:                   clusterConfig.ChasmLibraries,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
