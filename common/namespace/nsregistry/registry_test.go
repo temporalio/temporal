@@ -2,6 +2,7 @@ package nsregistry_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -60,12 +61,7 @@ func (s *registrySuite) newRegistry(forceNamespaceCacheRefreshOnReadNamespaces .
 		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		func(namespace string) bool {
-			for _, enabledNamespace := range forceNamespaceCacheRefreshOnReadNamespaces {
-				if namespace == enabledNamespace {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(forceNamespaceCacheRefreshOnReadNamespaces, namespace)
 		},
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
