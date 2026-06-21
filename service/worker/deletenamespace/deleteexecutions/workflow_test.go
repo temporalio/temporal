@@ -587,8 +587,8 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 		require.NoError(t, err)
 		testSuite.GetLogger().Info("Current stats.", "pageNumber", pageNumber, "DeleteExecutionsStats", string(desJson))
 
-		require.Equal(t, 10*(pageNumber-1), des.DeleteExecutionsResult.ErrorCount)
-		require.Equal(t, 220*(pageNumber-1), des.DeleteExecutionsResult.SuccessCount)
+		require.Equal(t, 10*(pageNumber-1), des.ErrorCount)
+		require.Equal(t, 220*(pageNumber-1), des.SuccessCount)
 		require.Equal(t, (10+220)*4, des.TotalExecutionsCount)
 		require.Equal(t, (10+220)*(4-(pageNumber-1)), des.RemainingExecutionsCount)
 		require.Equal(t, (10+220)/5, des.AverageRPS) // 5 seconds for every activity run.

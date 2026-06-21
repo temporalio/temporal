@@ -435,13 +435,14 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		fields["WithLargeTimeout"] = "WithLargeTimeout"
 	}
 	if impl == "client" {
-		if service.name == "history" {
+		switch service.name {
+		case "history":
 			routingOptions := historyRoutingOptions(reqType)
 			if routingOptions.Custom {
 				return
 			}
 			fields["GetClient"] = makeGetHistoryClient(reqType, routingOptions)
-		} else if service.name == "matching" {
+		case "matching":
 			fields["GetClient"] = makeGetMatchingClient(reqType)
 		}
 	}

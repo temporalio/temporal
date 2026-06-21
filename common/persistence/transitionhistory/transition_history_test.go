@@ -69,8 +69,7 @@ func TestCompareVersionedTransition(t *testing.T) {
 }
 
 func TestTransitionHistoryStalenessCheck(t *testing.T) {
-	var hist []*persistencespb.VersionedTransition
-	hist = []*persistencespb.VersionedTransition{
+	var hist []*persistencespb.VersionedTransition = []*persistencespb.VersionedTransition{
 		{NamespaceFailoverVersion: 1, TransitionCount: 3},
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}

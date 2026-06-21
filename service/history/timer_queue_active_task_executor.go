@@ -489,17 +489,18 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	// TODO: deprecated, remove below 3 metrics after v1.25
-	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
+	switch task.WorkflowBackoffType {
+	case enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY:
 		metrics.WorkflowRetryBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
-	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
+	case enumsspb.WORKFLOW_BACKOFF_TYPE_CRON:
 		metrics.WorkflowCronBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
-	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
+	case enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START:
 		metrics.WorkflowDelayedStartBackoffTimerCount.With(t.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),

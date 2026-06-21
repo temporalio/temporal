@@ -278,7 +278,7 @@ func (m *activityMatchEvaluator) compareStartTime(val string, operation string) 
 	case sqlparser.LessThanStr:
 		return startTime.Before(expectedTime), nil
 	case sqlparser.EqualStr:
-		return startTime == expectedTime, nil
+		return startTime.Equal(expectedTime), nil
 	case sqlparser.NotEqualStr:
 		return startTime != expectedTime, nil
 	default:

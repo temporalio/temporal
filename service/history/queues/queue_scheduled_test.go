@@ -182,10 +182,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider_Success() {
 	slices.SortFunc(testTaskKeys, func(k1, k2 tasks.Key) int {
 		return k1.CompareTo(k2)
 	})
-	shouldHaveNextPage := true
-	if testTaskKeys[len(testTaskKeys)-1].CompareTo(r.ExclusiveMax) >= 0 {
-		shouldHaveNextPage = false
-	}
+	shouldHaveNextPage := !(testTaskKeys[len(testTaskKeys)-1].CompareTo(r.ExclusiveMax) >= 0)
 
 	expectedNumTasks := 0
 	mockTasks := make([]tasks.Task, 0, len(testTaskKeys))

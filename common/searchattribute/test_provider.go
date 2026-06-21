@@ -123,11 +123,12 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		// This error must be always ignored.
 		return "", serviceerror.NewInvalidArgument("unmapped alias")
 	}
-	if namespace == "error-namespace" {
+	switch namespace {
+	case "error-namespace":
 		return "", serviceerror.NewInvalidArgument(
 			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
 		)
-	} else if namespace == "test-namespace" || namespace == t.Namespace {
+	case "test-namespace", t.Namespace:
 		if alias == "pass-through" {
 			return alias, nil
 		}

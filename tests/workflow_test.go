@@ -1558,21 +1558,22 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	// Check run id links
 	for i := range maximumAttempts {
 		events := env.GetHistory(env.Namespace().String(), executions[i])
-		if i == 0 {
+		switch i {
+		case 0:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":""}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed {"NewExecutionRunId":"%s"}`, executions[i+1].RunId), events)
-		} else if i == maximumAttempts-1 {
+		case maximumAttempts - 1:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionCompleted {"NewExecutionRunId":""}`, executions[i-1].RunId), events)
-		} else {
+		default:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled

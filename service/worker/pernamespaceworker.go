@@ -323,9 +323,10 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 // handleError should be called on errors from worker creation or run. it will attempt to
 // refresh the worker again at a later time.
 func (w *perNamespaceWorker) handleError(err error) {
-	if err == nil {
+	switch err {
+	case nil:
 		return
-	} else if err == errNoWorkerNeeded {
+	case errNoWorkerNeeded:
 		w.stopWorkerAndResetTimer()
 		return
 	}

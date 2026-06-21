@@ -184,11 +184,12 @@ func GetPendingActivityInfo(
 
 	if ai.Paused {
 		// adjust activity state for paused activities
-		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		switch p.State {
+		case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
 			// this state means activity is not running on the worker
 			// if activity is paused on server and not running on worker - mark it as PAUSED
 			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSED
-		} else if p.State == enumspb.PENDING_ACTIVITY_STATE_STARTED {
+		case enumspb.PENDING_ACTIVITY_STATE_STARTED:
 			// this state means activity is running on the worker
 			// if activity is paused on server, but still running on worker - mark it as PAUSE_REQUESTED
 			p.State = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED

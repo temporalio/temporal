@@ -632,7 +632,7 @@ func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err e
 }
 
 func (s *localStoreRPCSuite) TestClientForceTLS() {
-	options, err := s.frontendConfigRootCAForceTLSFactory.RPCFactory.GetFrontendGRPCServerOptions()
+	options, err := s.frontendConfigRootCAForceTLSFactory.GetFrontendGRPCServerOptions()
 	s.NoError(err)
 	s.Nil(options)
 }

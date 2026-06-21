@@ -98,7 +98,7 @@ func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationT
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	s.True(time.Since(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
@@ -161,7 +161,7 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreation
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
 	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	s.True(time.Since(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {

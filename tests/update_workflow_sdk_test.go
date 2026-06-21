@@ -220,8 +220,7 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 	env.SdkWorker().RegisterWorkflow(workflowFn2)
 	env.SdkWorker().RegisterActivity(sendUpdateActivityFn)
 
-	var firstRun sdkclient.WorkflowRun
-	firstRun = s.startWorkflow(env, workflowFn1)
+	var firstRun sdkclient.WorkflowRun = s.startWorkflow(env, workflowFn1)
 	var secondRunID string
 	s.Eventually(func() bool {
 		resp, err := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
