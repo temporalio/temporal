@@ -3,49 +3,40 @@ package predicates
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	emptySuite struct {
-		suite.Suite
-		*require.Assertions
-
-		emtpy Predicate[int]
+		parallelsuite.Suite[*emptySuite]
 	}
 )
 
 func TestNoneSuite(t *testing.T) {
-	s := new(emptySuite)
-	suite.Run(t, s)
-}
-
-func (s *emptySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-	s.emtpy = Empty[int]()
+	parallelsuite.Run(t, new(emptySuite))
 }
 
 func (s *emptySuite) TestEmpty_Test() {
+	empty := Empty[int]()
 	for i := 0; i != 10; i++ {
-		s.False(s.emtpy.Test(i))
+		s.False(empty.Test(i))
 	}
 }
 
 func (s *emptySuite) TestEmpty_Equals() {
-	s.True(s.emtpy.Equals(s.emtpy))
-	s.True(s.emtpy.Equals(Empty[int]()))
+	empty := Empty[int]()
+	s.True(empty.Equals(empty))
+	s.True(empty.Equals(Empty[int]()))
 
-	s.False(s.emtpy.Equals(newTestPredicate(1, 2, 3)))
-	s.False(s.emtpy.Equals(And[int](
+	s.False(empty.Equals(newTestPredicate(1, 2, 3)))
+	s.False(empty.Equals(And[int](
 		newTestPredicate(1, 2, 3),
 		newTestPredicate(2, 3, 4),
 	)))
-	s.False(s.emtpy.Equals(Or[int](
+	s.False(empty.Equals(Or[int](
 		newTestPredicate(1, 2, 3),
 		newTestPredicate(4, 5, 6),
 	)))
-	s.False(s.emtpy.Equals(Not[int](newTestPredicate(1, 2, 3))))
-	s.False(s.emtpy.Equals(Universal[int]()))
+	s.False(empty.Equals(Not[int](newTestPredicate(1, 2, 3))))
+	s.False(empty.Equals(Universal[int]()))
 }

@@ -5,24 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	VersionCheckerSuite struct {
-		*require.Assertions
-		suite.Suite
+		parallelsuite.Suite[*VersionCheckerSuite]
 	}
 )
 
 func TestVersionCheckerSuite(t *testing.T) {
-	suite.Run(t, new(VersionCheckerSuite))
-}
-
-func (s *VersionCheckerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+	parallelsuite.Run(t, new(VersionCheckerSuite))
 }
 
 func (s *VersionCheckerSuite) TestClientSupported() {

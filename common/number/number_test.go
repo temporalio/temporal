@@ -4,32 +4,17 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	numberSuite struct {
-		suite.Suite
-		*require.Assertions
+		parallelsuite.Suite[*numberSuite]
 	}
 )
 
 func TestNumberSuite(t *testing.T) {
-	s := new(numberSuite)
-	suite.Run(t, s)
-}
-
-func (s *numberSuite) SetupSuite() {}
-
-func (s *numberSuite) TearDownSuite() {}
-
-func (s *numberSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
-
-func (s *numberSuite) TearDownTest() {
-
+	parallelsuite.Run(t, new(numberSuite))
 }
 
 func (s *numberSuite) TestInt() {
