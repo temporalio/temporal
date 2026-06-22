@@ -106,7 +106,7 @@ type (
 		SharedCluster                   bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		ChasmLibraries                  []chasm.Library
+		AdditionalChasmLibraries        []chasm.Library
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -137,9 +137,9 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
-func WithClusterChasmLibraries(libraries ...chasm.Library) TestClusterOption {
+func WithClusterAdditionalChasmLibraries(libraries ...chasm.Library) TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.ChasmLibraries = append(params.ChasmLibraries, libraries...)
+		params.AdditionalChasmLibraries = append(params.AdditionalChasmLibraries, libraries...)
 	}
 }
 
@@ -331,7 +331,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMTLS:                      params.EnableMTLS,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		ChasmLibraries:                  params.ChasmLibraries,
+		AdditionalChasmLibraries:        params.AdditionalChasmLibraries,
 		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 

@@ -14,7 +14,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -55,7 +54,7 @@ func (s *ChasmSuite) SetupSuite() {
 		dynamicconfig.TransferProcessorMaxPollInterval.Key(): 1 * time.Second,
 		dynamicconfig.NamespaceMinRetentionGlobal.Key():      1 * time.Second,
 	}
-	s.setupSuite(testcore.WithClusterChasmLibraries(tests.Library))
+	s.setupSuite(testcore.WithClusterAdditionalChasmLibraries(tests.Library))
 }
 
 func (s *ChasmSuite) SetupTest() {
@@ -103,18 +102,18 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 
 	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
-		NamespaceId: nsID,
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
 		ArchetypeId: uint32(archetypeID),
 	}
-	_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -131,7 +130,7 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 
 	// Active cluster should fully delete the execution.
 	s.Eventually(func() bool {
-		_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return errors.As(err, new(*serviceerror.NotFound))
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -139,7 +138,7 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	// the DeleteExecutionTask itself; it will be cleaned up by the retention timer.
 	// Verify the execution is terminated on the standby.
 	s.Eventually(func() bool {
-		resp, err := s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		resp, err := s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		if err != nil {
 			// Execution may already be gone if replication of delete happened.
 			return errors.As(err, new(*serviceerror.NotFound))
@@ -176,19 +175,19 @@ func (s *ChasmSuite) TestRetentionTimer() {
 
 	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
-		NamespaceId: nsID,
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
 		ArchetypeId: uint32(archetypeID),
 	}
-	_, err = s.clusters[0].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
 	s.Eventually(func() bool {
 		// Wait for it to be replicated to the standby cluster
-		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -228,7 +227,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
 		s.Eventually(func() bool {
 			// Wait for replication, retention period, and retention timer task processing.
-			_, err = cluster.HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 			return errors.As(err, new(*serviceerror.NotFound))
 		}, 10*time.Second, 100*time.Millisecond)
 	}
@@ -275,21 +274,16 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 	s.NoError(err)
 	s.NotEmpty(startResp.GetRunId())
 
-	// Wait for replication to cluster 1 (standby).
-	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
-	})
-	s.NoError(err)
-	nsID := nsResp.NamespaceInfo.GetId()
-	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
-		NamespaceId: nsID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityID,
 		},
 		ArchetypeId: uint32(activity.ArchetypeID),
 	}
+	// Wait for replication to cluster 1 (standby).
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -406,8 +400,8 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 
 	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
-	describeExecutionRequest := &historyservice.DescribeMutableStateRequest{
-		NamespaceId: nsID,
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
@@ -415,7 +409,7 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	}
 
 	s.Eventually(func() bool {
-		_, err = s.clusters[1].HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -433,7 +427,7 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	// Verify Chasm deletion on both clusters.
 	for _, cluster := range s.clusters {
 		s.Eventually(func() bool {
-			_, err = cluster.HistoryClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 			return errors.As(err, new(*serviceerror.NotFound))
 		}, 10*time.Second, 100*time.Millisecond)
 	}

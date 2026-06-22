@@ -96,10 +96,10 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
-		TokenProvider     auth.TokenProvider
-		TLSConfigProvider *encryption.FixedTLSConfigProvider
-		ChasmLibraries    []chasm.Library
+		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
+		TokenProvider            auth.TokenProvider
+		TLSConfigProvider        *encryption.FixedTLSConfigProvider
+		AdditionalChasmLibraries []chasm.Library
 	}
 
 	TestClusterFactory interface {
@@ -357,7 +357,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
-		ChasmLibraries:                   clusterConfig.ChasmLibraries,
+		AdditionalChasmLibraries:         clusterConfig.AdditionalChasmLibraries,
 	}
 
 	if clusterConfig.EnableMetricsCapture {

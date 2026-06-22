@@ -108,7 +108,7 @@ type (
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
 		chasmRegistry             *chasm.Registry
-		chasmLibraries            []chasm.Library
+		additionalChasmLibraries  []chasm.Library
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -171,7 +171,7 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
-		ChasmLibraries           []chasm.Library
+		AdditionalChasmLibraries []chasm.Library
 	}
 
 	listenHostPort string
@@ -215,7 +215,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
-		chasmLibraries:                   params.ChasmLibraries,
+		additionalChasmLibraries:         params.AdditionalChasmLibraries,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -316,8 +316,8 @@ func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *c
 	return c.chasmEngine, c.chasmVisibilityMgr, c.chasmRegistry, nil
 }
 
-func (c *TemporalImpl) registerChasmLibraries(registry *chasm.Registry) (*chasm.Registry, error) {
-	for _, library := range c.chasmLibraries {
+func (c *TemporalImpl) registerAdditionalChasmLibraries(registry *chasm.Registry) (*chasm.Registry, error) {
+	for _, library := range c.additionalChasmLibraries {
 		if err := registry.Register(library); err != nil {
 			return nil, err
 		}
@@ -328,7 +328,7 @@ func (c *TemporalImpl) registerChasmLibraries(registry *chasm.Registry) (*chasm.
 func (c *TemporalImpl) chasmModule() fx.Option {
 	return fx.Options(
 		chasm.Module,
-		fx.Decorate(c.registerChasmLibraries),
+		fx.Decorate(c.registerAdditionalChasmLibraries),
 	)
 }
 
