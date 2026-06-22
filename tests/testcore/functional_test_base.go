@@ -137,16 +137,12 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
-func withChasmLibraries(libraries ...chasm.Library) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ChasmLibraries = append(params.ChasmLibraries, libraries...)
-	}
-}
-
 // WithChasmLibrariesForCluster registers additional CHASM libraries on every
 // service registry in the test cluster.
 func WithChasmLibrariesForCluster(libraries ...chasm.Library) TestClusterOption {
-	return withChasmLibraries(libraries...)
+	return func(params *TestClusterParams) {
+		params.ChasmLibraries = append(params.ChasmLibraries, libraries...)
+	}
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {

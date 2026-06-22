@@ -106,18 +106,13 @@ var Module = fx.Options(
 		chasmRegistry *chasm.Registry,
 		testHooks testhooks.TestHooks,
 	) {
-		hook, ok := testhooks.Get(
+		if hook, ok := testhooks.Get(
 			testHooks,
 			testhooks.HistoryChasmRuntimeProvider,
 			testhooks.GlobalScope,
-		)
-		if !ok {
-			return
+		); ok {
+			hook(chasmEngine, chasmVisibilityManager, chasmRegistry)
 		}
-
-		hook(func() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry) {
-			return chasmEngine, chasmVisibilityManager, chasmRegistry
-		})
 	}),
 
 	callbacks.Module,
