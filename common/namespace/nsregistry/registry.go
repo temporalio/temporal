@@ -816,6 +816,7 @@ func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Na
 		return nil, serviceerror.NewNamespaceNotFound(id.String())
 	}
 
+	// readthrough to persistence layer and update readthrough cache if not found
 	return r.readthroughNamespaceByIDLocked(id)
 }
 
