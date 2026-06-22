@@ -137,9 +137,7 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
-// WithChasmLibrariesForCluster registers additional CHASM libraries on every
-// service registry in the test cluster.
-func WithChasmLibrariesForCluster(libraries ...chasm.Library) TestClusterOption {
+func WithClusterChasmLibraries(libraries ...chasm.Library) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ChasmLibraries = append(params.ChasmLibraries, libraries...)
 	}
