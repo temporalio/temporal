@@ -3,19 +3,18 @@ package resetworkflow
 import (
 	"testing"
 
-	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	resetWorkflowSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*resetWorkflowSuite]
 	}
 )
 
 func TestResetWorkflowSuite(t *testing.T) {
-	s := new(resetWorkflowSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, new(resetWorkflowSuite))
 }
 
 func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {

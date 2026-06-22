@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	resourceDeduplicationSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*resourceDeduplicationSuite]
 	}
 )
 
 func TestResourceDeduplicationSuite(t *testing.T) {
-	s := new(resourceDeduplicationSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, new(resourceDeduplicationSuite))
 }
 
 func (s *resourceDeduplicationSuite) TestGenerateKey() {

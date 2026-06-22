@@ -4,24 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"google.golang.org/grpc/metadata"
 )
 
 type (
 	callerInfoSuite struct {
-		*require.Assertions
-		suite.Suite
+		parallelsuite.Suite[*callerInfoSuite]
 	}
 )
 
 func TestCallerInfoSuite(t *testing.T) {
-	suite.Run(t, &callerInfoSuite{})
-}
-
-func (s *callerInfoSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+	parallelsuite.Run(t, &callerInfoSuite{})
 }
 
 func (s *callerInfoSuite) TestSetCallerName() {

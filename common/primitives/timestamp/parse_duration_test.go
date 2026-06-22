@@ -4,15 +4,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type ParseDurationSuite struct {
-	suite.Suite
+	parallelsuite.Suite[*ParseDurationSuite]
 }
 
 func TestParseDurationSuite(t *testing.T) {
-	suite.Run(t, new(ParseDurationSuite))
+	parallelsuite.Run(t, new(ParseDurationSuite))
 }
 
 func (s *ParseDurationSuite) TestParseDuration() {

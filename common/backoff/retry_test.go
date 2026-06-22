@@ -5,26 +5,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	RetrySuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+		parallelsuite.Suite[*RetrySuite]
 	}
 
 	someError struct{}
 )
 
 func TestRetrySuite(t *testing.T) {
-	suite.Run(t, new(RetrySuite))
-}
-
-func (s *RetrySuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	parallelsuite.RunLegacySequential(t, new(RetrySuite)) //nolint:staticcheck // SA1019: TestThrottleRetryContext temporarily changes package global retry policy.
 }
 
 func (s *RetrySuite) TestRetrySuccess() {

@@ -5,21 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	jitterSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*jitterSuite]
 	}
 )
 
 func TestJitterSuite(t *testing.T) {
-	s := new(jitterSuite)
-	suite.Run(t, s)
-}
-
-func (s *jitterSuite) SetupSuite() {
+	parallelsuite.Run(t, new(jitterSuite))
 }
 
 func (s *jitterSuite) TestJitter_Int64() {

@@ -3,24 +3,17 @@ package predicates
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	notSuite struct {
-		suite.Suite
-		*require.Assertions
+		parallelsuite.Suite[*notSuite]
 	}
 )
 
 func TestNotSuite(t *testing.T) {
-	s := new(notSuite)
-	suite.Run(t, s)
-}
-
-func (s *notSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+	parallelsuite.Run(t, new(notSuite))
 }
 
 func (s *notSuite) TestNot_Test() {

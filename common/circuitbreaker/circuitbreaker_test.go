@@ -4,22 +4,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
-type TSCBWithDynamicSettingsTestSuite struct {
-	suite.Suite
+type CircuitBreakerSuite struct {
+	parallelsuite.Suite[*CircuitBreakerSuite]
 }
 
-func TestTSCBWithDynamicSettings(t *testing.T) {
-	suite.Run(t, &TSCBWithDynamicSettingsTestSuite{})
+func TestCircuitBreakerSuite(t *testing.T) {
+	parallelsuite.Run(t, new(CircuitBreakerSuite))
 }
 
-func TestBasic(t *testing.T) {
-	s := assert.New(t)
-
+func (s *CircuitBreakerSuite) TestBasic() {
 	name := "test-tscb"
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(Settings{Name: name})
 	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
@@ -30,9 +27,7 @@ func TestBasic(t *testing.T) {
 	doneFn(true)
 }
 
-func TestDynamicSettings(t *testing.T) {
-	s := assert.New(t)
-
+func (s *CircuitBreakerSuite) TestDynamicSettings() {
 	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(Settings{})
 	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
 	cb1 := tscb.cb.Load()

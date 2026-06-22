@@ -7,15 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	RetryPolicySuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+		parallelsuite.Suite[*RetryPolicySuite]
 	}
 )
 
@@ -62,11 +60,7 @@ func ExampleExponentialRetryPolicy_WithMaximumInterval() {
 }
 
 func TestRetryPolicySuite(t *testing.T) {
-	suite.Run(t, new(RetryPolicySuite))
-}
-
-func (s *RetryPolicySuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	parallelsuite.Run(t, new(RetryPolicySuite))
 }
 
 func (s *RetryPolicySuite) TestExponentialBackoff() {

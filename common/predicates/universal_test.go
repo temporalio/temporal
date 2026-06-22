@@ -4,49 +4,40 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	universalSuite struct {
-		suite.Suite
-		*require.Assertions
-
-		universal Predicate[int]
+		parallelsuite.Suite[*universalSuite]
 	}
 )
 
 func TestUniversalSuite(t *testing.T) {
-	s := new(universalSuite)
-	suite.Run(t, s)
-}
-
-func (s *universalSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-	s.universal = Universal[int]()
+	parallelsuite.Run(t, new(universalSuite))
 }
 
 func (s *universalSuite) TestUniversal_Test() {
+	universal := Universal[int]()
 	for i := 0; i != 10; i++ {
-		s.True(s.universal.Test(rand.Int()))
+		s.True(universal.Test(rand.Int()))
 	}
 }
 
 func (s *universalSuite) TestUniversal_Equals() {
-	s.True(s.universal.Equals(s.universal))
-	s.True(s.universal.Equals(Universal[int]()))
+	universal := Universal[int]()
+	s.True(universal.Equals(universal))
+	s.True(universal.Equals(Universal[int]()))
 
-	s.False(s.universal.Equals(newTestPredicate(1, 2, 3)))
-	s.False(s.universal.Equals(And[int](
+	s.False(universal.Equals(newTestPredicate(1, 2, 3)))
+	s.False(universal.Equals(And[int](
 		newTestPredicate(1, 2, 3),
 		newTestPredicate(2, 3, 4),
 	)))
-	s.False(s.universal.Equals(Or[int](
+	s.False(universal.Equals(Or[int](
 		newTestPredicate(1, 2, 3),
 		newTestPredicate(4, 5, 6),
 	)))
-	s.False(s.universal.Equals(Not[int](newTestPredicate(1, 2, 3))))
-	s.False(s.universal.Equals(Empty[int]()))
+	s.False(universal.Equals(Not[int](newTestPredicate(1, 2, 3))))
+	s.False(universal.Equals(Empty[int]()))
 }

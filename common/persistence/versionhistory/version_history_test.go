@@ -3,30 +3,28 @@ package versionhistory
 import (
 	"testing"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	versionHistorySuite struct {
-		suite.Suite
+		parallelsuite.Suite[*versionHistorySuite]
 	}
 
 	versionHistoriesSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*versionHistoriesSuite]
 	}
 )
 
 func TestVersionHistorySuite(t *testing.T) {
-	s := new(versionHistorySuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, new(versionHistorySuite))
 }
 
 func TestVersionHistoriesSuite(t *testing.T) {
-	s := new(versionHistoriesSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, new(versionHistoriesSuite))
 }
 
 func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
