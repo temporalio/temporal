@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -236,6 +237,7 @@ type ClientImpl struct {
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	autoCreateVisibilityRateLimiter  quotas.RequestRateLimiter
 	testHooks                        testhooks.TestHooks
 	metricsHandler                   metrics.Handler
 }
@@ -1457,6 +1459,16 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 	if !exists {
+		// The deployment-count visibility query is expensive and is run for every unseen
+		// deployment name. On the poller-driven auto-create path, a flood of unique names
+		// would trigger a flood of these queries, so rate limit it per namespace. Explicit
+		// user APIs (SetCurrent/SetRamping) use UUID request IDs and are not throttled here.
+		if strings.HasPrefix(requestID, AutoCreateRequestIDPrefix) {
+			rateLimitReq := quotas.NewRequest("countWorkerDeployments", 1, namespaceEntry.Name().String(), "", 0, "")
+			if !d.autoCreateVisibilityRateLimiter.Allow(time.Now(), rateLimitReq) {
+				return nil, newResourceExhaustedError("worker deployment auto-creation is rate limited; retry shortly")
+			}
+		}
 		// New deployment, make sure we're not exceeding the limit
 		count, err := d.countWorkerDeployments(ctx, namespaceEntry)
 		if err != nil {
@@ -1495,8 +1507,9 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	)
 }
 
-// TODO: this is an expensive query that is called every time a new deployment name is seen.
-// If user passes a ton of unique deployment names, we're in trouble. Fix it.
+// countWorkerDeployments runs an expensive visibility query and is called every time a new
+// deployment name is seen. On the auto-create path callers must guard it with
+// autoCreateVisibilityRateLimiter to bound the query rate under a flood of unique names.
 func (d *ClientImpl) countWorkerDeployments(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
