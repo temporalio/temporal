@@ -108,7 +108,7 @@ var Module = fx.Options(
 	) {
 		if hook, ok := testhooks.Get(
 			testHooks,
-			testhooks.HistoryChasmRuntimeProvider,
+			chasm.HistoryRuntimeProvider,
 			testhooks.GlobalScope,
 		); ok {
 			hook(chasmEngine, chasmVisibilityManager, chasmRegistry)

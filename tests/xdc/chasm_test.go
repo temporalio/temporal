@@ -34,8 +34,7 @@ const (
 type ChasmSuite struct {
 	xdcBaseSuite
 
-	chasmContext  context.Context
-	chasmRegistry *chasm.Registry
+	chasmContext context.Context
 }
 
 func TestChasmSuite(t *testing.T) {
@@ -60,15 +59,9 @@ func (s *ChasmSuite) SetupSuite() {
 func (s *ChasmSuite) SetupTest() {
 	s.setupTest()
 
-	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := s.clusters[0].Host().ChasmRuntime()
+	chasmContext, err := s.clusters[0].Host().ChasmContext(context.Background())
 	s.Require().NoError(err)
-	s.Require().NotNil(chasmEngine)
-	s.Require().NotNil(chasmVisibilityMgr)
-	s.Require().NotNil(chasmRegistry)
-
-	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
-	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
-	s.chasmRegistry = chasmRegistry
+	s.chasmContext = chasmContext
 }
 
 func (s *ChasmSuite) TearDownSuite() {
@@ -100,14 +93,12 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		ArchetypeId: uint32(archetypeID),
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
@@ -173,14 +164,12 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		ArchetypeId: uint32(archetypeID),
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
@@ -398,14 +387,12 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		ArchetypeId: uint32(archetypeID),
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 
 	s.Eventually(func() bool {

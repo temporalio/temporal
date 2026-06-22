@@ -78,6 +78,10 @@ func NewHook[T any, S any](key Key[T, S], value T) Hook {
 	}
 }
 
+func NewGlobalKey[T any]() Key[T, global] {
+	return newKey[T, global]()
+}
+
 // Set sets a test hook to a value with the given scope and returns a cleanup function to unset it.
 func Set[T any, S any](th TestHooks, key Key[T, S], val T, scope any) func() {
 	mk := hookKey{key.id, scope}

@@ -107,7 +107,6 @@ type (
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
-		chasmRegistry             *chasm.Registry
 		additionalChasmLibraries  []chasm.Library
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
@@ -217,6 +216,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tokenProvider:                    params.TokenProvider,
 		additionalChasmLibraries:         params.AdditionalChasmLibraries,
 	}
+	if len(impl.additionalChasmLibraries) > 0 {
+		testhooks.NewHook(chasm.RegistryInitializer, impl.registerAdditionalChasmLibraries).Apply(impl.testHooks, testhooks.GlobalScope)
+	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
@@ -306,30 +308,25 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 	return c.namespaceRegistries
 }
 
-func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *chasm.Registry, error) {
+func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
-		return nil, nil, nil, fmt.Errorf("expected exactly one history host for chasm runtime, got %d", numHistoryHosts)
+		return nil, fmt.Errorf("expected exactly one history host for chasm context, got %d", numHistoryHosts)
 	}
-	if c.chasmEngine == nil || c.chasmVisibilityMgr == nil || c.chasmRegistry == nil {
-		return nil, nil, nil, errors.New("chasm runtime is not available")
+	if c.chasmEngine == nil || c.chasmVisibilityMgr == nil {
+		return nil, errors.New("chasm context is not available")
 	}
-	return c.chasmEngine, c.chasmVisibilityMgr, c.chasmRegistry, nil
+	ctx = chasm.NewEngineContext(ctx, c.chasmEngine)
+	ctx = chasm.NewVisibilityManagerContext(ctx, c.chasmVisibilityMgr)
+	return ctx, nil
 }
 
-func (c *TemporalImpl) registerAdditionalChasmLibraries(registry *chasm.Registry) (*chasm.Registry, error) {
+func (c *TemporalImpl) registerAdditionalChasmLibraries(registry *chasm.Registry) error {
 	for _, library := range c.additionalChasmLibraries {
 		if err := registry.Register(library); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return registry, nil
-}
-
-func (c *TemporalImpl) chasmModule() fx.Option {
-	return fx.Options(
-		chasm.Module,
-		fx.Decorate(c.registerAdditionalChasmLibraries),
-	)
+	return nil
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
@@ -412,7 +409,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			c.chasmModule(),
+			chasm.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -436,14 +433,13 @@ func (c *TemporalImpl) startFrontend() {
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
-	testhooks.NewHook(testhooks.HistoryChasmRuntimeProvider, func(
+	testhooks.NewHook(chasm.HistoryRuntimeProvider, func(
 		chasmEngine chasm.Engine,
 		chasmVisibilityManager chasm.VisibilityManager,
-		chasmRegistry *chasm.Registry,
+		_ *chasm.Registry,
 	) {
 		c.chasmEngine = chasmEngine
 		c.chasmVisibilityMgr = chasmVisibilityManager
-		c.chasmRegistry = chasmRegistry
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
@@ -509,7 +505,7 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			c.chasmModule(),
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -565,7 +561,7 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			c.chasmModule(),
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -631,7 +627,7 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			c.chasmModule(),
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()

@@ -70,13 +70,8 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithChasmLibraries(tests.Library),
 	)
 
-	chasmEngine, chasmVisibilityMgr, chasmRegistry, err := env.GetTestCluster().Host().ChasmRuntime()
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(env.Context())
 	require.NoError(t, err)
-	require.NotNil(t, chasmEngine)
-	require.NotNil(t, chasmVisibilityMgr)
-	require.NotNil(t, chasmRegistry)
-	chasmCtx := chasm.NewEngineContext(env.Context(), chasmEngine)
-	chasmCtx = chasm.NewVisibilityManagerContext(chasmCtx, chasmVisibilityMgr)
 
 	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}
 }
