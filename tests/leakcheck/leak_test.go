@@ -52,16 +52,15 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	// TODO: TestEnv remains retained while teardown fixes are reverted.
-	objectleak.WithExpected("*testcore.TestEnv"),
-	objectleak.WithExpected("Assertions*"),
-	objectleak.WithExpected("FunctionalTestBase*"),
-	objectleak.WithExpected("ctx*"),
-	objectleak.WithExpected("dedicatedGuard*"),
+	objectleak.WithExpected("FunctionalTestBase"),
+	objectleak.WithExpected("FunctionalTestBase.Logger*"),
+	objectleak.WithExpected("FunctionalTestBase.Suite*"),
+	objectleak.WithExpected("FunctionalTestBase.testCluster.archiverBase*"),
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
+	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
+	// TODO: This is not fully garbage collected because of the goroutine leak above. Nothing to be done here.
 	objectleak.WithExpected("sdkClient*"),
-	objectleak.WithExpected("sdkWorker*"),
-	objectleak.WithExpected("taskPoller*"),
-	objectleak.WithExpected("tv*"),
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
