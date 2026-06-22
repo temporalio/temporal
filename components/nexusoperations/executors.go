@@ -455,14 +455,14 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			}); err != nil {
 				return err
 			}
-			e.recordScheduleToStartLatency(operation, node.NamespaceName(), node.WorkflowTypeName(), startedTime)
+			recordScheduleToStartLatency(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), startedTime)
 			return nil
 		}
 		// Operation completed synchronously. Store the result and update the state machine.
 		if err := handleSuccessfulOperationResult(node, operation, result.Successful, links); err != nil {
 			return err
 		}
-		e.recordOperationSucceeded(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		recordOperationSucceeded(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
 		return nil
 	})
 }
@@ -486,9 +486,9 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// Emit the terminal outcome metric at this live, once-only site (handleOperationError also
 		// runs on the async completion path and on replay, so emission must not live inside it).
 		if opErr.State == nexus.OperationStateCanceled {
-			e.recordOperationCanceled(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+			recordOperationCanceled(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
 		} else {
-			e.recordOperationFailed(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+			recordOperationFailed(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
 		}
 		return nil
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
@@ -562,7 +562,7 @@ func (e taskExecutor) failNonRetryable(env hsm.Environment, node *hsm.Node, oper
 	if err := handleNonRetryableStartOperationError(node, operation, callErr); err != nil {
 		return err
 	}
-	e.recordOperationFailed(operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+	recordOperationFailed(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
 	return nil
 }
 
@@ -624,7 +624,7 @@ func (e taskExecutor) recordOperationTimeout(env hsm.Environment, node *hsm.Node
 	}
 	// timedOutOp was captured from the transition closure above (the same Operation that
 	// MachineData would return); the timeout transition leaves the metric fields unchanged.
-	e.recordOperationTimedOut(timedOutOp, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
+	recordOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), timedOutOp, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
 	return nil
 }
 

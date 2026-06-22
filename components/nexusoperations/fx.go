@@ -8,6 +8,7 @@ import (
 var Module = fx.Module(
 	"component.nexusoperations",
 	fx.Provide(ConfigProvider),
+	fx.Provide(NewCompletionHandler),
 	fx.Invoke(RegisterStateMachines),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterEventDefinitions),

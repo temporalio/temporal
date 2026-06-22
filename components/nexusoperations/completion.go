@@ -11,6 +11,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -117,28 +118,30 @@ func handleOperationError(
 	}
 }
 
-// Adds a NEXUS_OPERATION_STARTED history event and sets the operation state machine to NEXUS_OPERATION_STATE_STARTED.
-// Necessary if the completion is received before the start response.
+// fabricateStartedEventIfMissing adds a NEXUS_OPERATION_STARTED history event and transitions the
+// operation to NEXUS_OPERATION_STATE_STARTED if it has not started yet. It is necessary if the
+// completion is received before the start response. It returns true when it fabricated the started
+// transition, so the caller can emit the schedule-to-start metric.
 func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
 	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
-) error {
+) (bool, error) {
 	operation, err := hsm.MachineData[Operation](node)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// The operation was already started, ignore.
 	if !TransitionStarted.Possible(operation) {
-		return nil
+		return false, nil
 	}
 
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -156,10 +159,28 @@ func fabricateStartedEventIfMissing(
 			e.EventTime = startTime
 		}
 	})
-	return StartedEventDefinition{}.Apply(node.Parent, event)
+	if err := (StartedEventDefinition{}).Apply(node.Parent, event); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-func CompletionHandler(
+// CompletionHandler resolves async Nexus operation completions delivered to the history service
+// and emits the caller-side terminal metrics. It is provided via fx and injected into the history
+// handler so the metrics handler and tag config are sourced from the dependency graph rather than
+// threaded through the call site.
+type CompletionHandler struct {
+	metricsHandler metrics.Handler
+	config         *Config
+}
+
+// NewCompletionHandler returns a CompletionHandler. Wired via fx; see Module.
+func NewCompletionHandler(metricsHandler metrics.Handler, config *Config) *CompletionHandler {
+	return &CompletionHandler{metricsHandler: metricsHandler, config: config}
+}
+
+// Handle resolves an async Nexus operation completion.
+func (h *CompletionHandler) Handle(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -170,6 +191,8 @@ func CompletionHandler(
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
 ) error {
+	metricsHandler := h.metricsHandler
+	metricTagConfig := h.config.ResolvedMetricTagConfig()
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
 	isRetryableNotFoundErr := requestID != ""
@@ -177,7 +200,8 @@ func CompletionHandler(
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
+		started, err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links)
+		if err != nil {
 			return err
 		}
 		operation, err := hsm.MachineData[Operation](node)
@@ -188,6 +212,10 @@ func CompletionHandler(
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
+		if started && operation.StartedTime != nil {
+			recordScheduleToStartLatency(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), operation.StartedTime.AsTime())
+		}
+
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)
 		} else {
@@ -199,7 +227,20 @@ func CompletionHandler(
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		// Emit the terminal outcome metric. The canceled vs failed split mirrors handleOperationError
+		// so the metric outcome matches the recorded transition.
+		switch {
+		case opFailedError == nil:
+			recordOperationSucceeded(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		case opFailedError.State == nexus.OperationStateCanceled:
+			recordOperationCanceled(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		default:
+			recordOperationFailed(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		}
+		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
@@ -210,7 +251,7 @@ func CompletionHandler(
 		ref.StateMachineRef.MutableStateVersionedTransition = nil
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
 		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
-		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
+		return h.Handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	return err
 }
