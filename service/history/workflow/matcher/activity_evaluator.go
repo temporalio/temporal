@@ -280,7 +280,7 @@ func (m *activityMatchEvaluator) compareStartTime(val string, operation string) 
 	case sqlparser.EqualStr:
 		return startTime.Equal(expectedTime), nil
 	case sqlparser.NotEqualStr:
-		return startTime != expectedTime, nil
+		return !startTime.Equal(expectedTime), nil
 	default:
 		return false, NewMatcherError("%s: operation %s is not supported for activity StartTime", invalidExpressionErrMessage, operation)
 	}
