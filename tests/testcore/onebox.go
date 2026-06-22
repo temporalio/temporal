@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -395,8 +394,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasm.Module,
-			chasmtests.Module,
+			chasmModule,
 		)
 		err := app.Err()
 		if err != nil {
@@ -492,8 +490,7 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasm.Module,
-			chasmtests.Module,
+			chasmModule,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -549,8 +546,7 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasm.Module,
-			chasmtests.Module,
+			chasmModule,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -616,8 +612,7 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasm.Module,
-			chasmtests.Module,
+			chasmModule,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
