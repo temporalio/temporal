@@ -5,17 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/dynamicconfig"
 )
-
-type TSCBWithDynamicSettingsTestSuite struct {
-	suite.Suite
-}
-
-func TestTSCBWithDynamicSettings(t *testing.T) {
-	suite.Run(t, &TSCBWithDynamicSettingsTestSuite{})
-}
 
 func TestBasic(t *testing.T) {
 	s := assert.New(t)

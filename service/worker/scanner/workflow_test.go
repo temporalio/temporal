@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
@@ -14,16 +13,16 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.uber.org/mock/gomock"
 )
 
 type scannerWorkflowTestSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
+	parallelsuite.Suite[*scannerWorkflowTestSuite]
 }
 
 func TestScannerWorkflowTestSuite(t *testing.T) {
-	suite.Run(t, new(scannerWorkflowTestSuite))
+	parallelsuite.RunLegacySequential(t, new(scannerWorkflowTestSuite)) //nolint:staticcheck // SA1019: suite mutates scanner heartbeat interval package global.
 }
 
 func (s *scannerWorkflowTestSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
@@ -39,7 +38,8 @@ func (s *scannerWorkflowTestSuite) registerActivities(env *testsuite.TestActivit
 }
 
 func (s *scannerWorkflowTestSuite) TestWorkflow() {
-	env := s.NewTestWorkflowEnvironment()
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
 	env.OnActivity(taskQueueScavengerActivityName, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(tqScannerWFTypeName)
@@ -47,7 +47,8 @@ func (s *scannerWorkflowTestSuite) TestWorkflow() {
 }
 
 func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
-	env := s.NewTestActivityEnvironment()
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestActivityEnvironment()
 	s.registerActivities(env)
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()

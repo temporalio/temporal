@@ -5,7 +5,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -19,16 +18,17 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.uber.org/mock/gomock"
 )
 
 type scannerTestSuite struct {
-	suite.Suite
+	parallelsuite.Suite[*scannerTestSuite]
 }
 
 func TestScanner(t *testing.T) {
-	suite.Run(t, new(scannerTestSuite))
+	parallelsuite.Run(t, new(scannerTestSuite))
 }
 
 func (s *scannerTestSuite) TestScannerEnabled() {
@@ -174,7 +174,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExpectedScanners:         []expectedScanner{historyScanner, executionScanner, buildIdScavenger}, // TaskQueueScanner is only supported for SQL store
 		},
 	} {
-		s.Run(c.Name, func() {
+		s.Run(c.Name, func(s *scannerTestSuite) {
 			ctrl := gomock.NewController(s.T())
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)

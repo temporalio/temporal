@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/interceptor"
@@ -26,13 +25,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.uber.org/mock/gomock"
 )
 
 type (
 	ForceReplicationWorkflowTestSuite struct {
-		suite.Suite
-		forceReplicationWorkflowFn any
+		parallelsuite.Suite[*ForceReplicationWorkflowTestSuite]
 	}
 )
 
@@ -52,15 +51,12 @@ func TestForceReplicationWorkflowTestSuite(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &ForceReplicationWorkflowTestSuite{
-				forceReplicationWorkflowFn: tc.forceReplicationWorkflowFn,
-			}
-			suite.Run(t, s)
+			parallelsuite.Run(t, &ForceReplicationWorkflowTestSuite{}, tc.forceReplicationWorkflowFn)
 		})
 	}
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
+func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -100,7 +96,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{VerifiedWorkflowCount: 1}, nil).Times(totalPageCount)
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 100,
@@ -131,7 +127,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	s.Equal([]byte(nil), status.PageTokenForRestart)
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
+func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew(forceReplicationWorkflowFn any) {
 	totalPageCount := 4
 	currentPageCount := 0
 	testMaxPageCountPerExecution := 2
@@ -185,6 +181,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 
 	// Run the workflow once. We should get a continue as new error.
 	continueAsNewInput, queryStatus := s.testRunForceReplicationForContinueAsNew(
+		forceReplicationWorkflowFn,
 		mockListWorkflows,
 		ForceReplicationParams{
 			Namespace:               "test-ns",
@@ -235,6 +232,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 }
 
 func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAsNew(
+	forceReplicationWorkflowFn any,
 	mockListWorkflows func(context.Context, *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error),
 	input ForceReplicationParams,
 	expectContinueAsNew bool,
@@ -257,7 +255,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	// executions of ForceReplication. The SeedReplicationQueueWithUserDataEntries activity will eventually run
 	// once, but we aren't guaranteed that it will run during any given execution of ForceReplication.
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, input)
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, input)
 
 	s.True(env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
@@ -287,7 +285,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	return continueAsNewParams, status
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
+func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 
 	for _, invalidInput := range []ForceReplicationParams{
@@ -301,7 +299,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
 		},
 	} {
 		env := testSuite.NewTestWorkflowEnvironment()
-		env.ExecuteWorkflow(s.forceReplicationWorkflowFn, invalidInput)
+		env.ExecuteWorkflow(forceReplicationWorkflowFn, invalidInput)
 
 		s.True(env.IsWorkflowCompleted())
 		err := env.GetWorkflowError()
@@ -312,7 +310,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
 	}
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
+func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -327,7 +325,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 2,
@@ -343,7 +341,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryableError(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -376,7 +374,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 2,
@@ -392,7 +390,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetryableError(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -430,7 +428,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 1,
@@ -448,7 +446,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryableError(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -487,7 +485,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 1,
@@ -505,7 +503,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
+func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -524,7 +522,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
 		temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil),
 	)
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 2,
@@ -548,7 +546,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
 	s.Equal([]byte(nil), status.PageTokenForRestart)
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
+func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions(forceReplicationWorkflowFn any) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -606,7 +604,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	// Seed task queue replication activity may or may not run in this execution; allow either.
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+	env.ExecuteWorkflow(forceReplicationWorkflowFn, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 2,
