@@ -151,9 +151,6 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 	}
 }
 
-// WithChasmLibraries registers additional CHASM libraries on every service
-// registry in the test cluster. This implies a dedicated cluster because CHASM
-// library registration is cluster-global.
 func WithChasmLibraries(libraries ...chasm.Library) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
