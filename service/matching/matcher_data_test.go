@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/tidwall/btree"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -871,6 +872,43 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			}
 		})
 	}
+}
+
+// TestTaskBTreeNeedsPointerTiebreaker documents why taskBTreeLess falls back to the task
+// pointer: tasks with no event (query, nexus, poll-forwarder) all carry the zero fairLevel,
+// so any two at the same effective priority compare equal on (effectivePriority, fairLevel).
+// btree requires a strict total order, so without the pointer fallback distinct tasks would
+// collide into a single key.
+func (s *MatcherDataSuite) TestTaskBTreeNeedsPointerTiebreaker() {
+	a := s.newQueryTask("a")
+	b := s.newQueryTask("b")
+	s.Require().NotSame(a, b)
+	// Same priority and same (zero) fair level: equal on everything but identity.
+	s.Equal(a.effectivePriority, b.effectivePriority)
+	s.Equal(taskFairLevel(a), taskFairLevel(b))
+
+	// A comparator without the pointer fallback treats a and b as the same key, so Set
+	// overwrites and one task is silently lost.
+	noTiebreak := btree.NewBTreeGOptions(func(x, y *internalTask) bool {
+		if x.effectivePriority != y.effectivePriority {
+			return x.effectivePriority < y.effectivePriority
+		}
+		return taskFairLevel(x).less(taskFairLevel(y))
+	}, btree.Options{NoLocks: true})
+	noTiebreak.Set(a)
+	noTiebreak.Set(b)
+	s.Equal(1, noTiebreak.Len(), "without a tiebreaker the second task overwrites the first")
+
+	// The real comparator (with the pointer fallback) keeps them distinct, and Delete
+	// removes exactly the requested task.
+	tree := newTaskBTree()
+	tree.Add(a)
+	tree.Add(b)
+	s.Equal(2, tree.Len(), "pointer tiebreaker keeps distinct tasks distinct")
+	tree.Remove(a)
+	s.Equal(1, tree.Len())
+	_, hasB := tree.tree.Get(b)
+	s.True(hasB, "removing a must not remove b")
 }
 
 // simple limiter tests

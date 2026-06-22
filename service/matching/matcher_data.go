@@ -135,14 +135,16 @@ func taskBTreeLess(a, b *internalTask) bool {
 	if afl != bfl {
 		return afl.less(bfl)
 	}
-	// Pointer value is unique per live allocation; used as a stable tiebreaker so the
-	// comparator stays a strict total order and btree can identify the exact element to
-	// delete even when effectivePriority and fairLevel tie.
+	// effectivePriority and fairLevel can tie: e.g. multiple query, nexus, or poll-forwarder
+	// tasks all carry the zero fairLevel. The pointer is unique per live allocation (Go's heap
+	// is non-moving), so it gives the comparator a strict total order. Without it btree.Set
+	// would treat colliding tasks as one key and overwrite (losing a task), and btree.Delete
+	// could not identify which task to remove. See TestTaskBTreeNeedsPointerTiebreaker.
 	return uintptr(unsafe.Pointer(a)) < uintptr(unsafe.Pointer(b))
 }
 
-// taskFairLevel returns the fair level for a task. Sync-match, query, and nexus tasks have
-// no event and get the zero fairLevel.
+// taskFairLevel returns the fair level for a task, or the zero fairLevel for tasks with no
+// event (query, nexus, and poll-forwarder tasks).
 func taskFairLevel(task *internalTask) fairLevel {
 	if task.event == nil {
 		return fairLevel{}
@@ -181,15 +183,14 @@ func (b *taskBTree) Len() int {
 // ForEachTask calls pred on each non-forwarder task. If pred returns true, calls post
 // and removes the task. pred and post must not call back into taskBTree.
 func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
+	// Collect first, then delete: we must not mutate the tree mid-iteration.
 	var toRemove []*internalTask
-	iter := b.tree.Iter()
-	for ok := iter.First(); ok; ok = iter.Next() {
-		task := iter.Item()
+	b.tree.Scan(func(task *internalTask) bool {
 		if !task.isPollForwarder() && pred(task) {
 			toRemove = append(toRemove, task)
 		}
-	}
-	iter.Release()
+		return true
+	})
 	for _, task := range toRemove {
 		b.tree.Delete(task)
 		task.matchHeapIndex = invalidHeapIndex
@@ -408,14 +409,15 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
-	iter := d.tasks.tree.Iter()
-	defer iter.Release()
-	for ok := iter.First(); ok; ok = iter.Next() {
-		task := iter.Item()
+	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
+	// tree.Iter() cursor escapes to the heap.
+	var matchedTask *internalTask
+	var matchedPoller *waitingPoller
+	d.tasks.tree.Scan(func(task *internalTask) bool {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
-			continue
+			return true
 		}
 
 		for _, poller := range d.pollers.heap {
@@ -439,10 +441,12 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				continue
 			}
 
-			return task, poller
+			matchedTask, matchedPoller = task, poller
+			return false
 		}
-	}
-	return nil, nil
+		return true
+	})
+	return matchedTask, matchedPoller
 }
 
 // call with lock held
