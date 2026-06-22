@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -253,8 +252,6 @@ func registerSignalCompletableWorkflow(s *testcore.TestEnv, wt string) {
 // schedule keeps taking scheduled actions, per expectScheduleProgressesWhilePaused.
 func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, isCHASM bool, policy enumspb.ScheduleOverlapPolicy) {
 	f := setupPausedScheduledWorkflow(t, newContext, policy, registerForeverWorkflow)
-	t.Logf("[chasm=%t %s] paused wf=%s actionsAtPause=%d\n",
-		isCHASM, policy, f.execution.GetRunId(), f.actionsAtPause)
 
 	if expectScheduleProgressesWhilePaused(isCHASM, policy) {
 		// The schedule should keep taking new actions despite the paused workflow.
@@ -284,8 +281,6 @@ func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, isCHASM b
 // cancellation for CANCEL_OTHER).
 func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, isCHASM bool, policy enumspb.ScheduleOverlapPolicy) {
 	f := setupPausedScheduledWorkflow(t, newContext, policy, registerSignalCompletableWorkflow)
-	t.Logf("[chasm=%t %s recovery] paused wf=%s actionsAtPause=%d\n",
-		isCHASM, policy, f.execution.GetRunId(), f.actionsAtPause)
 
 	// Unpause the workflow.
 	_, err := f.s.FrontendClient().UnpauseWorkflowExecution(f.ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
