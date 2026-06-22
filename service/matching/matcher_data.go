@@ -402,18 +402,16 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// findMatch returns the highest priority task+poller match, or nil if none. The task is
-// not removed from the queue; findAndWakeMatches removes it once the match is finalized.
+// findMatch should return the highest priority task+poller match even if the per-task rate
+// limit doesn't allow the task to be matched yet.
 // call with lock held
 // nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
-	// iterate tasks in priority order. The btree iterator keeps its node stack in an
-	// inline array, so this walk does not allocate.
+	// TODO(pri): optimize so it's not O(d*n) worst case
 	iter := d.tasks.tree.Iter()
 	defer iter.Release()
 	for ok := iter.First(); ok; ok = iter.Next() {
 		task := iter.Item()
-
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
@@ -440,6 +438,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
+
 			return task, poller
 		}
 	}
@@ -482,6 +481,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 // call with lock held. Returns true if a match was found but blocked by rate limiting.
 func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	allowForwarding := d.canForward && d.allowForwarding()
+
 	now := d.timeSource.Now().UnixNano()
 
 	for {
@@ -500,7 +500,7 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 			return true // not ready yet, timer will call match later
 		}
 
-		// ready to signal match; remove both task and poller from their queues
+		// ready to signal match
 		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 

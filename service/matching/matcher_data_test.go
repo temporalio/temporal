@@ -818,9 +818,9 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			// Reset tasks and pollers for each subtest.
+			// Reset the task tree for each subtest, since Add appends rather than
+			// replacing (the old s.md.tasks.heap assignment reset implicitly).
 			s.md.tasks = newTaskBTree()
-			s.md.pollers = pollerPQ{}
 
 			// Create task
 			var task *internalTask
