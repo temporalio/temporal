@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -107,7 +108,6 @@ type (
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
-		testChasmLibraries        []chasm.Library
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -170,7 +170,6 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
-		TestChasmLibraries       []chasm.Library
 	}
 
 	listenHostPort string
@@ -214,10 +213,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
-		testChasmLibraries:               params.TestChasmLibraries,
-	}
-	if len(impl.testChasmLibraries) > 0 {
-		testhooks.NewHook(chasm.RegistryInitializer, impl.registerTestChasmLibraries).Apply(impl.testHooks, testhooks.GlobalScope)
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -320,15 +315,6 @@ func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 	return ctx, nil
 }
 
-func (c *TemporalImpl) registerTestChasmLibraries(registry *chasm.Registry) error {
-	for _, library := range c.testChasmLibraries {
-		if err := registry.Register(library); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -410,6 +396,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -506,6 +493,7 @@ func (c *TemporalImpl) startHistory() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -562,6 +550,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -628,6 +617,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			chasm.Module,
+			chasmtests.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()

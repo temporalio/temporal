@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
@@ -96,10 +95,9 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions   map[primitives.ServiceName][]fx.Option
-		TokenProvider      auth.TokenProvider
-		TLSConfigProvider  *encryption.FixedTLSConfigProvider
-		TestChasmLibraries []chasm.Library
+		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
+		TokenProvider     auth.TokenProvider
+		TLSConfigProvider *encryption.FixedTLSConfigProvider
 	}
 
 	TestClusterFactory interface {
@@ -357,7 +355,6 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
-		TestChasmLibraries:               clusterConfig.TestChasmLibraries,
 	}
 
 	if clusterConfig.EnableMetricsCapture {

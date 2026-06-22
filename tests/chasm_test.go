@@ -67,7 +67,6 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified),
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
-		testcore.WithChasmLibraries(tests.Library),
 	)
 
 	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(env.Context())
