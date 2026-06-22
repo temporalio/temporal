@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -61,6 +63,43 @@ type startedActivity struct {
 	runID      string
 }
 
+// assertBatchOperationType verifies that both DescribeBatchOperation and
+// ListBatchOperations report the expected operation type for the given batch job.
+func assertBatchOperationType(
+	ctx context.Context,
+	t *testing.T,
+	env *standaloneActivityEnv,
+	jobID string,
+	expected enumspb.BatchOperationType,
+) {
+	t.Helper()
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		require.NoError(c, err)
+		require.Equal(c, expected, desc.GetOperationType())
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := env.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
+			Namespace: env.Namespace().String(),
+		})
+		require.NoError(c, err)
+		var found *batchpb.BatchOperationInfo
+		for _, op := range resp.GetOperationInfo() {
+			if op.GetJobId() == jobID {
+				found = op
+				break
+			}
+		}
+		require.NotNil(c, found, "job %s not found in ListBatchOperations", jobID)
+		require.Equal(c, expected, found.GetOperationType())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Success() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
@@ -92,6 +131,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 	}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 	// Terminate all three activities with a single batch operation.
+	jobID := uuid.NewString()
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
@@ -101,10 +141,13 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 			},
 		},
 		VisibilityQuery: query,
-		JobId:           uuid.NewString(),
+		JobId:           jobID,
 		Reason:          "test",
 	})
 	s.NoError(err)
+
+	// Describe/List should report the correct operation type for the batch.
+	assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY)
 
 	// All three activities must reach the Terminated status.
 	for _, a := range activities {

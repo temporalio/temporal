@@ -6,6 +6,7 @@ import (
 	"time"
 
 	batchpb "go.temporal.io/api/batch/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -31,24 +32,37 @@ const (
 	BatchReasonMemo = "batch_operation_reason"
 	// BatchOperationStatsMemo stores batch operation stats in memo
 	BatchOperationStatsMemo = "batch_operation_stats"
-	// BatchTypeTerminate is batch type for terminating workflows
-	BatchTypeTerminate = "terminate"
-	// BatchTypeCancel is the batch type for canceling workflows
-	BatchTypeCancel = "cancel"
-	// BatchTypeSignal is batch type for signaling workflows
-	BatchTypeSignal = "signal"
-	// BatchTypeDelete is batch type for deleting workflows
-	BatchTypeDelete = "delete"
-	// BatchTypeReset is batch type for resetting workflows
-	BatchTypeReset = "reset"
-	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
-	BatchTypeUpdateOptions = "update_options"
+	// Workflow batch operation memo type strings. Each operation is suffixed with
+	// the execution type it targets (workflows).
+
+	// BatchTypeTerminateWorkflows is batch type for terminating workflows
+	BatchTypeTerminateWorkflows = "terminate_workflows"
+	// BatchTypeCancelWorkflows is batch type for canceling workflows
+	BatchTypeCancelWorkflows = "cancel_workflows"
+	// BatchTypeSignalWorkflows is batch type for signaling workflows
+	BatchTypeSignalWorkflows = "signal_workflows"
+	// BatchTypeDeleteWorkflows is batch type for deleting workflows
+	BatchTypeDeleteWorkflows = "delete_workflows"
+	// BatchTypeResetWorkflows is batch type for resetting workflows
+	BatchTypeResetWorkflows = "reset_workflows"
+	// BatchTypeUpdateWorkflowOptions is batch type for updating the options of workflow executions
+	BatchTypeUpdateWorkflowOptions = "update_workflow_options"
+
+	// Activity batch operation memo type strings. Each operation is suffixed with
+	// the execution type it targets (activities).
+
+	// BatchTypeTerminateActivities is batch type for terminating activities
+	BatchTypeTerminateActivities = "terminate_activities"
+	// BatchTypeCancelActivities is batch type for canceling activities
+	BatchTypeCancelActivities = "cancel_activities"
+	// BatchTypeDeleteActivities is batch type for deleting activities
+	BatchTypeDeleteActivities = "delete_activities"
+	// BatchTypeResetActivities is batch type for resetting activities
+	BatchTypeResetActivities = "reset_activities"
 	// BatchTypeUnpauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
 	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
 	BatchTypeUpdateActivitiesOptions = "update_activity_options"
-	// BatchTypeResetActivities is batch type for resetting activities
-	BatchTypeResetActivities = "reset_activities"
 )
 
 var (
@@ -83,6 +97,9 @@ type (
 	task struct {
 		// the workflow execution to process
 		executionInfo *workflowpb.WorkflowExecutionInfo
+		// the activity (archetype) execution to process, set instead of
+		// executionInfo for activity batch operations (terminate/cancel/delete activities)
+		archetypeExecution *commonpb.Execution
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)

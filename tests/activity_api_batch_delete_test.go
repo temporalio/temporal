@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -53,16 +54,20 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 	}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 	// Delete all three activities with a single batch operation.
+	jobID := uuid.NewString()
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
 			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
 		},
 		VisibilityQuery: query,
-		JobId:           uuid.NewString(),
+		JobId:           jobID,
 		Reason:          "test",
 	})
 	s.NoError(err)
+
+	// Describe/List should report the correct operation type for the batch.
+	assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY)
 
 	// All three activities must be deleted (no longer describable).
 	for _, a := range activities {
