@@ -318,12 +318,13 @@ func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
 	})
 
 	require.Len(t, admin.requests, 2)
-	got := make([]string, len(admin.requests))
-	for i, req := range admin.requests {
-		got[i] = req.Namespace + "/" + req.ScheduleId
+	require.Equal(t, "ns-1", admin.requests[0].Namespace)
+	require.Equal(t, "sched-1", admin.requests[0].ScheduleId)
+	require.Equal(t, "ns-2", admin.requests[1].Namespace)
+	require.Equal(t, "sched-2", admin.requests[1].ScheduleId)
+	for _, req := range admin.requests {
 		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
 	}
-	require.ElementsMatch(t, []string{"ns-1/sched-1", "ns-2/sched-2"}, got)
 }
 
 func TestMigrateSchedule_Stdin_Workers(t *testing.T) {

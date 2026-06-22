@@ -316,17 +316,13 @@ func (c *TemporalImpl) ChasmRuntime() (chasm.Engine, chasm.VisibilityManager, *c
 	return engine, visibilityManager, registry, nil
 }
 
-func (c *TemporalImpl) registerChasmLibraries(registry *chasm.Registry) error {
+func (c *TemporalImpl) decorateChasmRegistry(registry *chasm.Registry) (*chasm.Registry, error) {
 	for _, library := range c.chasmLibraries {
 		if err := registry.Register(library); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
-}
-
-func (c *TemporalImpl) decorateChasmRegistry(registry *chasm.Registry) (*chasm.Registry, error) {
-	return registry, c.registerChasmLibraries(registry)
+	return registry, nil
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
