@@ -875,20 +875,23 @@ func (s *MatcherDataSuite) TestFindMatch() {
 }
 
 // TestTaskBTreeNeedsPointerTiebreaker documents why taskBTreeLess falls back to the task
-// pointer: tasks with no event (query, nexus, poll-forwarder) all carry the zero fairLevel,
-// so any two at the same effective priority compare equal on (effectivePriority, fairLevel).
-// btree requires a strict total order, so without the pointer fallback distinct tasks would
-// collide into a single key.
+// pointer. Query, nexus, and poll-forwarder tasks have no event, so taskFairLevel returns
+// the zero fairLevel for all of them; any two at the same effective priority are therefore
+// equal on (effectivePriority, fairLevel). btree treats equal-comparing items as one key,
+// so the failure shows up first at INSERT, not deletion: Set replaces the existing task and
+// silently drops it from the tree. (In the matcher this is e.g. two concurrent OfferQuery /
+// OfferNexusTask calls on the same queue, both waiting via EnqueueTaskAndWait — the evicted
+// task's caller then blocks until its context times out.)
 func (s *MatcherDataSuite) TestTaskBTreeNeedsPointerTiebreaker() {
 	a := s.newQueryTask("a")
 	b := s.newQueryTask("b")
 	s.Require().NotSame(a, b)
-	// Same priority and same (zero) fair level: equal on everything but identity.
+	// Equal on everything the priority comparator looks at — only identity differs.
 	s.Equal(a.effectivePriority, b.effectivePriority)
 	s.Equal(taskFairLevel(a), taskFairLevel(b))
 
-	// A comparator without the pointer fallback treats a and b as the same key, so Set
-	// overwrites and one task is silently lost.
+	// Without the pointer fallback a and b are the same key, so inserting b evicts a: the
+	// failure is at Set, before any Delete is involved.
 	noTiebreak := btree.NewBTreeGOptions(func(x, y *internalTask) bool {
 		if x.effectivePriority != y.effectivePriority {
 			return x.effectivePriority < y.effectivePriority
@@ -897,10 +900,11 @@ func (s *MatcherDataSuite) TestTaskBTreeNeedsPointerTiebreaker() {
 	}, btree.Options{NoLocks: true})
 	noTiebreak.Set(a)
 	noTiebreak.Set(b)
-	s.Equal(1, noTiebreak.Len(), "without a tiebreaker the second task overwrites the first")
+	s.Equal(1, noTiebreak.Len(), "inserting b silently evicted a")
+	got, _ := noTiebreak.Get(a)
+	s.Same(b, got, "a is no longer reachable; the tree now returns b in its place")
 
-	// The real comparator (with the pointer fallback) keeps them distinct, and Delete
-	// removes exactly the requested task.
+	// With the real comparator both coexist, and Delete removes exactly the requested task.
 	tree := newTaskBTree()
 	tree.Add(a)
 	tree.Add(b)
