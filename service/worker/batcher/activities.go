@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	visquery "go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
@@ -339,10 +340,18 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		visibilityQuery = adminReq.GetVisibilityQuery()
+		rawQuery, err := a.resolveRelativeTimestamps(adminReq.GetVisibilityQuery(), batchParams)
+		if err != nil {
+			return hbd, err
+		}
+		visibilityQuery = rawQuery
 		executions = adminReq.GetExecutions()
 	} else {
-		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+		rawQuery, err := a.resolveRelativeTimestamps(batchParams.Request.VisibilityQuery, batchParams)
+		if err != nil {
+			return hbd, err
+		}
+		visibilityQuery = a.adjustQueryBatchTypeEnum(rawQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 			return float64(a.rps(ns))
@@ -403,6 +412,34 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+// resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the reference time.
+// Returns the query unchanged if BatchStartTime is not set or the query contains no NOW().
+// Uses a query converter to validate that NOW() is only used with DateTime search attributes,
+// ensuring consistent behavior with regular visibility queries.
+func (a *activities) resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
+	if batchParams.GetBatchStartTime() == nil || query == "" {
+		return query, nil
+	}
+	queryTime := batchParams.BatchStartTime.AsTime()
+
+	// Validate the query using a converter to catch type errors upfront (e.g. NOW() on a
+	// non-DateTime search attribute), giving the same error behavior as a normal visibility query.
+	saTypeMap, err := a.SearchAttributesProvider.GetSearchAttributes("", false)
+	if err != nil {
+		return "", err
+	}
+	saMapper, err := a.SearchAttributesMapperProvider.GetMapper(a.namespace)
+	if err != nil {
+		return "", err
+	}
+	c := visquery.NewNilQueryConverter(a.namespace, saTypeMap, saMapper).WithQueryTime(queryTime)
+	if _, err := c.Convert(query); err != nil {
+		return "", err
+	}
+
+	return visquery.ResolveNow(query, queryTime)
 }
 
 func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {

@@ -30,8 +30,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type activitiesSuite struct {
@@ -904,4 +909,59 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
+}
+
+// TestBatchActivityWithProtobuf_ResolvesRelativeTimestamps verifies that the activity resolves
+// NOW()-based expressions in the visibility query using BatchStartTime as the anchor, then
+// applies the batch-type-specific filter via adjustQueryBatchTypeEnum.
+func (s *activitiesSuite) TestBatchActivityWithProtobuf_ResolvesRelativeTimestamps() {
+	mockClientFactory := sdk.NewMockClientFactory(s.controller)
+	mockSDKClient := mocksdk.NewMockClient(s.controller)
+	a := &activities{
+		activityDeps: activityDeps{
+			MetricsHandler:                 metrics.NoopMetricsHandler,
+			Logger:                         log.NewNoopLogger(),
+			ClientFactory:                  mockClientFactory,
+			FrontendClient:                 s.mockFrontendClient,
+			SearchAttributesProvider:       searchattribute.NewTestProvider(),
+			SearchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+		},
+		namespace:   "test-namespace",
+		namespaceID: "test-namespace-id",
+		rps:         func(string) int { return 10 },
+		concurrency: func(string) int { return 1 },
+	}
+
+	anchor := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	resolvedQuery := "StartTime > '2026-03-31T12:00:00Z'"
+	expectedFinalQuery := fmt.Sprintf("(%s) AND (%s)", resolvedQuery, statusRunningQueryFilter)
+	input := &batchspb.BatchOperationInput{
+		NamespaceId:    "test-namespace-id",
+		BatchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+		BatchStartTime: timestamppb.New(anchor),
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace:       "test-namespace",
+			VisibilityQuery: "StartTime > NOW() - '5h'",
+		},
+	}
+
+	mockClientFactory.EXPECT().NewClient(gomock.Any()).Return(mockSDKClient)
+	mockSDKClient.EXPECT().CountWorkflow(gomock.Any(), protomock.Eq(&workflowservice.CountWorkflowExecutionsRequest{
+		Query: expectedFinalQuery,
+	})).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil)
+	mockSDKClient.EXPECT().ListWorkflow(gomock.Any(), protomock.Eq(&workflowservice.ListWorkflowExecutionsRequest{
+		PageSize:      int32(pageSize),
+		NextPageToken: nil,
+		Query:         expectedFinalQuery,
+	})).Return(&workflowservice.ListWorkflowExecutionsResponse{}, nil)
+
+	env := s.NewTestActivityEnvironment()
+	env.RegisterActivity(a)
+
+	f, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
+	s.Require().NoError(err)
+	var result HeartBeatDetails
+	err = f.Get(&result)
+	s.Require().NoError(err)
+	s.Equal(int64(0), result.TotalEstimate)
 }

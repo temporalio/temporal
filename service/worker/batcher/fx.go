@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
@@ -38,13 +39,15 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler          metrics.Handler
-		Logger                  log.Logger
-		ClientFactory           sdk.ClientFactory
-		FrontendClient          workflowservice.WorkflowServiceClient
-		AdminClient             adminservice.AdminServiceClient
-		HistoryClient           resource.HistoryClient
-		AdminBatcherRateLimiter AdminBatcherRateLimiter
+		MetricsHandler                 metrics.Handler
+		Logger                         log.Logger
+		ClientFactory                  sdk.ClientFactory
+		FrontendClient                 workflowservice.WorkflowServiceClient
+		AdminClient                    adminservice.AdminServiceClient
+		HistoryClient                  resource.HistoryClient
+		AdminBatcherRateLimiter        AdminBatcherRateLimiter
+		SearchAttributesProvider       searchattribute.Provider
+		SearchAttributesMapperProvider searchattribute.MapperProvider
 	}
 
 	fxResult struct {

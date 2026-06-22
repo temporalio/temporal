@@ -50,6 +50,10 @@ type (
 
 		chasmMapper *chasm.VisibilitySearchAttributesMapper
 		archetypeID chasm.ArchetypeID
+
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
 	}
 
 	queryParamsLegacy struct {
@@ -118,6 +122,20 @@ func newQueryConverterInternal(
 	}
 }
 
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
+// If not set, time.Now().UTC() is used at resolution time.
+func (c *QueryConverterLegacy) WithQueryTime(t time.Time) *QueryConverterLegacy {
+	c.queryTime = t.UTC()
+	return c
+}
+
+func (c *QueryConverterLegacy) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
+	}
+	return c.queryTime
+}
+
 func (c *QueryConverterLegacy) BuildSelectStmt(
 	pageSize int,
 	nextPageToken []byte,
@@ -176,6 +194,11 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 
 	//nolint:revive
 	selectStmt, _ := stmt.(*sqlparser.Select)
+	if selectStmt.Where != nil {
+		if err := query.ResolveNowInExpr(&selectStmt.Where.Expr, c.getQueryTime()); err != nil {
+			return nil, err
+		}
+	}
 	err = c.convertSelectStmt(selectStmt)
 	if err != nil {
 		return nil, err
@@ -617,7 +640,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 
 	if saFieldName == sadefs.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
-			duration, err := query.ParseExecutionDurationStr(durationStr)
+			duration, err := query.ParseDurationStr(durationStr)
 			if err != nil {
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s: %v (%v)", saName, value, err)

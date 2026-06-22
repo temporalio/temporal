@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
@@ -23,6 +24,10 @@ type (
 	ConverterLegacy struct {
 		fnInterceptor  FieldNameInterceptor
 		whereConverter ExprConverter
+
+		// queryTime is the reference time used to resolve NOW() expressions. When zero,
+		// getQueryTime() falls back to time.Now().UTC() at resolution time.
+		queryTime time.Time
 	}
 
 	WhereConverter struct {
@@ -76,6 +81,20 @@ func NewConverterLegacy(fnInterceptor FieldNameInterceptor, whereConverter ExprC
 		fnInterceptor:  fnInterceptor,
 		whereConverter: whereConverter,
 	}
+}
+
+// WithQueryTime sets the reference time used to resolve NOW() expressions in the query.
+// If not set, time.Now().UTC() is used at resolution time.
+func (c *ConverterLegacy) WithQueryTime(t time.Time) *ConverterLegacy {
+	c.queryTime = t.UTC()
+	return c
+}
+
+func (c *ConverterLegacy) getQueryTime() time.Time {
+	if c.queryTime.IsZero() {
+		c.queryTime = time.Now().UTC()
+	}
+	return c.queryTime
 }
 
 func NewWhereConverter(
@@ -217,6 +236,9 @@ func (c *ConverterLegacy) convertSelect(sel *sqlparser.Select) (*QueryParamsLega
 
 	queryParams := &QueryParamsLegacy{}
 	if sel.Where != nil {
+		if err := ResolveNowInExpr(&sel.Where.Expr, c.getQueryTime()); err != nil {
+			return nil, wrapConverterError("unable to resolve NOW() expressions", err)
+		}
 		query, err := c.whereConverter.Convert(sel.Where.Expr)
 		if err != nil {
 			return nil, wrapConverterError("unable to convert filter expression", err)

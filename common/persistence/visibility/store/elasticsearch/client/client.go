@@ -58,5 +58,6 @@ type (
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []any
+		QueryTime   time.Time
 	}
 )
