@@ -1738,18 +1738,16 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion())
 
-	memo := &deploymentspb.WorkerDeploymentWorkflowMemo{
-		DeploymentName:        d.DeploymentName,
-		CreateTime:            d.State.CreateTime,
-		RoutingConfig:         d.State.RoutingConfig,
-		LatestVersionSummary:  d.getLatestVersionSummary(),
-		CurrentVersionSummary: d.getCurrentVersionSummary(),
-		RampingVersionSummary: d.getRampingVersionSummary(),
-	}
-	if workflow.GetVersion(ctx, "include-validation-summary-in-memo", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-		memo.ValidationSummary = computeValidationSummary(d.State.Versions)
-	}
-	return workflow.UpsertMemo(ctx, map[string]any{WorkerDeploymentMemoField: memo})
+	return workflow.UpsertMemo(ctx, map[string]any{
+		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
+			DeploymentName:        d.DeploymentName,
+			CreateTime:            d.State.CreateTime,
+			RoutingConfig:         d.State.RoutingConfig,
+			LatestVersionSummary:  d.getLatestVersionSummary(),
+			CurrentVersionSummary: d.getCurrentVersionSummary(),
+			RampingVersionSummary: d.getRampingVersionSummary(),
+		},
+	})
 }
 
 func (d *WorkflowRunner) setStateChanged() {
@@ -1824,5 +1822,6 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 		ComputeConfig:        versionSummary.GetComputeConfig(),
+		ComputeStatus:        versionSummary.GetComputeStatus(),
 	}
 }

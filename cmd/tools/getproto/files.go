@@ -60,8 +60,7 @@ func init() {
 	importMap["temporal/api/compute/v1/config.proto"] = compute.File_temporal_api_compute_v1_config_proto
 	importMap["temporal/api/compute/v1/provider.proto"] = compute.File_temporal_api_compute_v1_provider_proto
 	importMap["temporal/api/compute/v1/scaler.proto"] = compute.File_temporal_api_compute_v1_scaler_proto
-	importMap["temporal/api/compute/v1/validation.proto"] = compute.File_temporal_api_compute_v1_validation_proto
-	importMap["temporal/api/deployment/v1/message.proto"] = deployment.File_temporal_api_deployment_v1_message_proto
+importMap["temporal/api/deployment/v1/message.proto"] = deployment.File_temporal_api_deployment_v1_message_proto
 	importMap["temporal/api/enums/v1/activity.proto"] = enums.File_temporal_api_enums_v1_activity_proto
 	importMap["temporal/api/enums/v1/batch_operation.proto"] = enums.File_temporal_api_enums_v1_batch_operation_proto
 	importMap["temporal/api/enums/v1/command_type.proto"] = enums.File_temporal_api_enums_v1_command_type_proto

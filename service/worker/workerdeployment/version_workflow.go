@@ -8,10 +8,10 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	computepb "go.temporal.io/api/compute/v1"
-	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -236,8 +236,8 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 		var vs wciiface.ValidationStatus
 		c.Receive(ctx, &vs)
-		d.VersionState.ValidationStatus = wciValidationStatusToProto(&vs)
-		d.syncSummary(ctx) // propagate updated ValidationStatus to deployment workflow
+		d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
+		d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
 	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
@@ -1069,7 +1069,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 		ComputeConfig:        s.ComputeConfig,
-		ValidationStatus:     s.ValidationStatus,
+		ComputeStatus:        s.ComputeStatus,
 	}
 }
 

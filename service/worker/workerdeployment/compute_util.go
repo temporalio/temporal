@@ -2,9 +2,9 @@ package workerdeployment
 
 import (
 	computepb "go.temporal.io/api/compute/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/workflow"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -106,53 +106,17 @@ func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeCon
 	return updates
 }
 
-// computeValidationSummary aggregates WCI validation status counts across all versions
-// that have compute config configured.
-func computeValidationSummary(versions map[string]*deploymentspb.WorkerDeploymentVersionSummary) *deploymentspb.WorkerDeploymentValidationSummary {
-	summary := &deploymentspb.WorkerDeploymentValidationSummary{}
-	for _, v := range versions {
-		if v.GetComputeConfig() == nil || len(v.GetComputeConfig().GetScalingGroups()) == 0 {
-			continue
-		}
-		switch v.GetValidationStatus().GetHealth() {
-		case computepb.WorkerDeploymentVersionValidationStatus_HEALTH_OK:
-			summary.ConnectedCount++
-		case computepb.WorkerDeploymentVersionValidationStatus_HEALTH_ERROR:
-			summary.FailedCount++
-		default:
-			summary.UnknownCount++
-		}
-	}
-	return summary
-}
-
-// DeploymentValidationSummaryToProto converts the internal deployment validation summary
-// to the public proto type for use in API responses.
-func DeploymentValidationSummaryToProto(s *deploymentspb.WorkerDeploymentValidationSummary) *computepb.WorkerDeploymentValidationSummary {
-	if s == nil {
-		return nil
-	}
-	return &computepb.WorkerDeploymentValidationSummary{
-		ConnectedCount: s.ConnectedCount,
-		FailedCount:    s.FailedCount,
-		UnknownCount:   s.UnknownCount,
-	}
-}
-
-// wciValidationStatusToProto converts a WCI ValidationStatus to the public proto type.
-func wciValidationStatusToProto(vs *wciiface.ValidationStatus) *computepb.WorkerDeploymentVersionValidationStatus {
+// wciValidationStatusToComputeStatus converts a WCI ValidationStatus to the public ComputeStatus proto.
+// A successful validation results in an empty error_message; a failed validation sets the error_message.
+func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deploymentpb.ComputeStatus {
 	if vs == nil {
 		return nil
 	}
-	s := &computepb.WorkerDeploymentVersionValidationStatus{
+	pv := &deploymentpb.ComputeStatus_ProviderValidationStatus{
 		LastCheckTime: timestamppb.New(vs.LastValidationTime),
 	}
-	switch vs.Status {
-	case wciiface.ValidationResultSuccess:
-		s.Health = computepb.WorkerDeploymentVersionValidationStatus_HEALTH_OK
-	case wciiface.ValidationResultFailed:
-		s.Health = computepb.WorkerDeploymentVersionValidationStatus_HEALTH_ERROR
-		s.ErrorMessage = vs.ErrMessage
+	if vs.Status == wciiface.ValidationResultFailed {
+		pv.ErrorMessage = vs.ErrMessage
 	}
-	return s
+	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
 }

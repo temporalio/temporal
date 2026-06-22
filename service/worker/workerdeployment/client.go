@@ -631,23 +631,6 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, nil, err
 	}
 
-	// Extend each version summary with WCI validation status.
-	for _, vs := range dInfo.GetVersionSummaries() {
-		if vs.GetComputeConfig() == nil || len(vs.GetComputeConfig().GetScalingGroups()) == 0 {
-			continue
-		}
-		apiVersion := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs.GetVersion())
-		wciDesc, _, wciErr := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
-		if wciErr != nil {
-			var notFound *serviceerror.NotFound
-			if !errors.As(wciErr, &notFound) {
-				d.logger.Warn("failed to fetch WCI validation status for version", tag.Error(wciErr), tag.WorkflowID(vs.GetVersion()))
-			}
-			continue
-		}
-		vs.ValidationStatus = wciValidationStatusToProto(wciDesc.ValidationStatus)
-	}
-
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
@@ -782,7 +765,6 @@ func (d *ClientImpl) ListWorkerDeployments(
 			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
 			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
-			ValidationSummary:     workerDeploymentInfo.ValidationSummary,
 		})
 	}
 
@@ -1817,6 +1799,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
 			ComputeConfig:        v.GetComputeConfig(),
+			ComputeStatus:        v.GetComputeStatus(),
 		})
 	}
 

@@ -4135,7 +4135,6 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 			LatestVersionSummary:  d.LatestVersionSummary,
 			RampingVersionSummary: d.RampingVersionSummary,
 			CurrentVersionSummary: d.CurrentVersionSummary,
-			ValidationSummary:     workerdeployment.DeploymentValidationSummaryToProto(d.ValidationSummary),
 		}
 	}
 
