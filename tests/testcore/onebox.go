@@ -107,7 +107,7 @@ type (
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
-		additionalChasmLibraries  []chasm.Library
+		testChasmLibraries        []chasm.Library
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -170,7 +170,7 @@ type (
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		TokenProvider            auth.TokenProvider
-		AdditionalChasmLibraries []chasm.Library
+		TestChasmLibraries       []chasm.Library
 	}
 
 	listenHostPort string
@@ -214,10 +214,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
-		additionalChasmLibraries:         params.AdditionalChasmLibraries,
+		testChasmLibraries:               params.TestChasmLibraries,
 	}
-	if len(impl.additionalChasmLibraries) > 0 {
-		testhooks.NewHook(chasm.RegistryInitializer, impl.registerAdditionalChasmLibraries).Apply(impl.testHooks, testhooks.GlobalScope)
+	if len(impl.testChasmLibraries) > 0 {
+		testhooks.NewHook(chasm.RegistryInitializer, impl.registerTestChasmLibraries).Apply(impl.testHooks, testhooks.GlobalScope)
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -320,8 +320,8 @@ func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 	return ctx, nil
 }
 
-func (c *TemporalImpl) registerAdditionalChasmLibraries(registry *chasm.Registry) error {
-	for _, library := range c.additionalChasmLibraries {
+func (c *TemporalImpl) registerTestChasmLibraries(registry *chasm.Registry) error {
+	for _, library := range c.testChasmLibraries {
 		if err := registry.Register(library); err != nil {
 			return err
 		}

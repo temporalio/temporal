@@ -154,7 +154,7 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 func WithChasmLibraries(libraries ...chasm.Library) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithClusterAdditionalChasmLibraries(libraries...))
+		o.clusterOptions = append(o.clusterOptions, WithClusterTestChasmLibraries(libraries...))
 		o.dedicatedReason = "custom CHASM libraries used"
 	}
 }

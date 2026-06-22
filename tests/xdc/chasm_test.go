@@ -53,7 +53,7 @@ func (s *ChasmSuite) SetupSuite() {
 		dynamicconfig.TransferProcessorMaxPollInterval.Key(): 1 * time.Second,
 		dynamicconfig.NamespaceMinRetentionGlobal.Key():      1 * time.Second,
 	}
-	s.setupSuite(testcore.WithClusterAdditionalChasmLibraries(tests.Library))
+	s.setupSuite(testcore.WithClusterTestChasmLibraries(tests.Library))
 }
 
 func (s *ChasmSuite) SetupTest() {
