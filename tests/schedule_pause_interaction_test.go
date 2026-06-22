@@ -32,29 +32,21 @@ var allOverlapPolicies = []enumspb.ScheduleOverlapPolicy{
 
 // expectScheduleProgressesWhilePaused returns whether a schedule using the given
 // overlap policy continues to take new scheduled actions while the workflow it
-// started is paused. This encodes the observed, current behavior of each
-// scheduler implementation.
+// started is paused. The V1 and CHASM schedulers both treat a paused workflow as
+// still occupying the overlap slot, so behavior is identical across them:
 //
-//   - ALLOW_ALL never inspects the running workflow, so it always starts new
-//     runs regardless of pause (both schedulers).
-//   - TERMINATE_OTHER terminates the running workflow (a hard close that does
-//     not require the workflow to process a workflow task) and then starts the
-//     next run. CHASM does this even when the workflow is paused. The V1
-//     scheduler does NOT — it stalls. This V1 stall is a bug: the V1 watcher
-//     does not understand the PAUSED status and never observes the paused
-//     workflow close, so it never gets to start the buffered run.
-//   - SKIP / BUFFER_ONE / BUFFER_ALL / CANCEL_OTHER all keep the slot occupied
-//     by the paused workflow, so no new run is taken under either scheduler.
-//     (For CANCEL_OTHER the schedule additionally never makes progress on its
-//     own because a paused workflow cannot process the cancellation request -
-//     it has no workflow task - so the cancel never completes.)
-func expectScheduleProgressesWhilePaused(isCHASM bool, policy enumspb.ScheduleOverlapPolicy) bool {
+//   - ALLOW_ALL never inspects the running workflow, so it always starts new runs.
+//   - TERMINATE_OTHER terminates the paused workflow (a hard close that does not
+//     require the workflow to process a workflow task) and then starts the next run.
+//   - SKIP / BUFFER_ONE / BUFFER_ALL / CANCEL_OTHER keep the slot occupied by the
+//     paused workflow, so no new run is taken. (For CANCEL_OTHER the cancellation
+//     additionally never completes while paused, because a paused workflow has no
+//     workflow task to process the cancel; it completes once unpaused.)
+func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) bool {
 	switch policy {
-	case enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL:
+	case enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
 		return true
-	case enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
-		// CHASM terminates the paused workflow and continues; V1 stalls (bug).
-		return isCHASM
 	default:
 		// SKIP, BUFFER_ONE, BUFFER_ALL, CANCEL_OTHER: the paused workflow keeps
 		// the slot, so the schedule does not take new actions.
@@ -63,40 +55,40 @@ func expectScheduleProgressesWhilePaused(isCHASM bool, policy enumspb.ScheduleOv
 }
 
 func TestScheduleV1PauseInteraction(t *testing.T) {
-	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory, false) })
-	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory, false) })
-	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory, false) })
-	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, v1ContextFactory, false) })
+	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory) })
+	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory) })
+	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory) })
+	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, v1ContextFactory) })
 }
 
 func TestScheduleCHASMPauseInteraction(t *testing.T) {
-	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, chasmContextFactory, true) })
-	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, chasmContextFactory, true) })
-	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, chasmContextFactory, true) })
-	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, chasmContextFactory, true) })
+	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, chasmContextFactory) })
+	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, chasmContextFactory) })
+	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, chasmContextFactory) })
+	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, chasmContextFactory) })
 }
 
-func runSchedulePauseOverlapMatrix(t *testing.T, newContext contextFactory, isCHASM bool) {
+func runSchedulePauseOverlapMatrix(t *testing.T, newContext contextFactory) {
 	for _, policy := range allOverlapPolicies {
 		policy := policy
 		t.Run(policy.String(), func(t *testing.T) {
-			testSchedulePauseOverlap(t, newContext, isCHASM, policy)
+			testSchedulePauseOverlap(t, newContext, policy)
 		})
 	}
 }
 
-func runSchedulePauseRecoveryMatrix(t *testing.T, newContext contextFactory, isCHASM bool) {
+func runSchedulePauseRecoveryMatrix(t *testing.T, newContext contextFactory) {
 	for _, policy := range allOverlapPolicies {
 		policy := policy
 		// Recovery is only interesting for policies whose schedule was blocked
 		// by the paused workflow. Policies that keep progressing never stall,
-		// and may have already closed the paused workflow (e.g. CHASM
-		// TERMINATE_OTHER terminates it), so there is nothing to recover.
-		if expectScheduleProgressesWhilePaused(isCHASM, policy) {
+		// and may have already closed the paused workflow (e.g. TERMINATE_OTHER
+		// terminates it), so there is nothing to recover.
+		if expectScheduleProgressesWhilePaused(policy) {
 			continue
 		}
 		t.Run(policy.String(), func(t *testing.T) {
-			testSchedulePauseUnpauseRecovery(t, newContext, isCHASM, policy)
+			testSchedulePauseUnpauseRecovery(t, newContext, policy)
 		})
 	}
 }
@@ -250,10 +242,10 @@ func registerSignalCompletableWorkflow(s *testcore.TestEnv, wt string) {
 // testSchedulePauseOverlap creates a schedule (1s interval) that starts a single
 // long-running workflow, pauses that workflow, and then asserts whether the
 // schedule keeps taking scheduled actions, per expectScheduleProgressesWhilePaused.
-func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, isCHASM bool, policy enumspb.ScheduleOverlapPolicy) {
+func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, policy enumspb.ScheduleOverlapPolicy) {
 	f := setupPausedScheduledWorkflow(t, newContext, policy, registerForeverWorkflow)
 
-	if expectScheduleProgressesWhilePaused(isCHASM, policy) {
+	if expectScheduleProgressesWhilePaused(policy) {
 		// The schedule should keep taking new actions despite the paused workflow.
 		await.RequireTruef(t, func() bool {
 			c, cErr := scheduleActionCount(f.ctx, f.s, f.sid)
@@ -279,7 +271,7 @@ func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, isCHASM b
 // a paused workflow resumes taking actions once that workflow is unpaused and
 // allowed to close (by signalling it, and/or via the scheduler's own
 // cancellation for CANCEL_OTHER).
-func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, isCHASM bool, policy enumspb.ScheduleOverlapPolicy) {
+func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, policy enumspb.ScheduleOverlapPolicy) {
 	f := setupPausedScheduledWorkflow(t, newContext, policy, registerSignalCompletableWorkflow)
 
 	// Unpause the workflow.
@@ -299,10 +291,8 @@ func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, i
 	err = f.s.SdkClient().SignalWorkflow(f.ctx, f.execution.GetWorkflowId(), f.execution.GetRunId(), "complete", nil)
 	require.NoError(t, err)
 
-	// Once the slot frees, the schedule should resume taking actions. This
-	// confirms the V1 stall (see expectScheduleProgressesWhilePaused) is
-	// recoverable - the schedule is blocked only while the workflow is paused,
-	// not permanently.
+	// Once the slot frees, the schedule should resume taking actions - the
+	// schedule is blocked only while the workflow is paused, not permanently.
 	await.RequireTruef(t, func() bool {
 		c, cErr := scheduleActionCount(f.ctx, f.s, f.sid)
 		return cErr == nil && c > f.actionsAtPause
@@ -317,7 +307,7 @@ func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, i
 //   - After unpause, the workflow continues-as-new and the continued run
 //     completes, and the scheduler observes that completion across the
 //     continue-as-new boundary.
-func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory, isCHASM bool) {
+func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 	// The scheduler matches the continued run's completion by the request ID in
 	// the completion callback token, which only survives continue-as-new in the
 	// envelope token format (gated off by default).
@@ -466,7 +456,7 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory, isC
 // to a point before the pause. The reset run is no longer paused (the pause
 // event is not part of the reset history), and the scheduler keeps tracking the
 // reset run through to completion.
-func testSchedulePauseReset(t *testing.T, newContext contextFactory, isCHASM bool) {
+func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, pauseInteractionOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-pause-reset")
