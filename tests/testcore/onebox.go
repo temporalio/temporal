@@ -418,7 +418,7 @@ func (c *TemporalImpl) startFrontend() {
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
-	testhooks.NewHook(chasm.HistoryRuntimeProvider, func(
+	testhooks.NewHook(testhooks.HistoryChasmRuntimeProvider, func(
 		chasmEngine chasm.Engine,
 		chasmVisibilityManager chasm.VisibilityManager,
 		_ *chasm.Registry,

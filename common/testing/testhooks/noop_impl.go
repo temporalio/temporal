@@ -43,10 +43,6 @@ func NewHook[T any, S any](_ Key[T, S], _ T) Hook {
 	panic("testhooks.NewHook called but TestHooks are not enabled: use -tags=test_dep when running `go test`")
 }
 
-func NewGlobalKey[T any]() Key[T, global] {
-	return newKey[T, global]()
-}
-
 func (h Hook) Scope() ScopeType {
 	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
 }
