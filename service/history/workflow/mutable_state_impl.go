@@ -4046,9 +4046,9 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 	}
 
 	// save deployment search attributes if changed
-	if !(existingDeployment == modifiedDeployment &&
-		existingVersion == modifiedVersion &&
-		existingBehavior == modifiedBehavior) {
+	if existingDeployment != modifiedDeployment ||
+		existingVersion != modifiedVersion ||
+		existingBehavior != modifiedBehavior {
 		err = ms.saveDeploymentSearchAttributes(modifiedDeployment, modifiedVersion, modifiedBehavior, maxSearchAttributeValueSize)
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
