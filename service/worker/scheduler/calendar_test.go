@@ -5,23 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type calendarSuite struct {
-	suite.Suite
-	*require.Assertions
+	parallelsuite.Suite[*calendarSuite]
 }
 
 func TestCalendar(t *testing.T) {
-	suite.Run(t, new(calendarSuite))
-}
-
-func (s *calendarSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+	parallelsuite.Run(t, new(calendarSuite))
 }
 
 func (s *calendarSuite) mustCompileCalendarSpec(cal *schedulepb.CalendarSpec, tz *time.Location) *compiledCalendar {

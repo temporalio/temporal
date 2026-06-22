@@ -4,32 +4,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type specSuite struct {
-	suite.Suite
-	protorequire.ProtoAssertions
-
-	specBuilder *SpecBuilder
+	parallelsuite.Suite[*specSuite]
 }
 
 func TestSpec(t *testing.T) {
-	suite.Run(t, new(specSuite))
-}
-
-func (s *specSuite) SetupTest() {
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.specBuilder = NewSpecBuilder()
+	parallelsuite.Run(t, new(specSuite))
 }
 
 func (s *specSuite) checkSequenceRaw(spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := s.specBuilder.NewCompiledSpec(spec)
+	cs, err := NewSpecBuilder().NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -40,20 +31,20 @@ func (s *specSuite) checkSequenceRaw(spec *schedulepb.ScheduleSpec, start time.T
 
 func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := s.specBuilder.NewCompiledSpec(spec)
+	cs, err := NewSpecBuilder().NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		result := cs.GetNextTime(jitterSeed, start)
 		if exp.IsZero() {
-			s.Require().True(
+			s.True(
 				result.Nominal.IsZero(),
 				"exp %v nominal should be zero, got %v", exp, result.Nominal,
 			)
-			s.Require().True(result.Next.IsZero(), "next should be zero")
+			s.True(result.Next.IsZero(), "next should be zero")
 			break
 		}
-		s.Require().False(result.Nominal.IsZero())
-		s.Require().False(result.Next.IsZero())
+		s.False(result.Nominal.IsZero())
+		s.False(result.Next.IsZero())
 		s.Equal(exp, result.Next)
 		start = result.Next
 	}
@@ -367,7 +358,7 @@ func (s *specSuite) TestSpecExclude() {
 }
 
 func (s *specSuite) TestExcludeAll() {
-	cs, err := s.specBuilder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+	cs, err := NewSpecBuilder().NewCompiledSpec(&schedulepb.ScheduleSpec{
 		Interval: []*schedulepb.IntervalSpec{
 			{Interval: durationpb.New(7 * 24 * time.Hour)},
 		},

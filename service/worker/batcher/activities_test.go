@@ -11,7 +11,6 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -31,30 +30,24 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.uber.org/mock/gomock"
 )
 
 type activitiesSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-
-	controller *gomock.Controller
-
-	mockFrontendClient *workflowservicemock.MockWorkflowServiceClient
-}
-
-func (s *activitiesSuite) SetupTest() {
-	s.controller = gomock.NewController(s.T())
-
-	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
+	parallelsuite.Suite[*activitiesSuite]
 }
 
 func TestActivitiesSuite(t *testing.T) {
-	suite.Run(t, new(activitiesSuite))
+	parallelsuite.Run(t, new(activitiesSuite))
+}
+
+func (s *activitiesSuite) newMockFrontendClient() *workflowservicemock.MockWorkflowServiceClient {
+	return workflowservicemock.NewMockWorkflowServiceClient(gomock.NewController(s.T()))
 }
 
 func (s *activitiesSuite) TestTaskTimeoutContext() {
-	s.Run("no parent deadline applies default timeout", func() {
+	s.Run("no parent deadline applies default timeout", func(s *activitiesSuite) {
 		ctx, cancel := taskTimeoutContext(context.Background())
 		defer cancel()
 
@@ -63,7 +56,7 @@ func (s *activitiesSuite) TestTaskTimeoutContext() {
 		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
 	})
 
-	s.Run("longer parent deadline is shortened to default timeout", func() {
+	s.Run("longer parent deadline is shortened to default timeout", func(s *activitiesSuite) {
 		parent, parentCancel := context.WithTimeout(context.Background(), defaultTaskTimeout+time.Hour)
 		defer parentCancel()
 
@@ -75,7 +68,7 @@ func (s *activitiesSuite) TestTaskTimeoutContext() {
 		s.InDelta(defaultTaskTimeout, time.Until(deadline), float64(time.Second))
 	})
 
-	s.Run("shorter parent deadline is preserved", func() {
+	s.Run("shorter parent deadline is preserved", func(s *activitiesSuite) {
 		shorter := defaultTaskTimeout - 5*time.Second
 		parent, parentCancel := context.WithTimeout(context.Background(), shorter)
 		defer parentCancel()
@@ -156,18 +149,19 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 		},
 	}
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		s.Run(tt.name, func(s *activitiesSuite) {
+			mockFrontendClient := s.newMockFrontendClient()
 			ctx := context.Background()
 			slices.Reverse(tt.history.Events)
 			workflowExecution := &commonpb.WorkflowExecution{}
-			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistoryReverse(ctx, gomock.Any()).Return(
+			mockFrontendClient.EXPECT().GetWorkflowExecutionHistoryReverse(ctx, gomock.Any()).Return(
 				&workflowservice.GetWorkflowExecutionHistoryReverseResponse{History: tt.history, NextPageToken: nil}, nil)
-			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
+			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
-				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
 				s.True(appErr.NonRetryable(), "error should be non-retryable")
 				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
 			}
@@ -216,16 +210,17 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 		},
 	}
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		s.Run(tt.name, func(s *activitiesSuite) {
+			mockFrontendClient := s.newMockFrontendClient()
 			ctx := context.Background()
-			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistory(ctx, gomock.Any()).Return(
+			mockFrontendClient.EXPECT().GetWorkflowExecutionHistory(ctx, gomock.Any()).Return(
 				&workflowservice.GetWorkflowExecutionHistoryResponse{History: tt.history, NextPageToken: nil}, nil)
-			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
+			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
-				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
 				s.True(appErr.NonRetryable(), "error should be non-retryable")
 				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
 			}
@@ -328,8 +323,9 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		},
 	}
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
-			s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		s.Run(tt.name, func(s *activitiesSuite) {
+			mockFrontendClient := s.newMockFrontendClient()
+			mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&workflowservice.DescribeWorkflowExecutionResponse{
 					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 						AutoResetPoints: &workflowpb.ResetPoints{
@@ -343,7 +339,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 				WorkflowId: "wfid",
 				RunId:      "run1",
 			}
-			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, tt.buildId, tt.currentRunOnly)
+			id, err := getResetPoint(ctx, ns, execution, mockFrontendClient, tt.buildId, tt.currentRunOnly)
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, id)
 			if tt.wantSetRunId != "" {
@@ -404,7 +400,7 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 		},
 	}
 	for _, testRun := range tests {
-		s.Run(testRun.name, func() {
+		s.Run(testRun.name, func(s *activitiesSuite) {
 			a := activities{}
 			adjustedQuery := a.adjustQueryBatchTypeEnum(testRun.query, testRun.batchType)
 			s.Equal(testRun.expectedResult, adjustedQuery)
@@ -415,7 +411,7 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 	a := activities{}
 
-	s.Run("Empty query", func() {
+	s.Run("Empty query", func(s *activitiesSuite) {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "",
 			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
@@ -426,7 +422,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		s.Empty(adjustedQuery)
 	})
 
-	s.Run("RefreshWorkflowTasks returns query unchanged", func() {
+	s.Run("RefreshWorkflowTasks returns query unchanged", func(s *activitiesSuite) {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
 			Identity:        "test",
@@ -439,7 +435,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
 
-	s.Run("RefreshWorkflowTasks with complex query unchanged", func() {
+	s.Run("RefreshWorkflowTasks with complex query unchanged", func(s *activitiesSuite) {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')",
 			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
@@ -451,7 +447,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		s.Equal("(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')", adjustedQuery)
 	})
 
-	s.Run("Nil operation returns query unchanged", func() {
+	s.Run("Nil operation returns query unchanged", func(s *activitiesSuite) {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
 		}
@@ -462,7 +458,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 
 func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 	ctx := context.Background()
-	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(s.T()))
 
 	a := &activities{
 		activityDeps: activityDeps{
@@ -512,7 +508,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 
 func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 	ctx := context.Background()
-	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(s.T()))
 
 	a := &activities{
 		activityDeps: activityDeps{
@@ -547,7 +543,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).Return(nil, expectedErr)
 
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
-	s.Require().Error(err)
+	s.Error(err)
 	s.Equal(expectedErr, err)
 }
 
@@ -603,7 +599,7 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 	}
 
 	for _, tt := range tests {
-		s.Run(tt.name, func() {
+		s.Run(tt.name, func(s *activitiesSuite) {
 			got := isNonRetryableError(tt.err, tt.batchType)
 			s.Equal(tt.want, got)
 		})
@@ -619,9 +615,10 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	mockFrontendClient := s.newMockFrontendClient()
 	a := &activities{
 		activityDeps: activityDeps{
-			FrontendClient: s.mockFrontendClient,
+			FrontendClient: mockFrontendClient,
 			Logger:         log.NewTestLogger(),
 			MetricsHandler: metrics.NoopMetricsHandler,
 		},
@@ -663,7 +660,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	// The signal must be executed with the worker's trusted namespace, not the user-supplied one.
-	s.mockFrontendClient.EXPECT().
+	mockFrontendClient.EXPECT().
 		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *workflowservice.SignalWorkflowExecutionRequest, _ ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
 			s.Equal(workerNamespace, req.Namespace, "must use worker namespace, not request namespace")
@@ -672,7 +669,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	taskCh <- testTask
 
-	go a.startTaskProcessor(ctx, batchOperation, workerNamespace, taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+	go a.startTaskProcessor(ctx, batchOperation, workerNamespace, taskCh, respCh, limiter, nil, mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 	resp := <-respCh
 	s.NoError(resp.err)
@@ -685,9 +682,10 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	mockFrontendClient := s.newMockFrontendClient()
 	a := &activities{
 		activityDeps: activityDeps{
-			FrontendClient: s.mockFrontendClient,
+			FrontendClient: mockFrontendClient,
 			Logger:         log.NewTestLogger(),
 			MetricsHandler: metrics.NoopMetricsHandler,
 		},
@@ -707,7 +705,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	}
 
 	// Every signal fails with a retryable error, forcing the worker down the retry path.
-	s.mockFrontendClient.EXPECT().
+	mockFrontendClient.EXPECT().
 		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("transient error")).
 		AnyTimes()
@@ -718,7 +716,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	respCh := make(chan taskResponse, 1)
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
 
-	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 	// Feed tasks from a separate goroutine so the test can drain responses concurrently.
 	go func() {
@@ -736,7 +734,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	for range numTasks {
 		select {
 		case resp := <-respCh:
-			s.Require().Error(resp.err)
+			s.Error(resp.err)
 		case <-time.After(10 * time.Second):
 			s.FailNow("timed out waiting for task response: worker is deadlocked")
 		}
@@ -858,7 +856,8 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
 
 	// Run inside an activity environment so the coordinator's RecordHeartbeat call is valid.
-	env := s.NewTestActivityEnvironment()
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestActivityEnvironment()
 	runner := func(ctx context.Context) (HeartBeatDetails, error) {
 		return a.processWorkflowsWithProactiveFetching(
 			ctx, config, fakeWorker, limiter, mockSdk, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
@@ -902,6 +901,6 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
 
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
-	s.Require().Error(err)
+	s.Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
 }

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -31,32 +32,49 @@ import (
 
 type (
 	workflowSuite struct {
-		suite.Suite
-		testsuite.WorkflowTestSuite
-		env *testsuite.TestWorkflowEnvironment
+		parallelsuite.Suite[*workflowSuite]
 	}
 )
 
 var (
-	baseStartTime = time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)
+	baseStartTime     = time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)
+	workflowSuiteEnvs sync.Map
 )
 
 func TestWorkflow(t *testing.T) {
-	suite.Run(t, new(workflowSuite))
+	parallelsuite.RunLegacySequential(t, new(workflowSuite)) //nolint:staticcheck // SA1019: suite mutates scheduler package global tweakable policies.
 }
 
-func (s *workflowSuite) SetupTest() {
-	s.env = s.NewTestWorkflowEnvironment()
+func (s *workflowSuite) env() *testsuite.TestWorkflowEnvironment {
+	if env, ok := workflowSuiteEnvs.Load(s.T().Name()); ok {
+		return env.(*testsuite.TestWorkflowEnvironment)
+	}
+	env := s.newTestWorkflowEnvironment()
+	s.setEnv(env)
+	return env
 }
 
-func (s *workflowSuite) AfterTest(suiteName, testName string) {
-	s.env.AssertExpectations(s.T())
+func (s *workflowSuite) setEnv(env *testsuite.TestWorkflowEnvironment) {
+	name := s.T().Name()
+	if _, ok := workflowSuiteEnvs.Load(name); !ok {
+		s.T().Cleanup(func() {
+			if env, ok := workflowSuiteEnvs.LoadAndDelete(name); ok {
+				env.(*testsuite.TestWorkflowEnvironment).AssertExpectations(s.T())
+			}
+		})
+	}
+	workflowSuiteEnvs.Store(name, env)
+}
+
+func (s *workflowSuite) newTestWorkflowEnvironment() *testsuite.TestWorkflowEnvironment {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	return testSuite.NewTestWorkflowEnvironment()
 }
 
 // test helpers
 
 func (s *workflowSuite) now() time.Time {
-	return s.env.Now().UTC() // env.Now() returns local time by default, force to UTC
+	return s.env().Now().UTC() // env.Now() returns local time by default, force to UTC
 }
 
 func (s *workflowSuite) defaultAction(id string) *schedulepb.ScheduleAction {
@@ -87,14 +105,14 @@ func (s *workflowSuite) run(sched *schedulepb.Schedule, iterations int) {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
 
 	// fixed start time
-	s.env.SetStartTime(baseStartTime)
+	s.env().SetStartTime(baseStartTime)
 
 	// fill this in so callers don't need to
 	if sched.Action == nil {
 		sched.Action = s.defaultAction("myid")
 	}
 
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: sched,
 		State: &schedulespb.InternalState{
 			Namespace:     "myns",
@@ -106,7 +124,7 @@ func (s *workflowSuite) run(sched *schedulepb.Schedule, iterations int) {
 }
 
 func (s *workflowSuite) describe() *schedulespb.DescribeResponse {
-	encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
+	encoded, err := s.env().QueryWorkflow(QueryNameDescribe)
 	s.NoError(err)
 	var resp schedulespb.DescribeResponse
 	s.NoError(encoded.Get(&resp))
@@ -125,13 +143,13 @@ func (s *workflowSuite) runningWorkflows() []string {
 // Low-level mock helpers:
 
 func (s *workflowSuite) expectStart(f func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error)) *testsuite.MockCallWrapper {
-	return s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
+	return s.env().OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 			resp, err := f(req)
 			if resp == nil && err == nil { // fill in defaults so callers can be more concise
 				resp = &schedulespb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamppb.New(s.env.Now()),
+					RealStartTime: timestamppb.New(s.env().Now()),
 				}
 			}
 
@@ -140,21 +158,21 @@ func (s *workflowSuite) expectStart(f func(req *schedulespb.StartWorkflowRequest
 }
 
 func (s *workflowSuite) expectWatch(f func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error)) *testsuite.MockCallWrapper {
-	return s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Once().Return(
+	return s.env().OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 			return f(req)
 		})
 }
 
 func (s *workflowSuite) expectCancel(f func(req *schedulespb.CancelWorkflowRequest) error) *testsuite.MockCallWrapper {
-	return s.env.OnActivity(new(activities).CancelWorkflow, mock.Anything, mock.Anything).Once().Return(
+	return s.env().OnActivity(new(activities).CancelWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedulespb.CancelWorkflowRequest) error {
 			return f(req)
 		})
 }
 
 func (s *workflowSuite) expectTerminate(f func(req *schedulespb.TerminateWorkflowRequest) error) *testsuite.MockCallWrapper {
-	return s.env.OnActivity(new(activities).TerminateWorkflow, mock.Anything, mock.Anything).Once().Return(
+	return s.env().OnActivity(new(activities).TerminateWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedulespb.TerminateWorkflowRequest) error {
 			return f(req)
 		})
@@ -180,7 +198,7 @@ type runAcrossContinueState struct {
 
 func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcrossContinueState) {
 	// capture this to avoid races between end of one test and start of next
-	env := s.env
+	env := s.env()
 
 	for _, run := range runs {
 		run := run // capture fresh value
@@ -188,7 +206,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 		matchStart := mock.MatchedBy(func(req *schedulespb.StartWorkflowRequest) bool {
 			return req.Request.WorkflowId == run.id
 		})
-		s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, matchStart).Times(0).Maybe().Return(
+		s.env().OnActivity(new(activities).StartWorkflow, mock.Anything, matchStart).Times(0).Maybe().Return(
 			func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 				if prev, ok := state.started[req.Request.WorkflowId]; ok {
 					s.Failf("multiple starts", "for %s at %s (prev %s)", req.Request.WorkflowId, s.now(), prev)
@@ -204,7 +222,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 		matchShortPoll := mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
 			return req.Execution.WorkflowId == run.id && !req.LongPoll
 		})
-		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchShortPoll).Times(0).Maybe().Return(
+		s.env().OnActivity(new(activities).WatchWorkflow, mock.Anything, matchShortPoll).Times(0).Maybe().Return(
 			func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 				if s.now().Before(run.end) {
 					return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
@@ -215,7 +233,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 		matchLongPoll := mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
 			return req.Execution.WorkflowId == run.id && req.LongPoll
 		})
-		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
+		s.env().OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
 			// this can be called after end of workflow, use captured env
 			return run.end.Sub(env.Now().UTC())
 		}).Return(func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
@@ -223,7 +241,7 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 		})
 	}
 	// catch unexpected starts
-	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Times(0).Maybe().Return(
+	s.env().OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Times(0).Maybe().Return(
 		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 			s.Failf("unexpected start", "for %s at %s", req.Request.WorkflowId, s.now())
 			return nil, nil
@@ -241,11 +259,11 @@ func (s *workflowSuite) setupDelayedCallbacks(start time.Time, cbs []delayedCall
 		if delay := cb.at.Sub(start); delay > 0 {
 			if cb.finishTest {
 				cb.f = func() {
-					s.env.SetCurrentHistoryLength(impossibleHistorySize) // signals workflow loop to exit
-					state.finished = true                                // signals test to exit
+					s.env().SetCurrentHistoryLength(impossibleHistorySize) // signals workflow loop to exit
+					state.finished = true                                  // signals test to exit
 				}
 			}
-			s.env.RegisterDelayedCallback(cb.f, delay)
+			s.env().RegisterDelayedCallback(cb.f, delay)
 		}
 	}
 }
@@ -276,23 +294,23 @@ func (s *workflowSuite) runAcrossContinue(
 			started: make(map[string]time.Time),
 		}
 		for {
-			s.env = s.NewTestWorkflowEnvironment()
-			s.env.SetStartTime(startTime)
+			s.setEnv(s.newTestWorkflowEnvironment())
+			s.env().SetStartTime(startTime)
 
 			s.setupMocksForWorkflows(runs, &state)
 			s.setupDelayedCallbacks(startTime, cbs, &state)
 
 			s.T().Logf("starting workflow with CAN every %d iterations, start time %s",
 				CurrentTweakablePolicies.IterationsBeforeContinueAsNew, startTime)
-			s.env.ExecuteWorkflow(SchedulerWorkflow, startArgs)
+			s.env().ExecuteWorkflow(SchedulerWorkflow, startArgs)
 			s.T().Logf("finished workflow, time is now %s, finished is %v", s.now(), state.finished)
 
-			s.True(s.env.IsWorkflowCompleted())
-			result := s.env.GetWorkflowError()
+			s.True(s.env().IsWorkflowCompleted())
+			result := s.env().GetWorkflowError()
 			var canErr *workflow.ContinueAsNewError
-			s.Require().True(errors.As(result, &canErr), "result: %v", result)
+			s.True(errors.As(result, &canErr), "result: %v", result)
 
-			s.env.AssertExpectations(s.T())
+			s.env().AssertExpectations(s.T())
 
 			if state.finished {
 				break
@@ -300,10 +318,10 @@ func (s *workflowSuite) runAcrossContinue(
 
 			startTime = s.now()
 			startArgs = nil
-			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
+			s.NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
+		s.Equalf(len(runs), len(state.started), "started %#v", state.started)
 		for _, run := range runs {
 			actual := state.started[run.id]
 			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
@@ -353,8 +371,8 @@ func (s *workflowSuite) TestStart() {
 		Action: action,
 	}, 2)
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestInitialPatch() {
@@ -378,8 +396,8 @@ func (s *workflowSuite) TestInitialPatch() {
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -398,8 +416,8 @@ func (s *workflowSuite) TestInitialPatch() {
 			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 		},
 	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestCatchupWindow() {
@@ -423,13 +441,13 @@ func (s *workflowSuite) TestCatchupWindow() {
 		s.Equal("myid-2022-06-01T00:17:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		s.Equal(int64(5), s.describe().Info.MissedCatchupWindow)
 	}, 18*time.Minute)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -451,18 +469,18 @@ func (s *workflowSuite) TestCatchupWindow() {
 			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 	// written using low-level mocks so we can set initial state
 
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		// should not count any "misses" since we were paused
 		s.Equal(int64(0), s.describe().Info.MissedCatchupWindow)
 		// unpause just to make the test end cleanly
-		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
+		s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
 	}, 3*time.Minute)
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
@@ -471,8 +489,8 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -497,8 +515,8 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()), s.env.GetWorkflowError())
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()), s.env().GetWorkflowError())
 }
 
 func (s *workflowSuite) TestOverlapSkip() {
@@ -816,8 +834,8 @@ func (s *workflowSuite) TestOverlapCancel() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
 		},
 	}, 4)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestOverlapTerminate() {
@@ -867,8 +885,8 @@ func (s *workflowSuite) TestOverlapTerminate() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
 		},
 	}, 4)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestOverlapAllowAll() {
@@ -955,8 +973,8 @@ func (s *workflowSuite) TestFailedStart() {
 			}},
 		},
 	}, 4)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
@@ -1028,8 +1046,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 5)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestOnlyStartForAllowAll() {
@@ -1064,8 +1082,8 @@ func (s *workflowSuite) TestOnlyStartForAllowAll() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, 4)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestPauseOnFailure() {
@@ -1089,10 +1107,10 @@ func (s *workflowSuite) TestPauseOnFailure() {
 			},
 		}, nil
 	})
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		s.False(s.describe().Schedule.State.Paused)
 	}, 9*time.Minute)
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.True(desc.Schedule.State.Paused)
 		s.Contains(desc.Schedule.State.Notes, "paused due to workflow failure")
@@ -1109,14 +1127,14 @@ func (s *workflowSuite) TestPauseOnFailure() {
 			PauseOnFailure: true,
 		},
 	}, 3)
-	s.True(s.env.IsWorkflowCompleted())
+	s.True(s.env().IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
 }
 
 func (s *workflowSuite) TestCompileError() {
 	// written using low-level mocks since it sleeps forever
 
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		s.Contains(s.describe().Info.InvalidScheduleError, "Month is not in range [1-12]")
 	}, 1*time.Minute)
 
@@ -1151,7 +1169,7 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				at: time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC),
 				f: func() {
 					// this gets skipped because a scheduled run is still running
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
 							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC)),
 						},
@@ -1171,7 +1189,7 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				at: time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC),
 				f: func() {
 					// this one runs with overridden overlap policy
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
 							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
@@ -1236,7 +1254,7 @@ func (s *workflowSuite) TestBackfill() {
 			{
 				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						BackfillRequest: []*schedulepb.BackfillRequest{{
 							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
 							EndTime:       timestamppb.New(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
@@ -1301,7 +1319,7 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 					}
 
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						BackfillRequest: []*schedulepb.BackfillRequest{triggerBackfill, ignoreBackfill},
 					})
 				},
@@ -1362,7 +1380,7 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 			// as a workflow timer, so use an odd interval to force it to be different.
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+				s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 					BackfillRequest: []*schedulepb.BackfillRequest{{
 						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
 						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
@@ -1428,7 +1446,7 @@ func (s *workflowSuite) TestHugeBackfillBuffer() {
 		delayedCallbacks[i] = delayedCallback{
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+				s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 					BackfillRequest: []*schedulepb.BackfillRequest{{
 						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
 						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
@@ -1485,7 +1503,7 @@ func (s *workflowSuite) TestPause() {
 			{
 				at: time.Date(2022, 6, 1, 0, 7, 7, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						Pause: "paused",
 					})
 				},
@@ -1501,7 +1519,7 @@ func (s *workflowSuite) TestPause() {
 			{
 				at: time.Date(2022, 6, 1, 0, 26, 7, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						Unpause: "go ahead",
 					})
 				},
@@ -1567,15 +1585,15 @@ func (s *workflowSuite) TestUpdate() {
 				at: time.Date(2022, 6, 1, 0, 9, 5, 0, time.UTC),
 				f: func() {
 					// shouldn't crash
-					s.env.SignalWorkflow(SignalNameUpdate, nil)
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{})
+					s.env().SignalWorkflow(SignalNameUpdate, nil)
+					s.env().SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{})
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 9, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
+					s.env().SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
 						ConflictToken: desc.ConflictToken,
 						Schedule: &schedulepb.Schedule{
 							Spec: &schedulepb.ScheduleSpec{
@@ -1600,7 +1618,7 @@ func (s *workflowSuite) TestUpdate() {
 				at: time.Date(2022, 6, 1, 0, 12, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
+					s.env().SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
 						ConflictToken: desc.ConflictToken + 37, // conflict, should not take effect
 						Schedule:      &schedulepb.Schedule{},
 					})
@@ -1650,7 +1668,7 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 			{
 				at: time.Date(2022, 6, 1, 1, 7, 10, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
+					s.env().SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
 						Schedule: &schedulepb.Schedule{
 							Spec: &schedulepb.ScheduleSpec{
 								Interval: []*schedulepb.IntervalSpec{{
@@ -1728,7 +1746,7 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 				// update after nominal time 03:00:00 but before jittered time 03:37:29
 				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
+					s.env().SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
 						Schedule: &schedulepb.Schedule{
 							Spec:   spec,
 							Action: s.defaultAction("newid"),
@@ -1781,7 +1799,7 @@ func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
 				// signal between nominal and jittered time
 				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNameRefresh, nil)
+					s.env().SignalWorkflow(SignalNameRefresh, nil)
 				},
 			},
 			{
@@ -1834,13 +1852,13 @@ func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
 			{
 				at: time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Pause: "paused"})
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Pause: "paused"})
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 3, 30, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
+					s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
 				},
 			},
 			{
@@ -1885,28 +1903,28 @@ func (s *workflowSuite) TestLimitedActions() {
 		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	})
 
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
 		s.Equal(2, len(desc.Info.FutureActionTimes))
 	}, 1*time.Minute)
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
 		s.Equal(1, len(desc.Info.FutureActionTimes))
 	}, 5*time.Minute)
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
 		s.Equal(0, len(desc.Info.FutureActionTimes))
 		s.Equal(1, len(s.runningWorkflows()))
 	}, 7*time.Minute)
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		// hasn't updated yet since we slept past :09
 		s.Equal(1, len(s.runningWorkflows()))
-		s.env.SignalWorkflow(SignalNameRefresh, nil)
+		s.env().SignalWorkflow(SignalNameRefresh, nil)
 	}, 10*time.Minute)
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		s.Equal(0, len(s.runningWorkflows()))
 	}, 10*time.Minute+1*time.Second)
 
@@ -1924,7 +1942,7 @@ func (s *workflowSuite) TestLimitedActions() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 4)
-	s.True(s.env.IsWorkflowCompleted())
+	s.True(s.env().IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
 }
 
@@ -1972,7 +1990,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		delayedCallbacks[i] = delayedCallback{
 			at: callbackTime,
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+				s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 					BackfillRequest: []*schedulepb.BackfillRequest{{
 						StartTime:     timestamppb.New(callBackRangeStartTime),
 						EndTime:       timestamppb.New(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
@@ -2022,8 +2040,8 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2043,9 +2061,9 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 			ConflictToken: InitialConflictToken,
 		},
 	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env().IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
+	s.True(s.env().Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -2057,8 +2075,8 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -2079,17 +2097,17 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 			ConflictToken: InitialConflictToken,
 		},
 	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env().IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
+	s.True(s.env().Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Action: s.defaultAction("myid"),
 		},
@@ -2101,9 +2119,9 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 		},
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
+	s.True(s.env().IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
+	s.True(s.env().Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestCANByIterations() {
@@ -2125,8 +2143,8 @@ func (s *workflowSuite) TestCANByIterations() {
 	}).Times(0).Maybe()
 
 	// this is ignored because we set iters explicitly
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SetContinueAsNewSuggested(true)
+	s.env().RegisterDelayedCallback(func() {
+		s.env().SetContinueAsNewSuggested(true)
 	}, 5*time.Minute*iters/2-time.Second)
 
 	s.run(&schedulepb.Schedule{
@@ -2139,8 +2157,8 @@ func (s *workflowSuite) TestCANByIterations() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, iters)
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestCANBySuggested() {
@@ -2161,8 +2179,8 @@ func (s *workflowSuite) TestCANBySuggested() {
 		return nil, nil
 	}).Times(0).Maybe()
 
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SetContinueAsNewSuggested(true)
+	s.env().RegisterDelayedCallback(func() {
+		s.env().SetContinueAsNewSuggested(true)
 	}, 5*time.Minute*iters-time.Second)
 
 	s.run(&schedulepb.Schedule{
@@ -2175,8 +2193,8 @@ func (s *workflowSuite) TestCANBySuggested() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, 0) // 0 means use suggested
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestCANBySuggestedWithSignals() {
@@ -2206,13 +2224,13 @@ func (s *workflowSuite) TestCANBySuggestedWithSignals() {
 		return nil, nil
 	}).Times(0).Maybe()
 
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SetContinueAsNewSuggested(true)
+	s.env().RegisterDelayedCallback(func() {
+		s.env().SetContinueAsNewSuggested(true)
 	}, suggestCANAt)
 
 	for _, d := range runs {
-		s.env.RegisterDelayedCallback(func() {
-			s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+		s.env().RegisterDelayedCallback(func() {
+			s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 				TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 			})
 		}, d)
@@ -2231,8 +2249,8 @@ func (s *workflowSuite) TestCANBySuggestedWithSignals() {
 			Paused: true,
 		},
 	}, 0) // 0 means use suggested
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestCANBySignal() {
@@ -2253,8 +2271,8 @@ func (s *workflowSuite) TestCANBySignal() {
 		return nil, nil
 	}).Times(0).Maybe()
 
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+	s.env().RegisterDelayedCallback(func() {
+		s.env().SignalWorkflow(SignalNameForceCAN, nil)
 	}, 5*time.Minute*iters-time.Second)
 
 	s.run(&schedulepb.Schedule{
@@ -2267,24 +2285,24 @@ func (s *workflowSuite) TestCANBySignal() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, 0) // 0 means use suggested
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestMigrateSuccess() {
 	// Mock MigrateSchedule activity to succeed.
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
 	// Enable migration and request it via signal after the first iteration.
 	enableMigration := false
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		enableMigration = true
-		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+		s.env().SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
@@ -2305,15 +2323,15 @@ func (s *workflowSuite) TestMigrateSuccess() {
 	})
 
 	// Workflow should complete successfully (not CAN) after migration.
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.True(s.env().IsWorkflowCompleted())
+	s.NoError(s.env().GetWorkflowError())
 }
 
 func (s *workflowSuite) TestMigrateFailure() {
 	// Mock MigrateSchedule activity to always fail. Migration is retried
 	// each iteration since PendingMigration is persisted in State.
 	migrateCalls := 0
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
 			migrateCalls++
 			return errors.New("migration failed")
@@ -2321,21 +2339,21 @@ func (s *workflowSuite) TestMigrateFailure() {
 
 	// Enable migration and request it via signal after the first iteration.
 	enableMigration := false
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		enableMigration = true
-		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+		s.env().SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	// After ~5 iterations (5 hours of simulated time), the workflow should
 	// still be running -- migration failed but the scheduler continues.
 	stillRunning := false
-	s.env.RegisterDelayedCallback(func() {
-		stillRunning = !s.env.IsWorkflowCompleted()
+	s.env().RegisterDelayedCallback(func() {
+		stillRunning = !s.env().IsWorkflowCompleted()
 	}, 5*time.Hour)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
@@ -2362,16 +2380,16 @@ func (s *workflowSuite) TestMigrateFailure() {
 
 	// Verify PendingMigration is persisted in CAN state.
 	var canErr *workflow.ContinueAsNewError
-	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	s.ErrorAs(s.env().GetWorkflowError(), &canErr)
 	var canArgs schedulespb.StartScheduleArgs
-	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.NoError(payloads.Decode(canErr.Input, &canArgs))
 	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
 
 func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	// First attempt fails, second attempt succeeds (on next run loop iteration).
 	migrateCalls := 0
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
 			migrateCalls++
 			if migrateCalls == 1 {
@@ -2382,14 +2400,14 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 
 	// Enable migration and request it via signal after the first iteration.
 	enableMigration := false
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		enableMigration = true
-		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+		s.env().SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
@@ -2411,15 +2429,15 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 
 	// Migration should succeed on second attempt without a new signal,
 	// proving PendingMigration persists across run loop iterations.
-	s.True(s.env.IsWorkflowCompleted())
-	s.Require().NoError(s.env.GetWorkflowError())
+	s.True(s.env().IsWorkflowCompleted())
+	s.NoError(s.env().GetWorkflowError())
 	s.Equal(2, migrateCalls, "migration should fail once then succeed on retry")
 }
 
 func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	// Mock MigrateSchedule activity to always fail.
 	migrateCalls := 0
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
 			migrateCalls++
 			return errors.New("migration failed")
@@ -2427,31 +2445,31 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 
 	// Enable migration and request it via signal after the first iteration.
 	enableMigration := false
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		enableMigration = true
-		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+		s.env().SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 	// After migration failure, send a pause patch and verify it's processed,
 	// proving the workflow kept running and still handles signals.
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+	s.env().RegisterDelayedCallback(func() {
+		s.env().SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 			Pause: "paused after failed migration",
 		})
 	}, 5*time.Second)
 
 	stillRunning := false
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.True(desc.Schedule.State.Paused)
 		s.Equal("paused after failed migration", desc.Schedule.State.Notes)
-		stillRunning = !s.env.IsWorkflowCompleted()
+		stillRunning = !s.env().IsWorkflowCompleted()
 		// Send force-CAN to unblock the workflow (paused with no timer).
-		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+		s.env().SignalWorkflow(SignalNameForceCAN, nil)
 	}, 10*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
@@ -2479,23 +2497,23 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 
 	// Verify PendingMigration is persisted in CAN state.
 	var canErr *workflow.ContinueAsNewError
-	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	s.ErrorAs(s.env().GetWorkflowError(), &canErr)
 	var canArgs schedulespb.StartScheduleArgs
-	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.NoError(payloads.Decode(canErr.Input, &canArgs))
 	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
 
 func (s *workflowSuite) TestMigrateDynamicConfig() {
 	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe).
 	// Mock MigrateSchedule activity to succeed.
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
 	prevTweakables := CurrentTweakablePolicies
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2515,8 +2533,8 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 	})
 
 	// Workflow should complete successfully (not CAN) after migration triggered by tweakable.
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.True(s.env().IsWorkflowCompleted())
+	s.NoError(s.env().GetWorkflowError())
 }
 
 // TestMigrateDynamicConfigFlipsMidRun verifies that the enableCHASMMigration
@@ -2526,7 +2544,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 	enabled := false
 	migrateCalls := 0
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
 			migrateCalls++
 			return nil
@@ -2539,12 +2557,12 @@ func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
 	// Flip the closure between iteration 1 and iteration 2 (1h interval).
-	s.env.RegisterDelayedCallback(func() {
+	s.env().RegisterDelayedCallback(func() {
 		enabled = true
 	}, 30*time.Minute)
 
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return enabled }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2563,8 +2581,8 @@ func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 		},
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after the dynamic flip triggers migration")
+	s.True(s.env().IsWorkflowCompleted())
+	s.NoError(s.env().GetWorkflowError(), "workflow should complete after the dynamic flip triggers migration")
 	s.Equal(1, migrateCalls, "migration should fire exactly once, after the DC flips")
 }
 
@@ -2572,7 +2590,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe),
 	// but activity fails.
 	migrateCalls := 0
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+	s.env().OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
 			migrateCalls++
 			return errors.New("migration failed")
@@ -2582,8 +2600,8 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2603,16 +2621,16 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 	})
 
 	// Workflow should CAN after all iterations, not terminate.
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 	// Migration attempted every iteration.
 	s.Equal(5, migrateCalls)
 
 	// PendingMigration should be preserved in CAN state.
 	var canErr *workflow.ContinueAsNewError
-	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	s.ErrorAs(s.env().GetWorkflowError(), &canErr)
 	var canArgs schedulespb.StartScheduleArgs
-	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.NoError(payloads.Decode(canErr.Input, &canArgs))
 	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
 
@@ -2625,8 +2643,8 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	// No activity mock registered -- if migration is attempted, the test will fail.
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env().SetStartTime(baseStartTime)
+	s.env().ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2644,6 +2662,6 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	})
 
 	// Workflow should CAN normally without attempting migration.
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env().IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env().GetWorkflowError()))
 }
