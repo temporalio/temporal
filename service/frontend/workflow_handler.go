@@ -5767,8 +5767,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo: payload.EncodeString(snakeCaseBatchType(input.BatchType)),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+			batcher.BatchOperationTypeMemo:            payload.EncodeString(snakeCaseBatchType(input.BatchType)),
+			batcher.BatchReasonMemo:                   payload.EncodeString(request.GetReason()),
+			batcher.BatchOperationVisibilityQueryMemo: payload.EncodeString(visibilityQuery),
 		},
 	}
 
@@ -5955,6 +5956,16 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.String("batch-operation-type", operationTypeString))
 	}
 
+	// The visibility query is recorded in the memo at start time. Batch operations
+	// started before it was recorded, or started by execution list rather than
+	// query, do not have this field and default to an empty query.
+	var visibilityQuery string
+	if queryPayload, ok := memo[batcher.BatchOperationVisibilityQueryMemo]; ok {
+		if err = payload.Decode(queryPayload, &visibilityQuery); err != nil {
+			return nil, err
+		}
+	}
+
 	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
 		OperationType: operationType,
 		JobId:         executionInfo.Execution.GetWorkflowId(),
@@ -5963,6 +5974,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		CloseTime:     executionInfo.CloseTime,
 		Identity:      identity,
 		Reason:        reason,
+		Query:         visibilityQuery,
 	}
 	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		stats, err := wh.getCompletedBatchOperationStats(memo)
