@@ -682,7 +682,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 			s.True(closeTime.Equal(request.CloseTime))
 			s.NotEmpty(request.ExecutionDuration)
 			s.Zero(request.HistoryLength)
-			s.Zero(request.HistorySizeBytes)
+			s.Positive(request.HistorySizeBytes)
 			s.NotEmpty(request.StateTransitionCount)
 
 			// Other fields are tested in TestProcessChasmTask_RunningExecution

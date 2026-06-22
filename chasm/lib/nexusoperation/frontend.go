@@ -195,6 +195,7 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 			CloseTime:            closeTime,
 			ExecutionDuration:    executionDuration,
 			StateTransitionCount: exec.StateTransitionCount,
+			StateSizeBytes:       exec.HistorySizeBytes,
 			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
 		})
 	}

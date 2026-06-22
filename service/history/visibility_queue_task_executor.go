@@ -497,6 +497,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+	// CHASM executions don't track event-history size, so reuse the HistorySizeBytes
+	// visibility field to report the approximate persisted state size instead.
+	closedRequest.HistorySizeBytes = int64(visTaskContext.ExecutionInfo().ApproximateStateSize)
 
 	release(nil)
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
