@@ -3,13 +3,13 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	processBufferSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*processBufferSuite]
 	}
 
 	job struct {
@@ -30,7 +30,7 @@ func jobIds(jobs []*job) (out []int) {
 func identity[T any](v T) T { return v }
 
 func TestProcessBuffer(t *testing.T) {
-	suite.Run(t, new(processBufferSuite))
+	parallelsuite.Run(t, new(processBufferSuite))
 }
 
 func (s *processBufferSuite) TestProcessBufferEmpty() {

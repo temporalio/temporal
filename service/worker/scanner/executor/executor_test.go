@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
 type (
 	ExecutorTestSuite struct {
-		suite.Suite
+		parallelsuite.Suite[*ExecutorTestSuite]
 	}
 	testTask struct {
 		next    TaskStatus
@@ -22,7 +22,7 @@ type (
 )
 
 func TestExecutionTestSuite(t *testing.T) {
-	suite.Run(t, new(ExecutorTestSuite))
+	parallelsuite.Run(t, new(ExecutorTestSuite))
 }
 
 func (s *ExecutorTestSuite) TestStartStop() {
