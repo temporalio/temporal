@@ -142,7 +142,7 @@ func initPrometheusListener(
 
 	go func() {
 		err := server.ListenAndServe()
-		if err == http.ErrServerClosed {
+		if errors.Is(err, http.ErrServerClosed) {
 			return
 		}
 		msg := "Failed to initialize prometheus listener."
@@ -168,7 +168,7 @@ func (r *openTelemetryProviderImpl) Stop(logger log.Logger) {
 	if r.server != nil {
 		ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
 		defer closeCtx()
-		if err := r.server.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
+		if err := r.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
 		}
 	}
