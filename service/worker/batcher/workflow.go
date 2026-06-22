@@ -32,6 +32,8 @@ const (
 	BatchReasonMemo = "batch_operation_reason"
 	// BatchOperationStatsMemo stores batch operation stats in memo
 	BatchOperationStatsMemo = "batch_operation_stats"
+	// BatchOperationVisibilityQueryMemo stores the batch operation's visibility query in memo
+	BatchOperationVisibilityQueryMemo = "batch_operation_visibility_query"
 	// Workflow batch operation memo type strings. Each operation is suffixed with
 	// the execution type it targets (workflows).
 
