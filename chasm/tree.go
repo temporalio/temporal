@@ -2430,8 +2430,8 @@ func (n *Node) snapshotInternal(
 // untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
 // Snapshot returns the tree's live node references.
 //
-// The returned ChasmClusterLocalState is nil when no node carries cluster-local fields
-// (consistent with noopChasmTree); MergeClusterLocalState treats a nil state as a no-op.
+// The returned ChasmClusterLocalState is nil when no node carries cluster-local fields;
+// MergeClusterLocalState treats a nil state as a no-op.
 func (n *Node) PartitionedSnapshot(
 	exclusiveMinVT *persistencespb.VersionedTransition,
 ) (NodesSnapshot, *persistencespb.ChasmClusterLocalState) {
