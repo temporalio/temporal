@@ -5879,18 +5879,38 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	return &workflowservice.StartBatchOperationResponse{}, nil
 }
 
+// snakeCaseBatchType maps a batch operation type enum to the canonical string
+// stored in the batcher workflow memo (see batcher.BatchType* constants). The
+// stored string is execution-type explicit (e.g. "terminate_workflows" vs
+// "terminate_activities"). Both the original enum values (e.g.
+// BATCH_OPERATION_TYPE_TERMINATE) and their newer disambiguated workflow variants
+// (e.g. BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW) map to the same workflow string.
 func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.BATCH_OPERATION_TYPE_RESET:
-		return strings.ToLower(batchType.String())
-	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
-		return "update_options"
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+		return batcher.BatchTypeTerminateWorkflows
+	case enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW:
+		return batcher.BatchTypeCancelWorkflows
+	case enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW:
+		return batcher.BatchTypeSignalWorkflows
+	case enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
+		return batcher.BatchTypeDeleteWorkflows
+	case enumspb.BATCH_OPERATION_TYPE_RESET, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW:
+		return batcher.BatchTypeResetWorkflows
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS:
+		return batcher.BatchTypeUpdateWorkflowOptions
 	case enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
-		return "unpause_activities"
+		return batcher.BatchTypeUnpauseActivities
 	case enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS:
-		return "update_activity_options"
+		return batcher.BatchTypeUpdateActivitiesOptions
 	case enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY:
-		return "reset_activities"
+		return batcher.BatchTypeResetActivities
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+		return batcher.BatchTypeTerminateActivities
+	case enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+		return batcher.BatchTypeCancelActivities
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		return batcher.BatchTypeDeleteActivities
 	default:
 		return ""
 	}
@@ -6844,24 +6864,46 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 // not have this field and therefore map to BATCH_OPERATION_TYPE_UNSPECIFIED.
 func batchOperationTypeFromString(operationTypeString string) enumspb.BatchOperationType {
 	switch operationTypeString {
-	case batcher.BatchTypeCancel:
-		return enumspb.BATCH_OPERATION_TYPE_CANCEL
-	case batcher.BatchTypeSignal:
-		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
-	case batcher.BatchTypeTerminate:
+	// Workflow batch operations (current, execution-type-explicit strings).
+	case batcher.BatchTypeTerminateWorkflows:
 		return enumspb.BATCH_OPERATION_TYPE_TERMINATE
-	case batcher.BatchTypeDelete:
+	case batcher.BatchTypeCancelWorkflows:
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL
+	case batcher.BatchTypeSignalWorkflows:
+		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
+	case batcher.BatchTypeDeleteWorkflows:
 		return enumspb.BATCH_OPERATION_TYPE_DELETE
-	case batcher.BatchTypeReset:
+	case batcher.BatchTypeResetWorkflows:
 		return enumspb.BATCH_OPERATION_TYPE_RESET
-	case batcher.BatchTypeUpdateOptions:
+	case batcher.BatchTypeUpdateWorkflowOptions:
 		return enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+	// Legacy workflow memo strings written before the workflow/activity suffix
+	// split; still read for backwards compatibility with in-flight/old batches.
+	case "terminate":
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE
+	case "cancel":
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL
+	case "signal":
+		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
+	case "delete":
+		return enumspb.BATCH_OPERATION_TYPE_DELETE
+	case "reset":
+		return enumspb.BATCH_OPERATION_TYPE_RESET
+	case "update_options":
+		return enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+	// Activity batch operations.
 	case batcher.BatchTypeUpdateActivitiesOptions:
 		return enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
 	case batcher.BatchTypeResetActivities:
 		return enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
 	case batcher.BatchTypeUnpauseActivities:
 		return enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
+	case batcher.BatchTypeTerminateActivities:
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY
+	case batcher.BatchTypeCancelActivities:
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY
+	case batcher.BatchTypeDeleteActivities:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY
 	default:
 		return enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 	}

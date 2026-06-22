@@ -67,6 +67,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 	}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 	// Cancel all three activities with a single batch operation.
+	jobID := uuid.NewString()
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{
@@ -76,10 +77,13 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 			},
 		},
 		VisibilityQuery: query,
-		JobId:           uuid.NewString(),
+		JobId:           jobID,
 		Reason:          "test",
 	})
 	s.NoError(err)
+
+	// Describe/List should report the correct operation type for the batch.
+	assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY)
 
 	// All three activities must reach the Canceled status.
 	for _, a := range activities {

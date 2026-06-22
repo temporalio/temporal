@@ -1120,21 +1120,23 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 // TestListBatchOperations verifies that ListBatchOperations surfaces the
 // operation type recorded when the batch operation was started.
 func (s *ClientMiscTestSuite) TestListBatchOperations() {
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+
 	workflowFn := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool { return false })
 	}
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 		ID:                       uuid.NewString(),
-		TaskQueue:                s.TaskQueue(),
+		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 30 * time.Second,
 	}, workflowFn)
 	s.NoError(err)
 
 	jobID := uuid.NewString()
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{},
 		},
@@ -1153,8 +1155,8 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 	// take a moment to become listable.
 	var listed *batchpb.BatchOperationInfo
 	s.Eventually(func() bool {
-		resp, err := s.SdkClient().WorkflowService().ListBatchOperations(context.Background(), &workflowservice.ListBatchOperationsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.SdkClient().WorkflowService().ListBatchOperations(s.Context(), &workflowservice.ListBatchOperationsRequest{
+			Namespace: env.Namespace().String(),
 		})
 		if err != nil {
 			return false
