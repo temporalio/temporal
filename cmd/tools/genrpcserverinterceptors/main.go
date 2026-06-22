@@ -152,7 +152,6 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
 	for nestedRequest := range messageType.Elem().Fields() {
-		nestedRequest := nestedRequest
 		if nestedRequest.Type.Kind() != reflect.Pointer {
 			continue
 		}
