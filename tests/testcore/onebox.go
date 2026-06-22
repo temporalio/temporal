@@ -394,7 +394,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasmModule,
+			chasm.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -490,7 +490,7 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasmModule,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -546,7 +546,7 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasmModule,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -612,7 +612,7 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasmModule,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
