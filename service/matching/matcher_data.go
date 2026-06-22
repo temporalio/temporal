@@ -132,27 +132,28 @@ func taskBTreeLess(a, b *internalTask) bool {
 	}
 	afl := taskFairLevel(a)
 	bfl := taskFairLevel(b)
-	if afl.less(bfl) {
-		return true
+	if afl != bfl {
+		return afl.less(bfl)
 	}
-	if bfl.less(afl) {
-		return false
-	}
-	// Pointer value is unique per live allocation; used as a stable tiebreaker.
+	// Pointer value is unique per live allocation; used as a stable tiebreaker so the
+	// comparator stays a strict total order and btree can identify the exact element to
+	// delete even when effectivePriority and fairLevel tie.
 	return uintptr(unsafe.Pointer(a)) < uintptr(unsafe.Pointer(b))
 }
 
-// taskFairLevel returns the fair level for a task. Safe for tasks with no AllocatedTaskInfo.
+// taskFairLevel returns the fair level for a task. Sync-match, query, and nexus tasks have
+// no event and get the zero fairLevel.
 func taskFairLevel(task *internalTask) fairLevel {
 	if task.event == nil {
 		return fairLevel{}
 	}
-	return fairLevel{pass: task.event.GetTaskPass(), id: task.event.GetTaskId()}
+	return fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo)
 }
 
 func newTaskBTree() taskBTree {
 	return taskBTree{
-		tree: *btree.NewBTreeG(taskBTreeLess),
+		// NoLocks: matcherData does its own synchronization via matcherData.lock.
+		tree: *btree.NewBTreeGOptions(taskBTreeLess, btree.Options{NoLocks: true}),
 		ages: newBacklogAgeTracker(),
 	}
 }
@@ -171,19 +172,6 @@ func (b *taskBTree) Remove(task *internalTask) {
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, -1)
 	}
-}
-
-// popFront removes and returns the highest-priority (minimum) task in one tree pass.
-func (b *taskBTree) popFront() (*internalTask, bool) {
-	task, ok := b.tree.PopMin()
-	if !ok {
-		return nil, false
-	}
-	task.matchHeapIndex = invalidHeapIndex
-	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-		b.ages.record(task.event.Data.CreateTime, -1)
-	}
-	return task, true
 }
 
 func (b *taskBTree) Len() int {
@@ -414,30 +402,21 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// findMatch returns the highest priority task+poller match, removing the task from the
-// queue. Tasks that are skipped (no compatible poller) are temporarily popped and
-// re-inserted before returning, so queue order is preserved.
+// findMatch returns the highest priority task+poller match, or nil if none. The task is
+// not removed from the queue; findAndWakeMatches removes it once the match is finalized.
 // call with lock held
 // nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
-	// skipped accumulates tasks popped but not matched; re-inserted on return.
-	// Stays nil in the common case (minimum task always has a compatible poller),
-	// so no allocation occurs on the hot path.
-	var skipped []*internalTask
-
-	for {
-		task, ok := d.tasks.popFront()
-		if !ok {
-			for _, t := range skipped {
-				d.tasks.Add(t)
-			}
-			return nil, nil
-		}
+	// iterate tasks in priority order. The btree iterator keeps its node stack in an
+	// inline array, so this walk does not allocate.
+	iter := d.tasks.tree.Iter()
+	defer iter.Release()
+	for ok := iter.First(); ok; ok = iter.Next() {
+		task := iter.Item()
 
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
 		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
-			skipped = append(skipped, task)
 			continue
 		}
 
@@ -461,14 +440,10 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
-			for _, t := range skipped {
-				d.tasks.Add(t)
-			}
 			return task, poller
 		}
-
-		skipped = append(skipped, task)
 	}
+	return nil, nil
 }
 
 // call with lock held
@@ -510,12 +485,7 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	now := d.timeSource.Now().UnixNano()
 
 	for {
-		if d.pollers.Len() == 0 {
-			d.rateLimitTimer.unset()
-			return false
-		}
-
-		// search for highest priority match; task is removed from queue when found
+		// search for highest priority match
 		task, poller := d.findMatch(allowForwarding)
 		if task == nil || poller == nil {
 			// no more current matches, stop rate limit timer if was running
@@ -527,10 +497,11 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
-			d.tasks.Add(task) // put back; timer will call match later
-			return true
+			return true // not ready yet, timer will call match later
 		}
 
+		// ready to signal match; remove both task and poller from their queues
+		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 
 		// TODO(pri): maybe we can allow tasks to have costs other than 1
