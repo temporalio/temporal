@@ -976,7 +976,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	}
 
 	archetypeID, _ := m.assertAndConvertArchetypeID(input.ArchetypeID, "AddHistoryTasks")
-	err = m.persistence.AddHistoryTasks(ctx, &InternalAddHistoryTasksRequest{
+	if err = m.persistence.AddHistoryTasks(ctx, &InternalAddHistoryTasksRequest{
 		ShardID: input.ShardID,
 		RangeID: input.RangeID,
 
@@ -985,8 +985,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 		ArchetypeID: archetypeID,
 
 		Tasks: serializedTasks,
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	if hook, ok := testhooks.Get(m.testHooks, testhooks.HistoryTasksWritten, namespace.ID(input.NamespaceID)); ok {
