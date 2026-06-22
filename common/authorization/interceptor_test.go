@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -277,10 +278,8 @@ func (n mockNamespaceChecker) Exists(name namespace.Name) error {
 type multiNamespaceChecker []string
 
 func (m multiNamespaceChecker) Exists(name namespace.Name) error {
-	for _, ns := range m {
-		if ns == string(name) {
-			return nil
-		}
+	if slices.Contains(m, string(name)) {
+		return nil
 	}
 	return errors.New("doesn't exist")
 }

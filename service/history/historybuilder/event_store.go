@@ -1,6 +1,8 @@
 package historybuilder
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
@@ -135,17 +137,10 @@ func (b *EventStore) HasBufferEvents() bool {
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (b *EventStore) HasAnyBufferedEvent(predicate BufferedEventFilter) bool {
-	for _, event := range b.memBufferBatch {
-		if predicate(event) {
-			return true
-		}
+	if slices.ContainsFunc(b.memBufferBatch, predicate) {
+		return true
 	}
-	for _, event := range b.dbBufferBatch {
-		if predicate(event) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(b.dbBufferBatch, predicate)
 }
 
 func (b *EventStore) NumBufferedEvents() int {

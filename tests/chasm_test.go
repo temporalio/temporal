@@ -87,7 +87,6 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 // TODO: Remove once we have fully migrated to the unified query converter.
 func (s *ChasmSuite) forBothConverters(fn func(*ChasmSuite, chasmTestEnv)) {
 	for _, unified := range []bool{false, true} {
-		unified := unified
 		s.Run(fmt.Sprintf("unified=%v", unified), func(ss *ChasmSuite) {
 			fn(ss, newChasmTestEnv(ss.T(), unified))
 		})

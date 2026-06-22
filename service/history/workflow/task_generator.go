@@ -250,10 +250,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
 
-			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
-			if delay > retention {
-				delay = retention
-			}
+			delay := min(backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay()), retention)
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := closedTime.Add(delay)
 

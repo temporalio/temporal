@@ -1546,11 +1546,9 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 		s.NoError(err)
 		backoff := time.Duration(0)
 		if i > 1 {
-			backoff = time.Duration(initialInterval.Seconds()*math.Pow(backoffCoefficient, float64(i-2))) * time.Second
-			// retry backoff cannot larger than MaximumIntervalInSeconds
-			if backoff > time.Second {
-				backoff = time.Second
-			}
+			backoff = min(
+				// retry backoff cannot larger than MaximumIntervalInSeconds
+				time.Duration(initialInterval.Seconds()*math.Pow(backoffCoefficient, float64(i-2)))*time.Second, time.Second)
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
