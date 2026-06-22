@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -126,9 +126,7 @@ func calculateMedian(durations []time.Duration) time.Duration {
 	// Make a copy to avoid modifying original
 	sorted := make([]time.Duration, len(durations))
 	copy(sorted, durations)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i] < sorted[j]
-	})
+	slices.Sort(sorted)
 
 	n := len(sorted)
 	if n%2 == 0 {

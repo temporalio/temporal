@@ -261,16 +261,16 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 	var reportingErrs []error
 	var combined junit.Testsuites
-	combined.XMLName = reports[0].Testsuites.XMLName
-	combined.Name = reports[0].Testsuites.Name
+	combined.XMLName = reports[0].XMLName
+	combined.Name = reports[0].Name
 
 	for i, report := range reports {
-		combined.Tests += report.Testsuites.Tests
-		combined.Errors += report.Testsuites.Errors
-		combined.Failures += report.Testsuites.Failures
-		combined.Skipped += report.Testsuites.Skipped
-		combined.Disabled += report.Testsuites.Disabled
-		combined.Time += report.Testsuites.Time
+		combined.Tests += report.Tests
+		combined.Errors += report.Errors
+		combined.Failures += report.Failures
+		combined.Skipped += report.Skipped
+		combined.Disabled += report.Disabled
+		combined.Time += report.Time
 
 		// If the report is for a retry ...
 		var suffix string
@@ -294,7 +294,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			}
 		}
 
-		for _, suite := range report.Testsuites.Suites {
+		for _, suite := range report.Suites {
 			if len(suite.Testcases) == 0 {
 				continue
 			}

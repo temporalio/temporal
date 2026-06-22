@@ -122,12 +122,10 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	semaphore := NewPrioritySemaphore(1)
 	wg := sync.WaitGroup{}
 	s.True(semaphore.TryAcquire(PriorityHigh, 1))
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		s.waitUntilBlockedInSemaphore(2)
 		semaphore.Release(1)
-		wg.Done()
-	}()
+	})
 	wg.Add(1)
 	lowAcquired := false
 	go func() {

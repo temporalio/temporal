@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -55,13 +56,7 @@ func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
 	}, targetShardIDs)
 
 	targetShardIDs = MapShardID(4, 16, shardID4)
-	found := false
-	for _, targetShardID := range targetShardIDs {
-		if shardID16 == targetShardID {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(targetShardIDs, shardID16)
 	require.True(t, found)
 }
 

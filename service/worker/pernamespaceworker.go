@@ -325,7 +325,8 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 func (w *perNamespaceWorker) handleError(err error) {
 	if err == nil {
 		return
-	} else if err == errNoWorkerNeeded {
+	}
+	if errors.Is(err, errNoWorkerNeeded) {
 		w.stopWorkerAndResetTimer()
 		return
 	}

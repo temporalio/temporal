@@ -223,10 +223,7 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse,
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
-		upper := readLevel + tr.backlogMgr.config.RangeSize
-		if upper > maxReadLevel {
-			upper = maxReadLevel
-		}
+		upper := min(readLevel+tr.backlogMgr.config.RangeSize, maxReadLevel)
 		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
 			return nil, err

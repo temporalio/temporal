@@ -694,7 +694,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		err := convertOutcomeToNexusHandlerError(t)
 		return err
 
@@ -709,7 +709,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }

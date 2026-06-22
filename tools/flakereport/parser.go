@@ -50,8 +50,8 @@ func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
 // For "TestSuiteV0/TestMethod" returns "TestSuiteV0".
 // For "TestFoo" (no slash) returns "TestFoo".
 func topLevelTestName(name string) string {
-	if idx := strings.IndexByte(name, '/'); idx >= 0 {
-		return name[:idx]
+	if before, _, ok := strings.Cut(name, "/"); ok {
+		return before
 	}
 	return name
 }
@@ -301,8 +301,8 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 func filterParentTests(grouped map[string][]TestFailure, testRunCounts map[string]int) {
 	suitePrefix := make(map[string]bool, len(testRunCounts))
 	for name := range testRunCounts {
-		if idx := strings.IndexByte(name, '/'); idx >= 0 {
-			suitePrefix[name[:idx]] = true
+		if before, _, ok := strings.Cut(name, "/"); ok {
+			suitePrefix[before] = true
 		}
 	}
 	for testName := range grouped {

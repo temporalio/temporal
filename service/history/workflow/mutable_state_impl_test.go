@@ -5146,7 +5146,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 }
 
 func (s *mutableStateSuite) TestExecutionInfoClone() {
-	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
+	newInstance := reflect.New(reflect.TypeFor[persistencespb.WorkflowExecutionInfo]()).Interface()
 	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)
 	if !ok {
 		s.T().Fatal("type assertion to *persistencespb.WorkflowExecutionInfo failed")

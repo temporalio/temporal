@@ -151,9 +151,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 			var historyEvents []*historypb.HistoryEvent
 			for _, uwe := range wfEvents {
-				for _, event := range uwe.Events {
-					historyEvents = append(historyEvents, event)
-				}
+				historyEvents = append(historyEvents, uwe.Events...)
 			}
 			writtenHistoryCh <- historyEvents
 			return tests.UpdateWorkflowExecutionResponse, nil
