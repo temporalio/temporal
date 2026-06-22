@@ -296,10 +296,6 @@ func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
 
-func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
-	return c.namespaceRegistries
-}
-
 func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
 		return nil, fmt.Errorf("expected exactly one history host for chasm context, got %d", numHistoryHosts)

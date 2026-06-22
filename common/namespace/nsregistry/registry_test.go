@@ -720,11 +720,11 @@ func (s *registrySuite) TestGetByNameWithoutReadthrough() {
 	registry.Start()
 	defer registry.Stop()
 
-	ns, err := registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
+	_, err := registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 
-	ns, err = registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
+	ns, err := registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
@@ -800,11 +800,11 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 	registry.Start()
 	defer registry.Stop()
 
-	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
+	_, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 
-	ns, err = registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
+	ns, err := registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
 }
