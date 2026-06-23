@@ -25,14 +25,22 @@ var goleakOpts = []goleak.Option{
 	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
 
-	// TODO: gRPC connection goroutines leaked because history/matching
-	// connection pools are not closed on cluster shutdown.
+	// TODO: gRPC connection goroutines leaked because some inter-service client
+	// connection caches are not closed on cluster shutdown. An open
+	// *grpc.ClientConn keeps its own background goroutines alive (the
+	// CallbackSerializer, the transport, and the membership resolver's
+	// listener), so the garbage collector can never reclaim it; the connection
+	// must be closed explicitly. The caches that still hold connections open
+	// past shutdown are the history client's connection pool, the CHASM
+	// history-shard-routed service clients (scheduler/activity/nexus, which
+	// reuse history.NewConnectionPool), and the client bean's frontend/admin
+	// connections. Each needs a deterministic close on shutdown (as the
+	// matching client's connection cache now does) before these ignores can be
+	// removed.
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
 	goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/client/history.watchMembershipForClose[...]"),
-	goleak.IgnoreTopFunction("go.temporal.io/server/client/matching.(*partitionCache).Start.func1"),
-	goleak.IgnoreTopFunction("go.temporal.io/server/client/matching.watchMembershipForEviction"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
 
 	// TODO: worker-service and persistence goroutine leaks.

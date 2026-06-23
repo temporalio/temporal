@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -272,13 +273,26 @@ func ClientFactoryProvider(
 }
 
 func ClientBeanProvider(
+	lc fx.Lifecycle,
 	clientFactory client.Factory,
 	clusterMetadata cluster.Metadata,
 ) (client.Bean, error) {
-	return client.NewClientBean(
+	bean, err := client.NewClientBean(
 		clientFactory,
 		clusterMetadata,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// Deterministically release the bean's clients (daemon goroutines and
+	// cached gRPC connections) on shutdown.
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			bean.Close()
+			return nil
+		},
+	})
+	return bean, nil
 }
 
 func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {

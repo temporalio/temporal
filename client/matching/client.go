@@ -44,6 +44,7 @@ type clientImpl struct {
 	loadBalancer    LoadBalancer
 	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
 	partitionCache  *partitionCache
+	evictionCancel  context.CancelFunc
 }
 
 // NewClient creates a new matching service gRPC client
@@ -76,10 +77,21 @@ func NewClient(
 
 	// Evict cached clients whose host leaves the membership ring.
 	ctx, cancel := context.WithCancel(context.Background())
+	c.evictionCancel = cancel
 	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
 	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
 
 	return c
+}
+
+// Stop deterministically releases the resources started by NewClient: it stops
+// the eviction watcher and partition-cache rotation goroutines and closes every
+// cached gRPC connection. It is safe to call more than once (the runtime
+// cleanups registered in NewClient remain as a GC backstop).
+func (c *clientImpl) Stop() {
+	c.evictionCancel()
+	c.partitionCache.Stop()
+	c.clients.EvictAll()
 }
 
 func watchMembershipForEviction(
