@@ -6,6 +6,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -42,16 +43,40 @@ func routeSystemCallbackRequest(
 			logger.Error("failed to decode completion from token", tag.Error(err))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
-		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
+
+		// Normalize to support two possible token shapes:
+		// - legacy HSM tokens carry namespace/workflow IDs directly
+		// - CHASM tokens carry an encoded component ref instead
+		namespaceID := completion.GetNamespaceId()
+		businessID := completion.GetWorkflowId()
+		if namespaceID == "" && len(completion.GetComponentRef()) > 0 {
+			ref := &persistencespb.ChasmComponentRef{}
+			if err := ref.Unmarshal(completion.GetComponentRef()); err != nil {
+				logger.Error("failed to decode CHASM component ref from callback token", tag.Error(err))
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			}
+			if ref.GetNamespaceId() == "" {
+				logger.Error("decoded CHASM component ref is missing namespace ID")
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			}
+			if ref.GetBusinessId() == "" {
+				logger.Error("decoded CHASM component ref is missing business ID")
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			}
+			namespaceID = ref.GetNamespaceId()
+			businessID = ref.GetBusinessId()
+		}
+
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
 		if err != nil {
-			logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
+			logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
 			var nfe *serviceerror.NamespaceNotFound
 			if errors.As(err, &nfe) {
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", namespaceID)
 			}
 			return nil, commonnexus.ConvertGRPCError(err, false)
 		}
-		clusterName := ns.ActiveClusterName(completion.GetWorkflowId())
+		clusterName := ns.ActiveClusterName(namespace.RoutingKey{ID: businessID})
 		if clusterMetadata.GetCurrentClusterName() == clusterName {
 			frontendClient = localClient
 		} else {

@@ -293,11 +293,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(isValid bool, err error) {
+	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
-		).Times(1).Return(isValid, err)
+		).Times(1).Return(isTaskInTree, isValidByComponent, err)
 	}
 
 	// Mock mutable state.
@@ -349,21 +349,27 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		s.clientBean,
 	).(*transferQueueStandbyTaskExecutor)
 
-	// Validation succeeds, task should retry.
-	expectValidate(true, nil)
+	// Task in tree and valid by component — retry.
+	expectValidate(true, true, nil)
 	resp := transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
-	expectValidate(false, nil)
+	// Task in tree but component says invalid (e.g. code-deployment) — still retry.
+	expectValidate(true, false, nil)
+	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// Task not in tree — replication removed it, drop the physical task.
+	expectValidate(false, false, nil)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
-	// Validation fails, processing should fail.
+	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
-	expectValidate(false, expectedErr)
+	expectValidate(false, false, expectedErr)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
@@ -798,7 +804,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(parentExecution.WorkflowId)).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: parentExecution.WorkflowId})).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
@@ -1289,7 +1295,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	// workflow closed && child started && parent close policy is abandon
 	event, err = mutableState.AddTimeoutWorkflowEvent(
-		mutableState.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -1353,7 +1358,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)

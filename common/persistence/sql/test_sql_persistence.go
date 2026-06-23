@@ -175,7 +175,12 @@ func (s *TestCluster) DropDatabase() {
 func (s *TestCluster) LoadSchema(schemaFile string) {
 	statements, err := p.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
-		s.logger.Fatal("LoadSchema", tag.Error(err))
+		s.logger.Fatal(
+			fmt.Sprintf("LoadSchema %s: %v", schemaFile, err),
+			tag.Error(err),
+			tag.String("database", s.cfg.DatabaseName),
+			tag.String("schema-file", schemaFile),
+		)
 	}
 
 	var db sqlplugin.AdminDB
@@ -197,9 +202,20 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}()
 
-	for _, stmt := range statements {
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
+	}
+
+	for i, stmt := range statements {
 		if err = db.Exec(stmt); err != nil {
-			s.logger.Fatal("LoadSchema", tag.Error(err))
+			s.logger.Fatal(
+				fmt.Sprintf("LoadSchema statement %d for database %s: %v", i, s.cfg.DatabaseName, err),
+				tag.Error(err),
+				tag.String("database", s.cfg.DatabaseName),
+				tag.String("schema-file", schemaFile),
+				tag.Int("statement-index", i),
+				tag.String("statement", stmt),
+			)
 		}
 	}
 	s.logger.Info("loaded schema")

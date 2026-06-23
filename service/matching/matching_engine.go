@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
@@ -67,9 +68,18 @@ import (
 )
 
 const (
-	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
+
+	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
+	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
+	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
+	forwardedPollJitterRatio = 1.0 / 6
+	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
+	// the interval never drops below this value; if the interval is already at or below
+	// this floor, no jitter is applied.
+	forwardedPollMinInterval = common.CriticalLongPollTimeout
 
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
@@ -157,6 +167,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		partitionScalerFactory        PartitionScalerFactory
 		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
@@ -272,6 +283,7 @@ func NewEngine(
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
+	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -316,6 +328,7 @@ func NewEngine(
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
+		partitionScalerFactory:    partitionScalerFactory,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
@@ -532,6 +545,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
 	var nsState string
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
 	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
 		nsState = metrics.ActiveNamespaceStateTagValue
 	} else {
@@ -571,9 +585,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"AddWorkflowTask called with unexpected partition kind") {
+		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
+	}
+
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
@@ -1093,7 +1111,11 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"QueryWorkflow called with unexpected partition kind") {
+		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
+	}
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
@@ -1247,7 +1269,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
-		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !rootPartition.IsRoot() || rootPartition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		userData, err := e.getUserDataClone(ctx, rootPartition, loadCauseDescribe)
@@ -2531,7 +2553,10 @@ func (e *matchingEngineImpl) PollNexusTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.Request
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollNexusTaskQueue for taskQueue", tag.Name(taskQueueName))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2589,7 +2614,7 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
-		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2833,7 +2858,20 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, errNoTasks
 	}
 
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
+	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
+	// interval never falls below forwardedPollMinInterval.
+	longPollInterval := pm.LongPollExpirationInterval()
+	if pollMetadata.forwardedFrom == "" {
+		jitterMax := time.Duration(float64(longPollInterval) * forwardedPollJitterRatio)
+		if longPollInterval-jitterMax < forwardedPollMinInterval {
+			jitterMax = longPollInterval - forwardedPollMinInterval
+		}
+		if jitterMax > 0 {
+			longPollInterval -= backoff.FullJitter(jitterMax)
+		}
+	}
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
@@ -3450,8 +3488,25 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	}
 
 	typedUserData := userData.GetData().GetPerType()[int32(request.GetTaskQueueType())]
-	present := worker_versioning.HasDeploymentVersion(typedUserData.GetDeploymentData(), request.GetVersion())
-	return &matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: present}, nil
+	deploymentData := typedUserData.GetDeploymentData()
+	present := worker_versioning.HasDeploymentVersion(deploymentData, request.GetVersion())
+
+	// Report whether the version is active-or-draining so callers can skip sending
+	// reactivation signals to versions that don't need one (CURRENT/RAMPING/DRAINING —
+	// see worker_versioning.ShouldSkipReactivation). The revision number flows back
+	// so history can compose a cluster-wide-deterministic RequestId on the reactivation
+	// signal for receiver-side dedup.
+	shouldSkipReactivation, revisionNumber := worker_versioning.ShouldSkipReactivation(
+		deploymentData,
+		request.GetVersion().GetDeploymentName(),
+		request.GetVersion().GetBuildId(),
+	)
+
+	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
+		IsMember:               present,
+		ShouldSkipReactivation: shouldSkipReactivation,
+		RevisionNumber:         revisionNumber,
+	}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(

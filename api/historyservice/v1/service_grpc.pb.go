@@ -78,6 +78,7 @@ const (
 	HistoryService_GetWorkflowExecutionRawHistoryV2_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistoryV2"
 	HistoryService_GetWorkflowExecutionRawHistory_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory"
 	HistoryService_ForceDeleteWorkflowExecution_FullMethodName           = "/temporal.server.api.historyservice.v1.HistoryService/ForceDeleteWorkflowExecution"
+	HistoryService_DeleteExecution_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeleteExecution"
 	HistoryService_GetDLQTasks_FullMethodName                            = "/temporal.server.api.historyservice.v1.HistoryService/GetDLQTasks"
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
@@ -295,6 +296,7 @@ type HistoryServiceClient interface {
 	GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(ctx context.Context, in *ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(ctx context.Context, in *DeleteDLQTasksRequest, opts ...grpc.CallOption) (*DeleteDLQTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
@@ -941,6 +943,15 @@ func (c *historyServiceClient) ForceDeleteWorkflowExecution(ctx context.Context,
 	return out, nil
 }
 
+func (c *historyServiceClient) DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error) {
+	out := new(DeleteExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DeleteExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error) {
 	out := new(GetDLQTasksResponse)
 	err := c.cc.Invoke(ctx, HistoryService_GetDLQTasks_FullMethodName, in, out, opts...)
@@ -1300,6 +1311,7 @@ type HistoryServiceServer interface {
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(context.Context, *DeleteDLQTasksRequest) (*DeleteDLQTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
@@ -1572,6 +1584,9 @@ func (UnimplementedHistoryServiceServer) GetWorkflowExecutionRawHistory(context.
 }
 func (UnimplementedHistoryServiceServer) ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceDeleteWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQTasks not implemented")
@@ -2692,6 +2707,24 @@ func _HistoryService_ForceDeleteWorkflowExecution_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_DeleteExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DeleteExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, req.(*DeleteExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_GetDLQTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQTasksRequest)
 	if err := dec(in); err != nil {
@@ -3250,6 +3283,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForceDeleteWorkflowExecution",
 			Handler:    _HistoryService_ForceDeleteWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "DeleteExecution",
+			Handler:    _HistoryService_DeleteExecution_Handler,
 		},
 		{
 			MethodName: "GetDLQTasks",

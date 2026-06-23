@@ -20,14 +20,20 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -37,7 +43,8 @@ type ScheduleMigrationTestSuite struct {
 }
 
 func TestScheduleMigrationTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &ScheduleMigrationTestSuite{})
+	testcore.UseSuiteScopedCluster(t)                                   //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &ScheduleMigrationTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
@@ -81,7 +88,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -138,7 +145,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -164,12 +171,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	// and the V1 activity treats that as success (logs warning, returns nil).
 	// The V1 workflow terminates, but the pre-existing V2 schedule retains
 	// its original state -- the V1 state is not applied.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -199,6 +207,85 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 		},
 	)
 	s.NoError(err)
+}
+
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentinel() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel")
+	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wf")
+	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			nsID,
+			&workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                nsName,
+				WorkflowId:               v1WorkflowID,
+				WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				Identity:                 "test",
+				RequestId:                uuid.NewString(),
+				WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			},
+			nil, nil, time.Now().UTC(),
+		),
+	)
+	s.NoError(err)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+		},
+	)
+	s.NoError(err)
+
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	s.Contains(unavailableErr.Message, "sentinel")
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
@@ -253,7 +340,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -324,6 +411,15 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
+
+	// Custom search attributes and memo must survive the migration.
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	schSAKeyword := payload.EncodeString("v1-to-v2 sa value")
+	schSAInt, err := payload.Encode(2025)
+	s.NoError(err)
+	schMemo := payload.EncodeString("v1-to-v2 memo value")
+
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -341,35 +437,26 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		},
 	}
 
-	// Create the V1 (workflow-backed) scheduler directly.
-	startArgs := &schedulespb.StartScheduleArgs{
-		Schedule: sched,
-		State: &schedulespb.InternalState{
-			Namespace:     nsName,
-			NamespaceId:   nsID,
-			ScheduleId:    sid,
-			ConflictToken: scheduler.InitialConflictToken,
+	// Disable CHASM during creation so CreateSchedule routes to the V1 path.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+	_, err = env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAKeyword,
+				csaInt:     schSAInt,
+			},
 		},
-	}
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+		},
+	})
 	s.NoError(err)
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                nsName,
-		WorkflowId:               v1WorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayloads,
-		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-	}
-	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
-		ctx,
-		common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
-	)
-	s.NoError(err)
 
 	// Wait for the per-namespace worker to pick up the V1 workflow.
 	s.Eventually(func() bool {
@@ -387,15 +474,17 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 			return false
 		}
 		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
 	// Issue migration from V1 to V2.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -417,8 +506,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// V2 schedule should now exist.
-	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+	v2Desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 		ctx,
 		&schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
@@ -426,6 +514,23 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		},
 	)
 	s.NoError(err)
+	v2SA := v2Desc.GetFrontendResponse().GetSearchAttributes().GetIndexedFields()
+	s.Equal(schSAKeyword.Data, v2SA[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, v2SA[csaInt].GetData())
+	s.Equal(schMemo.Data, v2Desc.GetFrontendResponse().GetMemo().GetFields()["schedmemo1"].GetData())
+
+	// Custom SAs must also be queryable on the CHASM visibility record.
+	var listResp *workflowservice.ListSchedulesResponse
+	s.Eventually(func() bool {
+		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       nsName,
+			MaximumPageSize: 10,
+			Query:           "CustomKeywordField = 'v1-to-v2 sa value'",
+		})
+		return err == nil && len(listResp.GetSchedules()) == 1
+	}, 30*time.Second, 500*time.Millisecond)
+	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
+	s.Equal(schSAKeyword.Data, listResp.GetSchedules()[0].GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
@@ -468,8 +573,16 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		},
 	}
 
+	// Custom search attributes and memo must survive the migration.
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	schSAKeyword := payload.EncodeString("v2-to-v1 sa value")
+	schSAInt, err := payload.Encode(2024)
+	s.NoError(err)
+	schMemo := payload.EncodeString("v2-to-v1 memo value")
+
 	// Create CHASM schedule directly.
-	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+	_, err = env.GetTestCluster().SchedulerClient().CreateSchedule(
 		ctx,
 		&schedulerpb.CreateScheduleRequest{
 			NamespaceId: nsID,
@@ -478,7 +591,16 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						csaKeyword: schSAKeyword,
+						csaInt:     schSAInt,
+					},
+				},
+				Memo: &commonpb.Memo{
+					Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+				},
 			},
 		},
 	)
@@ -502,7 +624,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -597,6 +719,24 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		return err == nil && len(listResp.GetSchedules()) == 1
 	}, 30*time.Second, 500*time.Millisecond)
 	s.Equal(sid, listResp.GetSchedules()[0].GetScheduleId())
+
+	// Custom SAs and memo must have carried over to the V1 schedule.
+	s.Equal(schSAKeyword.Data, v1Desc.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, v1Desc.GetSearchAttributes().GetIndexedFields()[csaInt].GetData())
+	s.Equal(schMemo.Data, v1Desc.GetMemo().GetFields()["schedmemo1"].GetData())
+
+	entry := listResp.GetSchedules()[0]
+	s.Equal(schSAKeyword.Data, entry.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+	s.Equal(schSAInt.Data, entry.GetSearchAttributes().GetIndexedFields()[csaInt].GetData())
+
+	filtered, err := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       nsName,
+		MaximumPageSize: 10,
+		Query:           "CustomKeywordField = 'v2-to-v1 sa value'",
+	})
+	s.NoError(err)
+	s.Len(filtered.GetSchedules(), 1)
+	s.Equal(sid, filtered.GetSchedules()[0].GetScheduleId())
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
@@ -642,7 +782,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -654,7 +794,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -664,7 +804,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 }
@@ -813,7 +953,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -825,7 +965,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -949,7 +1089,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 				ScheduleId: sid,
 				Schedule:   schedule,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -1000,7 +1140,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 	)
 	s.ErrorAs(err, &failedPreconditionErr)
 
-	// Delete again is idempotent in CHASM — sets Closed=true again.
+	// Delete on an already-closed CHASM schedule returns ErrClosed.
 	_, err = env.GetTestCluster().SchedulerClient().DeleteSchedule(
 		ctx,
 		&schedulerpb.DeleteScheduleRequest{
@@ -1012,7 +1152,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 			},
 		},
 	)
-	s.NoError(err)
+	s.ErrorAs(err, &failedPreconditionErr)
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
@@ -1056,7 +1196,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  testcore.RandomizeStr("request-id"),
+				RequestId:  uuid.NewString(),
 			},
 		},
 	)
@@ -1095,7 +1235,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                testcore.RandomizeStr("request-id"),
+		RequestId:                uuid.NewString(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -1126,12 +1266,13 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	// Issue migration from V1 to V2. The previously deleted CHASM execution
 	// does not block creation of a new one -- StartExecution succeeds because
 	// closed executions allow reuse of the business ID.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -1173,6 +1314,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	// a CHASM sentinel (which would block the migration activity).
 	env := testcore.NewEnv(
 		t,
+		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithSdkWorker(),
 	)
 
@@ -1192,6 +1334,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		return nil
 	}
 	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Disable CHASM to create V1 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
 
 	// Create a V1 schedule with an immediate trigger.
 	sched := &schedulepb.Schedule{
@@ -1241,8 +1386,10 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		return true
 	}, 15*time.Second, 500*time.Millisecond)
 
-	// Enable CHASM now so the migration activity can create the V2 schedule.
+	// Enable CHASM and migration, allowing it for schedules with running workflows.
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
 
 	// Migrate from V1 to V2 while the workflow is still running.
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
@@ -1250,7 +1397,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  testcore.RandomizeStr("request-id"),
+		RequestId:  uuid.NewString(),
 	})
 	require.NoError(t, err)
 
@@ -1302,4 +1449,859 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		SignalName:        resumeSignal,
 	})
 	require.NoError(t, err)
+}
+
+// TestScheduleMigrationDeferredWithRunningWorkflow verifies that
+// EnableCHASMSchedulerMigrationWithRunningWorkflows gates automatic migration of a
+// V1 schedule that has a running workflow. When the gate is off (default),
+// auto-migration is deferred while a workflow is running (the scheduler keeps
+// running rather than migrating and completing); when the gate is turned on,
+// auto-migration proceeds even with a running workflow.
+func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
+	// Create the env without EnableChasm so that CreateSchedule produces a V1
+	// (workflow-backed) schedule rather than a CHASM sentinel.
+	env := testcore.NewEnv(
+		t,
+		testcore.WithWorkerService("V1 scheduler"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-defer-running")
+	wid := testcore.RandomizeStr("sched-migrate-defer-running-wf")
+	wt := testcore.RandomizeStr("sched-migrate-defer-running-wt")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	// A workflow that blocks until signaled, so it stays running during migration.
+	resumeSignal := "resume"
+	workflowFn := func(ctx workflow.Context) error {
+		ch := workflow.GetSignalChannel(ctx, resumeSignal)
+		ch.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+
+	// Create a V1 schedule with a short interval, so the scheduler iterates often
+	// and re-evaluates the auto-migration decision, and an immediate trigger so it
+	// starts a workflow. SKIP keeps a single workflow running across intervals.
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(2 * time.Second)}},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Wait for the V1 scheduler to start the workflow and record it as running.
+	var runningWfID string
+	require.Eventually(t, func() bool {
+		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		if err != nil || len(descResp.GetInfo().GetRecentActions()) == 0 {
+			return false
+		}
+		a := descResp.Info.RecentActions[0]
+		if a.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return false
+		}
+		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
+		return true
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// Enable CHASM and migration; the running-workflow gate stays off, so only the
+	// running action workflow can defer migration here.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
+
+	// A successful migration completes the V1 scheduler workflow; while migration
+	// is deferred it stays running.
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	v1Migrated := func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}
+
+	// With the gate off, auto-migration is deferred: the scheduler re-evaluates the
+	// decision every interval but keeps running rather than migrating.
+	require.Never(t, v1Migrated, 5*time.Second, 500*time.Millisecond,
+		"migration must be deferred while the schedule has a running workflow and the gate is off")
+
+	// Turn the gate on; auto-migration now proceeds even with the workflow running.
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, true)
+	require.Eventually(t, v1Migrated, 15*time.Second, 500*time.Millisecond,
+		"migration should proceed once the gate allows running workflows")
+
+	// The V2 schedule should now exist.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+
+	// Clean up: signal the running workflow to complete.
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
+		SignalName:        resumeSignal,
+	})
+	require.NoError(t, err)
+}
+
+// TestDeleteScheduleContextMetadata verifies that DeleteSchedule propagates the
+// correct context metadata (workflow-type, workflow-task-queue) for every
+// combination of CHASM and V1 state. This metadata is read by saas-temporal's
+// metering interceptor for action attribution.
+//
+// We assert by reading gRPC response trailers: this test enables the frontend
+// ContextMetadataInterceptor trailer path through startup dynamic config, so
+// any context metadata set during the handler is emitted as trailers that the
+// client can read directly.
+func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendContextMetadataSetTrailer, true),
+	)
+
+	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {
+		sid = testcore.RandomizeStr("sid")
+		wt = testcore.RandomizeStr("wt")
+		tq = testcore.RandomizeStr("tq")
+		sched = &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+		return
+	}
+
+	createCHASMSchedule := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
+		_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+			testcore.NewContext(),
+			&schedulerpb.CreateScheduleRequest{
+				NamespaceId: env.NamespaceID().String(),
+				FrontendRequest: &workflowservice.CreateScheduleRequest{
+					Namespace:  env.Namespace().String(),
+					ScheduleId: sid,
+					Schedule:   sched,
+					Identity:   "test",
+					RequestId:  testcore.RandomizeStr("req"),
+				},
+			},
+		)
+		require.NoError(t, err)
+	}
+
+	createCHASMSentinel := func(t *testing.T, sid string) {
+		_, err := env.GetTestCluster().SchedulerClient().CreateSentinel(
+			testcore.NewContext(),
+			&schedulerpb.CreateSentinelRequest{
+				NamespaceId: env.NamespaceID().String(),
+				Namespace:   env.Namespace().String(),
+				ScheduleId:  sid,
+			},
+		)
+		require.NoError(t, err)
+	}
+
+	createV1Scheduler := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
+		startArgs := &schedulespb.StartScheduleArgs{
+			Schedule: sched,
+			State: &schedulespb.InternalState{
+				Namespace:     env.Namespace().String(),
+				NamespaceId:   env.NamespaceID().String(),
+				ScheduleId:    sid,
+				ConflictToken: scheduler.InitialConflictToken,
+			},
+		}
+		inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+		require.NoError(t, err)
+		_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+			testcore.NewContext(),
+			common.CreateHistoryStartWorkflowRequest(
+				env.NamespaceID().String(),
+				&workflowservice.StartWorkflowExecutionRequest{
+					Namespace:                env.Namespace().String(),
+					WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+					WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+					Input:                    inputPayloads,
+					Identity:                 "test",
+					RequestId:                testcore.RandomizeStr("req"),
+					WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+				},
+				nil, nil, time.Now().UTC(),
+			),
+		)
+		require.NoError(t, err)
+	}
+
+	createV1DummySentinel := func(t *testing.T, sid string) {
+		_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+			testcore.NewContext(),
+			common.CreateHistoryStartWorkflowRequest(
+				env.NamespaceID().String(),
+				&workflowservice.StartWorkflowExecutionRequest{
+					Namespace:                env.Namespace().String(),
+					WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+					WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+					Identity:                 "test",
+					RequestId:                testcore.RandomizeStr("req"),
+					WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+				},
+				nil, nil, time.Now().UTC(),
+			),
+		)
+		require.NoError(t, err)
+	}
+
+	deleteAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
+		var trailer metadata.MD
+		_, err := env.FrontendClient().DeleteSchedule(
+			testcore.NewContext(),
+			&workflowservice.DeleteScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+				Identity:   "test",
+			},
+			grpc.Trailer(&trailer),
+		)
+		require.NoError(t, err)
+		require.Equal(t, []string{expectedWfType}, trailer.Get("workflow-type"),
+			"workflow-type should match the owning stack's metadata")
+		require.Equal(t, []string{expectedTQ}, trailer.Get("workflow-task-queue"),
+			"workflow-task-queue should match the owning stack's metadata")
+	}
+
+	// Subtest: Both stacks have real entries. CHASM metadata wins.
+	s.Run("BothStacks", func(s *ScheduleMigrationTestSuite) {
+		sid, wt, tq, sched := newSched()
+		createCHASMSchedule(s.T(), sid, sched)
+		createV1Scheduler(s.T(), sid, sched)
+		deleteAndAssertMetadata(s.T(), sid, wt, tq)
+	})
+
+	// Subtest: CHASM has real schedule, V1 has dummy sentinel. CHASM metadata wins.
+	s.Run("CHASMOnly_V1Sentinel", func(s *ScheduleMigrationTestSuite) {
+		sid, wt, tq, sched := newSched()
+		createCHASMSchedule(s.T(), sid, sched)
+		createV1DummySentinel(s.T(), sid)
+		deleteAndAssertMetadata(s.T(), sid, wt, tq)
+	})
+
+	// Subtest: CHASM has sentinel, V1 has real scheduler. V1 metadata wins.
+	s.Run("CHASMSentinel_V1Real", func(s *ScheduleMigrationTestSuite) {
+		sid, _, _, sched := newSched()
+		createCHASMSentinel(s.T(), sid)
+		createV1Scheduler(s.T(), sid, sched)
+		deleteAndAssertMetadata(s.T(), sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
+	})
+
+	// Subtest: No CHASM entry, V1 has real scheduler. V1 metadata wins.
+	s.Run("V1Only_NoCHASM", func(s *ScheduleMigrationTestSuite) {
+		sid, _, _, sched := newSched()
+		createV1Scheduler(s.T(), sid, sched)
+		deleteAndAssertMetadata(s.T(), sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
+	})
+
+	// Subtest: CHASM has sentinel, V1 has nothing. Delete returns error.
+	// Metering skips error responses so metadata content is irrelevant.
+	s.Run("CHASMSentinel_V1Gone", func(s *ScheduleMigrationTestSuite) {
+		sid := testcore.RandomizeStr("sid")
+		createCHASMSentinel(s.T(), sid)
+		_, err := env.FrontendClient().DeleteSchedule(
+			testcore.NewContext(),
+			&workflowservice.DeleteScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+				Identity:   "test",
+			},
+		)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
+	})
+
+	// Subtest: Neither stack has the schedule. Delete returns error.
+	s.Run("NeitherStack", func(s *ScheduleMigrationTestSuite) {
+		sid := testcore.RandomizeStr("nonexistent")
+		_, err := env.FrontendClient().DeleteSchedule(
+			testcore.NewContext(),
+			&workflowservice.DeleteScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+				Identity:   "test",
+			},
+		)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
+	})
+}
+
+// TestPatchScheduleContextMetadata verifies that PatchSchedule propagates the
+// correct context metadata for CHASM and V1 schedules.
+func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendContextMetadataSetTrailer, true),
+	)
+
+	newSched := func() (sid, wt, tq string, sched *schedulepb.Schedule) {
+		sid = testcore.RandomizeStr("sid")
+		wt = testcore.RandomizeStr("wt")
+		tq = testcore.RandomizeStr("tq")
+		sched = &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+		return
+	}
+
+	createCHASMSchedule := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
+		_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+			testcore.NewContext(),
+			&schedulerpb.CreateScheduleRequest{
+				NamespaceId: env.NamespaceID().String(),
+				FrontendRequest: &workflowservice.CreateScheduleRequest{
+					Namespace:  env.Namespace().String(),
+					ScheduleId: sid,
+					Schedule:   sched,
+					Identity:   "test",
+					RequestId:  testcore.RandomizeStr("req"),
+				},
+			},
+		)
+		require.NoError(t, err)
+	}
+
+	createV1Scheduler := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
+		startArgs := &schedulespb.StartScheduleArgs{
+			Schedule: sched,
+			State: &schedulespb.InternalState{
+				Namespace:     env.Namespace().String(),
+				NamespaceId:   env.NamespaceID().String(),
+				ScheduleId:    sid,
+				ConflictToken: scheduler.InitialConflictToken,
+			},
+		}
+		inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+		require.NoError(t, err)
+		_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+			testcore.NewContext(),
+			common.CreateHistoryStartWorkflowRequest(
+				env.NamespaceID().String(),
+				&workflowservice.StartWorkflowExecutionRequest{
+					Namespace:                env.Namespace().String(),
+					WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+					WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+					Input:                    inputPayloads,
+					Identity:                 "test",
+					RequestId:                testcore.RandomizeStr("req"),
+					WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+				},
+				nil, nil, time.Now().UTC(),
+			),
+		)
+		require.NoError(t, err)
+	}
+
+	patchAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
+		var trailer metadata.MD
+		_, err := env.FrontendClient().PatchSchedule(
+			testcore.NewContext(),
+			&workflowservice.PatchScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+				Patch:      &schedulepb.SchedulePatch{Pause: "test pause"},
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+			grpc.Trailer(&trailer),
+		)
+		require.NoError(t, err)
+		require.Equal(t, []string{expectedWfType}, trailer.Get("workflow-type"),
+			"workflow-type should match the owning stack's metadata")
+		require.Equal(t, []string{expectedTQ}, trailer.Get("workflow-task-queue"),
+			"workflow-task-queue should match the owning stack's metadata")
+	}
+
+	// CHASM schedule: metadata should reflect the schedule's action target.
+	s.Run("CHASMSchedule", func(s *ScheduleMigrationTestSuite) {
+		sid, wt, tq, sched := newSched()
+		createCHASMSchedule(s.T(), sid, sched)
+		patchAndAssertMetadata(s.T(), sid, wt, tq)
+	})
+
+	// V1 schedule: metadata should reflect the V1 scheduler workflow.
+	s.Run("V1Schedule", func(s *ScheduleMigrationTestSuite) {
+		sid, _, _, sched := newSched()
+		createV1Scheduler(s.T(), sid, sched)
+		patchAndAssertMetadata(s.T(), sid, scheduler.WorkflowType, primitives.PerNSWorkerTaskQueue)
+	})
+
+	// CHASM sentinel with no V1 workflow: patch should fail.
+	s.Run("CHASMSentinel_V1Gone", func(s *ScheduleMigrationTestSuite) {
+		sid := testcore.RandomizeStr("sid")
+		_, err := env.GetTestCluster().SchedulerClient().CreateSentinel(
+			testcore.NewContext(),
+			&schedulerpb.CreateSentinelRequest{
+				NamespaceId: env.NamespaceID().String(),
+				Namespace:   env.Namespace().String(),
+				ScheduleId:  sid,
+			},
+		)
+		s.NoError(err)
+
+		_, err = env.FrontendClient().PatchSchedule(
+			testcore.NewContext(),
+			&workflowservice.PatchScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+				Patch:      &schedulepb.SchedulePatch{Pause: "test"},
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			},
+		)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.NotContains(notFoundErr.Message, "sentinel",
+			"sentinel error should not leak to the client")
+	})
+}
+
+// TestScheduleMigration_StaleRunningDoesNotSkipPending guards the race fix in
+// CreateSchedulerFromMigration. Without the fix, a "running" BufferedStart
+// migrated from V1 (RunId set, Completed=nil, HasCallback=false) is treated as
+// live by InvokerProcessBufferTask if it fires before SchedulerCallbacksTask
+// has a chance to refresh it. With SCHEDULE_OVERLAP_POLICY_SKIP that causes a
+// concurrently-pending start to be silently dropped (Info.OverlapSkipped++).
+//
+// The test sends a tailored CreateFromMigrationStateRequest directly to the
+// CHASM scheduler API, bypassing V1 and the migration activity:
+//   - One pending BufferedStart for a recent nominal time.
+//   - One stale "running" BufferedStart whose underlying workflow has already
+//     completed by the time the request is sent.
+//
+// SchedulerCallbacksTask must run first, observe the workflow as completed,
+// stamp Completed, and only then fire ProcessBuffer (which then sees
+// isRunning=false and does not apply SKIP).
+func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-stale-running")
+	pendingWid := testcore.RandomizeStr("sched-stale-running-pending-wf")
+	runningWid := testcore.RandomizeStr("sched-stale-running-running-wf")
+	wt := testcore.RandomizeStr("sched-stale-running-wt")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	workflowFn := func(workflow.Context) error { return nil }
+	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Start the workflow that will appear as a stale "running" entry in the
+	// migration state, and wait for it to complete.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    nsName,
+		WorkflowId:   runningWid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+	runningRunID := startResp.GetRunId()
+	require.Eventually(t, func() bool {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWid, RunId: runningRunID},
+		})
+		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 200*time.Millisecond)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   pendingWid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			CatchupWindow: durationpb.New(time.Hour),
+		},
+	}
+
+	// Two BufferedStarts:
+	//   - Pending (Attempt=0, no RunId): SKIP-eligible if isRunning=true.
+	//   - Running (Attempt=1, RunId set, Completed=nil, HasCallback=false):
+	//     mirrors convertRunningWorkflowsToBufferedStarts, but the underlying
+	//     workflow has already finished -- the stale state SchedulerCallbacksTask
+	//     must refresh before ProcessBuffer runs.
+	now := time.Now().UTC()
+	pendingNominal := now.Add(-30 * time.Second)
+	state := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			Schedule:      sched,
+			Info:          &schedulepb.ScheduleInfo{},
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+		GeneratorState: &schedulerpb.GeneratorState{
+			LastProcessedTime: timestamppb.New(now),
+		},
+		InvokerState: &schedulerpb.InvokerState{
+			LastProcessedTime: timestamppb.New(now),
+			BufferedStarts: []*schedulespb.BufferedStart{
+				{
+					NominalTime:   timestamppb.New(pendingNominal),
+					ActualTime:    timestamppb.New(pendingNominal),
+					RequestId:     "sched-migrated-pending-" + uuid.NewString(),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					WorkflowId:    pendingWid + "-" + pendingNominal.Format(time.RFC3339Nano),
+					Attempt:       0,
+				},
+				{
+					NominalTime:   timestamppb.New(now),
+					ActualTime:    timestamppb.New(now),
+					StartTime:     timestamppb.New(now),
+					RequestId:     "sched-migrated-running-" + runningRunID,
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					WorkflowId:    runningWid,
+					RunId:         runningRunID,
+					Attempt:       1,
+					HasCallback:   false,
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State:       state,
+		},
+	)
+	require.NoError(t, err)
+
+	// Wait for both actions to surface in RecentActions:
+	//   - The original running workflow, refreshed to Completed by
+	//     SchedulerCallbacksTask.
+	//   - The pending start, kicked off by ProcessBuffer once isRunning
+	//     resolves to false, then run to completion by the SDK worker.
+	var lastDesc *schedulerpb.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		lastDesc = desc
+		return len(desc.GetFrontendResponse().GetInfo().GetRecentActions()) >= 2
+	}, 30*time.Second, 500*time.Millisecond, "expected both running and pending starts to surface in RecentActions")
+
+	// Load-bearing assertion: the pending start must NOT have been dropped
+	// under SKIP overlap policy.
+	require.Equal(t, int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
+		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
+}
+
+// TestScheduleMigrationRolloutPercent verifies that
+// CHASMSchedulerMigrationRolloutPercent gates per-schedule migration once
+// EnableCHASMSchedulerMigration is on: at 50%, two V1 schedules whose IDs
+// bucket on opposite sides of the rollout end up on different stacks — one
+// migrates and the other stays on V1.
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
+	t := s.T()
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerMigrationRolloutPercent, 50),
+	)
+
+	ctx := testcore.NewContext()
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	migrateSID, stayV1SID := testcore.PickRolloutSplit(t, nsName, 50)
+
+	mkSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   testcore.RandomizeStr("wid"),
+						WorkflowType: &commonpb.WorkflowType{Name: testcore.RandomizeStr("wt")},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr("tq"), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+	}
+
+	// Start each schedule directly as a V1 workflow, mirroring the pattern in
+	// TestScheduleMigrationDynamicConfig.
+	startV1 := func(sid string) {
+		startArgs := &schedulespb.StartScheduleArgs{
+			Schedule: mkSchedule(),
+			State: &schedulespb.InternalState{
+				Namespace:     nsName,
+				NamespaceId:   nsID,
+				ScheduleId:    sid,
+				ConflictToken: scheduler.InitialConflictToken,
+			},
+		}
+		inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+		require.NoError(t, err)
+		startReq := &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:                nsName,
+			WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+			WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			Input:                    inputPayloads,
+			Identity:                 "test",
+			RequestId:                uuid.NewString(),
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		}
+		_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+			ctx,
+			common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
+		)
+		require.NoError(t, err)
+	}
+	startV1(migrateSID)
+	startV1(stayV1SID)
+
+	v1Status := func(sid string) enumspb.WorkflowExecutionStatus {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+				},
+			},
+		)
+		if err != nil {
+			return enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
+		}
+		return desc.GetWorkflowExecutionInfo().GetStatus()
+	}
+
+	// The accepted schedule's V1 workflow should complete (migrate to CHASM).
+	require.Eventually(t, func() bool {
+		return v1Status(migrateSID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, 500*time.Millisecond, "schedule %q should migrate to CHASM", migrateSID)
+
+	// And its CHASM-side description should be present.
+	_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     nsID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: migrateSID},
+	})
+	require.NoError(t, err)
+
+	// The rejected schedule's V1 workflow should remain running, and the CHASM
+	// handler should still report NotFound. Re-checked over a window to ensure
+	// the negative state is stable rather than racing a delayed migration.
+	require.Never(t, func() bool {
+		return v1Status(stayV1SID) == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 1*time.Second, "schedule %q must not migrate while outside the rollout cohort", stayV1SID)
+
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     nsID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: stayV1SID},
+	})
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr,
+		"schedule %q rejected by the rollout must not appear on the CHASM handler", stayV1SID)
+
+	// And the schedule should still be reachable through the public frontend.
+	require.Eventually(t, func() bool {
+		_, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: stayV1SID,
+		})
+		return err == nil
+	}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for V1 schedule %q", stayV1SID)
+}
+
+func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
+	// Use a very short idle time so the schedule closes quickly once the generator
+	// determines there's nothing to do (empty spec → no next wakeup time → idle).
+	shortIdleTime := 500 * time.Millisecond
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.IdleTime = shortIdleTime
+
+	env := testcore.NewEnv(
+		t,
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-no-running")
+	wid := testcore.RandomizeStr("sched-migrate-no-running-wf")
+	wt := testcore.RandomizeStr("sched-migrate-no-running-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	_, err := env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State: &schedulerpb.SchedulerMigrationState{
+				SchedulerState: &schedulerpb.SchedulerState{
+					Namespace:   nsName,
+					NamespaceId: nsID,
+					ScheduleId:  sid,
+					// Empty spec: the generator runs, finds no future actions,
+					// and schedules an idle task.
+					Schedule: &schedulepb.Schedule{
+						Spec: &schedulepb.ScheduleSpec{},
+						Action: &schedulepb.ScheduleAction{
+							Action: &schedulepb.ScheduleAction_StartWorkflow{
+								StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+									WorkflowId:   wid,
+									WorkflowType: &commonpb.WorkflowType{Name: wt},
+									TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+								},
+							},
+						},
+					},
+					Info:          &schedulepb.ScheduleInfo{},
+					ConflictToken: scheduler.InitialConflictToken,
+				},
+				GeneratorState: &schedulerpb.GeneratorState{
+					LastProcessedTime: timestamppb.Now(),
+				},
+				// No BufferedStarts: the common migration scenario — schedule was idle.
+				InvokerState: &schedulerpb.InvokerState{},
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	descReq := &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     nsID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+	}
+
+	// Confirm the schedule is live on the CHASM stack before polling for closure.
+	await.Require(testcore.NewContext(), t, func(t *await.T) {
+		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
+		require.NoError(t, err)
+	}, 6*time.Second, 100*time.Millisecond)
+
+	// If generator.Generate() was never called, the idle task is never scheduled
+	// and the schedule stays open indefinitely. Closing proves the generator ran.
+	var closedErr *serviceerror.FailedPrecondition
+	await.Require(testcore.NewContext(), t, func(t *await.T) {
+		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
+		require.ErrorAs(t, err, &closedErr)
+	}, 6*time.Second, 100*time.Millisecond)
 }

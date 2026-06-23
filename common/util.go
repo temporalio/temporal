@@ -319,6 +319,8 @@ func IsServiceClientTransientError(err error) bool {
 		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 	case *serviceerrors.ShardOwnershipLost:
 		return true
+	case *serviceerrors.StalePartitionCounts:
+		return true
 	default:
 		return false
 	}
@@ -440,10 +442,7 @@ func VerifyShardIDMapping(
 		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
 			thisShardCount, thatShardCount))
 	}
-	shardCountMin := thisShardCount
-	if shardCountMin > thatShardCount {
-		shardCountMin = thatShardCount
-	}
+	shardCountMin := min(thisShardCount, thatShardCount)
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}

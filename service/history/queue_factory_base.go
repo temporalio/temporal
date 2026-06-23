@@ -226,9 +226,17 @@ func NewHostRateLimiterRateFn(
 			return float64(maxPollHostRps)
 		}
 
-		// ensure queue loading won't consume all persistence tokens
-		// especially upon host restart when we need to perform a load
-		// for all shards
-		return float64(persistenceMaxRPS()) * persistenceMaxRPSRatio
+		if pMaxRPS := persistenceMaxRPS(); pMaxRPS > 0 {
+			// ensure queue loading won't consume all persistence tokens
+			// especially upon host restart when we need to perform a load
+			// for all shards
+			return float64(pMaxRPS) * persistenceMaxRPSRatio
+		}
+
+		// persistenceMaxQPS=0 means "unlimited" — use a high default to avoid
+		// producing a zero rate which would block all queue readers.
+		// NOTE: Do not use math.MaxFloat64 here; int(math.MaxFloat64) overflows
+		// to math.MinInt64, which breaks burst calculation in the rate limiter.
+		return 100_000
 	}
 }

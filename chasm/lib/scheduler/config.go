@@ -3,6 +3,8 @@ package scheduler
 import (
 	"time"
 
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
@@ -16,15 +18,42 @@ type (
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
 		IdleTime                          time.Duration // How long to keep schedules after they're done
+		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
+		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
 	}
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
 	Config struct {
-		Tweakables         dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
-		ServiceCallTimeout dynamicconfig.DurationPropertyFn
-		RetryPolicy        func() backoff.RetryPolicy
+		Tweakables                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+		ServiceCallTimeout              dynamicconfig.DurationPropertyFn
+		RetryPolicy                     func() backoff.RetryPolicy
+		EncodeInternalTokenWithEnvelope dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
+
+// tweakablesCtxKey keys the namespace-filtered Tweakables accessor that scheduler
+// components read via the CHASM context (registered in Library.Components).
+type tweakablesCtxKeyType struct{}
+
+var tweakablesCtxKey = tweakablesCtxKeyType{}
+
+// tweakablesFromContext returns the scheduler Tweakables for the context's namespace,
+// falling back to DefaultTweakables when no config is registered.
+func tweakablesFromContext(ctx chasm.Context) Tweakables {
+	if fn, ok := ctx.Value(tweakablesCtxKey).(dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]); ok && fn != nil {
+		return fn(ctx.NamespaceEntry().Name().String())
+	}
+	return DefaultTweakables
+}
+
+// contextValues builds the CHASM context values exposed to scheduler components.
+func (c *Config) contextValues() map[any]any {
+	var tweakables dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+	if c != nil {
+		tweakables = c.Tweakables
+	}
+	return map[any]any{tweakablesCtxKey: tweakables}
+}
 
 var (
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
@@ -63,13 +92,16 @@ var (
 		CanceledTerminatedCountAsFailures: false,
 		MaxActionsPerExecution:            5,
 		IdleTime:                          7 * 24 * time.Hour,
+		EventLogMaxEntries:                30,
+		EventLogMaxMessageLen:             1000,
 	}
 )
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Tweakables:         CurrentTweakables.Get(dc),
-		ServiceCallTimeout: ServiceCallTimeout.Get(dc),
+		Tweakables:                      CurrentTweakables.Get(dc),
+		ServiceCallTimeout:              ServiceCallTimeout.Get(dc),
+		EncodeInternalTokenWithEnvelope: callback.EncodeInternalTokenWithEnvelope.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

@@ -2,14 +2,19 @@ package primitives
 
 import (
 	"fmt"
+	"strings"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 )
 
 // all internal task queues shall be defined here such that we enhance security on top of them
 const (
-	DefaultWorkerTaskQueue = "default-worker-tq"
-	PerNSWorkerTaskQueue   = "temporal-sys-per-ns-tq"
+	DefaultWorkerTaskQueue               = "default-worker-tq"
+	PerNSWorkerTaskQueue                 = "temporal-sys-per-ns-tq"
+	WorkerControllerPerNSWorkerTaskQueue = "temporal-sys-worker-controller-per-ns-tq"
+	internalTaskQueuePrefix              = "temporal-sys-"
+	internalTaskQueuePerNSPrefix         = "temporal-sys-per-ns-"
 
 	MigrationActivityTQ           = "temporal-sys-migration-activity-tq"
 	AddSearchAttributesActivityTQ = "temporal-sys-add-search-attributes-activity-tq"
@@ -17,8 +22,30 @@ const (
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
 )
 
+// IsInternalTaskQueueKind returns true if the task queue kind identifies a
+// server-internal task queue (e.g. worker commands queues).
+// All kinds are listed explicitly so that adding a new kind produces a compile error.
+func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
+	switch kind {
+	case enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS:
+		return true
+	case enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		enumspb.TASK_QUEUE_KIND_STICKY:
+		return false
+	}
+	return false
+}
+
+// IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue.
+func IsInternalTaskQueue(taskQueue string) bool {
+	return strings.HasPrefix(taskQueue, internalTaskQueuePrefix)
+}
+
+// IsInternalPerNsTaskQueue returns true if the task queue name belongs to a per-namespace internal system worker
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
-	return taskQueue == PerNSWorkerTaskQueue
+	// TODO: remove WorkerControllerPerNSWorkerTaskQueue once it has been updated to match the prefix
+	return strings.HasPrefix(taskQueue, internalTaskQueuePerNSPrefix) || taskQueue == WorkerControllerPerNSWorkerTaskQueue
 }
 
 // CheckInternalPerNsTaskQueueAllowed tries to block the usage of internal per-namespace task queue for illegal cases.

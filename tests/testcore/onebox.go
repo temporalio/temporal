@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math/rand"
@@ -15,14 +16,9 @@ import (
 	"time"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -47,12 +43,13 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/grpcinject"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -67,22 +64,13 @@ import (
 
 type (
 	TemporalImpl struct {
+		clients
 		fxApps []*fx.App
 
 		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
 		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
-		chasmEngine               chasm.Engine
-		chasmVisibilityMgr        chasm.VisibilityManager
-
-		// These are routing/load balancing clients but do not do retries:
-		adminClient     adminservice.AdminServiceClient
-		frontendClient  workflowservice.WorkflowServiceClient
-		operatorClient  operatorservice.OperatorServiceClient
-		historyClient   historyservice.HistoryServiceClient
-		matchingClient  matchingservice.MatchingServiceClient
-		schedulerClient schedulerpb.SchedulerServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
 		testHooks                        testhooks.TestHooks
@@ -107,6 +95,7 @@ type (
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		dcRedirectionPolicy              config.DCRedirectionPolicy
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -116,11 +105,12 @@ type (
 		callbackLock              sync.RWMutex // Must be used for above callbacks
 		serviceFxOptions          map[primitives.ServiceName][]fx.Option
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
-		chasmRegistry             *chasm.Registry
-		grpcClientInterceptor     *grpcinject.Interceptor
+		chasmEngine               chasm.Engine
+		chasmVisibilityMgr        chasm.VisibilityManager
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		tokenProvider             auth.TokenProvider
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -169,6 +159,7 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		DCRedirectionPolicy              config.DCRedirectionPolicy
 		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -177,6 +168,7 @@ type (
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider            auth.TokenProvider
 	}
 
 	listenHostPort string
@@ -184,11 +176,6 @@ type (
 )
 
 const NamespaceCacheRefreshInterval = time.Second
-
-var chasmFxOptions = fx.Options(
-	temporal.ChasmLibraryOptions,
-	chasmtests.Module,
-)
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
@@ -214,6 +201,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		dcRedirectionPolicy:              params.DCRedirectionPolicy,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -221,25 +209,32 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 		hostsByProtocolByService:         params.HostsByProtocolByService,
-		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		tokenProvider:                    params.TokenProvider,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
+	impl.clients = newClients(
+		impl.logger,
+		impl.hostsByProtocolByService[grpcProtocol],
+		impl.tlsConfigProvider,
+	)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
 	for k, v := range defaultDynamicConfigOverrides {
-		impl.dcClient.PartialOverrideValue(k, v)
+		impl.overrideDynamicConfigForClusterLifetime(k, v)
 	}
+	// Override Nexus callback URL. This is parameterized on the frontend's HTTP address,
+	// so it can't be overriden in the loop above.
+	impl.setNexusCallbackURL()
 	// Per-test overrides: cleaned up when the creating test finishes.
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
-
 	return impl
 }
 
@@ -261,8 +256,10 @@ func (c *TemporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	slices.Reverse(c.fxApps) // less log spam if we go backwards
 	var errs []error
+	errs = append(errs, c.close()...)
+
+	slices.Reverse(c.fxApps) // less log spam if we go backwards
 	for _, app := range c.fxApps {
 		errs = append(errs, app.Stop(ctx))
 	}
@@ -297,30 +294,6 @@ func (c *TemporalImpl) WorkerGRPCAddress() string {
 	return c.hostsByProtocolByService[grpcProtocol][primitives.WorkerService].All[0]
 }
 
-func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
-	return c.adminClient
-}
-
-func (c *TemporalImpl) OperatorClient() operatorservice.OperatorServiceClient {
-	return c.operatorClient
-}
-
-func (c *TemporalImpl) FrontendClient() workflowservice.WorkflowServiceClient {
-	return c.frontendClient
-}
-
-func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
-	return c.historyClient
-}
-
-func (c *TemporalImpl) MatchingClient() matchingservice.MatchingServiceClient {
-	return c.matchingClient
-}
-
-func (c *TemporalImpl) SchedulerClient() schedulerpb.SchedulerServiceClient {
-	return c.schedulerClient
-}
-
 func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
@@ -329,15 +302,16 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 	return c.namespaceRegistries
 }
 
-func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
+func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
-		return nil, fmt.Errorf("expected exactly one host for chasm engine, got %d", numHistoryHosts)
+		return nil, fmt.Errorf("expected exactly one history host for chasm context, got %d", numHistoryHosts)
 	}
-	return c.chasmEngine, nil
-}
-
-func (c *TemporalImpl) ChasmVisibilityManager() chasm.VisibilityManager {
-	return c.chasmVisibilityMgr
+	if c.chasmEngine == nil || c.chasmVisibilityMgr == nil {
+		return nil, errors.New("chasm context is not available")
+	}
+	ctx = chasm.NewEngineContext(ctx, c.chasmEngine)
+	ctx = chasm.NewVisibilityManagerContext(ctx, c.chasmVisibilityMgr)
+	return ctx, nil
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
@@ -355,11 +329,7 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	// steal these references from one frontend, it doesn't matter which
-	var rpcFactory common.RPCFactory
-	var historyRawClient resource.HistoryRawClient
 	var matchingRawClient resource.MatchingRawClient
-	var schedulerClient schedulerpb.SchedulerServiceClient
 	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
@@ -374,12 +344,11 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
-			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() config.DCRedirectionPolicy { return c.dcRedirectionPolicy }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -422,10 +391,10 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &schedulerClient, &grpcResolver),
+			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
-			chasmFxOptions,
+			chasm.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -434,22 +403,13 @@ func (c *TemporalImpl) startFrontend() {
 
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		// TODO: create matching client without reaching into fx graph
+		c.matching.client = matchingRawClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
 		}
 	}
-
-	// This connection/clients uses membership to find frontends and load-balance among them.
-	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
-	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
-	c.adminClient = adminservice.NewAdminServiceClient(connection)
-	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
-
-	// We also set the history, matching, and scheduler clients here, stealing them from one of the frontends.
-	c.historyClient = historyRawClient
-	c.matchingClient = matchingRawClient
-	c.schedulerClient = schedulerClient
 
 	// Address for SDKs
 	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
@@ -457,6 +417,15 @@ func (c *TemporalImpl) startFrontend() {
 
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
+
+	testhooks.NewHook(testhooks.HistoryChasmRuntimeProvider, func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		_ *chasm.Registry,
+	) {
+		c.chasmEngine = chasmEngine
+		c.chasmVisibilityMgr = chasmVisibilityManager
+	}).Apply(c.testHooks, testhooks.GlobalScope)
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
@@ -475,7 +444,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Provide(c.GetGrpcClientInterceptor),
 			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
 				// Wrap ExecutionManager with recorder to capture task writes
 				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
@@ -522,11 +490,8 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
-			chasmFxOptions,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
-			fx.Populate(&c.chasmEngine),
-			fx.Populate(&c.chasmVisibilityMgr),
-			fx.Populate(&c.chasmRegistry),
 		)
 		err := app.Err()
 		if err != nil {
@@ -560,7 +525,6 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -582,7 +546,7 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
-			chasmFxOptions,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -626,7 +590,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -649,7 +612,7 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
-			chasmFxOptions,
+			chasm.Module,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -701,16 +664,8 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return nil
 }
 
-func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
-	return c.grpcClientInterceptor
-}
-
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
-}
-
-func (c *TemporalImpl) GetCHASMRegistry() *chasm.Registry {
-	return c.chasmRegistry
 }
 
 func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
@@ -744,6 +699,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 				},
 			},
 		},
+		DCRedirectionPolicy: c.dcRedirectionPolicy,
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -757,6 +713,7 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 				RPC: config.RPC{},
 			},
 		},
+		DCRedirectionPolicy: config.DCRedirectionPolicy{},
 		ExporterConfig: telemetry.ExportConfig{
 			CustomExporters: c.spanExporters,
 		},
@@ -771,7 +728,6 @@ func (c *TemporalImpl) newRPCFactory(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	monitor membership.Monitor,
 	tracingStatsHandler telemetry.ClientStatsHandler,
-	grpcClientInterceptor *grpcinject.Interceptor,
 	httpPort httpPort,
 	metricsHandler metrics.Handler,
 ) (common.RPCFactory, error) {
@@ -793,13 +749,7 @@ func (c *TemporalImpl) newRPCFactory(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-	if grpcClientInterceptor != nil {
-		options = append(options,
-			grpc.WithChainUnaryInterceptor(grpcClientInterceptor.Unary()),
-			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
-		)
-	}
-	// Add replication stream recorder interceptor
+	// Add replication stream recorder injector
 	if c.replicationStreamRecorder != nil {
 		options = append(options,
 			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
@@ -825,8 +775,9 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
-		map[primitives.ServiceName][]grpc.DialOption{},
+		resource.PerServiceDialOptionsProvider(logger),
 		monitor,
+		c.tokenProvider,
 	), nil
 }
 
@@ -942,6 +893,20 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 	} else if err = json.Unmarshal(b, &newCfg); err != nil {
 		panic("copy persistence config: " + err.Error())
 	}
+
+	// Preserve fault injection injectors after the JSON copy.
+	for name, dataStore := range cfg.DataStores {
+		if dataStore.FaultInjection == nil {
+			continue
+		}
+		newDataStore := newCfg.DataStores[name]
+		if newDataStore.FaultInjection == nil {
+			newDataStore.FaultInjection = &config.FaultInjection{}
+		}
+		newDataStore.FaultInjection.Injector = dataStore.FaultInjection.Injector
+		newCfg.DataStores[name] = newDataStore
+	}
+
 	return newCfg
 }
 
@@ -966,6 +931,22 @@ func sdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+}
+
+func (c *TemporalImpl) setNexusCallbackURL() {
+	// Set Nexus callback URL with the cluster's HTTP address. This is a sensible default to avoid
+	// users to need to manually set this.
+	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests
+	nexusCallbackTemplate := fmt.Sprintf(
+		"http://%s/namespaces/{{.NamespaceName}}/nexus/callback",
+		c.FrontendHTTPAddress(),
+	)
+	c.overrideDynamicConfigForClusterLifetime(nexusoperations.CallbackURLTemplate.Key(), nexusCallbackTemplate)
+	c.overrideDynamicConfigForClusterLifetime(chasmnexus.CallbackURLTemplate.Key(), nexusCallbackTemplate)
+}
+
+func (c *TemporalImpl) overrideDynamicConfigForClusterLifetime(name dynamicconfig.Key, value any) {
+	c.dcClient.PartialOverrideValue(name, value)
 }
 
 // overrideDynamicConfigForTest overrides a dynamic config value for the duration of the test.

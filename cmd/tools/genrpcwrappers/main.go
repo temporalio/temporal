@@ -43,22 +43,22 @@ var (
 	services = []service{
 		{
 			name:            "frontend",
-			clientType:      reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*workflowservice.WorkflowServiceClient](),
 			clientGenerator: generateFrontendOrAdminClient,
 		},
 		{
 			name:            "admin",
-			clientType:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*adminservice.AdminServiceClient](),
 			clientGenerator: generateFrontendOrAdminClient,
 		},
 		{
 			name:            "history",
-			clientType:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*historyservice.HistoryServiceClient](),
 			clientGenerator: generateHistoryClient,
 		},
 		{
 			name:            "matching",
-			clientType:      reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*matchingservice.MatchingServiceClient](),
 			clientGenerator: generateMatchingClient,
 		},
 	}
@@ -98,12 +98,17 @@ var (
 		"client.matching.PollActivityTaskQueue": true,
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,
+		"client.matching.DispatchNexusTask":     true,
+		"client.matching.PollNexusTaskQueue":    true,
+
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,
 		"metricsClient.matching.PollActivityTaskQueue": true,
 		"metricsClient.matching.PollWorkflowTaskQueue": true,
 		"metricsClient.matching.QueryWorkflow":         true,
+		"metricsClient.matching.DispatchNexusTask":     true,
+		"metricsClient.matching.PollNexusTaskQueue":    true,
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
@@ -167,8 +172,8 @@ func findNestedField(t reflect.Type, name string, path string, maxDepth int) []f
 		return nil
 	}
 	var out []fieldWithPath
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		if ignoreField[t.Name()+"."+f.Name] {
 			continue
 		}
@@ -324,6 +329,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ReplicateTaskQueueUserDataRequest",
 		"RecordWorkerHeartbeatRequest",
 		"ListWorkersRequest",
+		"CountWorkersRequest",
 		"DescribeWorkerRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "\"not-applicable\""}
@@ -379,7 +385,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	if tq.found() && tqt.found() {
 		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		// Some task queue fields are full messages, some are just strings
-		isTaskQueueMessage := tq.field != nil && tq.field.Type == reflect.TypeOf((*taskqueuepb.TaskQueue)(nil))
+		isTaskQueueMessage := tq.field != nil && tq.field.Type == reflect.TypeFor[*taskqueuepb.TaskQueue]()
 		if !isTaskQueueMessage {
 			partitionMaker = fmt.Sprintf("tqid.NormalPartitionFromRpcName(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		}
@@ -445,8 +451,8 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 
 func writeTemplatedMethods(w io.Writer, service service, impl string, tmpl string) {
 	sType := service.clientType.Elem()
-	for n := 0; n < sType.NumMethod(); n++ {
-		writeTemplatedMethod(w, service, impl, sType.Method(n), tmpl)
+	for method := range sType.Methods() {
+		writeTemplatedMethod(w, service, impl, method, tmpl)
 	}
 }
 

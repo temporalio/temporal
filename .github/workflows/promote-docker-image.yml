@@ -21,6 +21,9 @@ on:
       DOCKERHUB_TOKEN:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   validate-inputs:
     runs-on: ubuntu-latest
@@ -30,7 +33,7 @@ jobs:
     steps:
       - name: Validate input tags
         id: validate
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SOURCE_TAG: ${{ inputs.source-tag }}
           TARGET_TAGS: ${{ inputs.target-tags }}
@@ -83,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -94,7 +97,7 @@ jobs:
           sudo mv crane /usr/local/bin/
 
       - name: Promote image
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
           TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}
