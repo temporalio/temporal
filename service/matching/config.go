@@ -46,8 +46,8 @@ type (
 		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		FairReaderWritePathRecovery              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-		FairReaderWritePathRecoveryPartition     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForceReadTasksOnWrite              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		ForceReadTasksOnWritePartition     dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -167,8 +167,8 @@ type (
 		AutoEnableV2Sub                      func(func(bool)) (bool, func())
 		GetTasksBatchSize                    func() int
 		GetTasksReloadAt                     func() int
-		FairReaderWritePathRecovery          func() bool
-		FairReaderWritePathRecoveryPartition func() int
+		ForceReadTasksOnWrite          func() bool
+		ForceReadTasksOnWritePartition func() int
 		UpdateAckInterval                    func() time.Duration
 		MaxTaskQueueIdleTime                 func() time.Duration
 		MinTaskThrottlingBurstSize           func() int
@@ -282,8 +282,8 @@ func NewConfig(
 		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
-		FairReaderWritePathRecovery:              dynamicconfig.MatchingFairReaderWritePathRecovery.Get(dc),
-		FairReaderWritePathRecoveryPartition:     dynamicconfig.MatchingFairReaderWritePathRecoveryPartition.Get(dc),
+		ForceReadTasksOnWrite:              dynamicconfig.MatchingForceReadTasksOnWrite.Get(dc),
+		ForceReadTasksOnWritePartition:     dynamicconfig.MatchingForceReadTasksOnWritePartition.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
@@ -402,11 +402,11 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetTasksReloadAt: func() int {
 			return config.GetTasksReloadAt(ns.String(), taskQueueName, taskType)
 		},
-		FairReaderWritePathRecovery: func() bool {
-			return config.FairReaderWritePathRecovery(ns.String(), taskQueueName, taskType)
+		ForceReadTasksOnWrite: func() bool {
+			return config.ForceReadTasksOnWrite(ns.String(), taskQueueName, taskType)
 		},
-		FairReaderWritePathRecoveryPartition: func() int {
-			return config.FairReaderWritePathRecoveryPartition(ns.String(), taskQueueName, taskType)
+		ForceReadTasksOnWritePartition: func() int {
+			return config.ForceReadTasksOnWritePartition(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)

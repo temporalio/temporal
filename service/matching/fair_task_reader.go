@@ -391,12 +391,11 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
 	}
 
-	// If this was a write and tasks were filtered (e.g. above readLevel when atEnd=false),
-	// we may need to trigger a read to pick them up from DB. Without this, the reader can
-	// get stuck in {atEnd=false, loadedTasks=0, readPending=false} with no trigger to
-	// start reading. This mirrors the re-check in readTasksImpl after processing
-	// newlyWrittenTasks.
-	if mode == mergeWrite && tr.shouldWritePathRecovery() {
+	// Diagnostic: when enabled via dynamic config, force a read check on the write path.
+	// We've observed stuck partitions where atEnd=false, loadedTasks=0, and no read
+	// goroutine is running. This tests whether forcing maybeReadTasksLocked here unblocks
+	// them. The root cause of how the reader gets into that state is still under investigation.
+	if mode == mergeWrite && tr.shouldForceReadOnWrite() {
 		tr.maybeReadTasksLocked()
 	}
 
@@ -551,15 +550,15 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
 }
 
-// shouldWritePathRecovery returns true if the write-path recovery logic is enabled
+// shouldForceReadOnWrite returns true if the forced read-on-write diagnostic is enabled
 // for this reader's partition. Gated by dynamic config so it can be targeted at a
-// specific namespace/task-queue/partition for diagnosis.
-func (tr *fairTaskReader) shouldWritePathRecovery() bool {
+// specific namespace/task-queue/partition.
+func (tr *fairTaskReader) shouldForceReadOnWrite() bool {
 	cfg := tr.backlogMgr.config
-	if !cfg.FairReaderWritePathRecovery() {
+	if !cfg.ForceReadTasksOnWrite() {
 		return false
 	}
-	targetPartition := cfg.FairReaderWritePathRecoveryPartition()
+	targetPartition := cfg.ForceReadTasksOnWritePartition()
 	if targetPartition < 0 {
 		return true // -1 means all partitions
 	}
