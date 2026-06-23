@@ -3492,6 +3492,12 @@ error and stopping the schedule.`,
 while searching for a schedule's next action time before emitting a warning (metric + log). It
 is non-fatal: the search continues past this threshold.`,
 	)
+	SchedulerV1VersionCeiling = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionCeiling",
+		-1,
+		`SchedulerV1VersionCeiling clamps the V1 scheduler workflow's recorded version (TweakablePolicies.Version) to min(current, N) for N in [0, the highest version]; a negative value (the default) disables the clamp and higher values are a no-op.
+Set it on a newer cluster to the version the oldest rollback peer records, so the history it writes stays replayable after failover plus rollback.`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
