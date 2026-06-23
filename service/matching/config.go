@@ -47,7 +47,6 @@ type (
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForceReadTasksOnWrite                    dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-		ForceReadTasksOnWritePartition           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -168,7 +167,6 @@ type (
 		GetTasksBatchSize              func() int
 		GetTasksReloadAt               func() int
 		ForceReadTasksOnWrite          func() bool
-		ForceReadTasksOnWritePartition func() int
 		UpdateAckInterval              func() time.Duration
 		MaxTaskQueueIdleTime           func() time.Duration
 		MinTaskThrottlingBurstSize     func() int
@@ -283,7 +281,6 @@ func NewConfig(
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		ForceReadTasksOnWrite:                    dynamicconfig.MatchingForceReadTasksOnWrite.Get(dc),
-		ForceReadTasksOnWritePartition:           dynamicconfig.MatchingForceReadTasksOnWritePartition.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
@@ -404,9 +401,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		ForceReadTasksOnWrite: func() bool {
 			return config.ForceReadTasksOnWrite(ns.String(), taskQueueName, taskType)
-		},
-		ForceReadTasksOnWritePartition: func() int {
-			return config.ForceReadTasksOnWritePartition(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)

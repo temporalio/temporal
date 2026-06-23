@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"golang.org/x/sync/semaphore"
 )
@@ -390,7 +389,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// and nothing will trigger a read. The root cause is still under investigation.
 	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
-		if tr.shouldForceReadOnWrite() {
+		if tr.backlogMgr.config.ForceReadTasksOnWrite() {
 			tr.maybeReadTasksLocked()
 		}
 	}
@@ -546,23 +545,6 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
 }
 
-// shouldForceReadOnWrite returns true if the forced read-on-write diagnostic is enabled
-// for this reader's partition. Gated by dynamic config so it can be targeted at a
-// specific namespace/task-queue/partition.
-func (tr *fairTaskReader) shouldForceReadOnWrite() bool {
-	cfg := tr.backlogMgr.config
-	if !cfg.ForceReadTasksOnWrite() {
-		return false
-	}
-	targetPartition := cfg.ForceReadTasksOnWritePartition()
-	if targetPartition < 0 {
-		return true // -1 means all partitions
-	}
-	if p, ok := tr.backlogMgr.pqMgr.QueueKey().Partition().(*tqid.NormalPartition); ok {
-		return p.PartitionId() == targetPartition
-	}
-	return false
-}
 
 func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 	tr.lock.Lock()

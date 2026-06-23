@@ -1486,16 +1486,9 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
 		"matching.forceReadTasksOnWrite",
 		false,
-		`When true, the fair task reader's write path calls maybeReadTasksLocked after merging
-written tasks. This is a diagnostic flag to test whether forcing a read check on the write path
-unblocks stuck partitions where atEnd=false, loadedTasks=0, and no read goroutine is running.
-Use with MatchingForceReadTasksOnWritePartition to target a specific partition.`,
-	)
-	MatchingForceReadTasksOnWritePartition = NewTaskQueueIntSetting(
-		"matching.forceReadTasksOnWritePartition",
-		-1,
-		`Partition ID filter for MatchingForceReadTasksOnWrite. -1 means all partitions.
-Set to a specific partition ID (e.g. 3) to target only that partition.`,
+		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
+read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
+This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
 	)
 
 	// Worker registry settings
