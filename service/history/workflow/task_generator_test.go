@@ -1243,6 +1243,47 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
 }
 
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates asserts the
+// contract: regen carries no per-task status of its own and force re-stamps on every call
+// (callers gate it — the active boolean and PartialRefresh's LastUpdateVersionedTransition
+// check). So a second back-to-back call emits the same tasks again, not a no-op. Content is
+// identical; only the shard-assigned TaskID would differ.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(t *testing.T) {
+	t.Parallel()
+
+	tsi := &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: tsi,
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(time.Now().Add(time.Hour))},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).AnyTimes()
+
+	emitCount := 0
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		emitCount += len(ts)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+
+	// First call emits.
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Positive(t, emitCount, "first call must emit at least one task")
+
+	// Second call force-regenerates: emits again (no status latch suppresses it).
+	emitsAfterFirst := emitCount
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
+}
+
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
 	t.Parallel()
 
