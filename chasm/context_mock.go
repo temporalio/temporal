@@ -191,23 +191,11 @@ type MockMutableContext struct {
 	TimeSkippingConfigInited bool
 }
 
-func (c *MockMutableContext) InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.TimeSkippingConfig = config
 	c.TimeSkippingConfigInited = true
-}
-
-func (c *MockMutableContext) UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.TimeSkippingConfig = config
-}
-
-func (c *MockMutableContext) GetTimeSkippingConfig() *commonpb.TimeSkippingConfig {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.TimeSkippingConfig
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {

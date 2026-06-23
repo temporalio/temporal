@@ -157,7 +157,7 @@ func (s *mutableStateSuite) TestChasmFastForwardWake_ShortenedBySkip() {
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 1).AnyTimes()
 
 	// Init the fast-forward — emits the wake at the target (accumulated == 0, so real fire == target).
-	s.mutableState.InitTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.mutableState.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled:     true,
 		FastForward: durationpb.New(time.Hour),
 	})

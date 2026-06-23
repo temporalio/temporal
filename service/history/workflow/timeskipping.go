@@ -542,34 +542,24 @@ func (ms *MutableStateImpl) applyTimeSkippingTransition(transition chasm.TimeSki
 // event ID.
 const chasmNoEventID int64 = -1
 
-// InitTimeSkippingConfig sets the execution's time-skipping configuration for a CHASM execution. It
-// backs chasm.MutableContext.InitTimeSkippingConfig (via the chasm.NodeBackend interface).
-//
-// It shares initTimeSkippingInfo with the workflow path; that path is archetype-aware, so it does
-// not emit a physical workflow timer task for CHASM executions (see applyFastForward). CHASM
-// executions have no history events, so there is no event ID to anchor to (see chasmNoEventID) and
-// no propagated state in this path.
-func (ms *MutableStateImpl) InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	ms.initTimeSkippingInfo(config, nil, chasmNoEventID)
-}
-
-// UpdateTimeSkippingConfig updates the execution's time-skipping configuration for a CHASM
-// execution. It backs chasm.MutableContext.UpdateTimeSkippingConfig (via the chasm.NodeBackend
-// interface) and shares updateTimeSkippingInfo with the workflow path.
-func (ms *MutableStateImpl) UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	ms.updateTimeSkippingInfo(config, chasmNoEventID)
-}
-
-// GetTimeSkippingConfig returns the execution's current time-skipping configuration, or nil if time
-// skipping was never initialized. It backs chasm.MutableContext.GetTimeSkippingConfig (via the
-// chasm.NodeBackend interface) so a root component can read back the config it set.
-func (ms *MutableStateImpl) GetTimeSkippingConfig() *commonpb.TimeSkippingConfig {
-	return ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
+// SetTimeSkippingConfig sets the execution's time-skipping configuration for a CHASM execution. It
+// backs chasm.MutableContext.SetTimeSkippingConfig (via the chasm.NodeBackend interface): the first
+// call initializes the TimeSkippingInfo, and subsequent calls update the config in place (preserving
+// the accumulated skipped duration). It reuses the workflow path's initTimeSkippingInfo /
+// updateTimeSkippingInfo, which are archetype-aware (no physical workflow timer task for CHASM — see
+// applyFastForward). CHASM executions have no history events to anchor to (see chasmNoEventID) and no
+// propagated state on this path.
+func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if ms.executionInfo.GetTimeSkippingInfo() == nil {
+		ms.initTimeSkippingInfo(config, nil, chasmNoEventID)
+	} else {
+		ms.updateTimeSkippingInfo(config, chasmNoEventID)
+	}
 }
 
 // GetTimeSkippingInfo returns the execution's full TimeSkippingInfo (config + fast-forward info). It
-// is the CHASM framework's window into time-skipping state: GetTimeSkippingConfig is the projection
-// exposed to executions, while the framework reads the fast-forward target/reached flag through here.
+// is the CHASM framework's window into time-skipping state: the framework reads the config and the
+// fast-forward target/reached flag through here (NodeBackend), not through a component-facing getter.
 func (ms *MutableStateImpl) GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo {
 	return ms.GetExecutionInfo().GetTimeSkippingInfo()
 }

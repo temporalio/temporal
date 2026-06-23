@@ -40,8 +40,7 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent          func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry            func() *namespace.Namespace
 	HandleEndpointRegistry             func() EndpointRegistry
-	HandleInitTimeSkippingConfig       func(config *commonpb.TimeSkippingConfig)
-	HandleUpdateTimeSkippingConfig     func(config *commonpb.TimeSkippingConfig)
+	HandleSetTimeSkippingConfig        func(config *commonpb.TimeSkippingConfig)
 	HandleGetTimeSkippingInfo          func() *persistencespb.TimeSkippingInfo
 	HandleRecordTimeSkippingTransition func(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error
 
@@ -116,15 +115,9 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 	}
 }
 
-func (m *MockNodeBackend) InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	if m.HandleInitTimeSkippingConfig != nil {
-		m.HandleInitTimeSkippingConfig(config)
-	}
-}
-
-func (m *MockNodeBackend) UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	if m.HandleUpdateTimeSkippingConfig != nil {
-		m.HandleUpdateTimeSkippingConfig(config)
+func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if m.HandleSetTimeSkippingConfig != nil {
+		m.HandleSetTimeSkippingConfig(config)
 	}
 }
 

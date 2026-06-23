@@ -235,12 +235,10 @@ type (
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
 
-		// Time-skipping backend surface. The component-facing config control (GetTimeSkippingConfig)
-		// is exposed to executions through MutableContext, which delegates the mutators here; the
-		// framework itself reads the full TimeSkippingInfo (config AND fast-forward info) via
-		// GetTimeSkippingInfo.
-		InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
-		UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		// Time-skipping backend surface. The component-facing config control (SetTimeSkippingConfig) is
+		// exposed to executions through MutableContext, which delegates the mutator here; the framework
+		// itself reads the full TimeSkippingInfo (config AND fast-forward info) via GetTimeSkippingInfo.
+		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 		GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo
 		// RecordTimeSkippingTransition records a single time-skipping transition for the execution: it
 		// advances the virtual clock to transition.TargetTime (and disables time skipping when the
@@ -2147,7 +2145,7 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 	// here: the decision is driven by the component work that schedules a future task worth skipping to
 	// (which sets isActiveStateDirty), and the skip the decision records marks the TimeSkippingInfo
 	// dirty via its own flag. The one implication is that a transaction which only changes
-	// TimeSkippingInfo (e.g. UpdateTimeSkippingConfig) without touching chasm state won't trigger the
+	// TimeSkippingInfo (e.g. SetTimeSkippingConfig) without touching chasm state won't trigger the
 	// decision; it is picked up on the next active transaction.
 	if !n.isActiveStateDirty {
 		// Passive cluster: the active cluster already made the time-skipping decision and replicated the

@@ -98,9 +98,9 @@ type MutableContext interface {
 	SetUserMetadata(Component, *sdkpb.UserMetadata) error
 
 	// TimeSkippingController is the framework-provided surface for managing this execution's
-	// time-skipping configuration (Init/Update/Get). A root component opts in by calling
-	// InitTimeSkippingConfig when the execution is created. These take no Component argument because
-	// the configuration is execution-scoped, like the ExecutionKey()/ExecutionInfo() accessors.
+	// time-skipping configuration. A root component opts in by calling SetTimeSkippingConfig when the
+	// execution is created (and again to adjust it). It takes no Component argument because the
+	// configuration is execution-scoped, like the ExecutionKey()/ExecutionInfo() accessors.
 	TimeSkippingController
 
 	// Get a Ref for the component
@@ -283,16 +283,8 @@ func (c *mutableCtx) SetUserMetadata(component Component, md *sdkpb.UserMetadata
 	return c.root.setComponentUserMetadata(component, md)
 }
 
-func (c *mutableCtx) InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	c.root.backend.InitTimeSkippingConfig(config)
-}
-
-func (c *mutableCtx) UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	c.root.backend.UpdateTimeSkippingConfig(config)
-}
-
-func (c *mutableCtx) GetTimeSkippingConfig() *commonpb.TimeSkippingConfig {
-	return c.root.backend.GetTimeSkippingInfo().GetConfig()
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.root.backend.SetTimeSkippingConfig(config)
 }
 
 func (c *mutableCtx) withValue(key any, value any) Context {

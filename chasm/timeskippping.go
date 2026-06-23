@@ -10,13 +10,14 @@ import (
 // Time skipping is a two-sided contract between the CHASM framework and a root component:
 //
 //   - TimeSkippingController (this interface) is PROVIDED BY the framework and CALLED BY the
-//     component. It is embedded in MutableContext: the component opts in via InitTimeSkippingConfig,
-//     adjusts the config with UpdateTimeSkippingConfig, and reads it back with GetTimeSkippingConfig.
+//     component. It is embedded in MutableContext: the component opts in / adjusts the config via
+//     SetTimeSkippingConfig. (The framework reads the config back via NodeBackend.GetTimeSkippingInfo,
+//     not through this component-facing surface.)
 //   - TimeSkippable (below) is IMPLEMENTED BY the root component and CALLED BY the framework, so the
 //     framework can ask whether the execution is idle enough to fast-forward, and where to skip to.
 //
 // A root component that wants time skipping does both: implement TimeSkippable, and call
-// InitTimeSkippingConfig when the execution is created.
+// SetTimeSkippingConfig when the execution is created.
 
 // TimeSkippingController is the framework-provided surface through which a component controls time
 // skipping for the whole execution.
@@ -24,14 +25,14 @@ import (
 // The backing mutable state (NodeBackend) implements the mutators and exposes the full TimeSkippingInfo
 // to the framework via GetTimeSkippingInfo.
 type TimeSkippingController interface {
-	InitTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
-	UpdateTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
-	GetTimeSkippingConfig() *commonpb.TimeSkippingConfig
+	// SetTimeSkippingConfig sets the execution's time-skipping config: the first call establishes it,
+	// later calls update it in place (preserving the accumulated skipped duration).
+	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 }
 
 // TimeSkippable is the component-implemented half of the time-skipping contract (see
 // TimeSkippingController above for the framework-provided half). A root component that opts into time
-// skipping (by calling MutableContext.InitTimeSkippingConfig) implements this so the CHASM framework
+// skipping (by calling MutableContext.SetTimeSkippingConfig) implements this so the CHASM framework
 // can call HasInflightWork during CloseTransaction to decide whether the execution is idle enough to
 // fast-forward virtual time.
 //
