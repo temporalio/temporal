@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -910,7 +911,7 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// Wait for the initial empty read to complete (reader reaches atEnd=true).
-	s.Require().Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		return s.taskMgr.getGetTasksCount(qkey) == 1
 	}, 5*time.Second, 10*time.Millisecond)
 
@@ -937,10 +938,9 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	}))
 
 	// Assert the fix: the write path triggers a DB read and the task reaches the matcher.
-	s.Require().Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		return s.capturedTasksLen() > capturedBefore
-	}, 5*time.Second, 10*time.Millisecond,
-		"task should be delivered to the matcher after the write path wakes the reader")
+	}, 5*time.Second, 10*time.Millisecond)
 
 	// Assert that additional DB reads were triggered by the write path.
 	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
