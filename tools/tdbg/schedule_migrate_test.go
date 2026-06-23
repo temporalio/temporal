@@ -318,13 +318,14 @@ func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
 	})
 
 	require.Len(t, admin.requests, 2)
-	require.Equal(t, "ns-1", admin.requests[0].Namespace)
-	require.Equal(t, "sched-1", admin.requests[0].ScheduleId)
-	require.Equal(t, "ns-2", admin.requests[1].Namespace)
-	require.Equal(t, "sched-2", admin.requests[1].ScheduleId)
+	// Order is not guaranteed: the default worker pool migrates lines concurrently, so match
+	// each schedule id to its namespace as a pair rather than asserting by index.
+	byID := map[string]string{}
 	for _, req := range admin.requests {
+		byID[req.ScheduleId] = req.Namespace
 		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
 	}
+	require.Equal(t, map[string]string{"sched-1": "ns-1", "sched-2": "ns-2"}, byID)
 }
 
 func TestMigrateSchedule_Stdin_Workers(t *testing.T) {
