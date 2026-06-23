@@ -431,7 +431,7 @@ func (s *executableSyncVersionedTransitionTaskSuite) TestHandleErr_RetryReplicat
 		uuid.NewString(), true, nil,
 	)
 	err := task.HandleErr(retryErr)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableSyncVersionedTransitionTaskSuite) TestHandleErr_NotFound() {

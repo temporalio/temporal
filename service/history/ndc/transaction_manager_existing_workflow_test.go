@@ -18,7 +18,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-var txnExistErrTest = errors.New("txnExist test error")
+var errTxnExist = errors.New("txnExist test error")
 
 type (
 	transactionMgrForExistingWorkflowSuite struct {
@@ -654,10 +654,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", txnExistErrTest)
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", errTxnExist)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, true, chasm.WorkflowArchetypeID, targetWorkflow, nil)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_LoadWorkflowError() {
@@ -680,10 +680,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		RunId: targetRunID,
 	}).AnyTimes()
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
-	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(nil, txnExistErrTest)
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(nil, errTxnExist)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, true, chasm.WorkflowArchetypeID, targetWorkflow, nil)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_HappensAfterError() {
@@ -710,10 +710,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
 	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(currentWorkflow, nil)
-	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, txnExistErrTest)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, errTxnExist)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, true, chasm.WorkflowArchetypeID, targetWorkflow, nil)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TestExecuteTransaction_UnknownPolicy() {
@@ -783,10 +783,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestUpdateAsZombie_TargetSuppre
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, txnExistErrTest)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyUpdateAsZombie, currentWorkflow, targetWorkflow, nil, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -833,10 +833,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestUpdateAsZombie_NewSuppressB
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, txnExistErrTest)
+	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyUpdateAsZombie, currentWorkflow, targetWorkflow, newWorkflow, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -905,10 +905,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestUpdateAsZombie_CheckWorkflo
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(false, txnExistErrTest)
+	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(false, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyUpdateAsZombie, currentWorkflow, targetWorkflow, newWorkflow, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -973,10 +973,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestSuppressCurrentAndUpdateAsC
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
-	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, txnExistErrTest)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent, currentWorkflow, targetWorkflow, nil, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -988,7 +988,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestSuppressCurrentAndUpdateAsC
 	targetReleaseCalled := false
 	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
 	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
-	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(txnExistErrTest)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(errTxnExist)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentMutableState := historyi.NewMockMutableState(s.controller)
@@ -1001,7 +1001,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestSuppressCurrentAndUpdateAsC
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent, currentWorkflow, targetWorkflow, nil, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -1023,7 +1023,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestSuppressCurrentAndUpdateAsC
 	newWorkflow.EXPECT().GetContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(txnExistErrTest)
+	newWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(errTxnExist)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentMutableState := historyi.NewMockMutableState(s.controller)
@@ -1036,7 +1036,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestSuppressCurrentAndUpdateAsC
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent, currentWorkflow, targetWorkflow, newWorkflow, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -1055,10 +1055,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestConflictResolveAsZombie_Tar
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, txnExistErrTest)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyConflictResolveAsZombie, currentWorkflow, targetWorkflow, nil, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -1105,10 +1105,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestConflictResolveAsZombie_New
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, txnExistErrTest)
+	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyConflictResolveAsZombie, currentWorkflow, targetWorkflow, newWorkflow, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -1177,10 +1177,10 @@ func (s *transactionMgrForExistingWorkflowSuite) TestConflictResolveAsZombie_Che
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 	newWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(false, txnExistErrTest)
+	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(false, errTxnExist)
 
 	err := s.updateMgr.executeTransaction(ctx, nDCTransactionPolicyConflictResolveAsZombie, currentWorkflow, targetWorkflow, newWorkflow, chasm.WorkflowArchetypeID)
-	s.Equal(txnExistErrTest, err)
+	s.Equal(errTxnExist, err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)

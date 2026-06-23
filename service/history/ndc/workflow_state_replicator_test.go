@@ -1040,7 +1040,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	}).AnyTimes()
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 type historyEventMatcher struct {
@@ -2217,7 +2217,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_EmptyLocalTr
 		TransitionHistory: nil, // empty local transition history
 	}).AnyTimes()
 	err := r.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, artifact, "test")
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_EmptyLocalTransitionHistory_LocalNewer_BackFillEvents() {
@@ -2335,7 +2335,7 @@ func (s *workflowReplicatorSuite) Test_applyMutation_NilLocalMutableState_SyncSt
 		context.Background(), namespace.ID(uuid.NewString()), s.workflowID, s.runID,
 		chasm.WorkflowArchetypeID, nil, nil, wcache.NoopReleaseFn, artifact, "test",
 	)
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *workflowReplicatorSuite) Test_applySnapshot_NilSnapshotAttributes_SyncStateError() {
@@ -2354,7 +2354,7 @@ func (s *workflowReplicatorSuite) Test_applySnapshot_NilSnapshotAttributes_SyncS
 		context.Background(), namespace.ID(uuid.NewString()), s.workflowID, s.runID,
 		chasm.WorkflowArchetypeID, nil, wcache.NoopReleaseFn, mockMutableState, artifact, "test",
 	)
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *workflowReplicatorSuite) Test_applySnapshotWhenWorkflowExist_StaleSnapshot_SyncStateError() {
@@ -2391,7 +2391,7 @@ func (s *workflowReplicatorSuite) Test_applySnapshotWhenWorkflowExist_StaleSnaps
 		chasm.WorkflowArchetypeID, nil, wcache.NoopReleaseFn, mockMutableState, sourceMutableState,
 		nil, nil, "test",
 	)
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *workflowReplicatorSuite) Test_applySnapshotWhenWorkflowExist_EmptyTransitionHistory_SameBranch_WithNewRun() {
@@ -2465,8 +2465,8 @@ func (s *workflowReplicatorSuite) Test_backFillEvents_EmptyBatches_NoOp() {
 func (s *workflowReplicatorSuite) Test_backFillEvents_WithEvents_CallsEngine() {
 	r := s.wfStateReplNewReplicator()
 	namespaceID := uuid.NewString()
-	events := []*historypb.HistoryEvent{{EventId: 1, Version: 1}, {EventId: 2, Version: 1}}
-	blob, err := s.serializer.SerializeEvents(events)
+	histEvents := []*historypb.HistoryEvent{{EventId: 1, Version: 1}, {EventId: 2, Version: 1}}
+	blob, err := s.serializer.SerializeEvents(histEvents)
 	s.NoError(err)
 	newRunEvents := []*historypb.HistoryEvent{{EventId: 1, Version: 1}}
 	newRunBlob, err := s.serializer.SerializeEvents(newRunEvents)
@@ -2500,8 +2500,8 @@ func (s *workflowReplicatorSuite) Test_backFillEvents_WithEvents_CallsEngine() {
 
 func (s *workflowReplicatorSuite) Test_getFirstHistoryEventsBatch_FromEventBatches() {
 	r := s.wfStateReplNewReplicator()
-	events := []*historypb.HistoryEvent{{EventId: 1, Version: 1}, {EventId: 2, Version: 1}}
-	blob, err := s.serializer.SerializeEvents(events)
+	histEvents := []*historypb.HistoryEvent{{EventId: 1, Version: 1}, {EventId: 2, Version: 1}}
+	blob, err := s.serializer.SerializeEvents(histEvents)
 	s.NoError(err)
 	artifact := &replicationspb.VersionedTransitionArtifact{EventBatches: []*commonpb.DataBlob{blob}}
 	batch, err := r.getFirstHistoryEventsBatch(
@@ -2514,8 +2514,8 @@ func (s *workflowReplicatorSuite) Test_getFirstHistoryEventsBatch_FromEventBatch
 
 func (s *workflowReplicatorSuite) Test_getFirstHistoryEventsBatch_FromRemote() {
 	r := s.wfStateReplNewReplicator()
-	events := []*historypb.HistoryEvent{{EventId: 1, Version: 1}}
-	blob, err := s.serializer.SerializeEvents(events)
+	histEvents := []*historypb.HistoryEvent{{EventId: 1, Version: 1}}
+	blob, err := s.serializer.SerializeEvents(histEvents)
 	s.NoError(err)
 	// EventBatches first event is not 1 => go to remote
 	otherEvents := []*historypb.HistoryEvent{{EventId: 5, Version: 1}}
@@ -2549,8 +2549,8 @@ func (s *workflowReplicatorSuite) Test_getFirstHistoryEventsBatch_RemoteEmpty_Er
 
 func (s *workflowReplicatorSuite) Test_getFirstHistoryEventsBatch_RemoteNotStartFromOne_Error() {
 	r := s.wfStateReplNewReplicator()
-	events := []*historypb.HistoryEvent{{EventId: 5, Version: 1}}
-	blob, err := s.serializer.SerializeEvents(events)
+	histEvents := []*historypb.HistoryEvent{{EventId: 5, Version: 1}}
+	blob, err := s.serializer.SerializeEvents(histEvents)
 	s.NoError(err)
 	artifact := &replicationspb.VersionedTransitionArtifact{}
 	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(

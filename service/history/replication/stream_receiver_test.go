@@ -330,7 +330,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 	s.Equal(0, len(s.taskScheduler.tasks))
 }
 
@@ -357,7 +357,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 	s.Equal(0, len(s.taskScheduler.tasks))
 }
 
@@ -533,9 +533,9 @@ func (s *streamReceiverSuite) TestSlowSubmissionTimestamp_RecordAndGet() {
 	// Default: no timestamp recorded yet -> zero time.
 	s.True(s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH).IsZero())
 
-	strRecvTs := time.Unix(0, rand.Int63())
-	s.streamReceiver.recordSlowSubmission(enumsspb.TASK_PRIORITY_HIGH, strRecvTs)
-	s.Equal(strRecvTs, s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH))
+	strRecvTS := time.Unix(0, rand.Int63())
+	s.streamReceiver.recordSlowSubmission(enumsspb.TASK_PRIORITY_HIGH, strRecvTS)
+	s.Equal(strRecvTS, s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH))
 
 	// A different priority is still unset.
 	s.True(s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW).IsZero())
@@ -556,7 +556,7 @@ func (s *streamReceiverSuite) TestGetTaskTracker() {
 
 	_, err = s.streamReceiver.getTaskTracker(enumsspb.TaskPriority(999))
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *streamReceiverSuite) TestGetTaskSchedulerByPriority() {
@@ -570,7 +570,7 @@ func (s *streamReceiverSuite) TestGetTaskSchedulerByPriority() {
 
 	_, err = s.streamReceiver.getTaskScheduler(enumsspb.TASK_PRIORITY_UNSPECIFIED)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *streamReceiverSuite) TestSetReceiverMode_AlreadySet_NoChange() {
@@ -593,7 +593,7 @@ func (s *streamReceiverSuite) TestValidateTasksHaveSamePriority_Mismatch() {
 	}
 	err := ValidateTasksHaveSamePriority(enumsspb.TASK_PRIORITY_HIGH, strRecvTasks...)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *streamReceiverSuite) TestValidateTasksHaveSamePriority_AllMatch() {
@@ -645,7 +645,7 @@ func (s *streamReceiverSuite) TestProcessMessage_RecvError() {
 	strRecvStream := &mockStream{recvErr: serviceerror.NewUnavailable("recv failed")}
 	err := s.streamReceiver.processMessages(strRecvStream)
 	s.Error(err)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *mockStream) Send(

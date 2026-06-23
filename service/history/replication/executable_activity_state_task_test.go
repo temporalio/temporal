@@ -516,7 +516,7 @@ func (s *executableActivityStateTaskSuite) TestValidateIncomingBatchTask_Nil() {
 	incoming, err := s.task.validateIncomingBatchTask(nil)
 	s.Nil(incoming)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableActivityStateTaskSuite) TestValidateIncomingBatchTask_UnsupportedType() {
@@ -525,7 +525,7 @@ func (s *executableActivityStateTaskSuite) TestValidateIncomingBatchTask_Unsuppo
 	incoming, err := s.task.validateIncomingBatchTask(actStateWrong)
 	s.Nil(incoming)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// also through BatchWith to cover that path
 	batchResult, batched := s.task.BatchWith(actStateWrong)

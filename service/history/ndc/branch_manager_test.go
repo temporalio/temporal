@@ -240,7 +240,7 @@ func (s *branchMgrSuite) TestCreateNewBranch_BranchChanged() {
 
 	_, err := s.nDCBranchMgr.createNewBranch(context.Background(), branchMgrBaseBranchToken, 10, newVersionHistory)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_NoMissingEventInBetween() {
@@ -308,7 +308,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_MissingEventInBetween(
 		incomingVersionHistory,
 		150+2,
 		300)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBetween() {
@@ -405,7 +405,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_MissingEventInBetwe
 		baseBranchLCAEventID+2,
 		baseBranchLCAEventVersion,
 	)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
@@ -496,5 +496,5 @@ func (s *branchMgrSuite) TestCreate_MissingEventInBetween() {
 		incomingVersionHistory,
 		150+2,
 		300)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }

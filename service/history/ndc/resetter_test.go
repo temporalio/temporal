@@ -472,7 +472,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 	s.Nil(rebuiltMutableState)
 
 	retryErr, isRetryError := err.(*serviceerrors.RetryReplication)

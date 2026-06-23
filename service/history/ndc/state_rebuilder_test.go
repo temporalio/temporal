@@ -601,7 +601,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState_TaskRefresherEr
 
 func (s *stateRebuilderSuite) TestApplyEvents_Error() {
 	requestID := uuid.NewString()
-	events := []*historypb.HistoryEvent{{
+	histEvents := []*historypb.HistoryEvent{{
 		EventId:    1,
 		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
@@ -612,7 +612,7 @@ func (s *stateRebuilderSuite) TestApplyEvents_Error() {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil, serviceerror.NewInternal("apply events failed"))
 
-	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateRebuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateRebuilder, histEvents, requestID)
 	s.Error(err)
 }
 

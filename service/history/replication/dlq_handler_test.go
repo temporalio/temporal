@@ -2,7 +2,7 @@ package replication
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -290,7 +290,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 	s.Equal(pageToken, token)
 }
 
-var dlqHErrTest = fmt.Errorf("dlqH test error")
+var errDLQTestFailure = errors.New("dlq test error")
 
 func (s *dlqHandlerSuite) TestNewLazyDLQHandler() {
 	handler := NewLazyDLQHandler(
@@ -323,22 +323,22 @@ func (s *dlqHandlerSuite) TestNewDLQHandler_NilTaskExecutors_Panics() {
 func (s *dlqHandlerSuite) TestPurgeMessages_UpdateAckLevelError_Ignored() {
 	lastMessageID := int64(1)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), gomock.Any()).Return(nil)
-	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(dlqHErrTest).AnyTimes()
+	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(errDLQTestFailure).AnyTimes()
 	err := s.replicationMessageHandler.PurgeMessages(context.Background(), s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
 
 func (s *dlqHandlerSuite) TestPurgeMessages_RangeDeleteError() {
 	lastMessageID := int64(1)
-	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), gomock.Any()).Return(dlqHErrTest)
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), gomock.Any()).Return(errDLQTestFailure)
 	err := s.replicationMessageHandler.PurgeMessages(context.Background(), s.sourceCluster, lastMessageID)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 }
 
 func (s *dlqHandlerSuite) TestReadMessages_GetFromDLQError() {
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(nil, dlqHErrTest)
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(nil, errDLQTestFailure)
 	taskList, tasksInfo, token, err := s.replicationMessageHandler.GetMessages(context.Background(), s.sourceCluster, int64(100), 1, nil)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 	s.Nil(taskList)
 	s.Nil(tasksInfo)
 	s.Nil(token)
@@ -388,15 +388,15 @@ func (s *dlqHandlerSuite) TestReadMessages_GetDLQReplicationMessagesError() {
 		}},
 	}
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(dbResp, nil)
-	s.adminClient.EXPECT().GetDLQReplicationMessages(gomock.Any(), gomock.Any()).Return(nil, dlqHErrTest)
+	s.adminClient.EXPECT().GetDLQReplicationMessages(gomock.Any(), gomock.Any()).Return(nil, errDLQTestFailure)
 	_, _, _, err := s.replicationMessageHandler.GetMessages(context.Background(), s.sourceCluster, int64(100), 1, nil)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 }
 
 func (s *dlqHandlerSuite) TestMergeMessages_ReadError() {
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(nil, dlqHErrTest)
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(nil, errDLQTestFailure)
 	token, err := s.replicationMessageHandler.MergeMessages(context.Background(), s.sourceCluster, int64(100), 1, nil)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 	s.Nil(token)
 }
 
@@ -415,9 +415,9 @@ func (s *dlqHandlerSuite) TestMergeMessages_ExecuteError() {
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), gomock.Any()).Return(dbResp, nil)
 	s.adminClient.EXPECT().GetDLQReplicationMessages(gomock.Any(), gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask}}, nil)
-	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(dlqHErrTest)
+	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(errDLQTestFailure)
 	token, err := s.replicationMessageHandler.MergeMessages(context.Background(), s.sourceCluster, int64(100), 1, nil)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 	s.Nil(token)
 }
 
@@ -437,9 +437,9 @@ func (s *dlqHandlerSuite) TestMergeMessages_RangeDeleteError() {
 	s.adminClient.EXPECT().GetDLQReplicationMessages(gomock.Any(), gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask}}, nil)
 	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
-	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), gomock.Any()).Return(dlqHErrTest)
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), gomock.Any()).Return(errDLQTestFailure)
 	token, err := s.replicationMessageHandler.MergeMessages(context.Background(), s.sourceCluster, int64(100), 1, nil)
-	s.Equal(dlqHErrTest, err)
+	s.Equal(errDLQTestFailure, err)
 	s.Nil(token)
 }
 

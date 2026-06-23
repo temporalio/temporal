@@ -759,7 +759,7 @@ func (s *replicationTaskSuite) TestNewReplicationTaskFromRequest_Success() {
 	)
 	s.NoError(err)
 	s.NotNil(task)
-	s.Equal(1, len(task.getNewEvents()))
+	s.Len(task.getNewEvents(), 1)
 }
 
 func (s *replicationTaskSuite) TestNewReplicationTaskFromRequest_Error() {
@@ -866,7 +866,7 @@ func (s *replicationTaskSuite) TestValidateReplicateEventsRequest() {
 		Events:            eventsBlob,
 	})
 	s.NoError(err)
-	s.Equal(1, len(evts))
+	s.Len(evts, 1)
 	s.Nil(newEvts)
 
 	// new run events version mismatch
@@ -886,8 +886,8 @@ func (s *replicationTaskSuite) TestValidateReplicateEventsRequest() {
 		NewRunEvents:      s.replTaskSerialize([]*historypb.HistoryEvent{{EventId: 1, Version: 3}}),
 	})
 	s.NoError(err)
-	s.Equal(1, len(evts))
-	s.Equal(1, len(newEvts))
+	s.Len(evts, 1)
+	s.Len(newEvts, 1)
 }
 
 func (s *replicationTaskSuite) TestValidateUUID() {
@@ -907,7 +907,7 @@ func (s *replicationTaskSuite) TestDeserializeBlob() {
 	blob.EncodingType = enumspb.ENCODING_TYPE_UNSPECIFIED
 	events, err = deserializeBlob(serializer, blob)
 	s.NoError(err)
-	s.Equal(1, len(events))
+	s.Len(events, 1)
 }
 
 func (s *replicationTaskSuite) TestDeserializeBlobs() {
@@ -915,7 +915,7 @@ func (s *replicationTaskSuite) TestDeserializeBlobs() {
 	// nil blobs
 	batches, err := DeserializeBlobs(serializer, nil)
 	s.NoError(err)
-	s.Equal(0, len(batches))
+	s.Empty(batches)
 
 	// valid blobs
 	blob1 := s.replTaskSerialize([]*historypb.HistoryEvent{{EventId: 1, Version: 3}})
@@ -923,7 +923,7 @@ func (s *replicationTaskSuite) TestDeserializeBlobs() {
 	blob2 := s.replTaskSerialize([]*historypb.HistoryEvent{{EventId: 2, Version: 3}})
 	batches, err = DeserializeBlobs(serializer, []*commonpb.DataBlob{blob1, blob2})
 	s.NoError(err)
-	s.Equal(2, len(batches))
+	s.Len(batches, 2)
 
 	// invalid blob -> error
 	_, err = DeserializeBlobs(serializer, []*commonpb.DataBlob{{

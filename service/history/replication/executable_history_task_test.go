@@ -681,7 +681,7 @@ func (s *executableHistoryTaskSuite) TestCheckSourceCluster_Match() {
 func (s *executableHistoryTaskSuite) TestCheckSourceCluster_Mismatch() {
 	err := s.task.checkSourceCluster("histTask-different-cluster")
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_BothNil() {
@@ -693,21 +693,21 @@ func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_CurrentNil() {
 	s.task.baseExecutionInfo = nil
 	err := s.task.checkBaseExecutionInfo(&workflowspb.BaseExecutionInfo{})
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_IncomingNil() {
 	s.task.baseExecutionInfo = &workflowspb.BaseExecutionInfo{}
 	err := s.task.checkBaseExecutionInfo(nil)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_NotEqual() {
 	s.task.baseExecutionInfo = &workflowspb.BaseExecutionInfo{RunId: "histTask-a"}
 	err := s.task.checkBaseExecutionInfo(&workflowspb.BaseExecutionInfo{RunId: "histTask-b"})
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_Equal() {
@@ -718,7 +718,7 @@ func (s *executableHistoryTaskSuite) TestCheckBaseExecutionInfo_Equal() {
 func (s *executableHistoryTaskSuite) TestCheckEvents_Empty() {
 	err := s.task.checkEvents([][]*historypb.HistoryEvent{})
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *executableHistoryTaskSuite) TestCheckEvents_GetDeserializedEventsError() {

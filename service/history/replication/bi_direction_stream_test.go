@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 )
 
@@ -257,7 +258,7 @@ func (s *biDirectionStreamSuite) TestNotifyRecvChannel_Full() {
 
 	// wait until the default branch has recorded the channel-full metric, which guarantees
 	// the select took the default path before we make room for the blocked send.
-	s.Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		return len(capture.Snapshot()[metrics.ReplicationStreamChannelFull.Name()]) > 0
 	}, time.Second*5, time.Millisecond*10)
 

@@ -1039,7 +1039,7 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		endExclusiveWatermark,
 	)
 	s.Error(err, "rpc error")
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError() {
@@ -1047,7 +1047,7 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	err := s.streamSender.recvEventLoop()
 	s.Error(err)
 	s.Error(err, "rpc error")
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestLivenessMonitor() {
@@ -1192,7 +1192,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_MissingPrio
 	}
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.Error(err)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_UnexpectedPriorityState_Error() {
@@ -1207,7 +1207,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_UnexpectedP
 	}
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.Error(err)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestRecvEventLoop_SyncReplicationState_ThenShutdown() {
@@ -1252,7 +1252,7 @@ func (s *streamSenderSuite) TestRecvEventLoop_TieredStackChange_ReturnsStreamErr
 	// the tiered-stack-change detection before Recv is ever called.
 	err := s.streamSender.recvEventLoop()
 	s.Error(err)
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestSendTasks_InvalidRange_ReturnsError() {

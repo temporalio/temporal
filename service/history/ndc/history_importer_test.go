@@ -322,10 +322,10 @@ func (s *histImportSuite) TestImportWorkflow_ApplyEvents_BrandNewDispatch() {
 func (s *histImportSuite) TestImportWorkflow_Commit_NoEventsWithToken() {
 	// Token present, no events -> commit branch. Use a brand-new spec to hit the
 	// IsBrandNew commit guard, which returns deterministically without DB access.
-	token := s.buildToken(true /*isBrandNew via existsInDB false won't set IsBrandNew*/)
+	token := s.buildToken(true /* isBrandNew via existsInDB false will not set IsBrandNew */)
 	// commit with IsBrandNew requires DB-not-found path which needs no token; so for
 	// the token path IsBrandNew is always false. ExistsInDB=false triggers CreateWorkflow.
-	s.expectInitializeFromTokenSucceeds(false /*existsInDB*/)
+	s.expectInitializeFromTokenSucceeds(false /* existsInDB */)
 
 	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil)
 	s.mockTxMgr.EXPECT().CreateWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
@@ -342,7 +342,7 @@ func (s *histImportSuite) TestImportWorkflow_Commit_NoEventsWithToken() {
 }
 
 func (s *histImportSuite) TestImportWorkflow_Commit_Error() {
-	s.expectInitializeFromTokenSucceeds(false /*existsInDB*/)
+	s.expectInitializeFromTokenSucceeds(false /* existsInDB */)
 
 	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(serviceerror.NewInternal("refresh err"))
 
@@ -831,7 +831,7 @@ type commitWf struct {
 func (s *histImportSuite) setupCommitExistsInDB(
 	memVH *historyspb.VersionHistories,
 	dbVH *historyspb.VersionHistories,
-) (*commitWf, *commitWf) {
+) (memCommitWf *commitWf, dbCommitWf *commitWf) {
 	memCtx := historyi.NewMockWorkflowContext(s.controller)
 	memCtx.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	memMS := historyi.NewMockMutableState(s.controller)

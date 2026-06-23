@@ -1,7 +1,7 @@
 package replication
 
 import (
-	"fmt"
+	"errors"
 	"math"
 	"math/rand"
 	"testing"
@@ -972,7 +972,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_ShutdownNoop
 
 func (s *streamReceiverMonitorSuite) TestFillStatusMap_GetShardByIDError() {
 	srMonitorServerKey := NewClusterShardKey(1, 1)
-	s.shardController.EXPECT().GetShardByID(int32(1)).Return(nil, fmt.Errorf("shard error"))
+	s.shardController.EXPECT().GetShardByID(int32(1)).Return(nil, errors.New("shard error"))
 	srMonitorStatusMap := make(map[ClusterShardKeyPair]*streamStatus)
 	s.streamReceiverMonitor.fillStatusMap(srMonitorStatusMap, srMonitorServerKey, []ClusterShardKey{NewClusterShardKey(2, 1)})
 	s.Empty(srMonitorStatusMap)
@@ -981,7 +981,7 @@ func (s *streamReceiverMonitorSuite) TestFillStatusMap_GetShardByIDError() {
 func (s *streamReceiverMonitorSuite) TestFillStatusMap_GetEngineError() {
 	srMonitorServerKey := NewClusterShardKey(1, 1)
 	srMonitorCtx := historyi.NewMockShardContext(s.controller)
-	srMonitorCtx.EXPECT().GetEngine(gomock.Any()).Return(nil, fmt.Errorf("engine error"))
+	srMonitorCtx.EXPECT().GetEngine(gomock.Any()).Return(nil, errors.New("engine error"))
 	s.shardController.EXPECT().GetShardByID(int32(1)).Return(srMonitorCtx, nil)
 	srMonitorStatusMap := make(map[ClusterShardKeyPair]*streamStatus)
 	s.streamReceiverMonitor.fillStatusMap(srMonitorStatusMap, srMonitorServerKey, []ClusterShardKey{NewClusterShardKey(2, 1)})

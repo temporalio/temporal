@@ -74,7 +74,7 @@ func (s *miscCoverageSuite) TestGRPCStreamClientProvider_Get_UnknownCluster() {
 	provider := NewStreamBiDirectionStreamClientProvider(s.clusterMetadata, s.clientBean)
 	_, err := provider.Get(context.Background(), ClusterShardKey{}, ClusterShardKey{ClusterID: 99})
 	s.Error(err)
-	s.IsType(&serviceerror.Internal{}, err)
+	s.ErrorAs(err, new(*serviceerror.Internal))
 }
 
 func (s *miscCoverageSuite) TestGRPCStreamClientProvider_Get_AdminClientError() {

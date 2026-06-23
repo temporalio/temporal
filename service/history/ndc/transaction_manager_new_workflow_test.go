@@ -21,7 +21,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-var txnNewErrTest = errors.New("txnNew test error")
+var errTxnNew = errors.New("txnNew test error")
 
 type (
 	transactionMgrForNewWorkflowSuite struct {
@@ -230,10 +230,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_GetCurren
 		RunId: runID,
 	}).AnyTimes()
 
-	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", txnNewErrTest)
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", errTxnNew)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_LoadWorkflowError() {
@@ -256,10 +256,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_LoadWorkf
 	}).AnyTimes()
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
-	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(nil, txnNewErrTest)
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(nil, errTxnNew)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_HappensAfterError() {
@@ -285,10 +285,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_HappensAf
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
 	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(currentWorkflow, nil)
-	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, txnNewErrTest)
+	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(false, errTxnNew)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TestExecuteTransaction_UnknownPolicy() {
@@ -316,10 +316,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsCurrent_CloseTransaction
 	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
 	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(nil, nil, txnNewErrTest)
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(nil, nil, errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsCurrent, nil, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 }
 
@@ -348,10 +348,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsCurrent_GetVectorClockEr
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(
 		&persistence.WorkflowSnapshot{}, []*persistence.WorkflowEvents{}, nil,
 	)
-	currentWorkflow.EXPECT().GetVectorClock().Return(int64(0), int64(0), txnNewErrTest)
+	currentWorkflow.EXPECT().GetVectorClock().Return(int64(0), int64(0), errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsCurrent, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -369,10 +369,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsZombie_SuppressByError()
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyActive, txnNewErrTest)
+	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyActive, errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsZombie, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -418,10 +418,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsZombie_CloseTransactionE
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 	targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(nil, nil, txnNewErrTest)
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive).Return(nil, nil, errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsZombie, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -468,10 +468,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsZombie_CreateError() {
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(), s.mockShard, persistence.CreateWorkflowModeBypassCurrent, "", int64(0),
 		targetMutableState, targetWorkflowSnapshot, targetWorkflowEventsSeq, gomock.Any(),
-	).Return(txnNewErrTest)
+	).Return(errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsZombie, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -524,10 +524,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsZombie_ReapplyEventsErro
 	)
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(txnNewErrTest)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsZombie, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -576,10 +576,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestCreateAsZombie_ReapplyCandidates
 	targetMutableState.EXPECT().GetReapplyCandidateEvents().Return(eventReapplyCandidates)
 
 	targetWorkflow.EXPECT().SuppressBy(currentWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(txnNewErrTest)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicyCreateAsZombie, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -597,10 +597,10 @@ func (s *transactionMgrForNewWorkflowSuite) TestSuppressCurrentAndCreateAsCurren
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, txnNewErrTest)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, errTxnNew)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicySuppressCurrentAndCreateAsCurrent, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }
@@ -612,7 +612,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestSuppressCurrentAndCreateAsCurren
 	targetReleaseCalled := false
 	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
 	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
-	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(txnNewErrTest)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(errTxnNew)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentReleaseCalled := false
@@ -622,7 +622,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestSuppressCurrentAndCreateAsCurren
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, nil)
 
 	err := s.createMgr.executeTransaction(ctx, nDCTransactionPolicySuppressCurrentAndCreateAsCurrent, currentWorkflow, targetWorkflow)
-	s.Equal(txnNewErrTest, err)
+	s.Equal(errTxnNew, err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
 }

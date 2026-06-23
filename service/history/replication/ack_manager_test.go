@@ -523,7 +523,7 @@ func (s *ackManagerSuite) TestSubscribeUnsubscribeNotification() {
 	s.Len(s.replicationAckManager.subscribers, 1)
 
 	s.replicationAckManager.UnsubscribeNotification(ackMgrSubID2)
-	s.Len(s.replicationAckManager.subscribers, 0)
+	s.Empty(s.replicationAckManager.subscribers)
 }
 
 func (s *ackManagerSuite) TestNotifyNewTasks_BroadcastsToSubscribers() {

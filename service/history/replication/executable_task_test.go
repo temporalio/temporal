@@ -1192,7 +1192,7 @@ func (s *executableTaskSuite) TestRetryPolicy() {
 	s.NotNil(policy)
 	// computing next interval should not panic and yields a non-negative backoff
 	next := policy.ComputeNextDelay(0, 1, nil)
-	s.True(next >= 0)
+	s.GreaterOrEqual(next, time.Duration(0))
 }
 
 func (s *executableTaskSuite) TestGetPriority() {
@@ -1217,7 +1217,7 @@ func (s *executableTaskSuite) TestMarkExecutionStart() {
 
 func (s *executableTaskSuite) TestNamespaceName() {
 	// before namespace stored
-	s.Equal("", s.task.NamespaceName())
+	s.Empty(s.task.NamespaceName())
 	// after namespace stored
 	execTaskNsName := namespace.Name("execTask-ns-name")
 	s.task.namespace.Store(execTaskNsName)
@@ -1237,9 +1237,9 @@ func (s *executableTaskSuite) TestWorkflowKeyFromTask_NilTask() {
 	)
 	execTask.replicationTask = nil
 	nsID, wfID, runID := execTask.workflowKeyFromTask()
-	s.Equal("", nsID)
-	s.Equal("", wfID)
-	s.Equal("", runID)
+	s.Empty(nsID)
+	s.Empty(wfID)
+	s.Empty(runID)
 }
 
 func (s *executableTaskSuite) TestWorkflowKeyFromTask_RawTaskInfo() {
@@ -1329,9 +1329,9 @@ func (s *executableTaskSuite) TestWorkflowKeyFromTask_UnknownAttributes() {
 		},
 	})
 	nsID, wfID, runID := execTask.workflowKeyFromTask()
-	s.Equal("", nsID)
-	s.Equal("", wfID)
-	s.Equal("", runID)
+	s.Empty(nsID)
+	s.Empty(wfID)
+	s.Empty(runID)
 }
 
 func (s *executableTaskSuite) TestEmitFinishMetrics_Duplicated() {

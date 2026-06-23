@@ -547,7 +547,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_ClosedWorkflow() {
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, reapplierRunID)
 	s.Error(err)
-	s.IsType(&serviceerror.Internal{}, err)
+	s.ErrorAs(err, new(*serviceerror.Internal))
 	s.Nil(appliedEvent)
 }
 

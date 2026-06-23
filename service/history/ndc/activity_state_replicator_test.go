@@ -1500,7 +1500,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie_
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie_LegacyUpdate() {
@@ -1600,7 +1600,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie_L
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityRetry() {
@@ -1691,7 +1691,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityRetry() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_UpdateActivityInfoError() {

@@ -139,6 +139,8 @@ func (s *executableTaskConverterSuite) TestConvert_AllTaskTypes() {
 					RunId:       "run",
 				},
 			}
+		default:
+			// Other task types need no attributes for this test.
 		}
 		replicationTasks[i] = task
 	}

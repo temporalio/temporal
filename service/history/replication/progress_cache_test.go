@@ -173,7 +173,7 @@ func (s *progressCacheSuite) TestProgressCache_StateAlreadyIncluded() {
 		{NamespaceFailoverVersion: 80, TransitionCount: 20},
 	}
 	err := s.progressCache.Update(s.runID, targetClusterID, seedTransitions, nil)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected := &ReplicationProgress{
 		versionedTransitions:       [][]*persistencespb.VersionedTransition{seedTransitions},
@@ -187,7 +187,7 @@ func (s *progressCacheSuite) TestProgressCache_StateAlreadyIncluded() {
 		{NamespaceFailoverVersion: 80, TransitionCount: 10},
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, progCacheOlderTransitions, nil)
-	s.Nil(err)
+	s.NoError(err)
 	s.DeepEqual(expected, s.progressCache.Get(s.runID, targetClusterID))
 }
 
@@ -200,7 +200,7 @@ func (s *progressCacheSuite) TestProgressCache_EventAlreadyIncluded() {
 		versionhistory.NewVersionHistoryItem(20, 80),
 	}
 	err := s.progressCache.Update(s.runID, targetClusterID, nil, seedItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected := &ReplicationProgress{
 		eventVersionHistoryItems:     [][]*historyspb.VersionHistoryItem{seedItems},
@@ -213,7 +213,7 @@ func (s *progressCacheSuite) TestProgressCache_EventAlreadyIncluded() {
 		versionhistory.NewVersionHistoryItem(5, 80),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, nil, progCacheSubsetItems)
-	s.Nil(err)
+	s.NoError(err)
 	s.DeepEqual(expected, s.progressCache.Get(s.runID, targetClusterID))
 }
 
@@ -227,7 +227,7 @@ func (s *progressCacheSuite) TestProgressCache_UpdateEventsError() {
 		versionhistory.NewVersionHistoryItem(10, 80),
 	}
 	err := s.progressCache.Update(s.runID, targetClusterID, nil, seedItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	// incoming history shares no version with the existing one. With seed version 80 and
 	// incoming version 81, the LCA loop exhausts without a joint point and returns an error,

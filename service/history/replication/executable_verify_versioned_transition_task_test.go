@@ -267,7 +267,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
-	s.IsType(&serviceerror.DataLoss{}, err)
+	s.ErrorAs(err, new(*serviceerror.DataLoss))
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
@@ -353,7 +353,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 	s.Equal(transitionHistory[1], err.(*serviceerrors.SyncState).VersionedTransition)
 }
 
@@ -407,7 +407,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 	var expected *persistencespb.VersionedTransition
 	s.Equal(expected, err.(*serviceerrors.SyncState).VersionedTransition)
 }
@@ -795,7 +795,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MutableStateN
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 // Execute: getMutableState returns a non-NotFound error -> returned as-is.
@@ -893,7 +893,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
-	s.IsType(&serviceerror.DataLoss{}, err)
+	s.ErrorAs(err, new(*serviceerror.DataLoss))
 }
 
 // verifyNewRunExist: getMutableState for new run returns a non-NotFound error -> propagated.

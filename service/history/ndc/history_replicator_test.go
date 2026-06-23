@@ -417,7 +417,7 @@ func (s *histReplSuite) TestDoApplyBackfillEvents_MutableStateNotFound() {
 	wfContext.EXPECT().LoadMutableState(ctx, s.mockShard).Return(nil, serviceerror.NewNotFound("not found"))
 
 	err := s.replicator.doApplyBackfillEvents(ctx, task, s.replicator.applyBackfillEvents)
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *histReplSuite) TestDoApplyBackfillEvents_LoadMutableStateOtherError() {
@@ -535,7 +535,7 @@ func (s *histReplSuite) TestApplyBackfillEvents_TransitionHistoryStale_SyncState
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
 
 	err := s.replicator.applyBackfillEvents(ctx, ms, historyi.NewMockWorkflowContext(s.controller), s.noopRelease(), task)
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 func (s *histReplSuite) TestApplyBackfillEvents_TransitionHistoryDuplicate() {
@@ -1092,7 +1092,7 @@ func (s *histReplSuite) TestDoApplyEvents_MissingMutableState_NonReset_RetryRepl
 	wfContext.EXPECT().LoadMutableState(ctx, s.mockShard).Return(nil, serviceerror.NewNotFound("not found"))
 
 	err := s.replicator.doApplyEvents(ctx, task)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *histReplSuite) TestDoApplyEvents_StartEvent_DuplicateThenContinue() {
@@ -1128,7 +1128,7 @@ func (s *histReplSuite) TestDoApplyEvents_StartEvent_DuplicateThenContinue() {
 	wfContext.EXPECT().LoadMutableState(ctx, s.mockShard).Return(nil, serviceerror.NewNotFound("not found"))
 
 	err = s.replicator.doApplyEvents(ctx, task)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *histReplSuite) TestDoApplyEvents_StartEvent_NonDuplicateError() {
@@ -1387,7 +1387,7 @@ func (s *histReplSuite) TestApplyNonStartEventsMissingMutableState_NonReset_NoBa
 
 	ms, err := s.replicator.applyNonStartEventsMissingMutableState(ctx, historyi.NewMockWorkflowContext(s.controller), task)
 	s.Nil(ms)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *histReplSuite) TestApplyNonStartEventsMissingMutableState_NonReset_WithBaseInfo() {
@@ -1414,7 +1414,7 @@ func (s *histReplSuite) TestApplyNonStartEventsMissingMutableState_NonReset_With
 
 	ms, err := s.replicator.applyNonStartEventsMissingMutableState(ctx, historyi.NewMockWorkflowContext(s.controller), task)
 	s.Nil(ms)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 }
 
 func (s *histReplSuite) resetTask() replicationTask {

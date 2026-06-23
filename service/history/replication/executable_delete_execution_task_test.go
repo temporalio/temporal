@@ -1,7 +1,6 @@
 package replication
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -305,7 +304,7 @@ func (s *executableDeleteExecutionTaskSuite) TestHandleErr_OtherError() {
 	delExecErr := serviceerror.NewUnavailable("boom")
 	err := task.HandleErr(delExecErr)
 	s.Error(err)
-	s.True(errors.Is(err, delExecErr))
+	s.ErrorIs(err, delExecErr)
 	s.Equal(fmt.Errorf("delete execution replication task error: %w", delExecErr).Error(), err.Error())
 }
 

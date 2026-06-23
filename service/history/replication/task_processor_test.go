@@ -907,9 +907,7 @@ func (s *taskProcessorSuite) TestPollProcessReplicationTasks_Success() {
 	reqChan := s.requestChan
 	responderDone := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case request := <-reqChan:
@@ -923,7 +921,7 @@ func (s *taskProcessorSuite) TestPollProcessReplicationTasks_Success() {
 				return
 			}
 		}
-	}()
+	})
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil).AnyTimes()
 	err := s.replicationTaskProcessor.pollProcessReplicationTasks()
 	s.NoError(err)
@@ -951,9 +949,7 @@ func (s *taskProcessorSuite) TestPollProcessReplicationTasks_ApplyError() {
 	)
 	reqChan := s.requestChan
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		request := <-reqChan
 		defer close(request.respChan)
 		request.respChan <- &replicationspb.ReplicationMessages{
@@ -961,7 +957,7 @@ func (s *taskProcessorSuite) TestPollProcessReplicationTasks_ApplyError() {
 			LastRetrievedMessageId: 456,
 			HasMore:                false,
 		}
-	}()
+	})
 	err := s.replicationTaskProcessor.pollProcessReplicationTasks()
 	s.Error(err)
 	wg.Wait()
@@ -979,9 +975,7 @@ func (s *taskProcessorSuite) TestEventLoop_ShutdownAndSyncShard() {
 	reqChan := s.requestChan
 	responderDone := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case request := <-reqChan:
@@ -991,10 +985,13 @@ func (s *taskProcessorSuite) TestEventLoop_ShutdownAndSyncShard() {
 				return
 			}
 		}
-	}()
+	})
 	s.replicationTaskProcessor.Start()
+	// syncShardChan is buffered (cap 1). The first send is buffered; the second
+	// send blocks until the event loop receives the first, which deterministically
+	// proves the sync-shard-status receive branch executed (no sleep needed).
 	s.replicationTaskProcessor.syncShardChan <- &replicationspb.SyncShardStatus{StatusTime: now}
-	time.Sleep(50 * time.Millisecond)
+	s.replicationTaskProcessor.syncShardChan <- &replicationspb.SyncShardStatus{StatusTime: now}
 	s.replicationTaskProcessor.Stop()
 	close(responderDone)
 	wg.Wait()
