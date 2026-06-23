@@ -915,8 +915,6 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Put the reader into the stuck state: atEnd=false, readPending=false, backoffTimer=nil.
-	// This state can occur in production through various race conditions (e.g., a write
-	// causing eviction, or a DB error recovery sequence).
 	blm := s.blm.(*fairBacklogManagerImpl)
 	blm.subqueueLock.Lock()
 	reader := blm.subqueues[subqueueZero]
