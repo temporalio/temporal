@@ -3245,10 +3245,10 @@ func (s *nodeSuite) TestContextNowStableWithinContext() {
 
 	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
 	s.Equal("test-value", contextWithValue.Value("test-key"))
-	s.Equal(updatedTime, contextWithValue.Now(component))
+	s.Equal(startTime, contextWithValue.Now(component))
 
 	s.timeSource.Update(laterTime)
-	s.Equal(updatedTime, contextWithValue.Now(component))
+	s.Equal(startTime, contextWithValue.Now(component))
 	s.Equal(laterTime, NewMutableContext(context.Background(), root).Now(component))
 
 	immutableContext := NewContext(context.Background(), root)
@@ -3365,7 +3365,7 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 
 	mutations, err := root.CloseTransaction()
 	s.NoError(err)
-	s.Empty(mutations.UpdatedNodes)
+	s.Len(mutations.UpdatedNodes, 1, "root should be updated")
 	s.Empty(mutations.DeletedNodes)
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
 }

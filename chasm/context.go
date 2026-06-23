@@ -214,7 +214,7 @@ func (c *immutableCtx) Value(key any) any {
 func (c *immutableCtx) withValue(key any, value any) Context {
 	return &immutableCtx{
 		ctx:          context.WithValue(c.goContext(), key, value),
-		now:          c.root.Now(nil),
+		now:          c.now,
 		root:         c.root,
 		executionKey: c.executionKey,
 	}
