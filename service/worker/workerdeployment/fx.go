@@ -1,12 +1,14 @@
 package workerdeployment
 
 import (
+	"context"
 	"time"
 
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -68,6 +70,7 @@ var Module = fx.Options(
 )
 
 func ClientProvider(
+	lc fx.Lifecycle,
 	logger log.Logger,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
@@ -87,6 +90,13 @@ func ClientProvider(
 			)
 		},
 	)
+	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			highestRevSignaledToVersionWf.Stop()
+			return nil
+		},
+	})
 	return &ClientImpl{
 		logger:                           logger,
 		historyClient:                    historyClient,
@@ -100,6 +110,7 @@ func ClientProvider(
 		autoCreateVisibilityRateLimiter:  autoCreateVisibilityRateLimiter,
 		testHooks:                        testHooks,
 		metricsHandler:                   metricsHandler,
+		highestRevSignaledToVersionWf:    highestRevSignaledToVersionWf,
 	}
 }
 

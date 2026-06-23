@@ -204,10 +204,10 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRege
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigNoop() {
-	s.testGetClaimMapperFromConfig("", true, reflect.TypeOf(&noopClaimMapper{}))
+	s.testGetClaimMapperFromConfig("", true, reflect.TypeFor[*noopClaimMapper]())
 }
 func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigDefault() {
-	s.testGetClaimMapperFromConfig("default", true, reflect.TypeOf(&defaultJWTClaimMapper{}))
+	s.testGetClaimMapperFromConfig("default", true, reflect.TypeFor[*defaultJWTClaimMapper]())
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -124,6 +125,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
+		testhooks.TestHooks{},
 		NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	).(*taskProcessorImpl)
 }
@@ -235,7 +237,6 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -244,8 +245,13 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		},
 	}
+	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
+		SourceClusterName: request.SourceClusterName,
+		TaskInfo:          request.TaskInfo,
+	}
 
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), persistedRequest).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
@@ -256,7 +262,6 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
 	runID := uuid.NewString()
 
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -266,8 +271,13 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
 			Version:     1,
 		},
 	}
+	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
+		SourceClusterName: request.SourceClusterName,
+		TaskInfo:          request.TaskInfo,
+	}
 
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), persistedRequest).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
@@ -278,7 +288,6 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	runID := uuid.NewString()
 
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
@@ -290,8 +299,13 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 			Version:      1,
 		},
 	}
+	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
+		SourceClusterName: request.SourceClusterName,
+		TaskInfo:          request.TaskInfo,
+	}
 
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), persistedRequest).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
@@ -310,7 +324,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -347,7 +360,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -388,7 +400,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
 		VisibilityTime: timestamppb.New(time.Now()),
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:    namespaceID,
@@ -437,7 +448,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,

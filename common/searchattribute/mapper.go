@@ -221,3 +221,23 @@ func UnaliasFields(
 
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
+
+// IsUserDefinedSearchAttribute returns true if alias refers to a user-defined custom search
+// attribute rather than a synthetic one (e.g. the synthetic ScheduleId that maps to WorkflowId).
+//
+// Two independent checks are required because custom SAs can be registered in two ways:
+//  1. Via UpdateNamespace with an explicit alias: stored in the Mapper as alias → field-name.
+//     GetFieldName returns the underlying field name (different from the alias), so the SA is
+//     identifiable even when it is absent from the NameTypeMap under the alias.
+//  2. Via AddSearchAttributes without an alias: stored directly in NameTypeMap's custom map
+//     under the alias itself. GetFieldName returns an error (no mapping exists), so the type
+//     map is the only way to detect these.
+func IsUserDefinedSearchAttribute(alias string, saMapper Mapper, saNameType NameTypeMap, ns string) bool {
+	// Check 1: explicit alias mapping resolves to a different underlying field name.
+	if mapped, err := saMapper.GetFieldName(alias, ns); err == nil && mapped != alias {
+		return true
+	}
+	// Check 2: alias is registered as a custom SA in the type map (no alias mapping).
+	_, ok := saNameType.Custom()[alias]
+	return ok
+}

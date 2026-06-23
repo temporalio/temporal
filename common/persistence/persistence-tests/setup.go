@@ -37,10 +37,8 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 		switch driver {
 		case mysql.PluginName:
 			return GetMySQLTestClusterOption()
-		case postgresql.PluginName:
-			return GetPostgreSQLTestClusterOption()
-		case postgresql.PluginNamePGX:
-			return GetPostgreSQLPGXTestClusterOption()
+		case postgresql.PluginName, postgresql.PluginNamePGX:
+			return GetPostgreSQLTestClusterOption(driver, nil)
 		case sqlite.PluginName:
 			return GetSQLiteMemoryTestClusterOption()
 		default:
@@ -56,7 +54,7 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 // GetCassandraTestClusterOption returns test options
 func GetCassandraTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		DBName:    "test_" + GenerateRandomDBName(3),
+		DBName:    GenerateRandomDBName(),
 		DBHost:    environment.GetCassandraAddress(),
 		DBPort:    environment.GetCassandraPort(),
 		SchemaDir: testCassandraSchemaDir,
@@ -68,7 +66,7 @@ func GetCassandraTestClusterOption() *TestBaseOptions {
 func GetMySQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: mysql.PluginName,
-		DBName:          "test_" + GenerateRandomDBName(3),
+		DBName:          GenerateRandomDBName(),
 		DBUsername:      testMySQLUser,
 		DBPassword:      testMySQLPassword,
 		DBHost:          environment.GetMySQLAddress(),
@@ -79,30 +77,31 @@ func GetMySQLTestClusterOption() *TestBaseOptions {
 }
 
 // GetPostgreSQLTestClusterOption return test options
-func GetPostgreSQLTestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginName,
-		DBName:          "test_" + GenerateRandomDBName(3),
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
+func GetPostgreSQLTestClusterOption(
+	pluginName string,
+	connectAttributes map[string]string,
+) *TestBaseOptions {
+	switch pluginName {
+	case postgresql.PluginName, postgresql.PluginNamePGX:
+		// no-op
+	default:
+		panic(fmt.Sprintf(
+			"invalid postgresql plugin name: %s (valid options: %s, %s)",
+			pluginName,
+			postgresql.PluginName,
+			postgresql.PluginNamePGX,
+		))
 	}
-}
-
-// GetPostgreSQLPGXTestClusterOption return test options
-func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNamePGX,
-		DBName:          "test_" + GenerateRandomDBName(3),
-		DBUsername:      testPostgreSQLUser,
-		DBPassword:      testPostgreSQLPassword,
-		DBHost:          environment.GetPostgreSQLAddress(),
-		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
+		SQLDBPluginName:   pluginName,
+		DBName:            GenerateRandomDBName(),
+		DBUsername:        testPostgreSQLUser,
+		DBPassword:        testPostgreSQLPassword,
+		DBHost:            environment.GetPostgreSQLAddress(),
+		DBPort:            environment.GetPostgreSQLPort(),
+		SchemaDir:         testPostgreSQLSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: connectAttributes,
 	}
 }
 
@@ -110,7 +109,7 @@ func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: sqlite.PluginName,
-		DBName:          filepath.Join(os.TempDir(), "test_"+GenerateRandomDBName(3)), // put files in temp to avoid cluttering the project
+		DBName:          filepath.Join(os.TempDir(), GenerateRandomDBName()), // put files in temp to avoid cluttering the project
 		DBUsername:      testSQLiteUser,
 		DBPassword:      testSQLitePassword,
 		DBHost:          environment.GetLocalhostIP(),
@@ -130,7 +129,7 @@ func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
-		DBName:            "test_" + GenerateRandomDBName(3),
+		DBName:            GenerateRandomDBName(),
 		DBUsername:        testSQLiteUser,
 		DBPassword:        testSQLitePassword,
 		DBHost:            environment.GetLocalhostIP(),

@@ -76,9 +76,9 @@ func (r *Registry) EventDefinitionByEventType(t enumspb.EventType) (EventDefinit
 	return def, ok
 }
 
-// EventDefinitionByGoType returns an [EventDefinition] for a given Go type and a boolean indicating whether it was found.
+// eventDefinitionByGoType returns an [EventDefinition] for a given Go type and a boolean indicating whether it was found.
 // Registration by Go type allows easy go-to-definition navigation in call sites.
-func EventDefinitionByGoType[D EventDefinition](r *Registry) (D, bool) {
+func eventDefinitionByGoType[D EventDefinition](r *Registry) (D, bool) {
 	var zero D
 	goType := reflect.TypeFor[D]()
 	for goType.Kind() == reflect.Pointer {

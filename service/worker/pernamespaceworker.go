@@ -325,7 +325,8 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 func (w *perNamespaceWorker) handleError(err error) {
 	if err == nil {
 		return
-	} else if err == errNoWorkerNeeded {
+	}
+	if errors.Is(err, errNoWorkerNeeded) {
 		w.stopWorkerAndResetTimer()
 		return
 	}
@@ -373,7 +374,9 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	if !w.wm.Running() ||
 		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
+		//nolint:forbidigo // per-namespace worker lifecycle, no workflow context
 		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
+
 		return errNoWorkerNeeded
 	}
 

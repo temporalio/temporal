@@ -288,7 +288,11 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 //     comment of the NewRef method in MutableContext.
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
-// It returns the result, along with the new component reference. opts are currently ignored.
+// opts are currently ignored.
+//
+// It returns the result, along with the new component reference. The returned reference may be
+// nil when updateFn deletes the component in the same transaction and the component is not the
+// root component.
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,

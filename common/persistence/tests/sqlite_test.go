@@ -53,7 +53,7 @@ func NewSQLiteFileConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		DatabaseName:      persistencetests.GenerateRandomDBName(),
 		ConnectAttributes: map[string]string{"cache": "private"},
 	}
 }
@@ -78,6 +78,10 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
 		t.Fatalf("Unable to load schema: %s", err)
+	}
+
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
 	}
 
 	for _, stmt := range statements {

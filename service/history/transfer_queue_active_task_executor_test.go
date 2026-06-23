@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -229,6 +230,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
+		testhooks.TestHooks{},
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -363,6 +365,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
 		nil,
+		testhooks.TestHooks{},
 	).(*transferQueueActiveTaskExecutor)
 
 	// Execution should succeed.
@@ -1273,7 +1276,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 
 	taskID := s.mustGenerateTaskID()
 	// Simulate termination due to reset.
-	event, err = mutableState.AddWorkflowExecutionTerminatedEvent(event.GetEventId(), "some reason", nil, consts.IdentityResetter, false, nil)
+	event, err = mutableState.AddWorkflowExecutionTerminatedEvent("some reason", nil, consts.IdentityResetter, false, nil)
 	s.NoError(err)
 
 	transferTask := &tasks.CloseExecutionTask{
@@ -3124,9 +3127,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             ci.CreateRequestId,
-			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			UserMetadata:          userMetadata,
+			RequestId:                ci.CreateRequestId,
+			WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			UserMetadata:             userMetadata,
 		},
 		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 			NamespaceId:      task.NamespaceID,

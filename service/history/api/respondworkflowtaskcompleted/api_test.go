@@ -151,9 +151,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 			var historyEvents []*historypb.HistoryEvent
 			for _, uwe := range wfEvents {
-				for _, event := range uwe.Events {
-					historyEvents = append(historyEvents, event)
-				}
+				historyEvents = append(historyEvents, uwe.Events...)
 			}
 			writtenHistoryCh <- historyEvents
 			return tests.UpdateWorkflowExecutionResponse, nil
@@ -728,6 +726,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		nil,
 		false,
 		nil,
+		0,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -807,6 +806,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		false,
 		nil,
+		0,
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -824,6 +824,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		false,
 		nil,
+		0,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,

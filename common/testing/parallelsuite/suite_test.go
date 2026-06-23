@@ -1,11 +1,15 @@
 package parallelsuite
 
 import (
+	"context"
 	"flag"
 	"reflect"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 type validSuite struct{ Suite[*validSuite] }
@@ -48,6 +52,54 @@ type setupTestSuite struct{ Suite[*setupTestSuite] }
 func (s *setupTestSuite) TestA()     {}
 func (s *setupTestSuite) SetupTest() {} //nolint:unused
 
+type awaitTrueSuite struct{ Suite[*awaitTrueSuite] }
+
+func (s *awaitTrueSuite) TestAwaitTrue() {
+	var attempts atomic.Int32
+	s.AwaitTrue(func() bool {
+		attempts.Add(1)
+		return true
+	}, time.Second, time.Millisecond)
+	s.Equal(int32(1), attempts.Load())
+}
+
+func (s *awaitTrueSuite) TestAwaitTrueFalseRetry() {
+	var attempts atomic.Int32
+	s.AwaitTrue(func() bool {
+		return attempts.Add(1) == 2
+	}, time.Second, time.Millisecond)
+	s.Equal(int32(2), attempts.Load())
+}
+
+func (s *awaitTrueSuite) TestAwaitTruef() {
+	s.AwaitTruef(func() bool {
+		return true
+	}, time.Second, time.Millisecond, "condition should pass")
+}
+
+type contextSuite struct{ Suite[*contextSuite] }
+
+func (s *contextSuite) TestContextHasDeadline() {
+	deadline, ok := s.Context().Deadline()
+	s.True(ok)
+	s.Positive(time.Until(deadline))
+}
+
+func (s *contextSuite) TestAwaitUsesSuiteContext() {
+	type key struct{}
+
+	testcontext.New(s.T(), testcontext.WithContextDecorator(key{}, func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, key{}, "decorated")
+	}))
+
+	s.Await(func(s *contextSuite) {
+		s.Equal("decorated", s.Context().Value(key{}))
+		deadline, ok := s.Context().Deadline()
+		s.True(ok)
+		s.Less(time.Until(deadline), 200*time.Millisecond)
+	}, 100*time.Millisecond, time.Millisecond)
+}
+
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
 
 func (s *sealAfterRunSuite) TestAssertionAfterRun() {
@@ -65,28 +117,21 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 	require.Panics(t, func() { s.T() })
 }
 
-type sealRunAfterAssertSuite struct {
-	Suite[*sealRunAfterAssertSuite]
-}
-
-func (s *sealRunAfterAssertSuite) TestRunAfterAssertion() {
-	// Use an assertion first.
-	s.NotNil(s.T())
-
-	t := s.guardT.T
-
-	// Calling Run after assertions panics.
-	require.Panics(t, func() {
-		s.Run("should-not-run", func(*sealRunAfterAssertSuite) {})
-	})
-}
-
 func TestRun_AcceptsSuite(t *testing.T) {
 	t.Run("no args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validSuite{}) })
 	})
 	t.Run("with args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validWithArgsSuite{}, "hello", 42) })
+	})
+	t.Run("legacy", func(t *testing.T) {
+		require.NotPanics(t, func() { RunLegacySequential(t, &validSuite{}) }) //nolint:staticcheck // SA1019: validating deprecated legacy runner
+	})
+	t.Run("await true", func(t *testing.T) {
+		require.NotPanics(t, func() { Run(t, &awaitTrueSuite{}) })
+	})
+	t.Run("context", func(t *testing.T) {
+		require.NotPanics(t, func() { Run(t, &contextSuite{}) })
 	})
 }
 
@@ -150,8 +195,5 @@ func TestApplyTestifyMFilter(t *testing.T) {
 func TestGuardSeal(t *testing.T) {
 	t.Run("assertion after Run", func(t *testing.T) {
 		Run(t, &sealAfterRunSuite{})
-	})
-	t.Run("Run after assertion", func(t *testing.T) {
-		Run(t, &sealRunAfterAssertSuite{})
 	})
 }

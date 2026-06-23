@@ -105,6 +105,7 @@ type (
 		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
 		OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
 		ReprocessAllTasks()
+		HasWaitingPoller() bool
 	}
 )
 
@@ -351,6 +352,20 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return err
 }
 
+// StartScaleManager is called by backlog manager after it's loaded metadata from the default queue. (New matcher only.)
+func (c *physicalTaskQueueManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
+	c.partitionMgr.StartScaleManager(scaleState)
+}
+
+func (c *physicalTaskQueueManagerImpl) UpdateScaleState(scaleState *persistencespb.PartitionScaleState, syncToDB bool) error {
+	if !syncToDB {
+		return c.backlogMgr.getDB().UpdateScaleState(c.tqCtx /* unused */, scaleState, false)
+	}
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	defer cancel()
+	return c.backlogMgr.getDB().UpdateScaleState(ctx, scaleState, true)
+}
+
 // Call this to set up dual-read from the other table.
 // Must be called by the active backlog manager before it sets itself initialized.
 // Must only be called when using new matcher.
@@ -450,6 +465,15 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
+func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior) {
+	c.metricsHandler.Counter(metrics.TasksAddedCounter.Name()).Record(
+		1,
+		metrics.TaskAddResultTag(result),
+		metrics.ForwardedTag(forwarded),
+		metrics.VersioningBehaviorTag(behavior),
+	)
+}
+
 // PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
@@ -460,8 +484,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
-	c.currentPolls.Add(1)
-	defer c.currentPolls.Add(-1)
+	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(1)))
+	defer func() {
+		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(-1)))
+	}()
 
 	namespaceId := namespace.ID(c.queue.NamespaceId())
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -475,6 +501,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
+	//nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
@@ -679,13 +706,13 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return false, nil
+			return syncMatchNoPoller, nil
 		}
 	}
 
@@ -696,7 +723,11 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	return c.oldMatcher.Offer(childCtx, task)
+	matched, err := c.oldMatcher.Offer(childCtx, task)
+	if matched {
+		return syncMatchSuccess, err
+	}
+	return syncMatchNoPoller, err
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

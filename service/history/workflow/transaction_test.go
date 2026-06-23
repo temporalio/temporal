@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -60,6 +59,7 @@ func (s *transactionSuite) SetupTest() {
 	s.mockShard.EXPECT().GetEngine(gomock.Any()).Return(s.mockEngine, nil).AnyTimes()
 	s.mockShard.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceCache).AnyTimes()
 	s.mockShard.EXPECT().GetLogger().Return(s.logger).AnyTimes()
+	s.mockShard.EXPECT().ChasmRegistry().Return(chasm.NewRegistry(s.logger)).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	s.transaction = NewTransaction(s.mockShard)
@@ -144,7 +144,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
 		true, // isWorkflow
@@ -253,10 +253,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 			},
 		},
 		[]*persistence.WorkflowEvents{},
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
 		true, // isWorkflow
@@ -334,10 +334,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyChasmExecu
 		0,
 		resetWorkflowSnapshot,
 		[]*persistence.WorkflowEvents{},
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		newWorkflowSnapshot,
 		[]*persistence.WorkflowEvents{},
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		currentWorkflowMutation,
 		[]*persistence.WorkflowEvents{},
 		true, // isWorkflow
