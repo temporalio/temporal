@@ -3,6 +3,7 @@ package ringpop
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -102,6 +103,11 @@ func (s *RpoSuite) TestMonitor() {
 
 	s.Equal(2, len(r.Members()))
 	s.Equal(1, len(r.AvailableMembers()))
+	for k := 0; k < 10; k++ {
+		host, err = r.Lookup(fmt.Sprintf("drain-key-%d", k))
+		s.Nil(err, "Ringpop monitor failed to find host for key after drain")
+		s.NotEqual(testService.hostAddrs[2], host.GetAddress(), "Ringpop monitor assigned key to draining host")
+	}
 
 	err = r.RemoveListener("test-listener")
 	s.Nil(err, "RemoveListener() failed")
@@ -220,6 +226,26 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 	})
 	s.Equal(3, len(resolver.Members()))
 	s.Equal(2, len(resolver.AvailableMembers()))
+}
+
+func (s *RpoSuite) TestLookupSkipsStoppingHosts() {
+	running := newHostInfo("a", nil)
+	stopping := newHostInfo("b", map[string]string{stopAtKey: strconv.FormatInt(time.Now().Add(10*time.Second).Unix(), 10)})
+
+	resolver := &serviceResolver{}
+	resolver.ringAndHosts.Store(ringAndHosts{
+		ring:  buildLookupRing([]*hostInfo{running, stopping}, 100),
+		hosts: map[string]*hostInfo{running.GetAddress(): running, stopping.GetAddress(): stopping},
+	})
+
+	s.Equal(2, len(resolver.Members()))
+	s.Equal(1, len(resolver.AvailableMembers()))
+
+	for k := 0; k < 10; k++ {
+		host, err := resolver.Lookup(fmt.Sprintf("stop-key-%d", k))
+		s.NoError(err)
+		s.Equal("a", host.GetAddress())
+	}
 }
 
 func eventToString(event *membership.ChangedEvent) []string {

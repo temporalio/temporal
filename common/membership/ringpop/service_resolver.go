@@ -78,8 +78,9 @@ type (
 	}
 
 	ringAndHosts struct {
-		// We need to store a separate map from address to hostInfo because HashRing doesn't
-		// return the rpmembership.Member that was passed to it, it only returns the address.
+		// ring contains only hosts that are eligible for new RPC traffic. hosts keeps the
+		// full currently known member set so membership change events still capture draining
+		// and stopping nodes until they fully disappear from ringpop gossip.
 		ring  *hashring.HashRing
 		hosts map[string]*hostInfo
 	}
@@ -216,7 +217,7 @@ func (r *serviceResolver) AvailableMemberCount() int {
 	_, hosts := r.ring()
 	n := 0
 	for _, host := range hosts {
-		if !isDraining(host) {
+		if isAvailableForLookup(host) {
 			n++
 		}
 	}
@@ -236,7 +237,7 @@ func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
 	_, hosts := r.ring()
 	var servers []membership.HostInfo
 	for _, host := range hosts {
-		if !isDraining(host) {
+		if isAvailableForLookup(host) {
 			servers = append(servers, host)
 		}
 	}
@@ -295,8 +296,7 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		return nil, nil
 	}
 
-	ring := newHashRing(r.replicaPoints)
-	ring.AddMembers(util.MapSlice(hosts, func(h *hostInfo) rpmembership.Member { return h })...)
+	ring := buildLookupRing(hosts, r.replicaPoints)
 
 	r.lastRefreshTime = time.Now().UTC()
 	r.ringAndHosts.Store(ringAndHosts{
@@ -308,7 +308,28 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 	slices.Sort(addrs)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 
+	dialableAddrs := util.MapSlice(filterHostsForLookup(hosts), func(h *hostInfo) string { return h.summary() })
+	slices.Sort(dialableAddrs)
+	r.logger.Info("Current dialable members", tag.Addresses(dialableAddrs))
+
 	return changedEvent, nil
+}
+
+func buildLookupRing(hosts []*hostInfo, replicaPoints int) *hashring.HashRing {
+	ring := newHashRing(replicaPoints)
+	dialable := util.MapSlice(filterHostsForLookup(hosts), func(host *hostInfo) rpmembership.Member { return host })
+	ring.AddMembers(dialable...)
+	return ring
+}
+
+func filterHostsForLookup(hosts []*hostInfo) []*hostInfo {
+	var dialable []*hostInfo
+	for _, host := range hosts {
+		if isAvailableForLookup(host) {
+			dialable = append(dialable, host)
+		}
+	}
+	return dialable
 }
 
 func (r *serviceResolver) scheduleRefresh(nextEvent int64) {
@@ -530,4 +551,13 @@ func isDraining(host *hostInfo) bool {
 		}
 	}
 	return false
+}
+
+func hasStopAt(host *hostInfo) bool {
+	_, ok := host.Label(stopAtKey)
+	return ok
+}
+
+func isAvailableForLookup(host *hostInfo) bool {
+	return !isDraining(host) && !hasStopAt(host)
 }
