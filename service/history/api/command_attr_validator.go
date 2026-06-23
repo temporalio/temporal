@@ -630,6 +630,13 @@ func (v *CommandAttrValidator) createCrossNamespaceCallError(
 	return serviceerror.NewInvalidArgumentf("unable to process cross namespace command between %v and %v", namespaceEntry.Name(), targetNamespaceEntry.Name())
 }
 
+// maxCommandSequenceErrorLength is the maximum length of the command sequence
+// string included in an invalid command sequence error. The limit keeps the
+// gRPC status message under the default HTTP/2 header limit (~8 KB) so that
+// clients receive a useful error instead of an RST_STREAM or
+// HeaderListSizeException.
+const maxCommandSequenceErrorLength = 2048
+
 func (v *CommandAttrValidator) ValidateCommandSequence(
 	commands []*commandpb.Command,
 ) error {
@@ -639,7 +646,7 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 		if closeCommand != enumspb.COMMAND_TYPE_UNSPECIFIED {
 			return serviceerror.NewInvalidArgumentf(
 				"invalid command sequence: [%v], command %s must be the last command.",
-				strings.Join(v.commandTypes(commands), ", "), closeCommand.String(),
+				v.truncatedCommandTypes(commands), closeCommand.String(),
 			)
 		}
 
@@ -681,4 +688,28 @@ func (v *CommandAttrValidator) commandTypes(
 		result[index] = command.GetCommandType().String()
 	}
 	return result
+}
+
+// truncatedCommandTypes returns a comma-separated string of command types,
+// truncated so that the result does not exceed maxCommandSequenceErrorLength.
+// If truncation is required, an ellipsis is appended and the list is cut
+// at a comma boundary to avoid breaking a single command name.
+func (v *CommandAttrValidator) truncatedCommandTypes(
+	commands []*commandpb.Command,
+) string {
+	types := v.commandTypes(commands)
+	joined := strings.Join(types, ", ")
+	if len(joined) <= maxCommandSequenceErrorLength {
+		return joined
+	}
+
+	// Truncate at the last comma that fits within the limit, leaving room
+	// for "...".
+	cutoff := maxCommandSequenceErrorLength - 3
+	lastComma := strings.LastIndex(joined[:cutoff], ", ")
+	if lastComma < 0 {
+		// A single command type is longer than the limit; hard truncate.
+		return joined[:cutoff] + "..."
+	}
+	return joined[:lastComma] + ", ..."
 }

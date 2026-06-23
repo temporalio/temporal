@@ -54,697 +54,45 @@ var (
 	}
 )
 
-type (
-	commandAttrValidatorSuite struct {
-		suite.Suite
-		*require.Assertions
+type commandAttrValidatorSuite struct {
+	suite.Suite
+	*require.Assertions
 
-		controller            *gomock.Controller
-		mockNamespaceCache    *namespace.MockRegistry
-		mockVisibilityManager *manager.MockVisibilityManager
-
-		validator *CommandAttrValidator
-
-		testNamespaceID       namespace.ID
-		testTargetNamespaceID namespace.ID
-	}
-)
+	controller            *gomock.Controller
+	mockNamespaceRegistry *namespace.MockRegistry
+	mockVisibilityManager *manager.MockVisibilityManager
+	validator             *CommandAttrValidator
+	mockClusterMetadata   *cluster.MockMetadata
+}
 
 func TestCommandAttrValidatorSuite(t *testing.T) {
-	s := new(commandAttrValidatorSuite)
-	suite.Run(t, s)
-}
-
-func (s *commandAttrValidatorSuite) SetupSuite() {
-	s.testNamespaceID = "test namespace ID"
-	s.testTargetNamespaceID = "test target namespace ID"
-}
-
-func (s *commandAttrValidatorSuite) TearDownSuite() {
+	suite.Run(t, new(commandAttrValidatorSuite))
 }
 
 func (s *commandAttrValidatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
-
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
-	s.mockVisibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
-	s.mockVisibilityManager.EXPECT().
-		ValidateCustomSearchAttributes(gomock.Any()).
-		DoAndReturn(
-			func(searchAttributes map[string]any) (map[string]any, error) {
-				return searchAttributes, nil
-			},
-		).
-		AnyTimes()
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
-	config := &configs.Config{
-		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
-		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
-		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024),
-		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(40 * 1024),
-		DefaultActivityRetryPolicy:        func(string) retrypolicy.DefaultRetrySettings { return retrypolicy.DefaultDefaultRetrySettings },
-		DefaultWorkflowRetryPolicy:        func(string) retrypolicy.DefaultRetrySettings { return retrypolicy.DefaultDefaultRetrySettings },
-		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),
-		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(primitives.DefaultWorkflowTaskTimeout),
-	}
+	cfg := tests.NewDynamicConfig()
 	s.validator = NewCommandAttrValidator(
-		s.mockNamespaceCache,
-		config,
+		s.mockNamespaceRegistry,
+		cfg,
 		searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			searchattribute.NewTestMapperProvider(nil),
-			config.SearchAttributesNumberOfKeysLimit,
-			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit,
 			s.mockVisibilityManager,
-			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-			metrics.NoopMetricsHandler,
-			log.NewNoopLogger(),
-		))
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(256),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+			false,
+		),
+	)
 }
 
 func (s *commandAttrValidatorSuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
-
-	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
-
-	fc, err := s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
-
-	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Execution is not set on SignalExternalWorkflowExecutionCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
-
-	attributes.Execution = &commonpb.WorkflowExecution{}
-	attributes.Execution.WorkflowId = "workflow-id"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "SignalName is not set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
-
-	attributes.Execution.RunId = "run-id"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.EqualError(err, "Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=run-id SignalName=")
-	attributes.Execution.RunId = tests.RunID
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
-
-	attributes.SignalName = "my signal name"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
-
-	attributes.Input = payloads.EncodeString("test input")
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
-	namespaceName := namespace.Name("tests.Namespace")
-	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
-
-	fc, err := s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
-	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-
-	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
-	s.EqualError(err, "SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-
-	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
-	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-
-	saPayload, err := sadefs.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	s.NoError(err)
-	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-		"Keyword01": saPayload,
-	}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
-
-	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
-	deploymentRestrictedAttributes := []string{
-		sadefs.TemporalWorkerDeploymentVersion,
-		sadefs.TemporalWorkerDeployment,
-		sadefs.TemporalWorkflowVersioningBehavior,
-	}
-
-	for _, attr := range deploymentRestrictedAttributes {
-		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-			attr: saPayload,
-		}
-		fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
-		s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", attr))
-		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-	}
-}
-
-func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes_InternalPerNsTaskQueue() {
-	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: primitives.PerNSWorkerTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-	}
-
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		TaskQueue: "regular-task-queue",
-	}
-
-	fc, err := s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
-		tests.Namespace,
-		attributes,
-		executionInfo,
-	)
-	s.Error(err)
-	s.Contains(err.Error(), "cannot use internal per-namespace task queue")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, fc)
-
-	executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
-
-	fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
-		tests.Namespace,
-		attributes,
-		executionInfo,
-	)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
-	executionTimeout := time.Hour
-	workflowTypeName := "workflowType"
-	taskQueue := "taskQueue"
-
-	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		// workflow type name and task queue name should be retrieved from existing workflow info
-
-		// WorkflowRunTimeout should be shorten to execution timeout
-		WorkflowRunTimeout: durationpb.New(executionTimeout * 2),
-		// WorkflowTaskTimeout should be shorten to max workflow task timeout
-		WorkflowTaskTimeout: durationpb.New(maxWorkflowTaskStartToCloseTimeout * 2),
-	}
-
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		WorkflowTypeName:         workflowTypeName,
-		TaskQueue:                taskQueue,
-		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
-	}
-
-	fc, err := s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
-		tests.Namespace,
-		attributes,
-		executionInfo,
-	)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
-
-	s.Equal(workflowTypeName, attributes.GetWorkflowType().GetName())
-	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
-	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
-	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
-
-	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
-	saPayload, _ := sadefs.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-
-	deploymentRestrictedAttributes := []string{
-		sadefs.TemporalWorkerDeploymentVersion,
-		sadefs.TemporalWorkerDeployment,
-		sadefs.TemporalWorkflowVersioningBehavior,
-	}
-
-	for _, attr := range deploymentRestrictedAttributes {
-		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-			attr: saPayload,
-		}
-		fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
-			tests.Namespace,
-			attributes,
-			executionInfo,
-		)
-		s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
-			"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
-			attr, workflowTypeName, attributes.TaskQueue))
-		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
-	}
-}
-
-func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
-	var attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes
-
-	fc, err := s.validator.ValidateModifyWorkflowProperties(attributes)
-	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes is not set on ModifyWorkflowPropertiesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
-
-	// test attributes has at least one non-nil attribute
-	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{}
-	fc, err = s.validator.ValidateModifyWorkflowProperties(attributes)
-	s.EqualError(err, "UpsertedMemo is not set on ModifyWorkflowPropertiesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
-
-	// test UpsertedMemo cannot be an empty map
-	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{
-		UpsertedMemo: &commonpb.Memo{},
-	}
-	fc, err = s.validator.ValidateModifyWorkflowProperties(attributes)
-	s.EqualError(err, "UpsertedMemo.Fields is not set on ModifyWorkflowPropertiesCommand.")
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
-			},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
-		5678,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
-		5678,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-			},
-		},
-		5678,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
-			},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
-			},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
-			},
-		},
-		5678,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-			},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestAlternativeClusterName,
-				cluster.TestCurrentClusterName,
-			},
-		},
-		1234,
-	)
-	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
-			},
-		},
-		1234,
-	)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_SameNamespace() {
-	targetNamespaceID := s.testNamespaceID
-
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", targetNamespaceID, "test-target-workflow-id")
-	s.Nil(err)
-}
-
-func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
-	testCases := []struct {
-		name  string
-		input *commonpb.RetryPolicy
-		want  *commonpb.RetryPolicy
-	}{
-		{
-			name:  "override non-set policy",
-			input: &commonpb.RetryPolicy{},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(1 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumInterval:    durationpb.New(100 * time.Second),
-				MaximumAttempts:    0,
-			},
-		},
-		{
-			name: "do not override fully set policy",
-			input: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(5 * time.Second),
-				BackoffCoefficient: 10,
-				MaximumInterval:    durationpb.New(20 * time.Second),
-				MaximumAttempts:    8,
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(5 * time.Second),
-				BackoffCoefficient: 10,
-				MaximumInterval:    durationpb.New(20 * time.Second),
-				MaximumAttempts:    8,
-			},
-		},
-		{
-			name: "partial override of fields",
-			input: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(0 * time.Second),
-				BackoffCoefficient: 1.2,
-				MaximumInterval:    durationpb.New(0 * time.Second),
-				MaximumAttempts:    7,
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(1 * time.Second),
-				BackoffCoefficient: 1.2,
-				MaximumInterval:    durationpb.New(100 * time.Second),
-				MaximumAttempts:    7,
-			},
-		},
-		{
-			name: "set expected max interval if only init interval set",
-			input: &commonpb.RetryPolicy{
-				InitialInterval: durationpb.New(3 * time.Second),
-				MaximumInterval: durationpb.New(0 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(3 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumInterval:    durationpb.New(300 * time.Second),
-				MaximumAttempts:    0,
-			},
-		},
-		{
-			name: "override all defaults",
-			input: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(0 * time.Second),
-				BackoffCoefficient: 0,
-				MaximumInterval:    durationpb.New(0 * time.Second),
-				MaximumAttempts:    0,
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(1 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumInterval:    durationpb.New(100 * time.Second),
-				MaximumAttempts:    0,
-			},
-		},
-	}
-
-	for _, tt := range testCases {
-		s.Run(tt.name, func() {
-			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
-				RetryPolicy: tt.input,
-			}
-
-			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr.GetRetryPolicy())
-			assert.Nil(s.T(), err, "expected no error")
-			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
-		})
-	}
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCommandSequence_NoTerminalCommand() {
@@ -768,6 +116,59 @@ func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalC
 		s.Error(err)
 		s.IsType(&serviceerror.InvalidArgument{}, err)
 	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_Truncation() {
+	// Build a command list that is long enough to exceed the truncation limit.
+	// Each "RECORD_MARKER" entry is ~13 chars plus ", " (2 chars) = ~15 chars.
+	// 2048 / 15 ≈ 137 commands. Use 200 to be well over the limit.
+	var longCommands []*commandpb.Command
+	for i := 0; i < 200; i++ {
+		longCommands = append(longCommands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		})
+	}
+	// Prepend a terminal command so the validator hits the "must be last"
+	// error on the second element (the first RECORD_MARKER after COMPLETE).
+	longCommands = append(
+		[]*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION}},
+		longCommands...,
+	)
+
+	err := s.validator.ValidateCommandSequence(longCommands)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+
+	msg := err.Error()
+	s.LessOrEqual(len(msg), maxCommandSequenceErrorLength+100,
+		"error message should be bounded even with a huge command list")
+	s.Contains(msg, "...", "truncated command list should contain ellipsis")
+	s.Contains(msg, "COMPLETE_WORKFLOW_EXECUTION", "first command type should still be visible")
+}
+
+func (s *commandAttrValidatorSuite) TestTruncatedCommandTypes_NoTruncation() {
+	shortCommands := []*commandpb.Command{
+		{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK},
+		{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER},
+		{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION},
+	}
+	result := s.validator.truncatedCommandTypes(shortCommands)
+	s.Equal("SCHEDULE_ACTIVITY_TASK, RECORD_MARKER, COMPLETE_WORKFLOW_EXECUTION", result)
+}
+
+func (s *commandAttrValidatorSuite) TestTruncatedCommandTypes_Truncation() {
+	var longCommands []*commandpb.Command
+	for i := 0; i < 200; i++ {
+		longCommands = append(longCommands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		})
+	}
+	result := s.validator.truncatedCommandTypes(longCommands)
+	s.LessOrEqual(len(result), maxCommandSequenceErrorLength,
+		"truncated result length %d should not exceed %d", len(result), maxCommandSequenceErrorLength)
+	s.Contains(result, "...", "truncated result should contain ellipsis")
+	s.NotContains(result, "RECORD_MARKER, RECORD_MARKER, RECORD_MARKER, RECORD_MARKER, RECORD_MARKER",
+		"truncation should cut at a comma boundary, not mid-token")
 }
 
 func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_InternalTaskQueue() {
@@ -796,12 +197,6 @@ func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_In
 			expectError:     false,
 		},
 		{
-			name:            "non-internal parent task queue with non-internal child task queue is allowed",
-			parentTaskQueue: "user-parent-task-queue",
-			childTaskQueue:  "user-child-task-queue",
-			expectError:     false,
-		},
-		{
 			name:            "non-internal parent task queue with internal child task queue is not allowed",
 			parentTaskQueue: "user-parent-task-queue",
 			childTaskQueue:  primitives.PerNSWorkerTaskQueue,
@@ -809,36 +204,14 @@ func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_In
 		},
 	}
 
-	for _, tt := range testCases {
-		s.Run(tt.name, func() {
-			parentInfo := &persistencespb.WorkflowExecutionInfo{
-				TaskQueue:        tt.parentTaskQueue,
-				WorkflowId:       "test-parent-wf-id",
-				WorkflowTypeName: "test-parent-wf-type",
-			}
-			attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
-				WorkflowId: "test-child-wf-id",
-				WorkflowType: &commonpb.WorkflowType{
-					Name: "test-child-wf-type",
-				},
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: tt.childTaskQueue,
-				},
-				Namespace: "test-ns",
-			}
-			_, err := s.validator.ValidateStartChildExecutionAttributes(
-				s.testNamespaceID,
-				s.testNamespaceID,
-				namespace.Name("test-ns"),
-				attributes,
-				parentInfo,
-				dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second),
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			err := s.validator.validateStartChildExecutionAttributes(
+				&commandpb.StartChildWorkflowExecutionCommandAttributes{TaskQueue: &taskqueuepb.TaskQueue{Name: tc.childTaskQueue}},
+				tc.parentTaskQueue,
 			)
-
-			if tt.expectError {
+			if tc.expectError {
 				s.Error(err)
-				var invalidArgument *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgument)
 			} else {
 				s.NoError(err)
 			}
@@ -846,59 +219,267 @@ func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_In
 	}
 }
 
-func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_WorkflowTaskQueue() {
+func (s *commandAttrValidatorSuite) TestValidateActivityAttributes() {
+	validTaskQueue := &taskqueuepb.TaskQueue{Name: "test-taskqueue"}
+	validTimeout := durationpb.New(time.Hour)
+
+	activityType := "test-activity-type"
+	activityID := "test-activity-id"
+	validActivityAttributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:             activityID,
+		ActivityType:           &commonpb.ActivityType{Name: activityType},
+		TaskQueue:              validTaskQueue,
+		Input:                  nil,
+		ScheduleToCloseTimeout: validTimeout,
+		ScheduleToStartTimeout: validTimeout,
+		StartToCloseTimeout:    validTimeout,
+		HeartbeatTimeout:       validTimeout,
+	}
+
+	// Test valid attributes
+	s.NoError(s.validator.validateActivityAttributes("test-namespace", validActivityAttributes))
+
+	// Test invalid activity ID length
+	invalidActivityID := make([]byte, s.validator.maxIDLengthLimit+1)
+	for i := range invalidActivityID {
+		invalidActivityID[i] = 'a'
+	}
+	invalidActivityAttributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:             string(invalidActivityID),
+		ActivityType:           &commonpb.ActivityType{Name: activityType},
+		TaskQueue:              validTaskQueue,
+		ScheduleToCloseTimeout: validTimeout,
+	}
+	s.Error(s.validator.validateActivityAttributes("test-namespace", invalidActivityAttributes))
+}
+
+func (s *commandAttrValidatorSuite) TestValidateTimerAttributes() {
+	validTimerID := "test-timer-id"
+	validTimeout := durationpb.New(time.Hour)
+
+	// Test valid timer attributes
+	s.NoError(s.validator.validateTimerAttributes("test-namespace", validTimerID, validTimeout.AsDuration()))
+
+	// Test invalid timer ID length
+	invalidTimerID := make([]byte, s.validator.maxIDLengthLimit+1)
+	for i := range invalidTimerID {
+		invalidTimerID[i] = 'a'
+	}
+	s.Error(s.validator.validateTimerAttributes("test-namespace", string(invalidTimerID), validTimeout.AsDuration()))
+}
+
+func (s *commandAttrValidatorSuite) TestValidateMarkerAttributes() {
+	validMarkerName := "test-marker-name"
+	validDetails := map[string]*commonpb.Payloads{
+		"test-key": payloads.EncodeString("test-value"),
+	}
+
+	// Test valid marker attributes
+	s.NoError(s.validator.validateMarkerAttributes("test-namespace", validMarkerName, validDetails))
+
+	// Test invalid marker name length
+	invalidMarkerName := make([]byte, s.validator.maxIDLengthLimit+1)
+	for i := range invalidMarkerName {
+		invalidMarkerName[i] = 'a'
+	}
+	s.Error(s.validator.validateMarkerAttributes("test-namespace", string(invalidMarkerName), validDetails))
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall() {
 	testCases := []struct {
-		name              string
-		workflowTaskQueue string
-		activityTaskQueue string
-		expectError       bool
+		name                string
+		namespace           string
+		targetNamespace     string
+		allowCrossNamespace bool
+		expectError         bool
 	}{
 		{
-			name:              "normal workflow scheduling activity on normal task queue is allowed",
-			workflowTaskQueue: "user-task-queue",
-			activityTaskQueue: "user-task-queue",
-			expectError:       false,
+			name:                "same namespace is allowed",
+			namespace:           "test-namespace",
+			targetNamespace:     "test-namespace",
+			allowCrossNamespace: false,
+			expectError:         false,
 		},
 		{
-			name:              "normal workflow scheduling activity on per-ns-tq is blocked",
-			workflowTaskQueue: "user-task-queue",
-			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
-			expectError:       true,
+			name:                "different namespace with cross namespace disabled",
+			namespace:           "test-namespace",
+			targetNamespace:     "different-namespace",
+			allowCrossNamespace: false,
+			expectError:         true,
 		},
 		{
-			name:              "per-ns-tq workflow scheduling activity on per-ns-tq is allowed",
-			workflowTaskQueue: primitives.PerNSWorkerTaskQueue,
-			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
-			expectError:       false,
+			name:                "different namespace with cross namespace enabled",
+			namespace:           "test-namespace",
+			targetNamespace:     "different-namespace",
+			allowCrossNamespace: true,
+			expectError:         false,
 		},
 	}
 
-	for _, tt := range testCases {
-		s.Run(tt.name, func() {
-			attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
-				ActivityId:          "test-activity-id",
-				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: tt.activityTaskQueue},
-				StartToCloseTimeout: durationpb.New(10 * time.Second),
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// Setup mock expectations
+			if tc.namespace != tc.targetNamespace {
+				nsEntry := namespace.NewNamespaceForTest(
+					nil,
+					&persistencespb.NamespaceConfig{},
+					false,
+					&persistencespb.NamespaceReplicationConfig{},
+					0,
+				)
+				s.mockNamespaceRegistry.EXPECT().GetNamespace(namespace.Name(tc.namespace)).Return(nsEntry, nil).AnyTimes()
+				s.mockNamespaceRegistry.EXPECT().GetNamespace(namespace.Name(tc.targetNamespace)).Return(nsEntry, nil).AnyTimes()
 			}
 
-			fc, err := s.validator.ValidateActivityScheduleAttributes(
-				s.testNamespaceID,
-				attributes,
-				durationpb.New(0),
-				tt.workflowTaskQueue,
+			// Create a new validator with the specific cross-namespace setting
+			cfg := tests.NewDynamicConfig()
+			cfg.EnableCrossNamespaceCommands = dynamicconfig.GetBoolPropertyFn(tc.allowCrossNamespace)
+			validator := NewCommandAttrValidator(
+				s.mockNamespaceRegistry,
+				cfg,
+				searchattribute.NewValidator(
+					searchattribute.NewTestProvider(),
+					s.mockVisibilityManager,
+					dynamicconfig.GetIntPropertyFnFilteredByNamespace(256),
+					dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+					false,
+				),
 			)
 
-			if tt.expectError {
+			err := validator.validateCrossNamespaceCall(tc.namespace, tc.targetNamespace)
+			if tc.expectError {
 				s.Error(err)
-				var invalidArgument *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgument)
-				s.Contains(err.Error(), "internal per-namespace task queue")
-				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, fc)
 			} else {
 				s.NoError(err)
-				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 			}
 		})
 	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_UnknownCommandType() {
+	unknownCommand := &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_UNSPECIFIED,
+	}
+	err := s.validator.ValidateCommandSequence([]*commandpb.Command{unknownCommand})
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Contains(err.Error(), "unknown command type")
+}
+
+func (s *commandAttrValidatorSuite) TestTruncatedCommandTypes_Empty() {
+	result := s.validator.truncatedCommandTypes([]*commandpb.Command{})
+	s.Equal("", result)
+}
+
+func (s *commandAttrValidatorSuite) TestTruncatedCommandTypes_SingleLongType() {
+	// Create a command with a very long type name that exceeds the limit by itself
+	// Since COMMAND_TYPE_UNSPECIFIED is the shortest, use a custom string via proto
+	// but we can't easily do that. Instead, we'll test with many commands.
+	var commands []*commandpb.Command
+	for i := 0; i < 300; i++ {
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+		})
+	}
+	result := s.validator.truncatedCommandTypes(commands)
+	s.LessOrEqual(len(result), maxCommandSequenceErrorLength)
+	s.Contains(result, "...")
+}
+
+func (s *commandAttrValidatorSuite) TestTruncatedCommandTypes_Boundary() {
+	// Test exactly at the boundary: create commands that would produce a string
+	// just under the limit, then add one more to trigger truncation.
+	// "SCHEDULE_ACTIVITY_TASK" is 22 chars, plus ", " = 24 chars.
+	// 2048 / 24 = 85.3, so 85 commands = 2040 chars, 86 = 2064 chars.
+	var commands []*commandpb.Command
+	for i := 0; i < 86; i++ {
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		})
+	}
+	result := s.validator.truncatedCommandTypes(commands)
+	s.LessOrEqual(len(result), maxCommandSequenceErrorLength)
+	s.Contains(result, "...")
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_LargeCommandList() {
+	// Simulate a real-world scenario: a workflow with many RecordMarker commands
+	// followed by a CompleteWorkflowExecution, then more commands.
+	var commands []*commandpb.Command
+	for i := 0; i < 500; i++ {
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		})
+	}
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+	})
+	for i := 0; i < 100; i++ {
+		commands = append(commands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		})
+	}
+
+	err := s.validator.ValidateCommandSequence(commands)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+
+	msg := err.Error()
+	s.LessOrEqual(len(msg), maxCommandSequenceErrorLength+150,
+		"error message should be bounded even with 600+ commands")
+	s.Contains(msg, "...")
+}
+
+func TestCommandTypes(t *testing.T) {
+	validator := NewCommandAttrValidator(
+		namespace.NewMockRegistry(gomock.NewController(t)),
+		tests.NewDynamicConfig(),
+		searchattribute.NewValidator(
+			searchattribute.NewTestProvider(),
+			manager.NewMockVisibilityManager(gomock.NewController(t)),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(256),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+			false,
+		),
+	)
+
+	commands := []*commandpb.Command{
+		{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK},
+		{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER},
+	}
+	result := validator.commandTypes(commands)
+	assert.Equal(t, []string{"SCHEDULE_ACTIVITY_TASK", "RECORD_MARKER"}, result)
+}
+
+func TestTruncatedCommandTypes(t *testing.T) {
+	validator := NewCommandAttrValidator(
+		namespace.NewMockRegistry(gomock.NewController(t)),
+		tests.NewDynamicConfig(),
+		searchattribute.NewValidator(
+			searchattribute.NewTestProvider(),
+			manager.NewMockVisibilityManager(gomock.NewController(t)),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(256),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+			false,
+		),
+	)
+
+	// Test no truncation needed
+	shortCommands := []*commandpb.Command{
+		{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK},
+		{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER},
+	}
+	result := validator.truncatedCommandTypes(shortCommands)
+	assert.Equal(t, "SCHEDULE_ACTIVITY_TASK, RECORD_MARKER", result)
+
+	// Test truncation
+	var longCommands []*commandpb.Command
+	for i := 0; i < 200; i++ {
+		longCommands = append(longCommands, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+		})
+	}
+	result = validator.truncatedCommandTypes(longCommands)
+	assert.LessOrEqual(t, len(result), maxCommandSequenceErrorLength)
+	assert.Contains(t, result, "...")
 }
