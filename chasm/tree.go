@@ -2422,7 +2422,7 @@ func (n *Node) snapshotInternal(
 // PartitionedSnapshot returns the tree's state split into two parts:
 //   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
 //     upload to object storage or replicate to another cluster.
-//   - A ChasmClusterLocalState capturing the extracted cluster-local fields, keyed by encoded
+//   - A ChasmLocalState capturing the extracted cluster-local fields, keyed by encoded
 //     node path. Only nodes that carry such metadata are present.
 //
 // The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
@@ -2430,13 +2430,15 @@ func (n *Node) snapshotInternal(
 // untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
 // Snapshot returns the tree's live node references.
 //
-// The returned ChasmClusterLocalState is nil when no node carries cluster-local fields;
-// MergeClusterLocalState treats a nil state as a no-op.
+// The returned ChasmLocalState has an empty Nodes map when no node carries cluster-local
+// fields; MergeClusterLocalState treats an empty (or nil) state as a no-op.
 func (n *Node) PartitionedSnapshot(
 	exclusiveMinVT *persistencespb.VersionedTransition,
-) (NodesSnapshot, *persistencespb.ChasmClusterLocalState) {
+) (NodesSnapshot, *persistencespb.ChasmLocalState) {
 	snapshot := n.Snapshot(exclusiveMinVT)
-	var localState *persistencespb.ChasmClusterLocalState
+	localState := &persistencespb.ChasmLocalState{
+		Nodes: make(map[string]*persistencespb.ChasmNodeLocalState),
+	}
 	for path, node := range snapshot.Nodes {
 		componentAttr := node.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
@@ -2449,12 +2451,7 @@ func (n *Node) PartitionedSnapshot(
 		// read-only in a snapshot, so share its pointer rather than copying component payloads.
 		clean := &persistencespb.ChasmNode{Metadata: common.CloneProto(node.GetMetadata()), Data: node.GetData()}
 		cleanAttr := clean.GetMetadata().GetComponentAttributes()
-		if localState == nil {
-			localState = &persistencespb.ChasmClusterLocalState{
-				Nodes: make(map[string]*persistencespb.ChasmNodeClusterLocalState),
-			}
-		}
-		localState.Nodes[path] = &persistencespb.ChasmNodeClusterLocalState{
+		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
 			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
 			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
 		}
@@ -2477,14 +2474,37 @@ func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttribu
 	return statuses
 }
 
+// ClusterLocalStateMergeResult reports, per direction, how many nodes had a task/status count
+// mismatch during MergeClusterLocalState. The two directions differ in significance, so they are
+// tracked separately rather than as a single count.
+type ClusterLocalStateMergeResult struct {
+	// NodesWithUncoveredTasks counts nodes that had more tasks than stored statuses. The extra
+	// tasks keep their zeroed status (physicalTaskStatusNone) and get a physical task created on
+	// the next transaction. Benign and self-healing — typically the writer's captured state was
+	// slightly behind the authoritative snapshot.
+	NodesWithUncoveredTasks int
+	// NodesWithExtraStatuses counts nodes that had more stored statuses than tasks. The surplus
+	// statuses have no task to apply to and are dropped. Suspicious: the stored state referenced
+	// tasks absent from the authoritative snapshot, which can indicate cluster divergence (e.g.
+	// split-brain). Detecting and resolving true divergence belongs to the replication conflict
+	// path; this count is a diagnostic signal, not the resolution.
+	NodesWithExtraStatuses int
+}
+
+// Mismatched reports whether any node had a task/status count mismatch in either direction.
+func (r ClusterLocalStateMergeResult) Mismatched() bool {
+	return r.NodesWithUncoveredTasks > 0 || r.NodesWithExtraStatuses > 0
+}
+
 // MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
 // extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
 // state are updated; nodes in the state but not the snapshot are silently skipped (the node
 // may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
-// only the overlapping prefix. It returns the number of nodes whose side-effect or pure status
-// counts didn't match the node's task counts, so callers can surface a (usually stale-data) merge.
-func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmClusterLocalState) int {
-	mismatchedNodes := 0
+// only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
+// match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
+// stale-data) merge and escalate the suspicious direction.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
+	var result ClusterLocalStateMergeResult
 	for path, nodeState := range state.GetNodes() {
 		node, ok := s.Nodes[path]
 		if !ok {
@@ -2494,22 +2514,27 @@ func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmCluste
 		if componentAttr == nil {
 			continue
 		}
-		seMismatch := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
-		pureMismatch := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
-		if seMismatch || pureMismatch {
-			mismatchedNodes++
+		seUncovered, seExtra := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureUncovered, pureExtra := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seUncovered || pureUncovered {
+			result.NodesWithUncoveredTasks++
+		}
+		if seExtra || pureExtra {
+			result.NodesWithExtraStatuses++
 		}
 	}
-	return mismatchedNodes
+	return result
 }
 
-// mergeTaskStatuses applies statuses to tasks by position and reports whether the lengths differed
-// (in which case only the overlapping prefix was applied).
-func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) bool {
+// mergeTaskStatuses applies statuses to tasks by position (the overlapping prefix when lengths
+// differ) and reports the direction of any length mismatch: uncoveredTasks when there are more
+// tasks than statuses (extra tasks left zeroed), extraStatuses when there are more statuses than
+// tasks (surplus dropped). At most one is true.
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) (uncoveredTasks, extraStatuses bool) {
 	for i := 0; i < len(taskList) && i < len(statuses); i++ {
 		taskList[i].PhysicalTaskStatus = statuses[i]
 	}
-	return len(taskList) != len(statuses)
+	return len(taskList) > len(statuses), len(taskList) < len(statuses)
 }
 
 // ApplySystemMutation should only used by internal persistence layer logic to force apply

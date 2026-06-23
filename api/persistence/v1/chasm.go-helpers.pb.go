@@ -116,35 +116,35 @@ func (this *ChasmComponentAttributes) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ChasmNodeClusterLocalState to the protobuf v3 wire format
-func (val *ChasmNodeClusterLocalState) Marshal() ([]byte, error) {
+// Marshal an object of type ChasmNodeLocalState to the protobuf v3 wire format
+func (val *ChasmNodeLocalState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ChasmNodeClusterLocalState from the protobuf v3 wire format
-func (val *ChasmNodeClusterLocalState) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ChasmNodeLocalState from the protobuf v3 wire format
+func (val *ChasmNodeLocalState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ChasmNodeClusterLocalState) Size() int {
+func (val *ChasmNodeLocalState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ChasmNodeClusterLocalState values are equivalent by recursively
+// Equal returns whether two ChasmNodeLocalState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ChasmNodeClusterLocalState) Equal(that interface{}) bool {
+func (this *ChasmNodeLocalState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ChasmNodeClusterLocalState
+	var that1 *ChasmNodeLocalState
 	switch t := that.(type) {
-	case *ChasmNodeClusterLocalState:
+	case *ChasmNodeLocalState:
 		that1 = t
-	case ChasmNodeClusterLocalState:
+	case ChasmNodeLocalState:
 		that1 = &t
 	default:
 		return false
@@ -153,35 +153,35 @@ func (this *ChasmNodeClusterLocalState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ChasmClusterLocalState to the protobuf v3 wire format
-func (val *ChasmClusterLocalState) Marshal() ([]byte, error) {
+// Marshal an object of type ChasmLocalState to the protobuf v3 wire format
+func (val *ChasmLocalState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ChasmClusterLocalState from the protobuf v3 wire format
-func (val *ChasmClusterLocalState) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ChasmLocalState from the protobuf v3 wire format
+func (val *ChasmLocalState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ChasmClusterLocalState) Size() int {
+func (val *ChasmLocalState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ChasmClusterLocalState values are equivalent by recursively
+// Equal returns whether two ChasmLocalState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ChasmClusterLocalState) Equal(that interface{}) bool {
+func (this *ChasmLocalState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ChasmClusterLocalState
+	var that1 *ChasmLocalState
 	switch t := that.(type) {
-	case *ChasmClusterLocalState:
+	case *ChasmLocalState:
 		that1 = t
-	case ChasmClusterLocalState:
+	case ChasmLocalState:
 		that1 = &t
 	default:
 		return false

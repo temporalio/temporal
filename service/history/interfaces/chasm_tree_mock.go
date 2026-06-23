@@ -245,11 +245,11 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 }
 
 // PartitionedSnapshot mocks base method.
-func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmClusterLocalState) {
+func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PartitionedSnapshot", arg0)
 	ret0, _ := ret[0].(chasm.NodesSnapshot)
-	ret1, _ := ret[1].(*persistence.ChasmClusterLocalState)
+	ret1, _ := ret[1].(*persistence.ChasmLocalState)
 	return ret0, ret1
 }
 

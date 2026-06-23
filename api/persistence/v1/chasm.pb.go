@@ -308,8 +308,8 @@ func (x *ChasmComponentAttributes) GetUserMetadata() *v11.UserMetadata {
 	return nil
 }
 
-// ChasmNodeClusterLocalState holds cluster-local (non-replicated) metadata for a single CHASM node.
-type ChasmNodeClusterLocalState struct {
+// ChasmNodeLocalState holds cluster-local (non-replicated) metadata for a single CHASM node.
+type ChasmNodeLocalState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Physical task statuses, in the same order as ChasmComponentAttributes.side_effect_tasks.
 	SideEffectTaskStatuses []int32 `protobuf:"varint,1,rep,packed,name=side_effect_task_statuses,json=sideEffectTaskStatuses,proto3" json:"side_effect_task_statuses,omitempty"`
@@ -319,20 +319,20 @@ type ChasmNodeClusterLocalState struct {
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *ChasmNodeClusterLocalState) Reset() {
-	*x = ChasmNodeClusterLocalState{}
+func (x *ChasmNodeLocalState) Reset() {
+	*x = ChasmNodeLocalState{}
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChasmNodeClusterLocalState) String() string {
+func (x *ChasmNodeLocalState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChasmNodeClusterLocalState) ProtoMessage() {}
+func (*ChasmNodeLocalState) ProtoMessage() {}
 
-func (x *ChasmNodeClusterLocalState) ProtoReflect() protoreflect.Message {
+func (x *ChasmNodeLocalState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -344,48 +344,48 @@ func (x *ChasmNodeClusterLocalState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmNodeClusterLocalState.ProtoReflect.Descriptor instead.
-func (*ChasmNodeClusterLocalState) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChasmNodeLocalState.ProtoReflect.Descriptor instead.
+func (*ChasmNodeLocalState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ChasmNodeClusterLocalState) GetSideEffectTaskStatuses() []int32 {
+func (x *ChasmNodeLocalState) GetSideEffectTaskStatuses() []int32 {
 	if x != nil {
 		return x.SideEffectTaskStatuses
 	}
 	return nil
 }
 
-func (x *ChasmNodeClusterLocalState) GetPureTaskStatuses() []int32 {
+func (x *ChasmNodeLocalState) GetPureTaskStatuses() []int32 {
 	if x != nil {
 		return x.PureTaskStatuses
 	}
 	return nil
 }
 
-// ChasmClusterLocalState is a collection of per-node ChasmNodeClusterLocalState.
-type ChasmClusterLocalState struct {
+// ChasmLocalState is a collection of per-node ChasmNodeLocalState.
+type ChasmLocalState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Cluster-local state keyed by encoded node path; only nodes that have it are present.
-	Nodes         map[string]*ChasmNodeClusterLocalState `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Nodes         map[string]*ChasmNodeLocalState `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChasmClusterLocalState) Reset() {
-	*x = ChasmClusterLocalState{}
+func (x *ChasmLocalState) Reset() {
+	*x = ChasmLocalState{}
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChasmClusterLocalState) String() string {
+func (x *ChasmLocalState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChasmClusterLocalState) ProtoMessage() {}
+func (*ChasmLocalState) ProtoMessage() {}
 
-func (x *ChasmClusterLocalState) ProtoReflect() protoreflect.Message {
+func (x *ChasmLocalState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -397,12 +397,12 @@ func (x *ChasmClusterLocalState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmClusterLocalState.ProtoReflect.Descriptor instead.
-func (*ChasmClusterLocalState) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChasmLocalState.ProtoReflect.Descriptor instead.
+func (*ChasmLocalState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ChasmClusterLocalState) GetNodes() map[string]*ChasmNodeClusterLocalState {
+func (x *ChasmLocalState) GetNodes() map[string]*ChasmNodeLocalState {
 	if x != nil {
 		return x.Nodes
 	}
@@ -886,6 +886,9 @@ type ChasmComponentAttributes_Task struct {
 	// If a physical task is created for this task in this cluster.
 	// NOTE: this is a cluster-specific field and can not be replicated.
 	// Changes to this field also doesn't require an increase in versioned transition.
+	// It is the only cluster-local field today: ChasmTree.PartitionedSnapshot zeroes it before
+	// upload/replication and MergeClusterLocalState restores it on read; any new cluster-local
+	// field must be handled there too (see TestPartitionedSnapshot_ClusterLocalFieldGuard).
 	PhysicalTaskStatus int32 `protobuf:"varint,7,opt,name=physical_task_status,json=physicalTaskStatus,proto3" json:"physical_task_status,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -1056,16 +1059,16 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x05links\x18\x01 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x1a\x89\x01\n" +
 	"\rRequestsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12b\n" +
-	"\x05value\x18\x02 \x01(\v2L.temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadataR\x05value:\x028\x01\"\x85\x01\n" +
-	"\x1aChasmNodeClusterLocalState\x129\n" +
+	"\x05value\x18\x02 \x01(\v2L.temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadataR\x05value:\x028\x01\"~\n" +
+	"\x13ChasmNodeLocalState\x129\n" +
 	"\x19side_effect_task_statuses\x18\x01 \x03(\x05R\x16sideEffectTaskStatuses\x12,\n" +
-	"\x12pure_task_statuses\x18\x02 \x03(\x05R\x10pureTaskStatuses\"\xef\x01\n" +
-	"\x16ChasmClusterLocalState\x12[\n" +
-	"\x05nodes\x18\x01 \x03(\v2E.temporal.server.api.persistence.v1.ChasmClusterLocalState.NodesEntryR\x05nodes\x1ax\n" +
+	"\x12pure_task_statuses\x18\x02 \x03(\x05R\x10pureTaskStatuses\"\xda\x01\n" +
+	"\x0fChasmLocalState\x12T\n" +
+	"\x05nodes\x18\x01 \x03(\v2>.temporal.server.api.persistence.v1.ChasmLocalState.NodesEntryR\x05nodes\x1aq\n" +
 	"\n" +
 	"NodesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
-	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.ChasmNodeClusterLocalStateR\x05value:\x028\x01\"\x15\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12M\n" +
+	"\x05value\x18\x02 \x01(\v27.temporal.server.api.persistence.v1.ChasmNodeLocalStateR\x05value:\x028\x01\"\x15\n" +
 	"\x13ChasmDataAttributes\"\x1b\n" +
 	"\x19ChasmCollectionAttributes\"5\n" +
 	"\x16ChasmPointerAttributes\x12\x1b\n" +
@@ -1118,8 +1121,8 @@ var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
 	(*ChasmNode)(nil),                                // 0: temporal.server.api.persistence.v1.ChasmNode
 	(*ChasmNodeMetadata)(nil),                        // 1: temporal.server.api.persistence.v1.ChasmNodeMetadata
 	(*ChasmComponentAttributes)(nil),                 // 2: temporal.server.api.persistence.v1.ChasmComponentAttributes
-	(*ChasmNodeClusterLocalState)(nil),               // 3: temporal.server.api.persistence.v1.ChasmNodeClusterLocalState
-	(*ChasmClusterLocalState)(nil),                   // 4: temporal.server.api.persistence.v1.ChasmClusterLocalState
+	(*ChasmNodeLocalState)(nil),                      // 3: temporal.server.api.persistence.v1.ChasmNodeLocalState
+	(*ChasmLocalState)(nil),                          // 4: temporal.server.api.persistence.v1.ChasmLocalState
 	(*ChasmDataAttributes)(nil),                      // 5: temporal.server.api.persistence.v1.ChasmDataAttributes
 	(*ChasmCollectionAttributes)(nil),                // 6: temporal.server.api.persistence.v1.ChasmCollectionAttributes
 	(*ChasmPointerAttributes)(nil),                   // 7: temporal.server.api.persistence.v1.ChasmPointerAttributes
@@ -1129,7 +1132,7 @@ var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
 	(*ChasmComponentAttributes_Task)(nil),            // 11: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task
 	(*ChasmComponentAttributes_RequestMetadata)(nil), // 12: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
 	nil,                           // 13: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry
-	nil,                           // 14: temporal.server.api.persistence.v1.ChasmClusterLocalState.NodesEntry
+	nil,                           // 14: temporal.server.api.persistence.v1.ChasmLocalState.NodesEntry
 	(*v1.DataBlob)(nil),           // 15: temporal.api.common.v1.DataBlob
 	(*VersionedTransition)(nil),   // 16: temporal.server.api.persistence.v1.VersionedTransition
 	(*v11.UserMetadata)(nil),      // 17: temporal.api.sdk.v1.UserMetadata
@@ -1151,7 +1154,7 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	11, // 9: temporal.server.api.persistence.v1.ChasmComponentAttributes.pure_tasks:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.Task
 	13, // 10: temporal.server.api.persistence.v1.ChasmComponentAttributes.requests:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry
 	17, // 11: temporal.server.api.persistence.v1.ChasmComponentAttributes.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	14, // 12: temporal.server.api.persistence.v1.ChasmClusterLocalState.nodes:type_name -> temporal.server.api.persistence.v1.ChasmClusterLocalState.NodesEntry
+	14, // 12: temporal.server.api.persistence.v1.ChasmLocalState.nodes:type_name -> temporal.server.api.persistence.v1.ChasmLocalState.NodesEntry
 	16, // 13: temporal.server.api.persistence.v1.ChasmTaskInfo.component_initial_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	16, // 14: temporal.server.api.persistence.v1.ChasmTaskInfo.component_last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	15, // 15: temporal.server.api.persistence.v1.ChasmTaskInfo.data:type_name -> temporal.api.common.v1.DataBlob
@@ -1168,7 +1171,7 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	16, // 26: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	21, // 27: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata.links:type_name -> temporal.api.common.v1.Link
 	12, // 28: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
-	3,  // 29: temporal.server.api.persistence.v1.ChasmClusterLocalState.NodesEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmNodeClusterLocalState
+	3,  // 29: temporal.server.api.persistence.v1.ChasmLocalState.NodesEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmNodeLocalState
 	30, // [30:30] is the sub-list for method output_type
 	30, // [30:30] is the sub-list for method input_type
 	30, // [30:30] is the sub-list for extension type_name

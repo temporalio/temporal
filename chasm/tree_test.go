@@ -1452,9 +1452,22 @@ func (s *nodeSuite) TestMergeClusterLocalState_ReportsLengthMismatch() {
 
 	clean, localState := root.PartitionedSnapshot(nil)
 
-	// Truncate the root node's side-effect statuses so they no longer line up with its tasks.
+	// Truncate the root node's side-effect statuses so there are fewer statuses than tasks. The
+	// uncovered tasks stay zeroed — the benign, self-healing direction.
 	localState.Nodes[""].SideEffectTaskStatuses = localState.Nodes[""].SideEffectTaskStatuses[:1]
-	s.Equal(1, clean.MergeClusterLocalState(localState))
+	s.Equal(ClusterLocalStateMergeResult{NodesWithUncoveredTasks: 1}, clean.MergeClusterLocalState(localState))
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_ReportsExtraStatuses() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Append a surplus side-effect status so there are more statuses than tasks. The extra status
+	// has no task to apply to and is dropped — the suspicious (possible-divergence) direction.
+	localState.Nodes[""].SideEffectTaskStatuses = append(localState.Nodes[""].SideEffectTaskStatuses, physicalTaskStatusCreated)
+	s.Equal(ClusterLocalStateMergeResult{NodesWithExtraStatuses: 1}, clean.MergeClusterLocalState(localState))
 }
 
 func (s *nodeSuite) TestMergeClusterLocalState_SkipsMissingNodes() {
@@ -1471,8 +1484,8 @@ func (s *nodeSuite) TestMergeClusterLocalState_SkipsMissingNodes() {
 	s.Len(clean.Nodes, 1)
 }
 
-// A tree whose nodes carry no tasks has no cluster-local state: PartitionedSnapshot returns nil,
-// and merging that nil state back is a no-op.
+// A tree whose nodes carry no tasks has no cluster-local state: PartitionedSnapshot returns a
+// state with an empty Nodes map, and merging that empty state back is a no-op.
 func (s *nodeSuite) TestPartitionedSnapshot_NoClusterLocalState() {
 	root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
 		"": {
@@ -1488,9 +1501,71 @@ func (s *nodeSuite) TestPartitionedSnapshot_NoClusterLocalState() {
 	s.NoError(err)
 
 	clean, localState := root.PartitionedSnapshot(nil)
-	s.Nil(localState)
+	s.NotNil(localState)
+	s.Empty(localState.Nodes)
 	s.Len(clean.Nodes, 1)
 	s.Zero(clean.MergeClusterLocalState(localState))
+}
+
+// TestPartitionedSnapshot_ClusterLocalFieldGuard is a tripwire against silent drift in the set of
+// cluster-local CHASM fields. Cluster-local state — currently only
+// ChasmComponentAttributes.Task.physical_task_status — must be extracted by PartitionedSnapshot
+// before upload/replication and restored by MergeClusterLocalState on read; otherwise it leaks
+// across clusters. The partition logic only inspects component_attributes' side_effect_tasks and
+// pure_tasks, so a new field on any message below — or a new attribute type in the
+// ChasmNodeMetadata oneof — could introduce cluster-local state the logic silently misses.
+//
+// When this fails: decide whether the added/removed field is cluster-local. If it is, handle it in
+// PartitionedSnapshot + MergeClusterLocalState and extend ChasmLocalState. Either way, update
+// the expected field set below once the partition logic is confirmed correct.
+func TestPartitionedSnapshot_ClusterLocalFieldGuard(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		msg  proto.Message
+		want []string
+	}{
+		{
+			&persistencespb.ChasmNodeMetadata{},
+			[]string{
+				"initial_versioned_transition",
+				"last_update_versioned_transition",
+				"component_attributes",
+				"data_attributes",
+				"collection_attributes",
+				"pointer_attributes",
+			},
+		},
+		{
+			&persistencespb.ChasmComponentAttributes{},
+			[]string{"type_id", "side_effect_tasks", "pure_tasks", "detached", "requests", "user_metadata"},
+		},
+		{
+			// The only message carrying a cluster-local field today (physical_task_status).
+			&persistencespb.ChasmComponentAttributes_Task{},
+			[]string{
+				"type_id", "destination", "scheduled_time", "data",
+				"versioned_transition", "versioned_transition_offset", "physical_task_status",
+			},
+		},
+		// Attribute types other than component carry no cluster-local state today; pinning their
+		// fields ensures a future cluster-local field added to one of them trips this guard too.
+		{&persistencespb.ChasmDataAttributes{}, nil},
+		{&persistencespb.ChasmCollectionAttributes{}, nil},
+		{&persistencespb.ChasmPointerAttributes{}, []string{"node_path"}},
+	}
+
+	for _, tc := range cases {
+		desc := tc.msg.ProtoReflect().Descriptor()
+		fields := desc.Fields()
+		got := make([]string, 0, fields.Len())
+		for i := 0; i < fields.Len(); i++ {
+			got = append(got, string(fields.Get(i).Name()))
+		}
+		require.ElementsMatchf(t, tc.want, got,
+			"%s field set changed; cluster-local partition logic in PartitionedSnapshot/"+
+				"MergeClusterLocalState may be stale (see this test's doc comment)", desc.FullName())
+	}
 }
 
 func (s *nodeSuite) TestRefreshTasks() {

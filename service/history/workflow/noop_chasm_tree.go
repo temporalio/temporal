@@ -25,7 +25,7 @@ func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesS
 	return chasm.NodesSnapshot{}
 }
 
-func (*noopChasmTree) PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmClusterLocalState) {
+func (*noopChasmTree) PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState) {
 	return chasm.NodesSnapshot{}, nil
 }
 
