@@ -385,6 +385,12 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
 
+	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
+		// Stuck state detected: no tasks in memory, not at end, no read running, no retry
+		// pending. Without intervention, no new tasks will be read from DB. (See INC-1722.)
+		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
+	}
+
 	// If this was a write and tasks were filtered (e.g. above readLevel when atEnd=false),
 	// we may need to trigger a read to pick them up from DB. Without this, the reader can
 	// get stuck in {atEnd=false, loadedTasks=0, readPending=false} with no trigger to

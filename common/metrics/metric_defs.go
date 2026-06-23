@@ -1210,6 +1210,10 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+	FairReaderStuckDetected = NewCounterDef(
+		"fair_reader_stuck_detected",
+		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
+	)
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
