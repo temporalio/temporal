@@ -46,8 +46,8 @@ type (
 		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForceReadTasksOnWrite              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-		ForceReadTasksOnWritePartition     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForceReadTasksOnWrite                    dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		ForceReadTasksOnWritePartition           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -155,27 +155,27 @@ type (
 		QueryPollerUnavailableWindow  func() time.Duration
 		EmitTaskDispatchLatencyAtPoll func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval           func() time.Duration
-		BacklogTaskForwardTimeout            func() time.Duration
-		RangeSize                            int64
-		NewMatcher                           bool
-		NewMatcherSub                        func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableFairness                       bool
-		EnableFairnessSub                    func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableMigration                      func() bool
-		AutoEnableV2                         func() bool
-		AutoEnableV2Sub                      func(func(bool)) (bool, func())
-		GetTasksBatchSize                    func() int
-		GetTasksReloadAt                     func() int
+		LongPollExpirationInterval     func() time.Duration
+		BacklogTaskForwardTimeout      func() time.Duration
+		RangeSize                      int64
+		NewMatcher                     bool
+		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableFairness                 bool
+		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableMigration                func() bool
+		AutoEnableV2                   func() bool
+		AutoEnableV2Sub                func(func(bool)) (bool, func())
+		GetTasksBatchSize              func() int
+		GetTasksReloadAt               func() int
 		ForceReadTasksOnWrite          func() bool
 		ForceReadTasksOnWritePartition func() int
-		UpdateAckInterval                    func() time.Duration
-		MaxTaskQueueIdleTime                 func() time.Duration
-		MinTaskThrottlingBurstSize           func() int
-		MaxTaskDeleteBatchSize               func() int
-		TaskDeleteInterval                   func() time.Duration
-		PriorityLevels                       priorityKey
-		DefaultPriorityKey                   priorityKey
+		UpdateAckInterval              func() time.Duration
+		MaxTaskQueueIdleTime           func() time.Duration
+		MinTaskThrottlingBurstSize     func() int
+		MaxTaskDeleteBatchSize         func() int
+		TaskDeleteInterval             func() time.Duration
+		PriorityLevels                 priorityKey
+		DefaultPriorityKey             priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -282,8 +282,8 @@ func NewConfig(
 		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
-		ForceReadTasksOnWrite:              dynamicconfig.MatchingForceReadTasksOnWrite.Get(dc),
-		ForceReadTasksOnWritePartition:     dynamicconfig.MatchingForceReadTasksOnWritePartition.Get(dc),
+		ForceReadTasksOnWrite:                    dynamicconfig.MatchingForceReadTasksOnWrite.Get(dc),
+		ForceReadTasksOnWritePartition:           dynamicconfig.MatchingForceReadTasksOnWritePartition.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
