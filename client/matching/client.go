@@ -6,7 +6,6 @@ package matching
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -44,7 +44,7 @@ type clientImpl struct {
 	loadBalancer    LoadBalancer
 	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
 	partitionCache  *partitionCache
-	evictionCancel  context.CancelFunc
+	evictionWatcher *goro.Handle
 }
 
 // NewClient creates a new matching service gRPC client
@@ -70,26 +70,24 @@ func NewClient(
 		partitionCache:  newPartitionCache(metricsHandler),
 	}
 
-	// Start goroutine to prune partition count cache.
-	// Clean up on gc, since we can't easily hook into fx here.
+	// Start goroutine to prune partition count cache. Stopped by Stop().
 	c.partitionCache.Start()
-	runtime.AddCleanup(c, func(cache *partitionCache) { cache.Stop() }, c.partitionCache)
 
-	// Evict cached clients whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
-	c.evictionCancel = cancel
-	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
+	// Evict cached clients whose host leaves the membership ring. Stopped by Stop().
+	c.evictionWatcher = goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
+		watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
+		return nil
+	})
 
 	return c
 }
 
 // Stop deterministically releases the resources started by NewClient: it stops
 // the eviction watcher and partition-cache rotation goroutines and closes every
-// cached gRPC connection. It is safe to call more than once (the runtime
-// cleanups registered in NewClient remain as a GC backstop).
+// cached gRPC connection. It is safe to call more than once.
 func (c *clientImpl) Stop() {
-	c.evictionCancel()
+	c.evictionWatcher.Cancel()
+	<-c.evictionWatcher.Done()
 	c.partitionCache.Stop()
 	c.clients.EvictAll()
 }
