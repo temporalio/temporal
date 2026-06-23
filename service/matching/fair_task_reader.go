@@ -385,18 +385,14 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
 
+	// Detect stuck reader: no tasks in memory, not at end, no read goroutine running, no
+	// retry pending. In this state, written tasks go only to DB (filtered above readLevel)
+	// and nothing will trigger a read. The root cause is still under investigation.
 	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
-		// Stuck state detected: no tasks in memory, not at end, no read running, no retry
-		// pending. Without intervention, no new tasks will be read from DB.
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
-	}
-
-	// Diagnostic: when enabled via dynamic config, force a read check on the write path.
-	// We've observed stuck partitions where atEnd=false, loadedTasks=0, and no read
-	// goroutine is running. This tests whether forcing maybeReadTasksLocked here unblocks
-	// them. The root cause of how the reader gets into that state is still under investigation.
-	if mode == mergeWrite && tr.shouldForceReadOnWrite() {
-		tr.maybeReadTasksLocked()
+		if tr.shouldForceReadOnWrite() {
+			tr.maybeReadTasksLocked()
+		}
 	}
 
 	// unlock before calling addTaskToMatcher
