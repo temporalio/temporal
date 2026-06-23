@@ -165,13 +165,7 @@ func (tm *priTaskMatcher) Stop() {
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{taskForwarderType: parentTaskForwarder}
-	skipLimiter := false
-	var err error
 	for {
-		if !skipLimiter && lim.Wait(tm.tqCtx) != nil {
-			return
-		}
-
 		res := tm.data.EnqueuePollerAndWait(ctxs, &poller)
 		if res.ctxErr != nil {
 			return // task queue closing
@@ -180,7 +174,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 			continue
 		}
 
-		skipLimiter, err = tm.forwardTask(res.task)
+		err := tm.forwardTask(res.task, lim)
 
 		// backoff on resource exhausted errors
 		if common.IsResourceExhausted(err) {
@@ -191,10 +185,14 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 	}
 }
 
-func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
+func (tm *priTaskMatcher) forwardTask(task *internalTask, lim quotas.RateLimiter) error {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if task.forwardCtx != nil {
+		// Sync match task: subject to forwarder rate limit.
+		if err := lim.Wait(tm.tqCtx); err != nil {
+			return err
+		}
 		// Use sync match context if we have it (for deadline, headers, etc.)
 		// TODO(pri): does it make sense to subtract 1s from the context deadline here?
 		// Also arrange for this to be canceled on tqCtx closing.
@@ -205,7 +203,9 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	} else {
 		// Task is from local backlog.
 
-		// Before we forward, ask task validator. This will happen every BacklogTaskForwardTimeout
+		// Ask task validator before consuming a rate-limit token. This lets us
+		// invalidate stale tasks at full speed without being throttled by the
+		// forwarder rate limit. This will happen every BacklogTaskForwardTimeout
 		// to the head of the backlog, which is what taskValidator expects.
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
@@ -218,7 +218,12 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
 
-			return true, nil
+			return nil
+		}
+
+		// Task is valid: apply forwarder rate limit before forwarding.
+		if err := lim.Wait(tm.tqCtx); err != nil {
+			return err
 		}
 
 		// Add a timeout for forwarding.
@@ -230,20 +235,20 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	if task.isQuery() {
 		res, err := tm.fwdr.ForwardQueryTask(ctx, task)
 		task.finishForward(res, err, true)
-		return false, err
+		return err
 	}
 
 	if task.isNexus() {
 		res, err := tm.fwdr.ForwardNexusTask(ctx, task)
 		task.finishForward(res, err, true)
-		return false, err
+		return err
 	}
 
 	// normal wf/activity task
 	err := tm.fwdr.ForwardTask(ctx, task)
 	task.finishForward(nil, err, true)
 
-	return false, err
+	return err
 }
 
 func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {

@@ -192,3 +192,78 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		require.Equal(t, taskToken, task.started.workflowTaskInfo.TaskToken)
 	})
 }
+
+// TestInvalidationBypassesForwarderRateLimit verifies that successfully
+// invalidating backlog tasks is not throttled by the forwarder rate limit.
+// With a very low rate limit, a stream of invalid backlog tasks should still
+// be drained quickly because invalidation should not consume rate-limit tokens.
+func (s *PriMatcherSuite) TestInvalidationBypassesForwarderRateLimit() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	childPartition := tq.NormalPartition(1)
+
+	cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+	// Set a very low forwarder rate so that, if validation were subject to it,
+	// processing N tasks would take roughly N/rate seconds.
+	cfg.ForwarderMaxRatePerSecond = func() float64 { return 0.5 }
+
+	// All tasks are invalid: the validator returns false.
+	mockValidator := NewMocktaskValidator(s.controller)
+	mockValidator.EXPECT().
+		maybeValidate(gomock.Any(), gomock.Any()).
+		Return(false).
+		AnyTimes()
+
+	mockClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	queue := UnversionedQueueKey(childPartition)
+	fwdr, err := newPriForwarder(&cfg.forwarderConfig, queue, mockClient, testhooks.TestHooks{})
+	s.Require().NoError(err)
+
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	tm := newPriTaskMatcher(
+		ctx,
+		cfg,
+		childPartition,
+		fwdr,
+		mockClient,
+		mockValidator,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		rateLimitManager,
+		func() {},
+	)
+
+	tm.Start()
+	defer tm.Stop()
+
+	const numTasks = 10
+	done := make(chan struct{}, numTasks)
+	for i := range numTasks {
+		task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+			TaskId: int64(i + 1),
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamppb.Now(),
+			},
+		}, func(t *internalTask, _ taskResponse) {
+			done <- struct{}{}
+		})
+		task.resetMatcherState()
+		s.Require().NoError(tm.AddTask(task))
+	}
+
+	// If invalidation were rate-limited at 0.5/s, draining 10 tasks would take
+	// ~18s. With validation exempt from the rate limit, it should complete in
+	// well under a second.
+	deadline := time.After(3 * time.Second)
+	for i := range numTasks {
+		select {
+		case <-done:
+		case <-deadline:
+			s.Failf("timeout", "only %d/%d invalid tasks finished before deadline", i, numTasks)
+			return
+		}
+	}
+}
