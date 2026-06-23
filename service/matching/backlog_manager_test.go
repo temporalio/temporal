@@ -841,7 +841,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
 }
 
-// TestBacklogDelivery_WritePathWakesStuckReader verifies the fix for INC-1722.
+// TestBacklogDelivery_WritePathWakesStuckReader verifies the write-path recovery for stuck fair readers.
 // When the fair task reader is in state {atEnd=false, readPending=false, backoffTimer=nil},
 // a write via SpoolTask calls wroteNewTasks -> mergeTasks(mergeWrite). The fix adds a call
 // to maybeReadTasksLocked() in the write path, which triggers a DB read that picks up the

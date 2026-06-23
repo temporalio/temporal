@@ -387,7 +387,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
 		// Stuck state detected: no tasks in memory, not at end, no read running, no retry
-		// pending. Without intervention, no new tasks will be read from DB. (See INC-1722.)
+		// pending. Without intervention, no new tasks will be read from DB.
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
 	}
 
@@ -395,7 +395,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// we may need to trigger a read to pick them up from DB. Without this, the reader can
 	// get stuck in {atEnd=false, loadedTasks=0, readPending=false} with no trigger to
 	// start reading. This mirrors the re-check in readTasksImpl after processing
-	// newlyWrittenTasks. (See INC-1722.)
+	// newlyWrittenTasks.
 	if mode == mergeWrite && tr.shouldWritePathRecovery() {
 		tr.maybeReadTasksLocked()
 	}
@@ -553,7 +553,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 
 // shouldWritePathRecovery returns true if the write-path recovery logic is enabled
 // for this reader's partition. Gated by dynamic config so it can be targeted at a
-// specific namespace/task-queue/partition for diagnosis. (See INC-1722.)
+// specific namespace/task-queue/partition for diagnosis.
 func (tr *fairTaskReader) shouldWritePathRecovery() bool {
 	cfg := tr.backlogMgr.config
 	if !cfg.FairReaderWritePathRecovery() {
