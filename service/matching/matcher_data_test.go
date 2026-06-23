@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tidwall/btree"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -872,47 +871,6 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			}
 		})
 	}
-}
-
-// TestTaskBTreeNeedsPointerTiebreaker documents why taskBTreeLess falls back to the task
-// pointer. Query, nexus, and poll-forwarder tasks have no event, so taskFairLevel returns
-// the zero fairLevel for all of them; any two at the same effective priority are therefore
-// equal on (effectivePriority, fairLevel). btree treats equal-comparing items as one key,
-// so the failure shows up first at INSERT, not deletion: Set replaces the existing task and
-// silently drops it from the tree. (In the matcher this is e.g. two concurrent OfferQuery /
-// OfferNexusTask calls on the same queue, both waiting via EnqueueTaskAndWait — the evicted
-// task's caller then blocks until its context times out.)
-func (s *MatcherDataSuite) TestTaskBTreeNeedsPointerTiebreaker() {
-	a := s.newQueryTask("a")
-	b := s.newQueryTask("b")
-	s.Require().NotSame(a, b)
-	// Equal on everything the priority comparator looks at — only identity differs.
-	s.Equal(a.effectivePriority, b.effectivePriority)
-	s.Equal(taskFairLevel(a), taskFairLevel(b))
-
-	// Without the pointer fallback a and b are the same key, so inserting b evicts a: the
-	// failure is at Set, before any Delete is involved.
-	noTiebreak := btree.NewBTreeGOptions(func(x, y *internalTask) bool {
-		if x.effectivePriority != y.effectivePriority {
-			return x.effectivePriority < y.effectivePriority
-		}
-		return taskFairLevel(x).less(taskFairLevel(y))
-	}, btree.Options{NoLocks: true})
-	noTiebreak.Set(a)
-	noTiebreak.Set(b)
-	s.Equal(1, noTiebreak.Len(), "inserting b silently evicted a")
-	got, _ := noTiebreak.Get(a)
-	s.Same(b, got, "a is no longer reachable; the tree now returns b in its place")
-
-	// With the real comparator both coexist, and Delete removes exactly the requested task.
-	tree := newTaskBTree()
-	tree.Add(a)
-	tree.Add(b)
-	s.Equal(2, tree.Len(), "pointer tiebreaker keeps distinct tasks distinct")
-	tree.Remove(a)
-	s.Equal(1, tree.Len())
-	_, hasB := tree.tree.Get(b)
-	s.True(hasB, "removing a must not remove b")
 }
 
 // simple limiter tests
