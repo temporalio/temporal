@@ -164,6 +164,8 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Ceiling on the V1 scheduler workflow's recorded version.
+	SchedulerV1VersionCeiling dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -351,6 +353,7 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
+		SchedulerV1VersionCeiling:     dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
 		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
