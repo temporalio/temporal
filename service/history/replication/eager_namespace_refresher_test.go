@@ -190,7 +190,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
-	s.IsType(&serviceerror.FailedPrecondition{}, err)
+	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ExecutorReturnsError() {
@@ -244,7 +244,48 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
-	s.IsType(&serviceerror.FailedPrecondition{}, err)
+	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_GetNamespaceError() {
+	eagerNsErr := errors.New("eagerNs get namespace error")
+	namespaceID := namespace.ID("abc")
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceID.String(),
+		},
+	}).Return(nil, eagerNsErr).Times(1)
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceID, "currentCluster")
+	s.Error(err)
+	s.Equal(eagerNsErr, err)
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_GetNamespaceByIDUnexpectedError() {
+	eagerNsErr := errors.New("eagerNs unexpected registry error")
+	namespaceID := namespace.ID("abc")
+	nsResponse := &adminservice.GetNamespaceResponse{
+		Info: &namespacepb.NamespaceInfo{
+			Id:    namespaceID.String(),
+			Name:  "eagerNs-namespace",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+			Data:  make(map[string]string)},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: mockCurrentCuster},
+			},
+		},
+		IsGlobalNamespace: true,
+	}
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceID.String(),
+		},
+	}).Return(nsResponse, nil).Times(1)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(nil, eagerNsErr).Times(1)
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceID, "currentCluster")
+	s.Error(err)
+	s.Equal(eagerNsErr, err)
 }
 
 func fromAdminClientAPIResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {
