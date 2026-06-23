@@ -165,9 +165,7 @@ func NewMetadata(
 	}
 
 	copyClusterInfo := make(map[string]ClusterInformation)
-	for k, v := range clusterInfo {
-		copyClusterInfo[k] = v
-	}
+	maps.Copy(copyClusterInfo, clusterInfo)
 	if refreshDuration == nil {
 		refreshDuration = dynamicconfig.GetDurationPropertyFn(refreshInterval)
 	}
@@ -323,9 +321,7 @@ func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	defer m.clusterLock.RUnlock()
 
 	result := make(map[string]ClusterInformation, len(m.clusterInfo))
-	for k, v := range m.clusterInfo {
-		result[k] = v
-	}
+	maps.Copy(result, m.clusterInfo)
 	return result
 }
 

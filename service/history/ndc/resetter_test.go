@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -199,6 +200,236 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
 
+func (s *resetterSuite) TestResetWorkflow_BaseWorkflowNotFound() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	resetterBaseEventID := int64(400)
+	resetterBaseVersion := int64(123)
+	resetterIncomingFirstEventID := resetterBaseEventID + 12
+	resetterIncomingVersion := resetterBaseVersion + 3
+
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(nil, serviceerror.NewNotFound("not found"))
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		resetterBaseEventID,
+		resetterBaseVersion,
+		resetterIncomingFirstEventID,
+		resetterIncomingVersion,
+	)
+	s.Error(err)
+	s.Nil(rebuiltMutableState)
+	expectedErr := serviceerrors.NewRetryReplication(
+		resendOnResetWorkflowMessage,
+		s.namespaceID.String(),
+		s.workflowID,
+		s.newRunID,
+		common.EmptyEventID,
+		common.EmptyVersion,
+		resetterIncomingFirstEventID,
+		resetterIncomingVersion,
+	)
+	s.Equal(expectedErr, err)
+}
+
+func (s *resetterSuite) TestResetWorkflow_LoadWorkflowDefaultError() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	resetterLoadErr := serviceerror.NewInternal("load workflow failed")
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(nil, resetterLoadErr)
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		int64(400),
+		int64(123),
+		int64(412),
+		int64(126),
+	)
+	s.Error(err)
+	s.Equal(resetterLoadErr, err)
+	s.Nil(rebuiltMutableState)
+}
+
+func (s *resetterSuite) TestResetWorkflow_ForkBranchError() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	branchToken := []byte("some random branch token")
+	lastEventID := int64(500)
+	version := int64(123)
+	versionHistory := versionhistory.NewVersionHistory(
+		branchToken,
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+
+	resetterBaseEventID := lastEventID - 100
+	resetterBaseVersion := version
+	resetterIncomingFirstEventID := resetterBaseEventID + 12
+	resetterIncomingVersion := resetterBaseVersion + 3
+
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	mockBaseWorkflow := NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(func(err error) {})
+
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(mockBaseWorkflow, nil)
+
+	resetterForkErr := serviceerror.NewInternal("fork history branch failed")
+	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, resetterForkErr)
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		resetterBaseEventID,
+		resetterBaseVersion,
+		resetterIncomingFirstEventID,
+		resetterIncomingVersion,
+	)
+	s.Error(err)
+	s.Equal(resetterForkErr, err)
+	s.Nil(rebuiltMutableState)
+}
+
+func (s *resetterSuite) TestResetWorkflow_RebuildError() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	branchToken := []byte("some random branch token")
+	lastEventID := int64(500)
+	version := int64(123)
+	versionHistory := versionhistory.NewVersionHistory(
+		branchToken,
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+
+	resetterBaseEventID := lastEventID - 100
+	resetterBaseVersion := version
+	resetterIncomingFirstEventID := resetterBaseEventID + 12
+	resetterIncomingVersion := resetterBaseVersion + 3
+	newBranchToken := []byte("other random branch token")
+
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	mockBaseWorkflow := NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(func(err error) {})
+
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(mockBaseWorkflow, nil)
+
+	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
+
+	resetterRebuildErr := serviceerror.NewInternal("rebuild failed")
+	s.mockStateBuilder.EXPECT().Rebuild(
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		gomock.Any(), newBranchToken, gomock.Any(),
+	).Return(nil, RebuildStats{}, resetterRebuildErr)
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		resetterBaseEventID,
+		resetterBaseVersion,
+		resetterIncomingFirstEventID,
+		resetterIncomingVersion,
+	)
+	s.Error(err)
+	s.Equal(resetterRebuildErr, err)
+	s.Nil(rebuiltMutableState)
+}
+
+func (s *resetterSuite) TestResetWorkflow_RefreshExpirationError() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	branchToken := []byte("some random branch token")
+	lastEventID := int64(500)
+	version := int64(123)
+	versionHistory := versionhistory.NewVersionHistory(
+		branchToken,
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+
+	resetterBaseEventID := lastEventID - 100
+	resetterBaseVersion := version
+	resetterIncomingFirstEventID := resetterBaseEventID + 12
+	resetterIncomingVersion := resetterBaseVersion + 3
+	rebuildStats := RebuildStats{HistorySize: 1, ExternalPayloadSize: 2, ExternalPayloadCount: 3}
+	newBranchToken := []byte("other random branch token")
+
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	mockBaseWorkflow := NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(func(err error) {})
+
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(mockBaseWorkflow, nil)
+
+	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
+
+	s.mockStateBuilder.EXPECT().Rebuild(
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		gomock.Any(), newBranchToken, gomock.Any(),
+	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
+	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
+
+	resetterRefreshErr := serviceerror.NewInternal("refresh failed")
+	s.mockRebuiltMutableState.EXPECT().RefreshExpirationTimeoutTask(gomock.Any()).Return(resetterRefreshErr)
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		resetterBaseEventID,
+		resetterBaseVersion,
+		resetterIncomingFirstEventID,
+		resetterIncomingVersion,
+	)
+	s.Error(err)
+	s.Equal(resetterRefreshErr, err)
+	s.Nil(rebuiltMutableState)
+}
+
 func (s *resetterSuite) TestResetWorkflow_Error() {
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -241,7 +472,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 	s.Nil(rebuiltMutableState)
 
 	retryErr, isRetryError := err.(*serviceerrors.RetryReplication)

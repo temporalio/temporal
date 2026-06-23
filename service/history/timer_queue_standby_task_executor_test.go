@@ -2296,11 +2296,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(isValid bool, err error) {
+	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
-		).Times(1).Return(isValid, err)
+		).Times(1).Return(isTaskInTree, isValidByComponent, err)
 	}
 
 	// Mock mutable state.
@@ -2352,21 +2352,27 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
-	// Validation succeeds, task should retry.
-	expectValidate(true, nil)
+	// Task in tree and valid by component — retry.
+	expectValidate(true, true, nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
-	expectValidate(false, nil)
+	// Task in tree but component says invalid (e.g. code-deployment) — still retry.
+	expectValidate(true, false, nil)
+	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// Task not in tree — replication removed it, drop the physical task.
+	expectValidate(false, false, nil)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
-	// Validation fails, processing should fail.
+	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
-	expectValidate(false, expectedErr)
+	expectValidate(false, false, expectedErr)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
@@ -2433,7 +2439,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 		s.clientBean,
 	).(*timerQueueStandbyTaskExecutor)
 
-	// All tasks were invalid.
+	// No tasks found — EachPureTask completed without invoking the callback.
 	expectEachPureTask(nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
@@ -2451,6 +2457,111 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
+	// makeTimeSkippingMS builds a running mutable state, snapshots it to a persistence proto,
+	// and returns the persistence proto plus the workflow key. The caller can mutate the returned
+	// ExecutionInfo (e.g. set TimeSkippingInfo) before programming GetWorkflowExecution.
+	makeTimeSkippingMS := func() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: "ts-bound-wf-" + uuid.NewString(),
+			RunId:      uuid.NewString(),
+		}
+		workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+
+		mutableState := workflow.TestGlobalMutableState(
+			s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+		event, err := mutableState.AddWorkflowExecutionStartedEvent(
+			execution,
+			&historyservice.StartWorkflowExecutionRequest{
+				Attempt:     1,
+				NamespaceId: s.namespaceID.String(),
+				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+					WorkflowType:        &commonpb.WorkflowType{Name: "test-wf-type"},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-tq"},
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+				},
+			},
+		)
+		s.NoError(err)
+
+		pms := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+		return pms, workflowKey
+	}
+
+	// makeTimeSkippingPendingMS builds an MS that puts the standby's action function on
+	// the "still waiting" path: fast-forward matches the task's source event and HasReached=false.
+	makeTimeSkippingPendingMS := func() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
+		pms, workflowKey := makeTimeSkippingMS()
+		pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(time.Hour),
+			},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
+				SourceEventId: 1,
+			},
+		}
+		return pms, workflowKey
+	}
+
+	s.Run("Wait", func() {
+		pms, workflowKey := makeTimeSkippingPendingMS()
+
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now,
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+
+		s.mockShard.SetCurrentTime(s.clusterName, s.now)
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+	})
+
+	s.Run("Ack", func() {
+		// HasReached=true: active side already replicated the disable transition,
+		// so the standby's action function returns nil and the task is acked.
+		pms, workflowKey := makeTimeSkippingPendingMS()
+		pms.ExecutionInfo.TimeSkippingInfo.FastForwardInfo.HasReached = true
+
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now.Add(time.Hour),
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+
+		s.mockShard.SetCurrentTime(s.clusterName, s.now)
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.NoError(resp.ExecutionErr)
+	})
+
+	s.Run("Discard", func() {
+		pms, workflowKey := makeTimeSkippingPendingMS()
+
+		timerTask := &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         workflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			VisibilityTimestamp: s.now,
+			EventID:             1,
+		}
+		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
+
+		// Past VisibilityTime + discardDelay: ErrTaskDiscarded.
+		s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
+		resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+		s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	})
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
@@ -2501,7 +2612,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
 		chasmTree := historyi.NewMockChasmTree(s.controller)
-		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
 		treeMockFn(chasmTree)
 
 		ms := historyi.NewMockMutableState(s.controller)

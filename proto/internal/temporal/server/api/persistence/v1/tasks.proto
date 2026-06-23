@@ -129,3 +129,8 @@ message PartitionScaleState {
   //     aip.dev/not-precedent: This is not public. --)
   google.protobuf.Any private_scaler_state = 100;
 }
+
+message SimplePartitionScalerState {
+  // How many partitions to target based on add rate alone.
+  int32 add_target = 1;
+}

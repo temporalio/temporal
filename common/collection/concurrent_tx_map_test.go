@@ -198,9 +198,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 
 	for range 10 {
 
-		doneWG.Add(1)
-
-		go func() {
+		doneWG.Go(func() {
 			startWG.Wait()
 			for n := range nKeys {
 				val := intType(rand.Int())
@@ -210,8 +208,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 					s.True(ok, "Concurrency Get test failed")
 				}
 			}
-			doneWG.Done()
-		}()
+		})
 	}
 
 	startWG.Done()

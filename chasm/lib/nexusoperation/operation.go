@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -326,7 +327,7 @@ func (o *Operation) loadStartArgs(
 		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),
 		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
 		payload:                invocationData.Input,
-		header:                 invocationData.Header,
+		header:                 maps.Clone(invocationData.Header),
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
 	}, nil

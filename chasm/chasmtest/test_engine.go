@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -117,9 +118,7 @@ func (e *Engine) Tasks(ref chasm.ComponentRef) (map[tasks.Category][]tasks.Task,
 	}
 	// Return a shallow copy so callers cannot mutate the internal task lists.
 	result := make(map[tasks.Category][]tasks.Task, len(exec.backend.TasksByCategory))
-	for cat, ts := range exec.backend.TasksByCategory {
-		result[cat] = ts
-	}
+	maps.Copy(result, exec.backend.TasksByCategory)
 	return result, nil
 }
 

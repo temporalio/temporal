@@ -388,7 +388,7 @@ func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQu
 	if f.nextListQueueResponse >= len(f.listQueueResponses) {
 		return &adminservice.ListQueuesResponse{}, nil
 	}
-	if bytes.Compare(f.previousPageToken, req.NextPageToken) != 0 {
+	if !bytes.Equal(f.previousPageToken, req.NextPageToken) {
 		return nil, fmt.Errorf("expected page token %v, got %v", f.previousPageToken, req.NextPageToken)
 	}
 

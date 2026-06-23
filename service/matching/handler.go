@@ -652,6 +652,20 @@ func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerLis
 	}
 }
 
+func (h *Handler) CountWorkers(
+	_ context.Context, request *matchingservice.CountWorkersRequest,
+) (*matchingservice.CountWorkersResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	countRequest := request.GetCountRequest()
+	count, err := h.workersRegistry.CountWorkers(nsID, countRequest.GetQuery(), countRequest.GetIncludeSystemWorkers())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CountWorkersResponse{
+		Count: count,
+	}, nil
+}
+
 func (h *Handler) UpdateFairnessState(
 	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
 ) (*matchingservice.UpdateFairnessStateResponse, error) {

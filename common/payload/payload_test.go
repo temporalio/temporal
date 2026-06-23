@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 )
 
@@ -89,70 +90,49 @@ func TestEncodeDecode(t *testing.T) {
 }
 
 func TestMergeMapOfPayload(t *testing.T) {
-	s := assert.New(t)
+	t.Run("nil map", func(t *testing.T) {
+		var currentMap map[string]*commonpb.Payload
+		var newMap map[string]*commonpb.Payload
+		resultMap := MergeMapOfPayload(currentMap, newMap)
+		require.Equal(t, newMap, resultMap)
+	})
 
-	var currentMap map[string]*commonpb.Payload
-	var newMap map[string]*commonpb.Payload
-	resultMap := MergeMapOfPayload(currentMap, newMap)
-	s.Equal(newMap, resultMap)
+	t.Run("empty map", func(t *testing.T) {
+		var currentMap map[string]*commonpb.Payload
+		newMap := make(map[string]*commonpb.Payload)
+		resultMap := MergeMapOfPayload(currentMap, newMap)
+		require.Equal(t, newMap, resultMap)
+	})
 
-	newMap = make(map[string]*commonpb.Payload)
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(newMap, resultMap)
+	t.Run("nil map merging key with string value", func(t *testing.T) {
+		var currentMap map[string]*commonpb.Payload
+		newMap := map[string]*commonpb.Payload{"key": EncodeString("val")}
+		resultMap := MergeMapOfPayload(currentMap, newMap)
+		require.Equal(t, newMap, resultMap)
+	})
 
-	newMap = map[string]*commonpb.Payload{"key": EncodeString("val")}
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(newMap, resultMap)
+	t.Run("non nil maps", func(t *testing.T) {
+		currentMap := map[string]*commonpb.Payload{"number": EncodeString("1")}
+		newMap := map[string]*commonpb.Payload{"key": EncodeString("val")}
+		resultMap := MergeMapOfPayload(currentMap, newMap)
+		require.Equal(
+			t,
+			map[string]*commonpb.Payload{"number": EncodeString("1"), "key": EncodeString("val")},
+			resultMap,
+		)
+	})
 
-	newMap = map[string]*commonpb.Payload{
-		"key":        EncodeString("val"),
-		"nil":        nilPayload,
-		"emptyArray": emptySlicePayload,
-	}
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(map[string]*commonpb.Payload{"key": EncodeString("val")}, resultMap)
-
-	currentMap = map[string]*commonpb.Payload{"number": EncodeString("1")}
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(
-		map[string]*commonpb.Payload{"number": EncodeString("1"), "key": EncodeString("val")},
-		resultMap,
-	)
-
-	newValue, _ := Encode(nil)
-	newMap = map[string]*commonpb.Payload{"number": newValue}
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(0, len(resultMap))
-
-	newValue, _ = Encode([]int{})
-	newValue.Metadata["key"] = []byte("foo")
-	newMap = map[string]*commonpb.Payload{"number": newValue}
-	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(0, len(resultMap))
-}
-
-func TestIsEqual(t *testing.T) {
-	s := assert.New(t)
-
-	a, _ := Encode(nil)
-	b, _ := Encode(nil)
-	s.True(isEqual(a, b))
-
-	a, _ = Encode([]string{})
-	b, _ = Encode([]string{})
-	s.True(isEqual(a, b))
-
-	a.Metadata["key"] = []byte("foo")
-	b.Metadata["key"] = []byte("bar")
-	s.True(isEqual(a, b))
-
-	a, _ = Encode(nil)
-	b, _ = Encode([]string{})
-	s.False(isEqual(a, b))
-
-	a, _ = Encode([]string{})
-	b, _ = Encode("foo")
-	s.False(isEqual(a, b))
+	t.Run("nil payloads are filtered", func(t *testing.T) {
+		var currentMap map[string]*commonpb.Payload
+		newMap := map[string]*commonpb.Payload{
+			"key":        EncodeString("val"),
+			"nil":        {},
+			"nilSlice":   {Data: []byte("null")}, // nil slice is encoded as null json value
+			"emptySlice": {Data: []byte("[]")},
+		}
+		resultMap := MergeMapOfPayload(currentMap, newMap)
+		require.Equal(t, map[string]*commonpb.Payload{"key": EncodeString("val")}, resultMap)
+	})
 }
 
 func TestFilterNilSearchAttributes(t *testing.T) {

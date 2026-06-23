@@ -12,6 +12,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -87,7 +88,7 @@ func (d *workerCommandsTaskDispatcher) execute(
 			tag.NewStringTag("control_queue", task.Destination),
 			tag.Attempt(int32(attempt)),
 		)
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("max_attempts_exceeded"))
+		d.recordCommandMetrics(task.Commands, namespaceName, "max_attempts_exceeded")
 		return nil
 	}
 
@@ -109,12 +110,13 @@ func (d *workerCommandsTaskDispatcher) execute(
 	ctx, cancel := context.WithTimeout(ctx, workerCommandsTaskTimeout)
 	defer cancel()
 
-	return d.dispatchToWorker(ctx, task)
+	return d.dispatchToWorker(ctx, task, namespaceName)
 }
 
 func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
+	namespaceName string,
 ) error {
 	request := &workerservicepb.ExecuteCommandsRequest{
 		Commands: task.Commands,
@@ -155,20 +157,20 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		Request: nexusRequest,
 	})
 	if err != nil {
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("rpc_error"))
+		d.recordCommandMetrics(task.Commands, namespaceName, "rpc_error")
 		return fmt.Errorf("failed to dispatch worker commands to control queue %s: %w", task.Destination, err)
 	}
 
 	nexusErr := commonnexus.DispatchResponseToError(resp)
 	if nexusErr == nil {
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("success"))
+		d.recordCommandMetrics(task.Commands, namespaceName, "success")
 		return nil
 	}
 
-	return d.handleError(nexusErr, task)
+	return d.handleError(nexusErr, task, namespaceName)
 }
 
-func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask) error {
+func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask, namespaceName string) error {
 	var handlerErr *nexus.HandlerError
 	if errors.As(nexusErr, &handlerErr) {
 		// Handler-level error (transport, timeout, internal). These are constructed by
@@ -176,7 +178,7 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
 			d.logger.Warn("No worker polling control queue",
 				tag.NewStringTag("control_queue", task.Destination))
-			metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("no_poller"))
+			d.recordCommandMetrics(task.Commands, namespaceName, "no_poller")
 			return nexusErr
 		}
 
@@ -184,14 +186,14 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 			d.logger.Error("Worker commands non-retryable handler error",
 				tag.NewStringTag("control_queue", task.Destination),
 				tag.Error(nexusErr))
-			metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("non_retryable_error"))
+			d.recordCommandMetrics(task.Commands, namespaceName, "non_retryable_error")
 			return nil
 		}
 
 		d.logger.Warn("Worker commands transport failure",
 			tag.NewStringTag("control_queue", task.Destination),
 			tag.Error(nexusErr))
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("transport_error"))
+		d.recordCommandMetrics(task.Commands, namespaceName, "transport_error")
 		return nexusErr
 	}
 
@@ -205,6 +207,26 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 		tag.NewStringTag("control_queue", task.Destination),
 		tag.NewInt("command_count", len(task.Commands)),
 		tag.Error(nexusErr))
-	metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("worker_error"))
+	d.recordCommandMetrics(task.Commands, namespaceName, "worker_error")
 	return nil
+}
+
+func (d *workerCommandsTaskDispatcher) recordCommandMetrics(commands []*workerpb.WorkerCommand, namespaceName string, outcome string) {
+	for _, cmd := range commands {
+		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(
+			1,
+			metrics.NamespaceTag(namespaceName),
+			metrics.OutcomeTag(outcome),
+			metrics.StringTag("command_type", workerCommandTypeName(cmd)),
+		)
+	}
+}
+
+func workerCommandTypeName(cmd *workerpb.WorkerCommand) string {
+	switch cmd.GetType().(type) {
+	case *workerpb.WorkerCommand_CancelActivity:
+		return "cancel_activity"
+	default:
+		return "unknown"
+	}
 }

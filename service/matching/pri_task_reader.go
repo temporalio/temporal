@@ -137,7 +137,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.Data.CreateTime, -1)
 
 	numAcked := tr.ackTaskLocked(task.event.TaskId)
 
@@ -249,7 +249,6 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		if IsTaskExpired(t) {
 			// task expired when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
-			metrics.DroppedTasksCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.DroppedTaskReasonExpiredReadTag)
 			return true
 		}
 

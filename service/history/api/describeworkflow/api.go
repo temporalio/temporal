@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -50,9 +51,7 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 	target := make(map[string]*commonpb.Payload, len(source))
 	for k, v := range source {
 		metadata := make(map[string][]byte, len(v.GetMetadata()))
-		for mk, mv := range v.GetMetadata() {
-			metadata[mk] = mv
-		}
+		maps.Copy(metadata, v.GetMetadata())
 		target[k] = &commonpb.Payload{
 			Metadata: metadata,
 			Data:     v.GetData(),

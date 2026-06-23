@@ -392,6 +392,7 @@ func createWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.NewMutableStateStats,
 		)
 		emitCompletionMetrics(
@@ -436,6 +437,7 @@ func conflictResolveWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.ResetMutableStateStats,
 			resp.NewMutableStateStats,
 			resp.CurrentMutableStateStats,
@@ -494,6 +496,7 @@ func getWorkflowExecution(
 		emitGetMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.MutableStateStats,
 		)
 	}
@@ -528,6 +531,7 @@ func updateWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.UpdateMutableStateStats,
 			resp.NewMutableStateStats,
 		)
@@ -699,13 +703,17 @@ func NotifyNewHistoryMutationEvent(
 func emitMutationMetrics(
 	shardContext historyi.ShardContext,
 	namespace *namespace.Namespace,
+	archetypeID chasm.ArchetypeID,
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
+	chasmRegistry := shardContext.ChasmRegistry()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			chasmRegistry,
+			archetypeID,
 			stat,
 		)
 	}
@@ -714,13 +722,17 @@ func emitMutationMetrics(
 func emitGetMetrics(
 	shardContext historyi.ShardContext,
 	namespace *namespace.Namespace,
+	archetypeID chasm.ArchetypeID,
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
+	chasmRegistry := shardContext.ChasmRegistry()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			chasmRegistry,
+			archetypeID,
 			stat,
 		)
 	}

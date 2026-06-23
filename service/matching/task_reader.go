@@ -223,10 +223,7 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse,
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
-		upper := readLevel + tr.backlogMgr.config.RangeSize
-		if upper > maxReadLevel {
-			upper = maxReadLevel
-		}
+		upper := min(readLevel+tr.backlogMgr.config.RangeSize, maxReadLevel)
 		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
 			return nil, err
@@ -256,7 +253,6 @@ func (tr *taskReader) addTasksToBuffer(
 		if IsTaskExpired(t) {
 			// task is expired when "add tasks to buffer" is called, so when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1, metrics.TaskExpireStageReadTag)
-			metrics.DroppedTasksCounter.With(tr.taggedMetricsHandler()).Record(1, metrics.DroppedTaskReasonExpiredReadTag)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())

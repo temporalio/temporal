@@ -9,10 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -161,7 +161,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			},
 		},
 	} {
-		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1011,7 +1010,6 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1245,6 +1243,47 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
 }
 
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates asserts the
+// contract: regen carries no per-task status of its own and force re-stamps on every call
+// (callers gate it — the active boolean and PartialRefresh's LastUpdateVersionedTransition
+// check). So a second back-to-back call emits the same tasks again, not a no-op. Content is
+// identical; only the shard-assigned TaskID would differ.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(t *testing.T) {
+	t.Parallel()
+
+	tsi := &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: tsi,
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(time.Now().Add(time.Hour))},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).AnyTimes()
+
+	emitCount := 0
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		emitCount += len(ts)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+
+	// First call emits.
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Positive(t, emitCount, "first call must emit at least one task")
+
+	// Second call force-regenerates: emits again (no status latch suppresses it).
+	emitsAfterFirst := emitCount
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
+}
+
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
 	t.Parallel()
 
@@ -1280,7 +1319,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 			},
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1341,7 +1379,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 			wantRunTimeout:     true,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1425,13 +1462,13 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 	}
 }
 
-// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer covers step (3)
-// of RegenerateTimerTasksForTimeSkipping: the elapsed-bound wake-up task regeneration.
-func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *testing.T) {
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer covers step (3)
+// of RegenerateTimerTasksForTimeSkipping: the fast-forward wake-up task regeneration.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC()
-	boundTarget := now.Add(2 * time.Hour)
+	fastForwardTarget := now.Add(2 * time.Hour)
 
 	type wantTask struct {
 		visibilityTimestamp time.Time
@@ -1439,37 +1476,35 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 	}
 
 	for _, tc := range []struct {
-		name             string
-		tsi              *persistencespb.TimeSkippingInfo
-		wantBoundTask    *wantTask
-		wantUserTimerLen int
+		name                string
+		tsi                 *persistencespb.TimeSkippingInfo
+		wantFastForwardTask *wantTask
+		wantUserTimerLen    int
 	}{
 		{
-			name: "bound configured and unreached emits task",
+			name: "fast-forward configured and unreached emits task",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    false,
 				},
 			},
-			wantBoundTask: &wantTask{visibilityTimestamp: boundTarget, eventID: 7},
+			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, eventID: 7},
 		},
 		{
 			name: "HasReached=true skips task emission",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: true,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    true,
 				},
@@ -1478,27 +1513,25 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 		{
 			name: "Enabled=false skips task emission",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled: false,
-					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
-				},
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:     false,
+					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
-				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
-					TargetTime:    timestamppb.New(boundTarget),
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime:    timestamppb.New(fastForwardTarget),
 					SourceEventId: 7,
 					HasReached:    false,
 				},
 			},
 		},
 		{
-			name: "no bound info does not emit bound task",
+			name: "no fast-forward info does not emit fast-forward task",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1522,23 +1555,23 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
-			var boundTasks []*tasks.TimeSkippingTimerTask
+			var fastForwardTasks []*tasks.TimeSkippingTimerTask
 			for _, task := range captured {
 				if bt, ok := task.(*tasks.TimeSkippingTimerTask); ok {
-					boundTasks = append(boundTasks, bt)
+					fastForwardTasks = append(fastForwardTasks, bt)
 				}
 			}
 
-			if tc.wantBoundTask == nil {
-				require.Empty(t, boundTasks)
+			if tc.wantFastForwardTask == nil {
+				require.Empty(t, fastForwardTasks)
 				return
 			}
 
-			require.Len(t, boundTasks, 1)
-			bt := boundTasks[0]
+			require.Len(t, fastForwardTasks, 1)
+			bt := fastForwardTasks[0]
 			require.Equal(t, tests.WorkflowKey, bt.WorkflowKey)
-			require.Equal(t, tc.wantBoundTask.visibilityTimestamp, bt.VisibilityTimestamp)
-			require.Equal(t, tc.wantBoundTask.eventID, bt.EventID)
+			require.Equal(t, tc.wantFastForwardTask.visibilityTimestamp, bt.VisibilityTimestamp)
+			require.Equal(t, tc.wantFastForwardTask.eventID, bt.EventID)
 			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
 		})
 	}
@@ -1621,7 +1654,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 			},
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

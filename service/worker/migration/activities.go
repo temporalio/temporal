@@ -20,6 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1198,11 +1199,15 @@ func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.Ar
 		return chasm.WorkflowArchetype, nil
 	}
 
-	// chasm activity library is not registered on worker service, so hardcoding the mapping here for now.
+	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
+	// the mapping here for now.
 	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
 	// chasm registry.
 	if archetypeID == chasmactivity.ArchetypeID {
 		return chasmactivity.Archetype, nil
+	}
+	if archetypeID == chasmnexus.ArchetypeID {
+		return chasmnexus.Archetype, nil
 	}
 
 	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
