@@ -1,5 +1,4 @@
 package replication
-package replication
 
 import (
 	"context"

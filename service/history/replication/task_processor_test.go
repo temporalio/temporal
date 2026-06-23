@@ -253,11 +253,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 		},
 	}
 	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
-<<<<<<< Updated upstream
 		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
-=======
-		ShardID:           s.shardID,
->>>>>>> Stashed changes
 		SourceClusterName: request.SourceClusterName,
 		TaskInfo:          request.TaskInfo,
 	}
@@ -283,11 +279,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
 		},
 	}
 	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
-<<<<<<< Updated upstream
 		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
-=======
-		ShardID:           s.shardID,
->>>>>>> Stashed changes
 		SourceClusterName: request.SourceClusterName,
 		TaskInfo:          request.TaskInfo,
 	}
@@ -315,11 +307,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 		},
 	}
 	persistedRequest := &persistence.PutReplicationTaskToDLQRequest{
-<<<<<<< Updated upstream
 		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
-=======
-		ShardID:           s.shardID,
->>>>>>> Stashed changes
 		SourceClusterName: request.SourceClusterName,
 		TaskInfo:          request.TaskInfo,
 	}
@@ -864,7 +852,7 @@ func (s *taskProcessorSuite) TestApplyReplicationTask_RoutesToDLQ() {
 		serviceerror.NewInvalidArgument("bad")).MinTimes(1)
 
 	expectedDLQ := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.shardID,
+		ShardID:           s.config.GetShardID(namespace.ID(namespaceID), workflowID),
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
