@@ -187,7 +187,7 @@ func TestStrmLivenessMonitor_SignalResetsThenShutdown(t *testing.T) {
 	// keep feeding signals so the heartbeat keeps resetting, then shut down.
 	// The buffered channel + blocking sends pace the signals as the monitor
 	// drains them, so each send exercises the timer-reset branch.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		signalChan <- struct{}{}
 	}
 	shutdownChan.Shutdown()

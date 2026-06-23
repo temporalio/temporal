@@ -1432,7 +1432,7 @@ func (s *streamSenderSuite) TestShouldProcessTask_TargetClusterFiltered_ReturnsF
 	// Use a SyncWorkflowStateTask with TargetClusters that excludes the client
 	// cluster -> filtered out, returns false (when shard matches).
 	strSenderFindMatchingShard := func() (string, string) {
-		for i := 0; i < 100000; i++ {
+		for i := range 100000 {
 			nsID := "ns"
 			wfID := "wf-" + strSenderItoa(i)
 			if common.WorkflowIDToHistoryShard(nsID, wfID, s.streamSender.clientClusterShardCount) == s.clientShardKey.ShardID {
@@ -1455,7 +1455,7 @@ func (s *streamSenderSuite) TestShouldProcessTask_TargetClusterFiltered_ReturnsF
 
 func (s *streamSenderSuite) TestShouldProcessTask_RegistryError_ReturnsTrue() {
 	strSenderFindMatchingShard := func() (string, string) {
-		for i := 0; i < 100000; i++ {
+		for i := range 100000 {
 			nsID := "ns"
 			wfID := "wf-" + strSenderItoa(i)
 			if common.WorkflowIDToHistoryShard(nsID, wfID, s.streamSender.clientClusterShardCount) == s.clientShardKey.ShardID {
