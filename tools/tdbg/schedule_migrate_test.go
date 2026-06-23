@@ -318,13 +318,19 @@ func TestMigrateSchedule_Stdin_Execute(t *testing.T) {
 	})
 
 	require.Len(t, admin.requests, 2)
-	require.Equal(t, "ns-1", admin.requests[0].Namespace)
-	require.Equal(t, "sched-1", admin.requests[0].ScheduleId)
-	require.Equal(t, "ns-2", admin.requests[1].Namespace)
-	require.Equal(t, "sched-2", admin.requests[1].ScheduleId)
-	for _, req := range admin.requests {
+	// The default worker count is >1, so migrations run concurrently and the order
+	// in which they are recorded is not deterministic. Assert on the set of
+	// (namespace, schedule_id) pairs rather than their positions.
+	type migratePair struct{ namespace, scheduleID string }
+	got := make([]migratePair, len(admin.requests))
+	for i, req := range admin.requests {
+		got[i] = migratePair{namespace: req.Namespace, scheduleID: req.ScheduleId}
 		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
 	}
+	require.ElementsMatch(t, []migratePair{
+		{namespace: "ns-1", scheduleID: "sched-1"},
+		{namespace: "ns-2", scheduleID: "sched-2"},
+	}, got)
 }
 
 func TestMigrateSchedule_Stdin_Workers(t *testing.T) {
