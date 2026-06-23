@@ -228,17 +228,19 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		})
 	}
 
-	// Receive WCI validation status updates and propagate to the deployment workflow memo.
-	syncValidationStatusChannel := workflow.GetSignalChannel(ctx, worker_versioning.SignalSyncValidationStatus)
-	d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
-		d.signalHandler.processingSignals++
-		defer func() { d.signalHandler.processingSignals-- }()
+	// Version gate for sync-validation-status signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "sync-validation-status-signal", workflow.DefaultVersion, 0) >= 0 {
+		syncValidationStatusChannel := workflow.GetSignalChannel(ctx, worker_versioning.SignalSyncValidationStatus)
+		d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
 
-		var vs wciiface.ValidationStatus
-		c.Receive(ctx, &vs)
-		d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
-		d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
-	})
+			var vs wciiface.ValidationStatus
+			c.Receive(ctx, &vs)
+			d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
+			d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
+		})
+	}
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {

@@ -333,7 +333,6 @@ type VersionLocalState struct {
 	LastModifierIdentity string `protobuf:"bytes,17,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
 	// Cached compute config summary, kept in sync with the WCI on each compute config update.
 	ComputeConfig *v12.ComputeConfigSummary `protobuf:"bytes,18,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
-	// Cached WCI validation status, updated when WCI signals this version workflow.
 	// Cached compute status, updated when WCI signals this version workflow.
 	ComputeStatus *v11.ComputeStatus `protobuf:"bytes,19,opt,name=compute_status,json=computeStatus,proto3" json:"compute_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -868,7 +867,6 @@ type WorkerDeploymentVersionSummary struct {
 	// Compute config summary for this version. Synced from the version workflow on each compute config update.
 	// Also set by the deployment workflow at version creation time if a compute config was provided.
 	ComputeConfig *v12.ComputeConfigSummary `protobuf:"bytes,13,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
-	// WCI validation status for this version. Synced from the version workflow when WCI signals a status change.
 	// Compute status for this version. Synced from the version workflow when WCI signals a status change.
 	ComputeStatus *v11.ComputeStatus `protobuf:"bytes,14,opt,name=compute_status,json=computeStatus,proto3" json:"compute_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
