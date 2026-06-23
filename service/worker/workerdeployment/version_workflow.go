@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -229,7 +230,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	}
 
 	// Receive WCI validation status updates and propagate to the deployment workflow memo.
-	syncValidationStatusChannel := workflow.GetSignalChannel(ctx, wciiface.SignalSyncValidationStatus)
+	syncValidationStatusChannel := workflow.GetSignalChannel(ctx, wciclient.SignalSyncValidationStatus)
 	d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
