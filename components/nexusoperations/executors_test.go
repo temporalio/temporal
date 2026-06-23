@@ -365,6 +365,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationFailedCount.Name()])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
 			},
 		},
 		{
