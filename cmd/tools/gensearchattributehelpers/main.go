@@ -38,10 +38,10 @@ func main() {
 func getSearchAttributesHelpersData() searchAttributesHelpersData {
 	sahd := searchAttributesHelpersData{}
 
-	historyEventT := reflect.TypeOf((*historypb.HistoryEvent)(nil))
+	historyEventT := reflect.TypeFor[*historypb.HistoryEvent]()
 
-	for i := 0; i < historyEventT.NumMethod(); i++ {
-		attributesGetter := historyEventT.Method(i)
+	for attributesGetter := range historyEventT.Methods() {
+		attributesGetter := attributesGetter
 		matches := attributesGetterRegex.FindStringSubmatch(attributesGetter.Name)
 		if len(matches) < 2 {
 			continue

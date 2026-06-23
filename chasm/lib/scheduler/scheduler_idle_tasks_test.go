@@ -68,12 +68,34 @@ func TestIdleTask_Execute(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	sched := env.Scheduler
+	eventLog := sched.EventLog.Get(ctx)
 
 	handler := newIdleHandler(10 * time.Minute)
 	require.False(t, sched.Closed)
 	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
 	require.NoError(t, err)
 	require.True(t, sched.Closed)
+	require.Len(t, eventLog.Events, 1)
+	require.Equal(t, "schedule closed from idle timer", eventLog.Events[0].Message)
+}
+
+func TestIdleTask_ExecuteInitializesEventLogMissingFromOlderTree(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	// Simulate a Scheduler tree persisted before EventLog was introduced.
+	sched.EventLog = chasm.NewEmptyField[*scheduler.EventLog]()
+	_, ok := sched.EventLog.TryGet(ctx)
+	require.False(t, ok)
+
+	handler := newIdleHandler(10 * time.Minute)
+	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
+	require.NoError(t, err)
+	require.True(t, sched.Closed)
+
+	eventLog := sched.EventLog.Get(ctx)
+	require.Len(t, eventLog.Events, 1)
+	require.Equal(t, "schedule closed from idle timer", eventLog.Events[0].Message)
 }
 
 func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {

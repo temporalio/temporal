@@ -520,14 +520,12 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	}
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
 		if err != nil {
 			s.logger.Info(err.Error())
 		}
-		wg.Done()
-	}()
+	})
 
 	partitionReady := func() bool {
 		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
@@ -1248,11 +1246,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		if i == taskCount/2 {
 			maxDispatch = 0
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, pollErr = pollFunc(maxDispatch)
-		}()
+		})
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
@@ -1274,11 +1270,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.logger.Debug("empty poll returned")
 			s.Equal(float64(0), maxDispatch)
 			maxDispatch = defaultTaskDispatchRPS
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				result, pollErr = pollFunc(maxDispatch)
-			}()
+			})
 			wg.Wait()
 			s.NoError(err)
 			s.NoError(pollErr)
@@ -5536,7 +5530,6 @@ func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -5705,7 +5698,6 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)

@@ -13,8 +13,7 @@ import (
 )
 
 func TestKeyedSet_Starts(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ks := goro.NewKeyedSet[int](ctx)
 
@@ -35,8 +34,7 @@ func TestKeyedSet_Starts(t *testing.T) {
 }
 
 func TestKeyedSet_Cancels(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ks := goro.NewKeyedSet[int](ctx)
 
@@ -65,8 +63,7 @@ func TestKeyedSet_Cancels(t *testing.T) {
 }
 
 func TestKeyedSet_StartsAndCancelsTogether(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ks := goro.NewKeyedSet[string](ctx)
 
@@ -125,8 +122,7 @@ func TestKeyedSet_BaseContextCanceled(t *testing.T) {
 }
 
 func TestKeyedSet_ConcurrentSync(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ks := goro.NewKeyedSet[int](ctx)
 

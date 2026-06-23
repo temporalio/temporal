@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -1226,7 +1225,7 @@ func emitStateTransitionCount(
 	metrics.StateTransitionCount.With(metricsHandler).Record(
 		mutableState.GetExecutionInfo().StateTransitionCount,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
-		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
+		metrics.NamespaceStateTag(namespaceState(clusterMetadata, new(mutableState.GetCurrentVersion()))),
 	)
 }
 
@@ -1259,5 +1258,5 @@ func MutableStateFailoverVersion(
 	if mutableState == nil {
 		return nil
 	}
-	return util.Ptr(mutableState.GetCurrentVersion())
+	return new(mutableState.GetCurrentVersion())
 }
