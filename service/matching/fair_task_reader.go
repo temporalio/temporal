@@ -545,7 +545,6 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
 }
 
-
 func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
