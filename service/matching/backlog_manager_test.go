@@ -853,6 +853,9 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 
 	s.setupToCaptureTasks()
 
+	// Enable the write-path recovery dynamic config for this test.
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingFairReaderWritePathRecovery.Key(), true)
+
 	// Set up initial qkey in DB so the initial read finds an empty queue.
 	qkey := s.ptqMgr.QueueKey()
 	_, err := s.taskMgr.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{

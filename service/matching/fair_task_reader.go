@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"golang.org/x/sync/semaphore"
 )
@@ -389,7 +390,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// get stuck in {atEnd=false, loadedTasks=0, readPending=false} with no trigger to
 	// start reading. This mirrors the re-check in readTasksImpl after processing
 	// newlyWrittenTasks. (See INC-1722.)
-	if mode == mergeWrite {
+	if mode == mergeWrite && tr.shouldWritePathRecovery() {
 		tr.maybeReadTasksLocked()
 	}
 
@@ -542,6 +543,24 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// let's say that's one metric with two labels of two values each.
 	// add another label for whether we're doing this on read or write.
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
+}
+
+// shouldWritePathRecovery returns true if the write-path recovery logic is enabled
+// for this reader's partition. Gated by dynamic config so it can be targeted at a
+// specific namespace/task-queue/partition for diagnosis. (See INC-1722.)
+func (tr *fairTaskReader) shouldWritePathRecovery() bool {
+	cfg := tr.backlogMgr.config
+	if !cfg.FairReaderWritePathRecovery() {
+		return false
+	}
+	targetPartition := cfg.FairReaderWritePathRecoveryPartition()
+	if targetPartition < 0 {
+		return true // -1 means all partitions
+	}
+	if p, ok := tr.backlogMgr.pqMgr.QueueKey().Partition().(*tqid.NormalPartition); ok {
+		return p.PartitionId() == targetPartition
+	}
+	return false
 }
 
 func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {

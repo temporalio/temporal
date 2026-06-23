@@ -1483,6 +1483,21 @@ default as namespace cardinality can be high and this requires a metrics collect
 		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
 	)
 
+	MatchingFairReaderWritePathRecovery = NewTaskQueueBoolSetting(
+		"matching.fairReaderWritePathRecovery",
+		false,
+		`When true, the fair task reader's write path calls maybeReadTasksLocked after merging
+written tasks. This recovers from a stuck reader state where atEnd=false, loadedTasks=0, and no
+read goroutine is running. Use with MatchingFairReaderWritePathRecoveryPartition to target a
+specific partition. (See INC-1722.)`,
+	)
+	MatchingFairReaderWritePathRecoveryPartition = NewTaskQueueIntSetting(
+		"matching.fairReaderWritePathRecoveryPartition",
+		-1,
+		`Partition ID filter for MatchingFairReaderWritePathRecovery. -1 means all partitions.
+Set to a specific partition ID (e.g. 3) to only apply the recovery on that partition.`,
+	)
+
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
 		"matching.workerRegistryNumBuckets",
