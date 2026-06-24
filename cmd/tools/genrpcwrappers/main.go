@@ -173,7 +173,6 @@ func findNestedField(t reflect.Type, name string, path string, maxDepth int) []f
 	}
 	var out []fieldWithPath
 	for f := range t.Fields() {
-		f := f
 		if ignoreField[t.Name()+"."+f.Name] {
 			continue
 		}
