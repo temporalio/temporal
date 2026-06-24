@@ -461,7 +461,7 @@ func (h *nexusHandler) StartOperation(
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -531,7 +531,7 @@ func (h *nexusHandler) StartOperation(
 			// the worker.
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
-			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+			nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 			if err != nil {
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -679,7 +679,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
